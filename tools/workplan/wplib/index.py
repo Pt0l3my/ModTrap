@@ -22,7 +22,7 @@ FIXED = {
     "docs/design/0001-design.md": "DESIGN", "docs/REASONING.md": "WHY", "docs/DECISIONS.md": "DEC",
     "docs/research/README.md": "RES", "tools/workplan/README.md": "WP",
 }
-SERIES = {"docs/research/mo2": "MO", "docs/research/xedit": "XE"}
+SERIES = {"docs/research/mo2": "MO", "docs/research/xedit": "XE", "docs/research/tools": "TL"}
 
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 NUMBER = re.compile(r"^(?:§\s*)?(\d+(?:\.\d+)*)\.?(?:\s|$)")

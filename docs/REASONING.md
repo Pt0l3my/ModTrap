@@ -47,6 +47,20 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 22 | 2026-11-20 | Telling which tool made a patch: evidence, and marks kept as data | METHOD | #tools #mo2 |
 | 23 | 2026-11-20 | MO2's plugin lists and the plugin header are read from their sources | FACT | #mo2 #xedit |
 | 24 | 2026-11-20 | Version 0.1's reader exists, and what it has not yet met | METHOD | #mo2 #process |
+| 25 | 2026-11-20 | The first scan of the owner's modlist agrees with MO2 | FACT | #mo2 #process |
+| 26 | 2026-11-20 | A patch is often one plugin in a collection: disable the plugin, not the mod | METHOD | #procedure #mo2 |
+| 27 | 2026-11-20 | The real list shows generated outputs and loose files, as the design assumed | FACT | #tools #procedure |
+| 28 | 2026-11-20 | The second scan: a patch with no master, MO2's output setting, and its limits | FACT | #tools #mo2 #procedure |
+| 29 | 2026-11-20 | Version 0.1's page: what was built, how it was tested, what was not | METHOD | #server #page #process |
+| 30 | 2026-11-20 | A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini | METHOD | #page #mo2 #safety |
+| 31 | 2026-11-20 | The dry run is built; what its first run on the owner's PC has to show | METHOD | #xedit #mo2 #safety #process |
+| 32 | 2026-11-20 | A friendlier page: what was changed and why | METHOD | #page |
+| 33 | 2026-11-20 | Sessions and Quit: how the state is kept, and what "safe to finish" means for now | METHOD | #page #safety #process |
+| 34 | 2026-11-20 | The script checked against the script engine's source, without running it | METHOD | #xedit #process |
+| 35 | 2026-11-20 | The Steps tab: a checklist the modlist's own files tick off | METHOD | #page #procedure #tools |
+| 36 | 2026-11-20 | Groundwork for the demaster, built ahead and switched off | METHOD | #safety #mo2 #process |
+| 37 | 2026-11-20 | Which tool made a plugin: read in the tools' own sources, kept as data | FACT | #tools |
+| 38 | 2026-11-20 | A Browse button: an in-page folder picker | METHOD | #page |
 
 ## Entries
 
@@ -321,3 +335,331 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   owner's modlist is the real test, and its summary (counts, notes, health) is what to compare with MO2's own view.
 - Left out on purpose until needed: plugins inside a mod's subfolders (MO2 ignores them), the VR and LE games
   (MT7), and anything that writes.
+
+### 25. The first scan of the owner's modlist agrees with MO2
+
+`2026-11-20` · FACT (the scan's output and a screenshot of MO2 2.5.2, both from the owner) · `#mo2 #process` · refs: WHY§24, MO01§2, XE02, DESIGN§3
+
+- FACT: on the owner's list (about 3,600 mods, 135 separators, 3,751 plugins, all active) the scan read every
+  plugin's header with none unreadable, and the health check was clean, as MO2 shows it.
+- FACT: for the mod the owner picked, the scan's priority and its plugin's load-order position are the numbers
+  MO2 shows for them. The ini's escaping (LIKELY in WHY§24), the modlist order and the plugin lists therefore
+  hold on a real instance of this size.
+- FACT: the scan found 17 dependants in 9 mods. Every plugin the community guide names for this mod is among
+  them, under the names this version of the list gives them, and two more that the guide does not name. The guide
+  is older than the list; reading the masters is not.
+- Open: one plugin that sits among the mod's patches in MO2's list, and by its name should depend on it, is not
+  among the 17. Either it does not list the mod as a master or the reader missed it; the owner is asked to run
+  `scan --plugin` on it.
+- FACT: the executable to start is titled as the 64-bit xEdit in this MO2, one of 24 configured.
+- **Later (2026-11-20):** the open point is closed. `scan --plugin` shows that plugin's masters are two of the
+  game's own and one Creation Club plugin: it does not list the trapped mod, and the reader was right (WHY§28).
+
+### 26. A patch is often one plugin in a collection: disable the plugin, not the mod
+
+`2026-11-20` · METHOD · `#procedure #mo2` · refs: MT6, MT9, MT17, WHY§25, MO01§2, DESIGN§5, DESIGN§6.5
+
+- FACT: on the real list, five of the nine mods holding dependants are patch collections: each has one or two
+  plugins for the trapped mod among many for other mods. The guide's "disable plugins" list is exactly these.
+  Disabling such a mod would switch off patches the list still needs.
+- METHOD: so the treatments are per plugin, and there are two ways to switch a patch off: **disable the mod** when
+  every plugin it provides depends on the trapped mod, **deactivate the plugin** when it is one among others.
+  `model.groups` gives this first reading from the headers alone ("whole mod", "some plugins", "output").
+- METHOD: deactivating a plugin means writing `plugins.txt` (removing its star), in MO2's form and encoding, with
+  MO2 closed and the file in the safe folder first. MO2 takes the order from the newer of its two list files
+  (MO01§2), and a rewritten `plugins.txt` is the newer one, so ModTrap must write every line in the same order and
+  check, after MO2's next start, that the order is unchanged. This goes to the probe.
+- Design 0001's "patch-only mod" becomes "patch-only plugin or mod" (DESIGN§5).
+
+### 27. The real list shows generated outputs and loose files, as the design assumed
+
+`2026-11-20` · FACT (the same scan and screenshot) · `#tools #procedure` · refs: MT18, WHY§22, DESIGN§13, DESIGN§14
+
+- FACT: two of the 17 dependants live in mods named as tools' outputs, one of them the output of a tool whose
+  work is textures and meshes, which nonetheless writes a plugin. Whether MO2's per-executable output setting
+  (MO01§2) names those mods on this list is not yet known: the scan now reads it and says so.
+- FACT: the trapped mod holds, beside its plugin and an archive, loose animation and behaviour files and settings
+  files for a script-extender plugin. The guide's step to re-run the animation tool matches the first; nothing in
+  any plugin's masters would have shown it. This is DESIGN§13's "what masters cannot show", met in practice.
+- FACT: the guide also disables a mod that holds no plugin, a hotfix for the trapped mod. No master points to
+  it. LIKELY: a mod whose files do nothing but replace the trapped mod's files can be found by comparing file
+  names between the two folders; that is the file-conflict idea of WHY§21, now with a concrete case.
+
+### 28. The second scan: a patch with no master, MO2's output setting, and its limits
+
+`2026-11-20` · FACT (the scan's output, from the owner) · `#tools #mo2 #procedure` · refs: WHY§25, WHY§26, WHY§22, MO01§2, DESIGN§5, DESIGN§13
+
+- FACT: a patch hub for the trapped mod holds eight plugins; seven list the trapped mod as a master and one does
+  not, though it is a patch for it by its name and its place. The guide disables that mod whole. Masters alone
+  would leave the eighth plugin active.
+- METHOD: a new reading, "most of the mod": more of a mod's plugins depend on the trapped mod than not, and nothing
+  outside the mod needs the rest. ModTrap then proposes disabling the mod whole and names the leftover plugins, for
+  the owner to judge. A patch collection (one plugin in 167) never reads this way.
+- FACT: MO2's per-executable output setting works as evidence (WHY§22): the scan tied one output mod to the four
+  xEdit entries of this MO2, from the profile's settings alone.
+- FACT: it is not enough by itself. Another tool's output mod on the same list carries no such setting (that tool
+  chooses its own output folder), so the scan read it as an ordinary mod. Names and header marks, kept as data
+  (DESIGN§13), are needed beside it.
+- METHOD: "made by xEdit" does not mean "run the tool again": xEdit is an editor, and what it wrote there came
+  from a script or from hand edits that ModTrap cannot repeat. For an editor's output the proposed treatment is
+  demaster; "run the tool again" is for patchers and generators. The tool data file needs a field for this.
+- FACT: xEdit's new files go to that output mod on this list. ModTrap's script writes its results to a folder
+  outside the instance (DESIGN§6.3), so they do not land there; in the fallback route they would, and so would
+  xEdit's own backups unless `-B:` points elsewhere (XE01§5).
+- FACT: the dependants' master lists run from 4 to 200 plugins; the largest are the list's merged and generated
+  patches. Loading "the dependants and their masters" (XE01§3) is still far less than the whole load order for the
+  small patches, but close to all of it for the largest; the dry run's time will be set by those.
+
+### 29. Version 0.1's page: what was built, how it was tested, what was not
+
+`2026-11-20` · METHOD · `#server #page #process` · refs: DESIGN§2, DESIGN§4, DESIGN§10, WHY§9, MT11
+
+- METHOD: `python -m modtrap` (or `ModTrap.cmd`) starts the server on 127.0.0.1 and opens the page. The server is
+  DataPiler's, taken whole (NOTICE); the log is a small one of our own on DataPiler's pattern; the API reads only.
+  The chosen folder is kept in ModTrap's own folder under the user's local application data, never in the instance.
+- METHOD: an instance is read on a thread of its own, and plugin headers are cached by path, size and time, so a
+  rescan re-reads only what changed.
+- FACT: tested here with the standard library's test runner (server guards, API, masking, nothing written to the
+  instance) and in a real browser against two invented instances, one the size of the owner's (about 3,600 mods and
+  3,900 plugins): read and modelled in well under a second, first rows on the page in under a second, filtering
+  instant, no errors in the browser's console under the strict content policy.
+- Not tested: on Windows at all, the `.cmd` starter included; the page against the owner's real modlist. Timings on
+  the owner's PC will be set by the disk (3,751 plugin files opened), not by this code.
+- Not built yet from DESIGN§4: the tools' versions in the instance bar (DESIGN§13), the Steps and History tabs, a
+  folder picker (the folder is typed or pasted), and the built launcher and updater (MT11).
+
+### 30. A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini
+
+`2026-11-20` · METHOD · `#page #mo2 #safety` · refs: MT19, WHY§29, MO01§2, DESIGN§4
+
+- FACT (the owner's report): the first page's Open button "did nothing". With an empty box the server's refusal
+  was shown and at once painted over by the next refresh, and the grey example path in the box read as a real
+  value. Fixed: an empty box is answered on the page, a refusal stays until a modlist is being read, and the box's
+  hint no longer looks like a path. The form had only ever been tested through the start-up option, never through
+  the button: the browser test now presses it.
+- FACT: a browser gives a page a dropped folder's name and lets it read files inside, but never its path. So the
+  page reads one file from the dropped folder, `ModOrganizer.ini`, and sends its bytes and the folder's name; it
+  never walks the folder.
+- METHOD: the server finds the folder (`modtrap/locate.py`): folders opened before; then every ancestor of every
+  absolute path in that ini (MO2's executables and the game usually sit inside the instance, MO01§2); then a
+  bounded search for a folder of that name. A candidate is accepted when its own ini has the same sha256.
+- From the session that started ModTrap, whose DataPiler has a folder picker and detection but never met a
+  dropped folder: handle the drag for the whole page, or a near miss makes the browser open the dropped thing;
+  never log, store or echo the ini (it holds the owner's paths); the search only on fixed drives, never through a
+  link or junction, never opening a cloud drive's placeholder; and MO2 rewrites its ini, so fall back from the
+  byte match to identity (the one folder of that name that is an instance of the same game). All taken.
+- Not taken, and why: asking "Use this folder?" before registering it. ModTrap at this stage only reads, the owner
+  asked that the drop register the path, and the page shows at once what was found. A confirmation belongs before
+  the first job that writes, where the plan already is (DESIGN§6.1).
+- Next, from the same advice: detection (a running MO2's folder; MO2's own records of its instances), and
+  DataPiler's in-page folder picker as a Browse button. A native folder dialog was ruled out there: it opens
+  behind the browser.
+- Tested here in a browser with a simulated drop (a real drag from Explorer cannot be driven from a test), and on
+  Linux only. The drive search and the Windows file attributes are untested until the owner's PC.
+
+### 31. The dry run is built; what its first run on the owner's PC has to show
+
+`2026-11-20` · METHOD · `#xedit #mo2 #safety #process` · refs: DESIGN§6.1, DESIGN§6.2, DESIGN§9, WHY§3, WHY§5, WHY§6, WHY§7, XE01§3, XE01§7, MO01§3, MT4
+
+- FACT (the owner): the page and the drop box work on the real modlist. The owner asked for the dry run.
+- METHOD: the dry run on real plugins comes before the probe on invented ones, because report mode only reads:
+  `modtrap/xedit/ModTrap.pas` changes nothing in memory, so xEdit has nothing to save. The probe (DESIGN§9) is for
+  the mode that writes. All the same, before xEdit starts ModTrap copies and hashes every dependant in the job's
+  folder, and afterwards checks each is still that file; and the script clears any "unsaved" mark xEdit holds on a
+  plugin it did not change, and reports it.
+- METHOD: the script asks, per record, which plugins it needs (one call, XE01§7), and only for a record that needs
+  a trapped plugin goes down to the lowest elements. For each it reports whether the record is the trapped
+  plugin's own, and for an element whether it sits in an array (and which, and how long) or is a single field. It
+  judges nothing: which arrays are safe to shorten is ModTrap's list (`dryrun.SAFE_ARRAYS`), not the script's.
+- METHOD: xEdit is given a plugin list of the dependants and every master under them, and is told not to build
+  references, which the report does not need. On the owner's list the largest dependants have up to 200 masters,
+  so several hundred plugins load.
+- METHOD: the page follows a progress file the script rewrites after each step, and takes the end from the
+  report's last line. If xEdit closes without one, ModTrap prints the tail of xEdit's own log from the job's
+  folder into the terminal, masked: the script cannot be run here, so that tail is how a script error will be read.
+- Tested here: everything around xEdit, with a stand-in that reads the same job file and writes the same report
+  (the plan, the job's files, the command, following progress, the checks, a closed xEdit, a changed dependant,
+  the page in a browser).
+- Not tested, and what the first run shows, in the order it would fail:
+  1. LIKELY: MO2 accepts the command as built, with quoted paths inside `-a`, open or closed (MO01§3, WHY§7).
+  2. LIKELY: xEdit takes `-P:` and loads exactly those plugins and their masters (XE01§3).
+  3. LIKELY: the script compiles and runs in xEdit's script host. It is written only with functions and idioms
+     found in xEdit's own scripts, but has never run.
+  4. LIKELY: a script can rewrite a text file while it works (WHY§5).
+  5. LIKELY: xEdit's names for arrays match `SAFE_ARRAYS` ("FormIDs", "Leveled List Entries", "KWDA - Keywords").
+     The first real report shows the names; until then an entry of an unknown array reads "needs you", which is the
+     safe side.
+  6. How long it takes, and whether xEdit closes by itself at the end.
+
+### 32. A friendlier page: what was changed and why
+
+`2026-11-20` · METHOD · `#page` · refs: DESIGN§4, WHY§29, WHY§30, MT2
+
+- The owner, away from the PC with the dry run still to try, asked for the page to be made friendlier meanwhile.
+- FACT (the owner's screenshot of the real list): with the highest priority first, each separator sat above
+  mods that belong to the separator before it, so the groups read wrongly; and ticking meant hitting a small box
+  in a list of 3,580 rows, most of which cannot be ticked.
+- METHOD: the mods are now shown as MO2 shows them, lowest priority first, each separator heading its own mods,
+  with groups that fold (one, or all), a choice of order (as in MO2, reversed, most dependants first), a click
+  anywhere on a row to tick it, and a "nothing matches" line with a way back.
+- METHOD: a first-time visitor is told what to do: a welcome screen with the three steps, a large drop area, and
+  the modlists opened before; a step guide in the header that follows the owner's progress (the fourth step,
+  the demaster itself, is shown as not yet built); and a bar at the foot of the page as soon as a mod is ticked,
+  leading to what depends on it.
+- METHOD: things are linked: a plugin's name anywhere opens it on the Plugins tab, a mod's name shows it on the
+  Mods tab, the health and tools chips open their tabs. The tools set up in MO2 have a tab of their own, with the
+  one ModTrap starts as xEdit marked and each tool's output mod.
+- METHOD: the dry run's result opens with a count by outcome, and its lines and the whole log have a copy button;
+  the log is already masked, so what is copied can be pasted when asking for help.
+- METHOD: keyboard and assistive use: `/` goes to the search box, Escape clears it, folding and links are real
+  buttons, counts and states have text beside their colour, movement stops under "reduce motion".
+- FACT: checked in a browser on the invented lists, the large one included (folding 134 groups, re-ordering and
+  searching 3,467 mods each take a fraction of a second; no error in the console). The list of mods is now worked
+  out once for each reading, not at every request. A test checks that every element the script asks for is on the
+  page, and that the page loads nothing from outside and has nothing inline.
+- Not done: a folder picker with a Browse button and detection of a running MO2 (WHY§30); a light theme.
+
+### 33. Sessions and Quit: how the state is kept, and what "safe to finish" means for now
+
+`2026-11-20` · METHOD · `#page #safety #process` · refs: MT20, DESIGN§15, DESIGN§11, DESIGN§14, WHY§32
+
+- METHOD: a session is a folder under ModTrap's own work folder with a `session.json` (name, modlist, profile,
+  status, what the page looked like), its log, and its jobs. The page sends what it looks like half a second after
+  each change; the server writes it at once and atomically. So closing the console window loses at most that half
+  second, and Quit loses nothing.
+- METHOD: "the exact same state" is built from two halves. What ModTrap decides (the session, its last job and
+  result, its log) is read back from the session's folder. What comes from the modlist (the mods, plugins,
+  masters) is read again from the modlist itself at start, never from a copy: a copy could be stale, and every
+  later step must stand on what is on disk now. Plugin headers are cached by path, size and time, so a start reads
+  only plugins that changed.
+- METHOD: the lock is by modlist folder, not by profile: profiles of one MO2 share the mod folders that a
+  demaster's output goes to, so two sessions on two profiles of one modlist could still trip over each other.
+- METHOD: "verified finished and safe" is today one check (nothing of the session is still going), because
+  nothing ModTrap does yet changes a modlist. The place for the real check exists (`Api.session_finish`); the
+  steps of a demaster and the health check plug into it when they are built (DESIGN§14, DESIGN§15).
+- FACT: a page can close its own tab only if a script opened it; ModTrap's tab is opened by the operating system's
+  browser launch, so `window.close()` is refused. The page therefore says "ModTrap has closed, you can close this
+  tab", and tries to close itself all the same.
+- FACT: tested here: the store and the lock; through the API a quit and a fresh start that give back the same
+  session, page state, dry-run result and log without reading a single plugin again; and in a browser, where the
+  page's state before Quit and after the restart compared equal, and a second session on the same modlist was
+  locked until the first was finished. Not tested on Windows.
+- Not built: deleting a session (it will hold safe folders, so deleting needs the same care as Revert), and what a
+  demaster cut short by Quit should do.
+
+### 34. The script checked against the script engine's source, without running it
+
+`2026-11-20` · METHOD · `#xedit #process` · refs: WHY§31, XE01§7, XE01§9, MT4
+
+- METHOD: xEdit's scripts run in JVCL's interpreter, whose source is not in xEdit's repository. It was read at
+  `github.com/project-jedi/jvcl`, commit `b045b99` (2026-05-29; MPL 1.1 by its file headers; only
+  `jvcl/run/JvInterpreter*.pas`, read only), together with xEdit's own adapter units at the 4.1.5f tag.
+- FACT: every keyword and form the script uses is in the interpreter's parser: `unit`, `while`, `mod`, `try` with
+  `except on E: Exception`, a bare `raise` to pass an error on, `exit`, character constants such as `#9`
+  (`JvInterpreterParser.pas:104-150`, `:336-381`, `:740-748`; `JvInterpreter.pas:7640-7648`).
+- FACT (a real find): the interpreter looks names up without regard to case, across everything registered. Four
+  of the script's own variable names were names xEdit registers: `formId` (xEdit's `FormID` function), `tFile` and
+  `tForm` (the classes `TFile` and `TForm`) and `fileName`. They are renamed. Every name the script declares was
+  then compared by a small program with all 3,741 names the two sources register; what is left in common are the
+  entry point `Initialize` and the one-letter names xEdit's own scripts use.
+- FACT: xEdit catches an error a script lets through and writes it with its place in the script
+  (`xEdit/xeMainForm.pas:8469-8474`). So the script now records its failure and passes the error on: xEdit's log
+  names the line, and ModTrap prints that log's tail (WHY§31).
+- METHOD: the script no longer decides what an element is. For each element that points at a trapped plugin it
+  writes the chain of elements up to the record: each one's name, kind of element, kind of value, size and place.
+  ModTrap's own code reads the chain (`dryrun.read_chain`): an entry of a list is an element whose parent is a list
+  by either kind. A keyword list is a list by its value, not by its element kind, which the first version of the
+  script would have missed. A wrong reading can now be put right in ModTrap without the owner running xEdit again
+  on a new script.
+- METHOD: the job file is written as UTF-8 with a byte-order mark, which the script's string list honours, so a
+  folder name with letters outside the PC's own text encoding still arrives whole. The script's own files come back
+  in the PC's encoding; ModTrap reads them as UTF-8 if valid, else as that.
+- Still unproven, as WHY§31 lists: only a run can show the rest.
+
+### 35. The Steps tab: a checklist the modlist's own files tick off
+
+`2026-11-20` · METHOD · `#page #procedure #tools` · refs: MT18, MT17, DESIGN§14, DESIGN§13, WHY§21, WHY§27, WHY§28
+
+- METHOD: until ModTrap can change a modlist, the steps of a demaster are a checklist for doing it by hand, made
+  for whichever mods are ticked: the dry run; the patches to switch off; the plugins to demaster; the tool outputs
+  to rebuild; the mods to disable; the tools to run again; the settings files to look at; the health check; play.
+  It replaces a guide written for one mod with one worked out from the modlist.
+- METHOD: a step is "done" when the modlist's files show it, at every reading: a plugin no longer lists the mod as
+  a master, a plugin is inactive, a mod is disabled, the health check is clean. Only what no file can show (a tool
+  was run again, a settings file was looked at, the game plays) is ticked off by the owner, and kept in the session.
+- METHOD: three things no master list shows are now found (WHY§27). What the ticked mod carries besides plugins,
+  by file name: animations and behaviours lead to the behaviour tool set up in MO2, LOD files to the LOD tools.
+  Mods that only replace the ticked mod's files (a hotfix): a mod at least four fifths made of files the ticked mod
+  also has. And small settings files of other mods that name a ticked plugin: lines for something that works while
+  the game runs. The last reads the content of other mods' settings files, and nothing else of them.
+- LIKELY: the file-name patterns for each kind (`steps.KINDS`) are from general knowledge of how Skyrim mods lay
+  out their files, not from a source; the page says "for example" and shows the files it went by.
+- FACT: a mod that also provides a ticked plugin (a second copy of it, higher or lower in priority) is listed with
+  the mods to disable: the plugin stays in the game while any of them is enabled.
+- Limits: files inside a mod's archive are not seen (the archive's table is not read); the search of settings files
+  stops after a time and a count, and says so; the caution about saves and compiled scripts is general modding
+  knowledge, worded as such.
+
+### 36. Groundwork for the demaster, built ahead and switched off
+
+`2026-11-20` · METHOD · `#safety #mo2 #process` · refs: MT9, MT14, MT15, WHY§16, WHY§26, WHY§6, DESIGN§8, DESIGN§9, DESIGN§11, DESIGN§12, MO01§2, XE02
+
+- METHOD: four parts of the demaster step can be written and tested without xEdit, so they were, while the dry run
+  waits for its first real run. None is called by anything the page can reach; a test checks that the module
+  behind the page imports none of them.
+- `modtrap/profile.py`: enabling and disabling mods in `modlist.txt`, activating and deactivating plugins in
+  `plugins.txt`, adding a mod on top. It works on the file's bytes line by line: only the changed lines differ, and
+  disabling then enabling gives the original file back byte for byte (order, line ends, comment, encoding). It
+  refuses, writing nothing, a name that is not listed, a mod MO2 does not manage, and a file that is not the one
+  the change was planned against or that changed meanwhile. It answers with each line changed and the mod's
+  priority as MO2 numbers it, for the history.
+- `modtrap/safe.py`: the safe folder. A file may be changed only if its copy is there and matches; what ModTrap
+  writes is noted; Revert first checks every file and writes nothing at all if one was changed since by something
+  else, unless told to go ahead; files ModTrap made are removed only if still as made. The record is written after
+  every step, so a new start of ModTrap can still revert.
+- `modtrap/history.py`: the append-only record, one event a line, flushed to disk as written; a line cut short by
+  a crash is passed over. It answers which mods and plugins ModTrap switched off and not on again, with where they
+  were: what Re-enable needs.
+- `modtrap/probe.py`: three invented plugins with real records for the probe: a mod to take out, a plugin that
+  overrides one of its records and holds a list with one entry pointing at it, and a patch made only for it; and
+  what a dry run and a demaster of them must give. LIKELY: the layout of records and groups is the format as widely
+  documented, not read in a source; ModTrap's own tests read the files back, and whether xEdit loads them is the
+  first thing the probe will show.
+- Not written: the script's mode that changes plugins. It waits for the first real report, which shows xEdit's
+  names and behaviour; and it must not share a file with the report mode until that mode is proven, since an error
+  in it could stop the script from loading at all.
+- Still open before any of this is switched on: what MO2 does with a re-enabled mod's plugins (MO01§6), whether a
+  rewritten `plugins.txt` keeps the load order through MO2's next start (WHY§26), and detecting that MO2 is closed.
+
+### 37. Which tool made a plugin: read in the tools' own sources, kept as data
+
+`2026-11-20` · FACT (the tools' repositories at named commits, TL01) · `#tools` · refs: MT18, WHY§22, WHY§28, TL01§2, TL01§3, TL01§4, TL01§5, TL01§7, DESIGN§13
+
+- FACT: Wrye Bash marks its patch in the header's author field and names it by a fixed pattern (TL01§2);
+  ParallaxGen names its split outputs by a fixed pattern and chooses its own output folder, which is why MO2's
+  setting missed it on the owner's list (TL01§4, WHY§28); Synthesis has a default name, but a group's output is
+  named by the modlist's maker and carries no mark of the tool (TL01§3).
+- METHOD: `modtrap/data/tools.json` holds one entry a tool with its marks, names, kind and source; `modtrap/tools.py`
+  applies it. Evidence in order: MO2's own record of where a tool's new files go, the author field, a known file
+  name, and last a name that only begins like a tool's (weak: shown as "probably"). The page shows the evidence.
+- METHOD: what follows from the kind. A patcher's or generator's output is proposed for "run the tool again". An
+  editor's output (xEdit, zEdit) cannot be made again by ModTrap and is demastered. A tool ModTrap does not know,
+  but whose output mod MO2 records, is taken for a tool, not an editor.
+- LIKELY: DynDOLOD's names (TL01§5); its source is not public and its documentation is still to be read.
+- On the owner's list this now recognises the texture tool's output plugin by its name, where MO2's setting alone
+  had read it as an ordinary mod.
+
+### 38. A Browse button: an in-page folder picker
+
+`2026-11-20` · METHOD · `#page` · refs: MT19, WHY§30, DESIGN§4
+
+- METHOD: a third way to open a modlist, beside dropping its folder and pasting its path: a picker over the page
+  that walks this PC's folders (`modtrap/browse.py`). It lists folder names only, never files, marks each folder
+  that holds a `ModOrganizer.ini`, and lets a folder be opened only if it is such a folder. It starts at the fixed
+  drives, shows no link, junction or system folder, and refuses network and device paths.
+- In-page and not a native dialog, on the advice from the owner's DataPiler (WHY§30): a dialog opened by ModTrap's
+  own process tends to open behind the browser.
+- FACT: tested here with the test runner and in a browser on Linux, where the start is the root folder. The list
+  of drives on Windows comes from the same code as the drop's search and is untested until the owner's PC.
+- Not done from the same advice: detecting a running MO2 and offering its folder, and showing each tool's version;
+  both need Windows calls that cannot be tried here, and are better written when the owner can run them.

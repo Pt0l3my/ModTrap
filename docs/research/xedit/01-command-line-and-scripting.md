@@ -64,6 +64,19 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **FACT.** `AddMessage` writes to xEdit's Messages tab. xEdit's own scripts save string lists to files
   (for example `Build/Edit Scripts/Save script source.pas:30`).
 
+- **FACT.** A script's call `ReportRequiredMasters(element, list, a, b)` reaches the element with `a` as "as new"
+  and `b` as "recursive" (`:641-655`). For a main record with "as new" false it adds the plugin the record itself
+  belongs to; with "recursive" true it goes through everything under the element that can hold form IDs
+  (`Core/wbImplementation.pas:7572-7592`, `:12735-12749`). So one call on a record, false and true, gives every
+  plugin that record needs, and the same call on a part of it gives what that part needs.
+- **FACT.** `RecordCount` and `RecordByIndex` go over a plugin's records as one flat list
+  (`Core/wbImplementation.pas:4269-4272`, `:4325-4328`). `FileCount` and `FileByIndex` go over the loaded files
+  (`xEdit/JvI/xejviScriptHost.pas:173-181`).
+- **FACT.** `GetElementState`, `SetElementState` and `ClearElementState` take a number for the state, `esUnsaved`
+  among them, and answer whether it was set (`:259-325`).
+- **FACT.** A named parameter is matched whole and without regard to case: `-P:` only as `P:`, `-script:` only as
+  `script:` (`Core/wbCommandLine.pas:37-64`). `-script:` does not collide with `-S:`.
+
 ## 8. xEdit's own "Report masters" script
 
 - **FACT.** `Build/Edit Scripts/Report masters.pas` asks which masters to check, then for each record calls

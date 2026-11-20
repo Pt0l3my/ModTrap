@@ -1,0 +1,54 @@
+{
+ "format": "modtrap-tools/1",
+ "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered.",
+ "tools": [
+  {
+   "tool": "Wrye Bash",
+   "kind": "patcher",
+   "executables": ["wrye bash", "bash.exe", "wryebash"],
+   "author": ["BASHED PATCH"],
+   "names": ["^Bashed Patch, \\d+\\.esp$"],
+   "label": "FACT",
+   "source": "TL01§2"
+  },
+  {
+   "tool": "Synthesis",
+   "kind": "patcher",
+   "executables": ["synthesis"],
+   "names": ["^Synthesis\\.esp$"],
+   "weak_names": ["^Synthesis\\b.+\\.esp$"],
+   "label": "FACT for the default name; a group's own name is the owner's choice",
+   "source": "TL01§3"
+  },
+  {
+   "tool": "ParallaxGen (PGPatcher)",
+   "kind": "generator",
+   "executables": ["parallaxgen", "pgpatcher"],
+   "names": ["^PGPatcher\\.esp$", "^PG_\\d+\\.esp$", "^ParallaxGen(_\\d+)?\\.esp$"],
+   "label": "FACT",
+   "source": "TL01§4"
+  },
+  {
+   "tool": "DynDOLOD",
+   "kind": "generator",
+   "executables": ["dyndolod"],
+   "names": ["^DynDOLOD\\.es[mp]$", "^Occlusion\\.esp$"],
+   "label": "LIKELY",
+   "source": "TL01§5"
+  },
+  {
+   "tool": "xEdit",
+   "kind": "editor",
+   "executables": ["sseedit", "xedit", "tes5edit"],
+   "label": "FACT that it is an editor; what it wrote came from a script or from hand edits",
+   "source": "TL01§6"
+  },
+  {
+   "tool": "zEdit",
+   "kind": "editor",
+   "executables": ["zedit"],
+   "label": "LIKELY",
+   "source": "TL01§6"
+  }
+ ]
+}

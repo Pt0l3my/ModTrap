@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -185,6 +186,7 @@ class Instance:
     mods: list[Mod]                            # lowest priority first; the game first, overwrite last
     load_order: list[tuple[str, bool]]         # (plugin name, active), in load order
     primary: tuple[str, ...]                   # the game's own plugins, always active
+    output_mods: dict[str, str] = field(default_factory=dict)   # an executable's title -> the mod its new files go to
     notes: list[str] = field(default_factory=list)   # what was found that the owner should know, in words
 
     def mod(self, name: str) -> Mod | None:
@@ -319,7 +321,16 @@ def load(root: Path | str, profile: str | None = None) -> Instance:
             seen_p.add(fold(n))
             order.append((n, a))
 
+    # MO01§2: per executable, the mod that receives the files the program creates (the profile's settings.ini).
+    output_mods: dict[str, str] = {}
+    st_path = pdir / "settings.ini"
+    if st_path.is_file():
+        section = parse_ini(_decode(_read_bytes(st_path))).get("custom_overwrites", {})
+        for key, value in section.items():
+            if value:
+                output_mods[urllib.parse.unquote(key)] = value
+
     return Instance(root=root, mods_dir=mods_dir, profiles_dir=profiles_dir, overwrite_dir=overwrite_dir,
                     game_dir=game_dir, game_name=game_name, profile=chosen, profiles=profiles,
                     executables=_executables(ini.get("customExecutables", {})), mods=mods, load_order=order,
-                    primary=tuple(primary), notes=notes)
+                    primary=tuple(primary), output_mods=output_mods, notes=notes)

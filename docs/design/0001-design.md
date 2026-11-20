@@ -1,7 +1,7 @@
 # Design 0001: ModTrap
 
 *2026-11-20 · Adopted as the working design under MT17; revised the same day after the owner's answers (MT4 to
-MT11, MT14, MT15, MT17, MT18). Version 0.1's reader is being built; nothing else is. Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
+MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), and the dry run (WHY§31). Nothing that writes to an instance is. Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
 [REASONING.md](../REASONING.md), `MO01` and `XE01` are [the research notes](../research/README.md).*
 
 ## 1. What ModTrap does
@@ -17,7 +17,8 @@ Words used below:
 
 - **trapped mod**: a mod the owner ticked. Its plugins are the **trapped plugins**.
 - **dependant**: a plugin of another mod that lists a trapped plugin among its masters.
-- **patch-only mod**: a mod whose plugins exist only for a trapped mod; it is disabled, not demastered (MT6).
+- **patch-only**: a plugin that exists only for a trapped mod. It is switched off, not demastered (MT6): its mod is
+  disabled, or the plugin alone is deactivated when its mod holds other plugins (WHY§26).
 - **safe folder**: ModTrap's copies of every file a job will change, taken before it changes any (MT14).
 - **history**: ModTrap's dated record of every change it made to the instance (MT15).
 
@@ -57,15 +58,15 @@ is the same across them, and xEdit does the rest.
 
 ## 4. The page
 
-- **Instance bar.** The modlist folder (picked once, remembered), the profile, the game and its version, the tools
+- **Instance bar.** The modlist folder (dropped on the page or pasted, MT19; found as in WHY§30; remembered), the profile, the game and its version, the tools
   found (§13), whether MO2 is open, and the health check's result.
-- **Mods.** The full modlist in MO2's order, each row with its priority number, enabled or disabled, its plugins,
+- **Mods.** The full modlist in MO2's order, under its separators as groups that fold (WHY§32), each row with its priority number, enabled or disabled, its plugins,
   and a count of dependants; a search box and filters (enabled only; has plugins; has dependants; changed by
   ModTrap). A mod with no plugins, or whose plugins nothing depends on, shows "can be disabled as it is".
 - **Plugins.** The full load order, each row with its position, its kind (esm, esp, esl or light-flagged), its mod,
   active or not, its masters and its dependants.
 - **Selection panel.** For the ticked mods: every dependant, grouped by the mod it lives in, with what ModTrap
-  proposes for it (§5) and a way to change that per dependant; and the patch-only mods proposed for disabling.
+  proposes for it (§5) and a way to change that per dependant.
 - **Demaster Selected.** Opens the plan (§6.1). Nothing has run yet.
 - **Terminal.** A live, scrolling log of the job: ModTrap's own steps, and the lines our script writes as xEdit
   works (WHY§5). A copy is kept in ModTrap's work folder.
@@ -75,11 +76,17 @@ is the same across them, and xEdit does the rest.
 
 ## 5. What happens to each dependant
 
-For each dependant, one of three treatments. ModTrap proposes one; the owner can change it (MT6):
+For each dependant plugin, one treatment. ModTrap proposes it; the owner can change it (MT6):
 
-- **Demaster** (the default): §6.
-- **Disable its mod** (patch-only): proposed when the dry run shows that nothing, or almost nothing, of the
-  mod's plugins would remain once the trapped mod's records are taken out, and no other enabled plugin needs them.
+- **Demaster** (§6): the plugin does other things too, and should go on working without the trapped mod.
+- **Switch off** (patch-only): the plugin exists only for the trapped mod. ModTrap **disables its mod** when every
+  plugin that mod provides is patch-only, and **deactivates the plugin alone** when it is one among others, as in a
+  patch collection (WHY§26). The first reading comes from the headers (which of a mod's plugins depend on the
+  trapped mod); the dry run settles it (nothing, or almost nothing, of the plugin would remain).
+  Where most of a mod's plugins depend on the trapped mod and nothing else needs the rest, ModTrap proposes
+  disabling the mod whole and names the leftover plugins for the owner to judge (WHY§28).
+- **Run the tool again**: the plugin is the generated output of a patcher or generator (§13). The output of an
+  editor such as xEdit cannot be made again by ModTrap, and is demastered (WHY§28).
 - **Skip**: the owner will deal with it another way; the job then cannot disable the trapped mod, and says so.
 
 Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4): A and B
@@ -140,7 +147,8 @@ A copy that fails is dropped and its dependant reported; the others can go on.
 1. **Insert.** The verified copies go into the modlist under their original file names, in a ModTrap mod placed
    above the originals (MT5), which MO2 then uses in their place. The originals stay as installed.
 2. **Disable** (MT9, Auto on by default). With MO2 closed, ModTrap disables the trapped mods and the patch-only
-   mods in the profile's `modlist.txt`; with Auto off, it lists them for the owner to disable in MO2.
+   mods in the profile's `modlist.txt`, and deactivates the patch-only plugins of other mods in `plugins.txt`
+   (WHY§26); with Auto off, it lists them for the owner to do in MO2.
 3. **Verify the instance.** ModTrap reads the instance again (§3) and runs the health check: no active plugin may
    list a master that is missing or inactive, and the load order must otherwise be as it was. Then it asks the
    owner to open MO2 and confirm that MO2 shows no missing-master warning; the answer is kept in the history.
@@ -163,7 +171,8 @@ nothing is installed into either.
 ## 8. Safety rules (the guard)
 
 1. ModTrap writes only: inside its own work folder (the safe folders and the history are there); the files a
-   confirmed plan named, which are ModTrap's own mod in the instance (MT5) and the profile's `modlist.txt`. Every path is checked after resolving links, before the job starts and again before each write.
+   confirmed plan named, which are ModTrap's own mod in the instance (MT5) and the profile's `modlist.txt` and
+   `plugins.txt`. Every path is checked after resolving links, before the job starts and again before each write.
 2. It never writes in the game's folder, in a trapped mod's folder, in `overwrite`, or to any file the plan did
    not name. It never deletes a mod or a plugin.
 3. No file is changed before its copy in the safe folder exists and matches it by size and SHA-256.
@@ -216,6 +225,8 @@ instance:
   left alone and why, the result of each verification, and the owner's confirmation from MO2;
 - each mod disabled or re-enabled: its name, its **priority in the modlist**, and for each of its plugins its
   **position in the load order** and its kind (esm, esp, esl), as they were at that moment;
+- each plugin deactivated or reactivated by itself: its name, position and kind, and its mod and that mod's
+  priority;
 - each change of order: the file, the old and new positions, with date and time;
 - each Revert.
 
@@ -237,8 +248,8 @@ order around it has changed since.
   3. its file name is one the tool is known to use;
   4. it lives under one of the modlist's separators for tool output.
 
-  The marks and names for 2 and 3 are in a data file ModTrap ships, one entry a tool, each with its source; they
-  are not in code (WHY§22). With only weak evidence the page says "probably made by", never more.
+  The marks and names for 2 and 3 are in a data file ModTrap ships (`modtrap/data/tools.json`), one entry a tool,
+  each with its source in TL01; they are not in code (WHY§22, WHY§37). With only weak evidence the page says "probably made by", never more.
 - A generated patch among a job's dependants is not demastered by default: its treatment is **run the tool again**,
   after the trapped mods are disabled, so that the tool rebuilds it without them. Demastering it is the
   alternative the owner can pick, for a tool they no longer have.
@@ -272,3 +283,25 @@ A typical job's steps:
 The job is **complete** only when every step is done and the health check passes (MT17). Until then it is shown as
 "in progress, waiting for you", and **Revert** stays one click away. The steps and their states are part of the
 history (§12).
+
+## 15. Sessions, and Quit
+
+- A **session** (MT20) is one piece of work on one modlist. It lives in a folder of its own under ModTrap's work
+  folder and holds: its name, the modlist's folder and profile, what the page looked like (the ticked mods, the
+  tab, the search and filters, the order, the folded groups, the plugin being looked at), its log, and its jobs
+  with their safe folders (§11) and results. It is written as the owner works, not only at the end.
+- Opening a modlist goes to the session that holds it; if none does, a new session is made and named after the
+  modlist's folder. The owner can rename a session, start another, and switch between them from the header.
+- **One session holds a modlist at a time.** A second session on the same modlist can be started, but it waits,
+  locked: it can look and tick, but cannot start a dry run or a demaster. Sessions on different modlists do not
+  hold each other up.
+- **Finish** hands the modlist to the session that has waited longest. Before it does, ModTrap checks that the
+  session is safe to leave: nothing of it is still going; and, once ModTrap can demaster, every step of its jobs is
+  done (§14) and the health check is clean (§3). A session that is not safe is not finished, and the page says what
+  is still open. A finished session stays, to be looked at; no more work is done in it.
+- **Quit** saves the session and stops ModTrap; the page then says so, since a browser lets a page close only a
+  tab the page itself opened. Starting ModTrap again reads the modlist afresh (plugin headers come from a cache, so
+  only changed plugins are read) and puts the page back as it was, the last dry run and the log included. If the
+  modlist changed in between (a mod no longer there), what cannot be restored is dropped, and the rest is.
+- Quitting while a job is going asks first. A dry run cut short this way is shown afterwards as not finished; the
+  rule for a demaster cut short belongs with Revert (§11) and is not yet designed.

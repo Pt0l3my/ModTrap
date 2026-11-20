@@ -56,17 +56,21 @@ class InstanceTests(unittest.TestCase):
             ("Quill", 4, True, "mod"),
             ("Outputs_separator", 5, False, "separator"),
             ("Bramble - Lantern Patch", 6, True, "mod"),
-            (instance.OVERWRITE, 7, True, "overwrite"),
+            ("Patch Collection", 7, True, "mod"),
+            ("Tool Output", 8, True, "mod"),
+            (instance.OVERWRITE, 9, True, "overwrite"),
         ])
         self.assertEqual(inst.mod("bramble").plugins, ("Bramble.esp",))
         self.assertEqual(inst.executables[0].title, "xEdit")
+        self.assertEqual(inst.output_mods, {"Invented Patcher": "Tool Output"})
         self.assertEqual(inst.notes, [])
 
     def test_load_order(self):
         inst = instance.load(self.root)
         self.assertEqual([n for n, _ in inst.load_order],
                          list(fx.GAME_PLUGINS) + ["Bramble.esp", "Lantern.esp", "Quill.esp",
-                                                  "BrambleLanternPatch.esp"])
+                                                  "BrambleLanternPatch.esp", "Collection - Bramble.esp",
+                                                  "Collection - Quill.esp", "Generated.esp"])
         self.assertTrue(all(a for _, a in inst.load_order))
 
     def test_unlisted_folder_and_missing_folder(self):
@@ -110,10 +114,35 @@ class ModelTests(unittest.TestCase):
 
     def test_dependants(self):
         m = self.build()
-        self.assertEqual(m.row("Bramble.esp").dependants, ["Lantern.esp", "BrambleLanternPatch.esp"])
+        self.assertEqual(m.row("Bramble.esp").dependants, ["Lantern.esp", "BrambleLanternPatch.esp", "Collection - Bramble.esp", "Generated.esp"])
         bramble = m.instance.mod("Bramble")
-        self.assertEqual([r.name for r in m.dependants_of_mod(bramble)], ["Lantern.esp", "BrambleLanternPatch.esp"])
-        self.assertEqual(m.dependants_of_mod(m.instance.mod("Quill")), [])
+        self.assertEqual([r.name for r in m.dependants_of_mod(bramble)], ["Lantern.esp", "BrambleLanternPatch.esp", "Collection - Bramble.esp", "Generated.esp"])
+        self.assertEqual([r.name for r in m.dependants_of_mod(m.instance.mod("Quill"))],
+                         ["Collection - Quill.esp", "Generated.esp"])
+
+    def test_groups_read_what_each_dependant_is(self):
+        m = self.build()
+        gs = model.groups(m, m.instance.mod("Bramble"))
+        self.assertEqual([(g.mod.name, [r.name for r in g.dependants], g.others, g.made_by, g.reading) for g in gs], [
+            ("Lantern", ["Lantern.esp"], 0, (), "whole mod"),
+            ("Bramble - Lantern Patch", ["BrambleLanternPatch.esp"], 0, (), "whole mod"),
+            ("Patch Collection", ["Collection - Bramble.esp"], 1, (), "some plugins"),
+            ("Tool Output", ["Generated.esp"], 0, ("Invented Patcher",), "output"),
+        ])
+
+    def test_a_patch_hub_with_one_masterless_patch_reads_as_most_of_the_mod(self):
+        b = plugin.build
+        for name, masters in (("Hub A.esp", ("Skyrim.esm", "Bramble.esp")), ("Hub B.esp", ("Skyrim.esm", "Bramble.esp")),
+                              ("Hub C.esp", ("Skyrim.esm",))):
+            fx.write(self.root / "mods" / "Bramble - Lantern Patch" / name, b(masters))
+        g = next(g for g in model.groups(self.build(), self.build().instance.mod("Bramble"))
+                 if g.mod.name == "Bramble - Lantern Patch")
+        self.assertEqual((g.reading, g.others, g.leftover), ("most of the mod", 1, ("Hub C.esp",)))
+        # If something outside the mod needs the leftover plugin, the mod is not proposed whole.
+        fx.write(self.root / "mods" / "Quill" / "Quill.esp", b(("Skyrim.esm", "Hub C.esp")))
+        g = next(g for g in model.groups(self.build(), self.build().instance.mod("Bramble"))
+                 if g.mod.name == "Bramble - Lantern Patch")
+        self.assertEqual(g.reading, "some plugins")
 
     def test_disabling_the_mod_is_what_breaks_the_list(self):
         # The situation ModTrap exists for: with Bramble disabled, its dependants miss a master.
@@ -122,7 +151,9 @@ class ModelTests(unittest.TestCase):
         m = self.build()
         self.assertEqual([(i.plugin, i.master, i.what) for i in m.issues],
                          [("Lantern.esp", "Bramble.esp", "missing"),
-                          ("BrambleLanternPatch.esp", "Bramble.esp", "missing")])
+                          ("BrambleLanternPatch.esp", "Bramble.esp", "missing"),
+                          ("Collection - Bramble.esp", "Bramble.esp", "missing"),
+                          ("Generated.esp", "Bramble.esp", "missing")])
         self.assertIsNone(m.row("Bramble.esp").source)
 
     def test_inactive_master(self):
@@ -130,14 +161,16 @@ class ModelTests(unittest.TestCase):
         p.write_bytes(p.read_bytes().replace(b"*Bramble.esp", b"Bramble.esp"))
         m = self.build()
         self.assertEqual({(i.plugin, i.what) for i in m.issues},
-                         {("Lantern.esp", "inactive"), ("BrambleLanternPatch.esp", "inactive")})
+                         {("Lantern.esp", "inactive"), ("BrambleLanternPatch.esp", "inactive"),
+                          ("Collection - Bramble.esp", "inactive"), ("Generated.esp", "inactive")})
 
     def test_higher_mod_wins_and_overwrite_wins_all(self):
         fx.write(self.root / "mods" / "Quill" / "Lantern.esp", plugin.build(("Skyrim.esm",)))
         m = self.build()
         row = m.row("Lantern.esp")
         self.assertEqual((row.source, row.also_in), ("Quill", ("Lantern",)))
-        self.assertEqual(m.row("Bramble.esp").dependants, ["BrambleLanternPatch.esp"])
+        self.assertEqual(m.row("Bramble.esp").dependants,
+                         ["BrambleLanternPatch.esp", "Collection - Bramble.esp", "Generated.esp"])
         fx.write(self.root / "overwrite" / "Lantern.esp", plugin.build(("Skyrim.esm", "Bramble.esp")))
         self.assertEqual(self.build().row("Lantern.esp").source, instance.OVERWRITE)
 

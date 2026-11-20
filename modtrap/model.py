@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import plugin
+from . import plugin, tools
 from .instance import GAME, Instance, Mod, fold
 
 
@@ -47,13 +47,19 @@ class Model:
     plugins: dict[str, PluginRow]   # by folded name
     order: list[str]                # folded names in load order, then those outside it by name
     issues: list[Issue]
+    _by_source: dict[str, list[PluginRow]] = field(default_factory=dict, repr=False)
 
     def row(self, name: str) -> PluginRow | None:
         return self.plugins.get(fold(name))
 
     def provided_by(self, mod: Mod) -> list[PluginRow]:
         """The mod's plugins that MO2 would use (it wins them), in load order."""
-        return [self.plugins[f] for f in self.order if self.plugins[f].source == mod.name]
+        if not self._by_source:
+            for f in self.order:
+                r = self.plugins[f]
+                if r.source is not None:
+                    self._by_source.setdefault(r.source, []).append(r)
+        return self._by_source.get(mod.name, [])
 
     def dependants_of_mod(self, mod: Mod) -> list[PluginRow]:
         """Plugins of other mods that list one of this mod's plugins as a master, in load order."""
@@ -64,6 +70,57 @@ class Model:
                 if fold(d) not in own:
                     out[fold(d)] = self.plugins[fold(d)]
         return [self.plugins[f] for f in self.order if f in out]
+
+
+@dataclass
+class Group:
+    """The dependants of a trapped mod that live in one other mod, and a first reading of what they are
+    (DESIGN§5). The dry run through xEdit refines it; this much is known from the headers alone."""
+    mod: Mod
+    dependants: list[PluginRow]
+    others: int                     # the mod's plugins (that it wins) that do not depend on the trapped mod
+    made_by: tuple[str, ...]        # the tools that made these plugins, as far as the evidence goes (TL01§7)
+    reading: str                    # "output", "whole mod", "most of the mod", "some plugins"
+    leftover: tuple[str, ...] = ()  # for "most of the mod": its plugins that do not depend on the trapped mod
+    evidence: tuple[dict, ...] = () # per plugin: {"plugin", "tool", "kind", "how", "strong"}
+    proposal: str = ""              # for an output: "run the tool again", "probably run the tool again", "demaster"
+
+
+def groups(model: Model, trapped: Mod) -> list[Group]:
+    """The trapped mod's dependants grouped by the mod they live in, in load order of their first plugin."""
+    inst = model.instance
+    binaries = {e.title: e.binary for e in inst.executables}
+    by_mod: dict[str, list[PluginRow]] = {}
+    for r in model.dependants_of_mod(trapped):
+        by_mod.setdefault(r.source or "", []).append(r)
+    out = []
+    for name, rows in by_mod.items():
+        mod = inst.mod(name)
+        if mod is None:
+            continue
+        others = len(model.provided_by(mod)) - len(rows)
+        found = {r.name: tools.identify(r.name, r.author, name, inst.output_mods, binaries) for r in rows}
+        every = all(found[r.name] for r in rows)            # each of these plugins has a maker we can name
+        made_by = tuple(sorted({e.tool for evs in found.values() for e in evs})) if every else ()
+        evidence = tuple({"plugin": pn, "tool": e.tool, "kind": e.kind, "how": e.how, "strong": e.strong}
+                         for pn, evs in found.items() for e in evs)
+        dep = {fold(r.name) for r in rows}
+        rest = [r for r in model.provided_by(mod) if fold(r.name) not in dep]
+        # "Most of the mod": more of its plugins depend on the trapped mod than not, and nothing outside the mod
+        # needs the ones that do not. Such a mod is probably all about the trapped mod (a patch hub with one patch
+        # that needs no master), and disabling it whole is proposed, for the owner to judge (WHY§28).
+        mostly = 0 < others < len(rows) and all(
+            all(model.plugins[fold(d)].source == mod.name for d in r.dependants) for r in rest)
+        if made_by:
+            reading = "output"
+        elif others == 0:
+            reading = "whole mod"
+        else:
+            reading = "most of the mod" if mostly else "some plugins"
+        proposal = tools.proposal([e for evs in found.values() for e in evs]) if made_by else ""
+        out.append(Group(mod, rows, others, made_by, reading,
+                         tuple(r.name for r in rest) if reading == "most of the mod" else (), evidence, proposal))
+    return out
 
 
 def build(inst: Instance, read=plugin.read) -> Model:
