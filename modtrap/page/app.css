@@ -86,3 +86,18 @@ h3 { font-size: 14px; margin: 14px 0 4px; }
   font: 13px/1.5 Consolas, ui-monospace, monospace; white-space: pre-wrap; }
 .terminal .warn { color: var(--warn); }
 .terminal .error { color: var(--bad); }
+.terminal.side { flex: 1; min-width: 320px; max-width: 46%; border-left: 1px solid var(--line); }
+#job-result { flex: 1.3; }
+#plan .card { margin: 0; }
+.actions { display: flex; gap: 8px; margin-top: 10px; }
+.actions .go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+details { margin: 4px 0; }
+summary { cursor: pointer; }
+.would-record { color: var(--good); }
+.would-entry { color: var(--good); }
+.would-needs { color: var(--warn); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 6px 0; }
+.kv dt { color: var(--dim); }
+.kv dd { margin: 0; }
+.count.run { background: var(--warn); color: #2a1d00; }
+.count.ok { background: var(--good); color: #062a15; }

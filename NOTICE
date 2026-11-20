@@ -9,8 +9,8 @@ ModTrap is our own code under the MIT licence (LICENSE).
 - Mod Organizer 2 (GPL-3.0). ModTrap starts the owner's own installed copy from its command line and reads the
   instance's text files. No MO2 code is copied or bundled.
 - xEdit / SSEEdit (MPL-2.0). ModTrap starts the owner's own installed copy, through MO2, with ModTrap's own script.
-  No xEdit code or script is copied or bundled; ModTrap's script is written from scratch against xEdit's scripting
-  functions.
+  No xEdit code or script is copied or bundled; ModTrap's script (modtrap/xedit/ModTrap.pas) is our own, written
+  from scratch against xEdit's scripting functions, under ModTrap's MIT licence.
 
 2. Code reused from the owner's other projects
 ----------------------------------------------

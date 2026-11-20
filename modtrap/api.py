@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import NAME, VERSION, instance, locate, logbook, model, paths, plugin
+from . import NAME, VERSION, dryrun, instance, locate, logbook, model, paths, plugin
 from .server import Bad
 
 log = logbook.get("app")
@@ -53,6 +53,10 @@ class Api:
         self.profile = ""
         self.model: model.Model | None = None
         self._run = 0
+        self.job: dryrun.Job | None = None
+        self.launcher = dryrun.launch          # replaced in tests
+        self.running = dryrun.image_running
+        self.poll = 1.0
 
     # --- reading an instance, off the request thread ---------------------------------------------------------------
 
@@ -133,6 +137,45 @@ class Api:
         log.info("the dropped folder was found through %s", how)
         self.open(str(folder))
         return {"status": "reading", "how": how}
+
+    # --- the dry run (DESIGN§6.1, DESIGN§6.2) ------------------------------------------------------------------------
+
+    def _mods(self, body: dict) -> list[str]:
+        mods = body.get("mods")
+        if not isinstance(mods, list) or not mods or len(mods) > 50 or not all(isinstance(x, str) and x for x in mods):
+            raise Bad("tick at least one mod")
+        return mods
+
+    def _busy(self) -> bool:
+        return self.job is not None and self.job.state not in ("done", "failed", "stopped")
+
+    def dry_plan(self, body: dict) -> dict:
+        try:
+            return dryrun.plan(self._need(), self._mods(body)).public()
+        except dryrun.Refused as e:
+            raise Bad(str(e)) from None
+
+    def dry_start(self, body: dict) -> dict:
+        m = self._need()
+        with self._lock:
+            if self._busy():
+                raise Bad("a dry run is already going")
+            if self.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            try:
+                p = dryrun.plan(m, self._mods(body))
+                job = dryrun.Job(m, p, dryrun.new_job_dir(), launcher=self.launcher, running=self.running,
+                                 poll=self.poll)
+            except dryrun.Refused as e:
+                raise Bad(str(e)) from None
+            self.job = job
+        logbook.set_masks({"<modlist>": self.folder, "<game>": str(m.instance.game_dir) if m.instance.game_dir else None,
+                           "<mods>": str(m.instance.mods_dir), "<job>": str(job.dir)})
+        job.start()
+        return job.public()
+
+    def job_state(self) -> dict:
+        return {"job": self.job.public() if self.job else None}
 
     # --- answers ---------------------------------------------------------------------------------------------------
 
@@ -228,6 +271,8 @@ class Api:
             return 200, self.plugin(query.get("name", ""))
         if path == "/api/mod":
             return 200, self.mod(query.get("name", ""))
+        if path == "/api/job":
+            return 200, self.job_state()
         if path == "/api/log":
             try:
                 after = int(query.get("after", "0"))
@@ -248,9 +293,20 @@ class Api:
             return 200, {"status": "reading"}, None
         if path == "/api/locate":
             return 200, self.locate(body), None
+        if path == "/api/dryrun/plan":
+            return 200, self.dry_plan(body), None
+        if path == "/api/dryrun/start":
+            return 200, self.dry_start(body), None
+        if path == "/api/job/stop":
+            if self.job is None:
+                raise Bad("no dry run is going")
+            self.job.stop()
+            return 200, self.job_state(), None
         if path == "/api/rescan":
             if not self.folder:
                 raise Bad("no modlist is open")
+            if self._busy():
+                raise Bad("a dry run is going; rescan when it has ended")
             self.open(self.folder, self.profile or None)
             return 200, {"status": "reading"}, None
         return 404, {"error": "not found"}, None

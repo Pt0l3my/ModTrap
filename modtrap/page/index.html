@@ -36,6 +36,7 @@
   <button data-tab="mods" class="on">Mods</button>
   <button data-tab="plugins">Plugins</button>
   <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
+  <button data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-tab="log">Log</button>
 </nav>
@@ -75,10 +76,24 @@
 
   <section id="tab-selection" class="tab" hidden>
     <div class="tools">
-      <button id="demaster" disabled title="Arrives with version 0.3: this version only reads">Demaster Selected</button>
-      <span class="dim">This version only reads your modlist. It shows what a demaster of the ticked mods would involve; it changes nothing.</span>
+      <button id="dry-run" disabled>Dry run through xEdit</button>
+      <button id="demaster" disabled title="Arrives with version 0.3">Demaster Selected</button>
+      <span class="dim">The dry run starts your xEdit through MO2 and lists what would be taken out of each dependant. It changes nothing.</span>
     </div>
+    <div id="plan" class="pad" hidden></div>
     <div id="selection" class="scroll pad"></div>
+  </section>
+
+  <section id="tab-job" class="tab" hidden>
+    <div class="tools">
+      <strong id="job-state">No dry run yet</strong>
+      <span id="job-info" class="dim"></span>
+      <button id="job-stop" hidden>Stop</button>
+    </div>
+    <div class="split">
+      <div id="job-result" class="scroll pad"><p class="dim">Tick mods on the Mods tab, then press “Dry run through xEdit” on the Selection tab.</p></div>
+      <pre id="job-log" class="terminal side" tabindex="0"></pre>
+    </div>
   </section>
 
   <section id="tab-health" class="tab" hidden>

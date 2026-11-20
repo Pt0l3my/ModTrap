@@ -177,6 +177,8 @@ function togglePick(name, on) {
   }
   $("sel-count").textContent = state.picked.size;
   $("sel-count").classList.toggle("on", state.picked.size > 0);
+  $("dry-run").disabled = !state.picked.size;
+  $("plan").hidden = true;
   renderSelection();
 }
 
@@ -288,6 +290,112 @@ async function renderSelection() {
   box.replaceChildren(...cards);
 }
 
+// --- the dry run (DESIGN§6.1, DESIGN§6.2) ---------------------------------------------------------------------------
+
+const JOB_WORDS = {
+  preparing: "Preparing", starting: "Starting xEdit through MO2", loading: "xEdit is loading the plugins",
+  reading: "xEdit is reading the dependants", checking: "Checking the result", done: "Dry run done",
+  failed: "The dry run failed", stopped: "Stopped",
+};
+const WOULD = {
+  "record": ["would be taken out", "would-record", "The dependant's own copy of one of the trapped mod's records."],
+  "entry": ["entry would be taken out", "would-entry", "An entry of a list that can be shortened; the record stays."],
+  "needs you": ["needs you", "would-needs", "ModTrap would not change this by itself."],
+};
+const FILE_READING = {
+  "patch only": ["patch only: would be switched off", "good", "Every record in it belongs to the trapped mod: nothing of it would remain."],
+  "can be demastered": ["can be demastered", "good", "Everything in it that needs the trapped mod can be taken out automatically."],
+  "needs you": ["needs you", "warn", "Some of what needs the trapped mod is not something ModTrap takes out by itself."],
+  "not finished": ["not read to the end", "bad", ""],
+};
+
+async function showPlan() {
+  const box = $("plan");
+  let p;
+  try { p = await api("/api/dryrun/plan", { mods: [...state.picked] }); } catch (e) {
+    box.hidden = false;
+    box.replaceChildren(el("div", { class: "card" }, el("p", { class: "message bad", text: e.message })));
+    return;
+  }
+  const start = el("button", { class: "go", text: "Start the dry run" });
+  const cancel = el("button", { text: "Cancel" });
+  cancel.addEventListener("click", () => { box.hidden = true; });
+  start.addEventListener("click", async () => {
+    start.disabled = true;
+    try { await api("/api/dryrun/start", { mods: [...state.picked] }); box.hidden = true; state.jobSeen = ""; showTab("job"); tick(); }
+    catch (e) { start.disabled = false; box.append(el("p", { class: "message bad", text: e.message })); }
+  });
+  box.hidden = false;
+  box.replaceChildren(el("div", { class: "card" },
+    el("h2", { text: "The plan for this dry run" }),
+    el("dl", { class: "kv" },
+      el("dt", { text: "Trapped" }), el("dd", { class: "mono", text: p.trapped.join(", ") }),
+      el("dt", { text: "Dependants to read" }), el("dd", {}, plural(p.dependants.length, "plugin") + ": ", el("span", { class: "mono", text: p.dependants.join(", ") })),
+      el("dt", { text: "xEdit will load" }), el("dd", { text: plural(p.load, "plugin") + ": the dependants and every master under them, nothing else" }),
+      el("dt", { text: "Started as" }), el("dd", { text: "“" + p.tool + "” (" + p.tool_file + ") through MO2, profile “" + p.profile + "”, with ModTrap's own script in report mode" })),
+    el("p", { text: "What will happen: xEdit's window opens, loads those plugins, runs the script and closes by itself. The script only reads. Before it starts, ModTrap copies every dependant into its own safe folder and records its checksum; afterwards it checks that each is still exactly that file." }),
+    el("p", { class: "dim", text: "MO2 may be open or closed. If xEdit is already open, close it first. Loading can take several minutes; the Dry run tab shows the progress." }),
+    ...p.warnings.map((w) => el("p", { class: "message", text: w })),
+    el("div", { class: "actions" }, start, cancel)));
+}
+
+function renderJob(job) {
+  const badge = $("job-badge");
+  if (!job) { badge.hidden = true; return; }
+  const active = !["done", "failed", "stopped"].includes(job.state);
+  badge.hidden = false;
+  badge.textContent = active ? "…" : job.state === "done" ? "✓" : "!";
+  badge.className = "count " + (active ? "run" : job.state === "done" ? "ok" : "bad");
+  $("job-state").textContent = JOB_WORDS[job.state] || job.state;
+  const mins = Math.floor(job.seconds / 60), secs = job.seconds % 60;
+  $("job-info").textContent = job.plan.trapped.join(", ") + " · " + plural(job.plan.dependants.length, "dependant") + " · " +
+    (mins ? mins + " min " : "") + secs + " s" + (job.unchanged === true ? " · every dependant is unchanged on disk" : "");
+  $("job-stop").hidden = !active;
+  $("dry-run").disabled = active || !state.picked.size;
+  const key = job.id + "|" + job.state;
+  if (key === state.jobSeen) return;
+  state.jobSeen = key;
+  const box = $("job-result");
+  const parts = [];
+  if (job.message) parts.push(el("p", { class: "message " + (job.state === "failed" ? "bad" : ""), text: job.message }));
+  if (!active) parts.push(el("p", { class: "dim" }, "This run's files (the report, xEdit's own log, the copies of the dependants): ", el("span", { class: "mono", text: job.folder })));
+  if (active) parts.push(el("p", { class: "dim", text: "Watch xEdit's own window and the lines on the right. Nothing is being changed." }));
+  const r = job.result;
+  if (r) {
+    if (r.not_loaded.length) parts.push(el("p", { class: "message bad", text: "xEdit did not load: " + r.not_loaded.join(", ") }));
+    if (r.held_changed.length) parts.push(el("p", { class: "message", text: "xEdit held these as changed although the script changed nothing; the marks were cleared and the files are unchanged on disk: " + r.held_changed.join(", ") }));
+    for (const f of r.files) {
+      const [label, cls, hint] = FILE_READING[f.reading] || [f.reading, "", ""];
+      const card = el("div", { class: "card" },
+        el("div", { class: "card-head" }, el("h2", { class: "mono", text: f.name }), el("span", { class: "tag " + cls, text: label })),
+        el("p", { class: "dim", text: hint }),
+        el("p", { text: f.records + " records; " + f.needing + " need the trapped mod: " + f.own + " of its own records, " +
+          plural(f.entries, "list entry", "list entries") + ", " + f.needs_you + " that need you." }));
+      const shown = f.items.slice(0, 400);
+      const list = el("ul");
+      for (const it of shown) {
+        const [w, wc, wh] = WOULD[it.would];
+        const li = el("li", {}, el("span", { class: "mono", text: it.signature + " " + it.form + (it.editor_id ? " " + it.editor_id : "") }),
+          el("span", { class: "tag " + wc, title: wh, text: w }));
+        if (!it.own && it.elements.length) {
+          li.append(el("ul", {}, ...it.elements.slice(0, 40).map((e) => el("li", { class: "mono dim",
+            text: (e.kind === "entry" ? "entry of " + e.array + " (" + e.array_length + " long)" : "field " + e.path) + " → " + e.target_file + " " + e.target_form }))));
+        }
+        list.append(li);
+      }
+      const det = el("details", {}, el("summary", { text: "Show the " + plural(f.items.length, "record") }), list);
+      if (f.items.length > shown.length) det.append(el("p", { class: "dim", text: "Showing the first " + shown.length + "; the full report is in the job's folder." }));
+      if (f.items.length) card.append(det);
+      parts.push(card);
+    }
+  }
+  box.replaceChildren(...parts);
+}
+
+async function pollJob() {
+  try { const d = await api("/api/job"); state.job = d.job; renderJob(d.job); } catch (e) { /* next round */ }
+}
+
 // --- tabs, the log, and the loop -------------------------------------------------------------------------------------
 
 function showTab(name) {
@@ -302,11 +410,15 @@ async function pollLog() {
     if (d.lines.length) {
       const log = $("log");
       const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+      const jl = $("job-log");
+      const jAtEnd = jl.scrollTop + jl.clientHeight >= jl.scrollHeight - 30;
       for (const ln of d.lines) {
         log.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
+        if (ln.source === "dryrun") jl.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
         state.logAfter = ln.seq;
       }
       if (atEnd) log.scrollTop = log.scrollHeight;
+      if (jAtEnd) jl.scrollTop = jl.scrollHeight;
     }
   } catch (e) { /* the next round tries again */ }
 }
@@ -322,6 +434,7 @@ async function loadLists(key) {
   renderMods();
   renderPlugins();
   $("sel-count").textContent = state.picked.size;
+  $("dry-run").disabled = !state.picked.size;
   renderSelection();
   showTab(state.tab || "mods");
 }
@@ -336,11 +449,13 @@ async function tick() {
   if (s.status === "ready" && (key !== state.loaded || was !== "ready")) {
     try { await loadLists(key); } catch (e) { showMessage(e.message, true); }
   }
+  await pollJob();
   await pollLog();
 }
 
 function loop() {
-  tick().finally(() => setTimeout(loop, state.status === "reading" ? 700 : 2500));
+  const busy = state.status === "reading" || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 
 async function openFolder(folder, profile) {
@@ -422,6 +537,12 @@ $("rescan").addEventListener("click", async () => {
   tick();
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+$("dry-run").addEventListener("click", showPlan);
+$("job-stop").addEventListener("click", async () => {
+  if (!window.confirm("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
+  try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }
+  tick();
+});
 let debounce;
 const later = (fn) => () => { clearTimeout(debounce); debounce = setTimeout(fn, 120); };
 $("mods-search").addEventListener("input", later(filterMods));

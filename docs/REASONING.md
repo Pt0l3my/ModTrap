@@ -53,6 +53,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 28 | 2026-11-20 | The second scan: a patch with no master, MO2's output setting, and its limits | FACT | #tools #mo2 #procedure |
 | 29 | 2026-11-20 | Version 0.1's page: what was built, how it was tested, what was not | METHOD | #server #page #process |
 | 30 | 2026-11-20 | A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini | METHOD | #page #mo2 #safety |
+| 31 | 2026-11-20 | The dry run is built; what its first run on the owner's PC has to show | METHOD | #xedit #mo2 #safety #process |
 
 ## Entries
 
@@ -448,3 +449,37 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   behind the browser.
 - Tested here in a browser with a simulated drop (a real drag from Explorer cannot be driven from a test), and on
   Linux only. The drive search and the Windows file attributes are untested until the owner's PC.
+
+### 31. The dry run is built; what its first run on the owner's PC has to show
+
+`2026-11-20` · METHOD · `#xedit #mo2 #safety #process` · refs: DESIGN§6.1, DESIGN§6.2, DESIGN§9, WHY§3, WHY§5, WHY§6, WHY§7, XE01§3, XE01§7, MO01§3, MT4
+
+- FACT (the owner): the page and the drop box work on the real modlist. The owner asked for the dry run.
+- METHOD: the dry run on real plugins comes before the probe on invented ones, because report mode only reads:
+  `modtrap/xedit/ModTrap.pas` changes nothing in memory, so xEdit has nothing to save. The probe (DESIGN§9) is for
+  the mode that writes. All the same, before xEdit starts ModTrap copies and hashes every dependant in the job's
+  folder, and afterwards checks each is still that file; and the script clears any "unsaved" mark xEdit holds on a
+  plugin it did not change, and reports it.
+- METHOD: the script asks, per record, which plugins it needs (one call, XE01§7), and only for a record that needs
+  a trapped plugin goes down to the lowest elements. For each it reports whether the record is the trapped
+  plugin's own, and for an element whether it sits in an array (and which, and how long) or is a single field. It
+  judges nothing: which arrays are safe to shorten is ModTrap's list (`dryrun.SAFE_ARRAYS`), not the script's.
+- METHOD: xEdit is given a plugin list of the dependants and every master under them, and is told not to build
+  references, which the report does not need. On the owner's list the largest dependants have up to 200 masters,
+  so several hundred plugins load.
+- METHOD: the page follows a progress file the script rewrites after each step, and takes the end from the
+  report's last line. If xEdit closes without one, ModTrap prints the tail of xEdit's own log from the job's
+  folder into the terminal, masked: the script cannot be run here, so that tail is how a script error will be read.
+- Tested here: everything around xEdit, with a stand-in that reads the same job file and writes the same report
+  (the plan, the job's files, the command, following progress, the checks, a closed xEdit, a changed dependant,
+  the page in a browser).
+- Not tested, and what the first run shows, in the order it would fail:
+  1. LIKELY: MO2 accepts the command as built, with quoted paths inside `-a`, open or closed (MO01§3, WHY§7).
+  2. LIKELY: xEdit takes `-P:` and loads exactly those plugins and their masters (XE01§3).
+  3. LIKELY: the script compiles and runs in xEdit's script host. It is written only with functions and idioms
+     found in xEdit's own scripts, but has never run.
+  4. LIKELY: a script can rewrite a text file while it works (WHY§5).
+  5. LIKELY: xEdit's names for arrays match `SAFE_ARRAYS` ("FormIDs", "Leveled List Entries", "KWDA - Keywords").
+     The first real report shows the names; until then an entry of an unknown array reads "needs you", which is the
+     safe side.
+  6. How long it takes, and whether xEdit closes by itself at the end.
