@@ -8,27 +8,35 @@
 </head>
 <body data-token="__TOKEN__">
 <header>
-  <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
+  <div class="top">
+    <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
+    <ol id="steps" class="steps" hidden>
+      <li data-step="open" data-tab="mods"><span class="n">1</span><span class="t">Modlist open</span></li>
+      <li data-step="pick" data-tab="mods"><span class="n">2</span><span class="t" id="step-pick">Tick the mods to take out</span></li>
+      <li data-step="dry" data-tab="selection"><span class="n">3</span><span class="t" id="step-dry">Dry run</span></li>
+      <li data-step="trap" class="later" title="Not built yet: the step that actually demasters"><span class="n">4</span><span class="t">Demaster</span></li>
+    </ol>
+  </div>
   <div id="drop" class="drop">
     <div class="drop-title">Drop your modlist folder here
       <span class="qm" tabindex="0" title="Drag the modlist's folder (the one with ModOrganizer.exe in it) from Explorer onto this page. A browser never tells a page where a dropped folder is, so ModTrap reads one small file from it, ModOrganizer.ini, and uses it to find the folder on this PC. Nothing else in the folder is read at that point, and nothing is sent anywhere.">?</span>
     </div>
     <form id="open-form" autocomplete="off">
-      <label for="folder">or paste its path</label>
+      <label for="folder" id="folder-label">or paste its path</label>
       <input id="folder" name="folder" type="text" spellcheck="false" placeholder="Paste the modlist folder's path here" aria-describedby="message">
-      <select id="profile" title="Profile" hidden></select>
+      <select id="profile" title="Profile: which of this modlist's profiles to read" hidden></select>
       <button type="submit">Open</button>
-      <button type="button" id="rescan" hidden>Rescan</button>
+      <button type="button" id="rescan" title="Read the modlist again, after you have changed something in MO2" hidden>Rescan</button>
     </form>
   </div>
   <div id="summary" class="summary" hidden>
     <span class="chip" id="s-game"></span>
     <span class="chip" id="s-mods"></span>
     <span class="chip" id="s-plugins"></span>
-    <span class="chip" id="s-tools" title=""></span>
-    <span class="chip" id="s-health"></span>
+    <button class="chip link" id="s-tools" type="button"></button>
+    <button class="chip link" id="s-health" type="button"></button>
   </div>
-  <p id="message" class="message" hidden></p>
+  <p id="message" class="message" role="status" hidden></p>
   <ul id="notes" class="notes" hidden></ul>
 </header>
 
@@ -38,46 +46,88 @@
   <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
+  <button data-tab="tools">Tools</button>
   <button data-tab="log">Log</button>
 </nav>
 
 <main>
+  <section id="welcome" class="welcome" hidden>
+    <div class="welcome-box">
+      <h1>Take a mod out of your modlist, cleanly</h1>
+      <p class="lead">ModTrap finds every plugin that depends on a mod you want gone, and works out what it takes to remove that dependency. At this stage it only reads your modlist: nothing is changed.</p>
+      <ol class="how">
+        <li><strong>Open your modlist.</strong> Drag its folder (the one with ModOrganizer.exe in it) anywhere onto this page, or paste its path above.</li>
+        <li><strong>Tick the mods you want to take out.</strong> ModTrap shows which other plugins need them.</li>
+        <li><strong>Run a dry run.</strong> Your own xEdit lists exactly what would be taken out of each of those plugins.</li>
+      </ol>
+      <div class="bigdrop" aria-hidden="true">Drop the modlist folder anywhere on this page</div>
+      <div id="recent" hidden>
+        <h3>Opened before</h3>
+        <div id="recent-list" class="recent-list"></div>
+      </div>
+      <p class="dim small">ModTrap runs on this PC only and sends nothing anywhere.</p>
+    </div>
+  </section>
+
+  <section id="reading" class="welcome" hidden>
+    <div class="welcome-box">
+      <h1><span class="spinner" aria-hidden="true"></span> Reading your modlist…</h1>
+      <p class="lead">Its list of mods, its load order, and the header of every plugin. The first time takes longest; nothing is being changed.</p>
+    </div>
+  </section>
+
   <section id="tab-mods" class="tab" hidden>
     <div class="tools">
-      <input id="mods-search" type="search" placeholder="Search mods and plugins" spellcheck="false">
-      <label><input type="checkbox" id="f-enabled"> Enabled only</label>
-      <label><input type="checkbox" id="f-plugins"> Has plugins</label>
-      <label><input type="checkbox" id="f-deps"> Has dependants</label>
+      <input id="mods-search" type="search" placeholder="Search mods and plugins   ( / )" spellcheck="false" aria-label="Search mods and plugins">
+      <label title="Hide mods that are disabled in MO2"><input type="checkbox" id="f-enabled"> Enabled only</label>
+      <label title="Hide mods that provide no plugin: there is nothing to demaster in those"><input type="checkbox" id="f-plugins"> Has plugins</label>
+      <label title="Show only mods that other plugins depend on: the ones that cannot simply be disabled"><input type="checkbox" id="f-deps"> Has dependants</label>
+      <label>Order
+        <select id="mods-order" title="How the mods are ordered">
+          <option value="mo2">As in MO2 (lowest priority first)</option>
+          <option value="rev">Highest priority first</option>
+          <option value="deps">Most dependants first</option>
+        </select>
+      </label>
+      <button id="collapse-all" type="button" title="Fold every group">Fold all</button>
+      <button id="expand-all" type="button" title="Unfold every group">Unfold all</button>
       <span id="mods-shown" class="dim"></span>
     </div>
     <div class="scroll"><table id="mods-table">
-      <thead><tr><th class="c-tick"></th><th class="c-num">Priority</th><th>Mod</th><th>Plugins</th>
-        <th class="c-num" title="Plugins of other mods that list one of this mod's plugins as a master">Dependants</th></tr></thead>
+      <thead><tr><th class="c-tick"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
+        <th title="The plugins this mod provides, as MO2 would use them">Plugins</th>
+        <th class="c-num" title="Plugins of other mods that list one of this mod's plugins as a master. While there are any, disabling the mod gives missing-master errors.">Dependants</th></tr></thead>
       <tbody></tbody>
-    </table></div>
+    </table>
+    <p id="mods-empty" class="empty" hidden>No mod matches. <button type="button" id="mods-clear">Clear the search and filters</button></p>
+    </div>
   </section>
 
   <section id="tab-plugins" class="tab" hidden>
     <div class="tools">
-      <input id="plugins-search" type="search" placeholder="Search plugins and their mods" spellcheck="false">
-      <label><input type="checkbox" id="p-problems"> With problems</label>
-      <label><input type="checkbox" id="p-deps"> Needed by others</label>
+      <input id="plugins-search" type="search" placeholder="Search plugins and their mods   ( / )" spellcheck="false" aria-label="Search plugins">
+      <label title="Plugins with a missing or inactive master, or that could not be read"><input type="checkbox" id="p-problems"> With problems</label>
+      <label title="Plugins that other plugins list as a master"><input type="checkbox" id="p-deps"> Needed by others</label>
       <span id="plugins-shown" class="dim"></span>
     </div>
     <div class="split">
       <div class="scroll"><table id="plugins-table">
-        <thead><tr><th class="c-num">Position</th><th>Plugin</th><th>Kind</th><th>Mod</th><th class="c-num">Mod priority</th>
-          <th class="c-num">Masters</th><th class="c-num">Needed by</th></tr></thead>
+        <thead><tr><th class="c-num" title="The plugin's place in the load order">Position</th><th>Plugin</th>
+          <th title="esm: a master file; esl: a light plugin; esp+esl: an .esp flagged light">Kind</th><th>Mod</th><th class="c-num">Mod priority</th>
+          <th class="c-num" title="How many plugins this one lists as its masters">Masters</th>
+          <th class="c-num" title="How many plugins list this one as a master">Needed by</th></tr></thead>
         <tbody></tbody>
-      </table></div>
+      </table>
+      <p id="plugins-empty" class="empty" hidden>No plugin matches. <button type="button" id="plugins-clear">Clear the search and filters</button></p>
+      </div>
       <aside id="plugin-detail" class="detail"><p class="dim">Click a plugin to see its masters and what needs it.</p></aside>
     </div>
   </section>
 
   <section id="tab-selection" class="tab" hidden>
     <div class="tools">
-      <button id="dry-run" disabled>Dry run through xEdit</button>
-      <button id="demaster" disabled title="Arrives with version 0.3">Demaster Selected</button>
+      <button id="dry-run" class="primary" disabled>Dry run through xEdit</button>
+      <button id="demaster" disabled title="Not built yet: the step that actually demasters">Demaster Selected</button>
       <span class="dim">The dry run starts your xEdit through MO2 and lists what would be taken out of each dependant. It changes nothing.</span>
     </div>
     <div id="plan" class="pad" hidden></div>
@@ -89,10 +139,12 @@
       <strong id="job-state">No dry run yet</strong>
       <span id="job-info" class="dim"></span>
       <button id="job-stop" hidden>Stop</button>
+      <span class="spacer"></span>
+      <button id="job-copy" type="button" title="Copy these lines, to paste when asking for help. Your folders are already replaced by placeholders.">Copy the lines</button>
     </div>
     <div class="split">
       <div id="job-result" class="scroll pad"><p class="dim">Tick mods on the Mods tab, then press “Dry run through xEdit” on the Selection tab.</p></div>
-      <pre id="job-log" class="terminal side" tabindex="0"></pre>
+      <pre id="job-log" class="terminal side" tabindex="0" aria-label="The dry run's lines"></pre>
     </div>
   </section>
 
@@ -100,10 +152,26 @@
     <div id="health" class="scroll pad"></div>
   </section>
 
+  <section id="tab-tools" class="tab" hidden>
+    <div id="tools-list" class="scroll pad"></div>
+  </section>
+
   <section id="tab-log" class="tab" hidden>
-    <pre id="log" class="terminal" tabindex="0"></pre>
+    <div class="tools">
+      <span class="dim">Everything ModTrap has done since it started. Your folders are replaced by placeholders such as &lt;modlist&gt;, so these lines can be shared.</span>
+      <span class="spacer"></span>
+      <button id="log-copy" type="button">Copy the log</button>
+    </div>
+    <pre id="log" class="terminal" tabindex="0" aria-label="ModTrap's log"></pre>
   </section>
 </main>
+
+<div id="tray" class="tray" hidden>
+  <span id="tray-text"></span>
+  <button id="tray-review" class="primary" type="button">See what depends on them</button>
+  <button id="tray-clear" type="button">Untick all</button>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
 <script nonce="__NONCE__">/*__JS__*/</script>
 </body>
 </html>

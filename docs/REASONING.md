@@ -54,6 +54,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 29 | 2026-11-20 | Version 0.1's page: what was built, how it was tested, what was not | METHOD | #server #page #process |
 | 30 | 2026-11-20 | A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini | METHOD | #page #mo2 #safety |
 | 31 | 2026-11-20 | The dry run is built; what its first run on the owner's PC has to show | METHOD | #xedit #mo2 #safety #process |
+| 32 | 2026-11-20 | A friendlier page: what was changed and why | METHOD | #page |
 
 ## Entries
 
@@ -483,3 +484,31 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
      The first real report shows the names; until then an entry of an unknown array reads "needs you", which is the
      safe side.
   6. How long it takes, and whether xEdit closes by itself at the end.
+
+### 32. A friendlier page: what was changed and why
+
+`2026-11-20` · METHOD · `#page` · refs: DESIGN§4, WHY§29, WHY§30, MT2
+
+- The owner, away from the PC with the dry run still to try, asked for the page to be made friendlier meanwhile.
+- FACT (the owner's screenshot of the real list): with the highest priority first, each separator sat above
+  mods that belong to the separator before it, so the groups read wrongly; and ticking meant hitting a small box
+  in a list of 3,580 rows, most of which cannot be ticked.
+- METHOD: the mods are now shown as MO2 shows them, lowest priority first, each separator heading its own mods,
+  with groups that fold (one, or all), a choice of order (as in MO2, reversed, most dependants first), a click
+  anywhere on a row to tick it, and a "nothing matches" line with a way back.
+- METHOD: a first-time visitor is told what to do: a welcome screen with the three steps, a large drop area, and
+  the modlists opened before; a step guide in the header that follows the owner's progress (the fourth step,
+  the demaster itself, is shown as not yet built); and a bar at the foot of the page as soon as a mod is ticked,
+  leading to what depends on it.
+- METHOD: things are linked: a plugin's name anywhere opens it on the Plugins tab, a mod's name shows it on the
+  Mods tab, the health and tools chips open their tabs. The tools set up in MO2 have a tab of their own, with the
+  one ModTrap starts as xEdit marked and each tool's output mod.
+- METHOD: the dry run's result opens with a count by outcome, and its lines and the whole log have a copy button;
+  the log is already masked, so what is copied can be pasted when asking for help.
+- METHOD: keyboard and assistive use: `/` goes to the search box, Escape clears it, folding and links are real
+  buttons, counts and states have text beside their colour, movement stops under "reduce motion".
+- FACT: checked in a browser on the invented lists, the large one included (folding 134 groups, re-ordering and
+  searching 3,467 mods each take a fraction of a second; no error in the console). The list of mods is now worked
+  out once for each reading, not at every request. A test checks that every element the script asks for is on the
+  page, and that the page loads nothing from outside and has nothing inline.
+- Not done: a folder picker with a Browse button and detection of a running MO2 (WHY§30); a light theme.

@@ -53,6 +53,7 @@ class Api:
         self.profile = ""
         self.model: model.Model | None = None
         self._run = 0
+        self._lists: dict[str, tuple[object, dict]] = {}
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
@@ -100,10 +101,6 @@ class Api:
                  self._cache.read_count - before, len(m.issues))
         for note in inst.notes:
             log.warn("%s", note)
-        with self._lock:
-            if run != self._run:
-                return
-            self.status, self.message, self.model, self.profile = "ready", "", m, inst.profile
         settings = paths.load_settings()
         recent = [r for r in settings.get("recent", []) if isinstance(r, str) and r != folder]
         settings.update({"folder": folder, "profile": inst.profile, "recent": [folder, *recent][:8]})
@@ -111,6 +108,10 @@ class Api:
             paths.save_settings(settings)
         except OSError as e:
             log.warn("the chosen folder could not be remembered: %s", logbook.why(e))
+        with self._lock:
+            if run != self._run:
+                return
+            self.status, self.message, self.model, self.profile = "ready", "", m, inst.profile
 
     def locate(self, body: dict) -> dict:
         """A folder dropped on the page (WHY§30): its name and its ModOrganizer.ini. Finds it on disk and opens it."""
@@ -190,6 +191,8 @@ class Api:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
+        settings = paths.load_settings()
+        out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         if m is not None and out["status"] == "ready":
             inst = m.instance
             real = [x for x in inst.mods if x.kind == "mod"]
@@ -200,16 +203,29 @@ class Api:
                 "separators": sum(x.kind == "separator" for x in inst.mods),
                 "plugins": sum(r.position is not None for r in rows), "plugins_active": sum(r.active for r in rows),
                 "unreadable": sum(bool(r.unreadable) and r.source is not None for r in rows),
-                "tools": [{"title": e.title, "output_mod": inst.output_mods.get(e.title, "")}
-                          for e in inst.executables],
+                "tools": self._tools(inst),
                 "notes": [logbook.mask(n) for n in inst.notes],
                 "issues": [{"plugin": i.plugin, "master": i.master, "what": i.what} for i in m.issues[:500]],
                 "issue_count": len(m.issues),
             })
         return out
 
+    def _tools(self, inst: instance.Instance) -> list[dict]:
+        """The executables set up in MO2 (DESIGN§13): title, program file, the mod its new files go to, and
+        which one ModTrap would start as xEdit."""
+        try:
+            chosen = dryrun.find_xedit(inst)[0]
+        except dryrun.Refused:
+            chosen = ""
+        return [{"title": e.title, "file": Path(e.binary.replace("\\", "/")).name,
+                 "output_mod": inst.output_mods.get(e.title, ""), "xedit": e.title == chosen}
+                for e in inst.executables]
+
     def mods(self) -> dict:
         m = self._need()
+        hit = self._lists.get("mods")
+        if hit and hit[0] is m:
+            return hit[1]
         rows = []
         for mod in reversed(m.instance.mods):               # highest priority first, as MO2 lists them
             if mod.kind in ("game", "overwrite") and not mod.plugins:
@@ -218,7 +234,9 @@ class Api:
             rows.append({"name": mod.name, "priority": mod.priority, "enabled": mod.enabled, "kind": mod.kind,
                          "listed": mod.listed, "plugins": [r.name for r in won],
                          "files": len(mod.plugins), "dependants": len(m.dependants_of_mod(mod)) if won else 0})
-        return {"mods": rows}
+        out = {"mods": rows}
+        self._lists["mods"] = (m, out)                  # the lists are worked out once for each reading
+        return out
 
     def plugins(self) -> dict:
         m = self._need()

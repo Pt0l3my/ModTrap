@@ -85,7 +85,8 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(r.status, 200)
         s = self.ready()
         self.assertEqual((s["status"], s["profile"], s["mods"], s["issue_count"]), ("ready", "Default", 7, 0))
-        self.assertEqual(s["tools"], [{"title": "xEdit", "output_mod": ""}])
+        self.assertEqual(s["tools"], [{"title": "xEdit", "file": "SSEEdit64.exe", "output_mod": "", "xedit": True}])
+        self.assertEqual(s["recent"], [str(self.root)])
         mods = json.loads(self.call("GET", "/api/mods")[1])["mods"]
         self.assertEqual(mods[0]["name"], "Tool Output")                  # highest priority first
         bramble = next(m for m in mods if m["name"] == "Bramble")

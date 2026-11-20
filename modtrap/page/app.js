@@ -24,7 +24,7 @@ function el(tag, attrs, ...kids) {
     if (v === false || v == null) continue;
     if (k === "class") e.className = v;
     else if (k === "text") e.textContent = v;
-    else if (k.startsWith("data-")) e.setAttribute(k, v);
+    else if (k.startsWith("data-") || k.startsWith("aria-")) e.setAttribute(k, v);
     else e[k] = v;
   }
   for (const k of kids) if (k != null) e.append(k);
@@ -48,24 +48,88 @@ function showMessage(text, bad) {
   m.classList.toggle("bad", !!bad);
 }
 
+function toast(text) {
+  const t = $("toast");
+  t.textContent = text;
+  t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+
+async function copyText(text, what) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(what + " copied. Your folders are already replaced by placeholders.");
+  } catch (e) {
+    toast("The browser did not allow copying. Select the lines and press Ctrl+C.");
+  }
+}
+
+function renderRecent(s) {
+  const list = (s.recent || []).filter((r) => r !== s.folder || s.status !== "ready");
+  $("recent").hidden = !list.length;
+  $("recent-list").replaceChildren(...list.map((path) => {
+    const parts = path.split(/[\\/]/).filter(Boolean);
+    const b = el("button", { type: "button", class: "recent", title: "Open this modlist again" },
+      el("strong", { text: parts[parts.length - 1] || path }), el("span", { class: "dim mono", text: path }));
+    b.addEventListener("click", () => { $("folder").value = path; openFolder(path, null); });
+    return b;
+  }));
+}
+
+function renderSteps() {
+  const steps = $("steps");
+  const job = state.job;
+  const picked = state.picked.size;
+  const dryDone = job && job.state === "done";
+  const dryBusy = job && !["done", "failed", "stopped"].includes(job.state);
+  const at = dryDone ? "trap" : dryBusy || picked ? "dry" : "pick";
+  $("step-pick").textContent = picked ? plural(picked, "mod") + " ticked" : "Tick the mods to take out";
+  $("step-dry").textContent = dryBusy ? "Dry run going…" : dryDone ? "Dry run done" : "Dry run";
+  for (const li of steps.children) {
+    const k = li.dataset.step;
+    const done = k === "open" || (k === "pick" && picked > 0) || (k === "dry" && dryDone);
+    li.classList.toggle("done", done);
+    li.classList.toggle("now", k === at && !done && k !== "trap");
+  }
+  steps.querySelector('[data-step="dry"]').dataset.tab = job ? "job" : "selection";
+}
+
+function renderTools(s) {
+  const box = $("tools-list");
+  const rows = s.tools.map((t) => el("tr", {},
+    el("td", {}, t.title, t.xedit ? el("span", { class: "tag good", text: "ModTrap starts this one for a dry run" }) : null),
+    el("td", { class: "mono", text: t.file }),
+    el("td", { text: t.output_mod || "" })));
+  box.replaceChildren(el("div", { class: "card" },
+    el("h2", { text: plural(s.tools.length, "tool") + " set up in this MO2" }),
+    el("p", { class: "dim", text: "These are the executables in MO2's own list. ModTrap only ever starts xEdit. “Output goes to” is the mod MO2 sends a tool's new files to; a plugin found there was made by that tool." }),
+    el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "Name in MO2" }), el("th", { text: "Program" }), el("th", { text: "Output goes to" }))),
+      el("tbody", {}, ...rows))));
+}
+
 function renderState(s) {
   $("version").textContent = s.version ? "version " + s.version : "";
   if (document.activeElement !== $("folder") && s.folder && (!$("folder").value || s.status === "ready")) $("folder").value = s.folder;
   const ready = s.status === "ready";
   $("summary").hidden = !ready;
   $("tabs").hidden = !ready;
+  $("steps").hidden = !ready;
   $("rescan").hidden = !ready;
   $("drop").classList.toggle("compact", ready);
+  $("folder-label").textContent = ready ? "Modlist" : "or paste its path";
+  $("welcome").hidden = ready || s.status === "reading";
+  $("reading").hidden = s.status !== "reading";
   if (s.status === "reading" || ready) state.sticky = "";
   if (state.sticky) showMessage(state.sticky, true);
-  else if (s.status === "reading") showMessage("Reading the modlist: its mods, and the header of every plugin…");
   else if (s.status === "error") showMessage(s.message, true);
-  else if (s.status === "none") showMessage("Drop the folder of an MO2 modlist on this page (the one MO2 itself is in), or paste its path and press Open. ModTrap only reads it.");
   else showMessage("");
+  renderRecent(s);
   if (!ready) {
     document.querySelectorAll(".tab").forEach((t) => { t.hidden = true; });
     $("notes").hidden = true;
     $("profile").hidden = true;
+    $("tray").hidden = true;
     return;
   }
   $("s-game").textContent = (s.game || "Game unknown") + " · profile " + s.profile;
@@ -73,10 +137,9 @@ function renderState(s) {
   $("s-plugins").textContent = plural(s.plugins, "plugin") + ", " + s.plugins_active + " active" +
     (s.unreadable ? ", " + s.unreadable + " unreadable" : "");
   $("s-tools").textContent = plural(s.tools.length, "tool") + " set up in MO2";
-  $("s-tools").title = s.tools.map((t) => t.title + (t.output_mod ? " → " + t.output_mod : "")).join("\n");
   const h = $("s-health");
   h.textContent = s.issue_count ? plural(s.issue_count, "master problem") : "No missing or inactive masters";
-  h.className = "chip " + (s.issue_count ? "bad" : "good");
+  h.className = "chip link " + (s.issue_count ? "bad" : "good");
   $("health-count").textContent = s.issue_count;
   $("health-count").classList.toggle("bad", s.issue_count > 0);
   const notes = $("notes");
@@ -84,8 +147,12 @@ function renderState(s) {
   notes.hidden = !s.notes.length;
   const sel = $("profile");
   sel.hidden = s.profiles.length < 2;
-  sel.replaceChildren(...s.profiles.map((p) => el("option", { value: p, text: p, selected: p === s.profile })));
+  if (document.activeElement !== sel)
+    sel.replaceChildren(...s.profiles.map((p) => el("option", { value: p, text: p, selected: p === s.profile })));
+  const toolsKey = JSON.stringify(s.tools);
+  if (toolsKey !== state.toolsKey) { state.toolsKey = toolsKey; renderTools(s); }
   renderHealth(s);
+  renderSteps();
 }
 
 function renderHealth(s) {
@@ -115,61 +182,162 @@ function renderHealth(s) {
 
 // --- the Mods tab ----------------------------------------------------------------------------------------------------
 
-function renderMods() {
-  const body = $("mods-table").tBodies[0];
-  const frag = document.createDocumentFragment();
-  for (const m of state.mods) {
-    let tr;
-    if (m.kind === "separator") {
-      tr = el("tr", { class: "sep" }, el("td"), el("td", { class: "c-num", text: m.priority }),
-        el("td", { colSpan: 3, text: m.name.replace(/_separator$/i, "") }));
-    } else {
-      const can = m.kind === "mod" && m.plugins.length > 0;
-      const tick = el("input", { type: "checkbox", disabled: !can, checked: state.picked.has(m.name),
-        title: can ? "Tick to see what a demaster of this mod would involve" : "Nothing to demaster: this mod provides no plugin" });
-      tick.addEventListener("change", () => togglePick(m.name, tick.checked));
-      const name = el("td", {}, m.name);
-      if (m.kind === "foreign") name.append(el("span", { class: "tag", text: "not managed by MO2" }));
-      if (m.kind === "game") name.replaceChildren("The game's own Data folder");
-      if (m.kind === "overwrite") name.replaceChildren("Overwrite");
-      if (!m.enabled) name.append(el("span", { class: "tag", text: "disabled" }));
-      if (!m.listed) name.append(el("span", { class: "tag warn", text: "not in modlist.txt" }));
-      if (m.files > m.plugins.length && m.enabled) name.append(el("span", { class: "tag", text: (m.files - m.plugins.length) + " plugin file(s) overridden" }));
-      tr = el("tr", { class: (m.enabled ? "" : "off") + (state.picked.has(m.name) ? " picked" : "") },
-        el("td", { class: "c-tick" }, tick), el("td", { class: "c-num", text: m.priority < 0 ? "" : m.priority }), name,
-        el("td", { class: "plugs", text: m.plugins.slice(0, 4).join(", ") + (m.plugins.length > 4 ? " … +" + (m.plugins.length - 4) : "") }),
-        el("td", { class: "c-num" + (m.dependants ? " badnum" : ""), text: m.plugins.length ? m.dependants : "" }));
-    }
-    tr.dataset.name = m.name;
-    m.row = tr;
-    m.hay = fold(m.name + " " + m.plugins.join(" "));
-    frag.append(tr);
+// The mods are shown as MO2 shows them: lowest priority first, each separator heading the mods that follow it.
+function buildGroups() {
+  const asc = [...state.mods].reverse();              // the API lists the highest priority first
+  const groups = [{ sep: null, mods: [] }];
+  for (const m of asc) {
+    if (m.kind === "separator") groups.push({ sep: m, mods: [] });
+    else groups[groups.length - 1].mods.push(m);
   }
-  body.replaceChildren(frag);
+  state.groups = groups.filter((g) => g.sep || g.mods.length);
+}
+
+function modRow(m) {
+  const can = m.kind === "mod" && m.plugins.length > 0;
+  const tick = el("input", { type: "checkbox", disabled: !can, checked: state.picked.has(m.name),
+    "aria-label": "Tick " + m.name,
+    title: can ? "Tick to see what taking this mod out would involve" : "Nothing to demaster: this mod provides no plugin" });
+  tick.addEventListener("change", () => togglePick(m.name, tick.checked));
+  const name = el("td", { class: "modname" }, m.name);
+  if (m.kind === "foreign") name.append(el("span", { class: "tag", title: "A DLC or Creation Club item MO2 lists but does not manage", text: "not managed by MO2" }));
+  if (m.kind === "game") name.replaceChildren("The game's own Data folder");
+  if (m.kind === "overwrite") name.replaceChildren("Overwrite");
+  if (!m.enabled) name.append(el("span", { class: "tag", text: "disabled" }));
+  if (!m.listed) name.append(el("span", { class: "tag warn", text: "not in modlist.txt" }));
+  if (m.files > m.plugins.length && m.enabled) name.append(el("span", { class: "tag", title: "Another mod of higher priority provides a plugin of the same name", text: (m.files - m.plugins.length) + " plugin file(s) overridden" }));
+  const plugs = el("td", { class: "plugs" });
+  m.plugins.slice(0, 4).forEach((p, i) => {
+    if (i) plugs.append(", ");
+    const a = el("button", { type: "button", class: "linkish", text: p, title: "Show this plugin's masters and what needs it" });
+    a.addEventListener("click", (ev) => { ev.stopPropagation(); gotoPlugin(p); });
+    plugs.append(a);
+  });
+  if (m.plugins.length > 4) plugs.append(" … +" + (m.plugins.length - 4));
+  const tr = el("tr", { class: (m.enabled ? "" : "off") + (state.picked.has(m.name) ? " picked" : "") + (can ? " tickable" : "") },
+    el("td", { class: "c-tick" }, tick), el("td", { class: "c-num", text: m.priority < 0 ? "" : m.priority }), name, plugs,
+    el("td", { class: "c-num" + (m.dependants ? " badnum" : ""), text: m.plugins.length ? m.dependants : "" }));
+  if (can) tr.addEventListener("click", (ev) => {
+    if (ev.target.closest("input, button, a")) return;
+    togglePick(m.name, !state.picked.has(m.name));
+  });
+  tr.dataset.name = m.name;
+  m.row = tr;
+  m.hay = fold(m.name + " " + m.plugins.join(" "));
+}
+
+function groupRow(g) {
+  const arrow = el("span", { class: "arrow", text: "▾" });
+  const info = el("span", { class: "dim ginfo" });
+  const btn = el("button", { type: "button", class: "gtoggle", "aria-expanded": "true" }, arrow, g.sep.name.replace(/_separator$/i, ""));
+  const tr = el("tr", { class: "sep" }, el("td", { colSpan: 5 }, btn, info));
+  btn.addEventListener("click", () => {
+    if (state.collapsed.has(g.sep.name)) state.collapsed.delete(g.sep.name); else state.collapsed.add(g.sep.name);
+    filterMods();
+  });
+  g.row = tr; g.arrow = arrow; g.info = info; g.btn = btn;
+}
+
+function renderMods() {
+  state.collapsed = state.collapsed || new Set();
+  buildGroups();
+  for (const g of state.groups) {
+    if (g.sep) groupRow(g);
+    g.mods.forEach(modRow);
+  }
+  layoutMods();
+}
+
+function layoutMods() {
+  const order = $("mods-order").value;
+  const frag = document.createDocumentFragment();
+  state.grouped = order !== "deps";
+  if (order === "deps") {
+    const flat = state.groups.flatMap((g) => g.mods).filter((m) => m.kind === "mod" && m.plugins.length);
+    flat.sort((a, b) => b.dependants - a.dependants || a.priority - b.priority);
+    flat.forEach((m) => frag.append(m.row));
+    state.flat = new Set(flat);
+  } else {
+    const groups = order === "rev" ? [...state.groups].reverse() : state.groups;
+    for (const g of groups) {
+      if (g.sep) frag.append(g.row);
+      (order === "rev" ? [...g.mods].reverse() : g.mods).forEach((m) => frag.append(m.row));
+    }
+    state.flat = null;
+  }
+  $("mods-table").tBodies[0].replaceChildren(frag);
+  $("collapse-all").disabled = $("expand-all").disabled = !state.grouped;
   filterMods();
 }
 
 function filterMods() {
   const q = fold($("mods-search").value.trim());
   const en = $("f-enabled").checked, pl = $("f-plugins").checked, dp = $("f-deps").checked;
-  const filtering = q || en || pl || dp;
+  const filtering = !!(q || en || pl || dp);
   let shown = 0, total = 0;
-  for (const m of state.mods) {
-    let ok;
-    if (m.kind === "separator") ok = !filtering;
-    else {
+  for (const g of state.groups) {
+    const folded = state.grouped && g.sep && state.collapsed.has(g.sep.name) && !filtering;
+    let match = 0, ticked = 0;
+    for (const m of g.mods) {
       total++;
-      ok = (!q || m.hay.includes(q)) && (!en || m.enabled) && (!pl || m.plugins.length > 0) && (!dp || m.dependants > 0);
-      if (ok) shown++;
+      const ok = (!q || m.hay.includes(q)) && (!en || m.enabled) && (!pl || m.plugins.length > 0) && (!dp || m.dependants > 0) &&
+        (state.grouped || state.flat.has(m));
+      if (ok) { match++; shown++; }
+      if (state.picked.has(m.name)) ticked++;
+      m.row.hidden = !ok || folded;
     }
-    m.row.hidden = !ok;
+    if (g.sep) {
+      g.row.hidden = !state.grouped || (filtering && !match);
+      g.arrow.textContent = folded ? "▸" : "▾";
+      g.btn.setAttribute("aria-expanded", folded ? "false" : "true");
+      g.info.textContent = (filtering ? match + " of " + g.mods.length + " shown" : plural(g.mods.length, "mod")) +
+        (ticked ? " · " + ticked + " ticked" : "");
+    }
   }
-  $("mods-shown").textContent = filtering ? shown + " of " + total + " shown" : total + " entries";
+  $("mods-shown").textContent = filtering || !state.grouped ? shown + " of " + total + " shown" : total + " entries in " + plural(state.groups.filter((g) => g.sep).length, "group");
+  $("mods-empty").hidden = shown > 0;
+}
+
+function clearModFilters() {
+  $("mods-search").value = "";
+  for (const id of ["f-enabled", "f-plugins", "f-deps"]) $(id).checked = false;
+  filterMods();
+}
+
+function findMod(name) {
+  for (const g of state.groups || []) for (const m of g.mods) if (m.name === name) return m;
+  return null;
+}
+
+function flash(row) {
+  row.scrollIntoView({ block: "center" });
+  row.classList.add("flash");
+  setTimeout(() => row.classList.remove("flash"), 1600);
+}
+
+function gotoMod(name) {
+  const m = findMod(name);
+  if (!m) return;
+  showTab("mods");
+  clearModFilters();
+  if ($("mods-order").value === "deps") { $("mods-order").value = "mo2"; layoutMods(); }
+  const g = state.groups.find((x) => x.mods.includes(m));
+  if (g && g.sep && state.collapsed.delete(g.sep.name)) filterMods();
+  flash(m.row);
+}
+
+function updateTray() {
+  const n = state.picked.size;
+  const tab = state.tab || "mods";
+  $("tray").hidden = !n || tab === "selection" || tab === "job";
+  const names = [...state.picked];
+  $("tray-review").textContent = n === 1 ? "See what depends on it" : "See what depends on them";
+  $("tray-text").textContent = plural(n, "mod") + " ticked: " + names.slice(0, 3).join(", ") + (n > 3 ? " and " + (n - 3) + " more" : "");
 }
 
 function togglePick(name, on) {
   if (on) state.picked.add(name); else { state.picked.delete(name); state.details.delete(name); }
-  const m = state.mods.find((x) => x.name === name);
+  const m = findMod(name);
   if (m && m.row) {
     m.row.classList.toggle("picked", on);
     const box = m.row.querySelector("input");
@@ -179,6 +347,9 @@ function togglePick(name, on) {
   $("sel-count").classList.toggle("on", state.picked.size > 0);
   $("dry-run").disabled = !state.picked.size;
   $("plan").hidden = true;
+  if (state.groups) filterMods();
+  updateTray();
+  renderSteps();
   renderSelection();
 }
 
@@ -218,6 +389,35 @@ function filterPlugins() {
     if (ok) shown++;
   }
   $("plugins-shown").textContent = (q || pr || dp) ? shown + " of " + state.plugins.length + " shown" : state.plugins.length + " plugins";
+  $("plugins-empty").hidden = shown > 0;
+}
+
+function clearPluginFilters() {
+  $("plugins-search").value = "";
+  $("p-problems").checked = $("p-deps").checked = false;
+  filterPlugins();
+}
+
+function gotoPlugin(name) {
+  const p = state.plugins.find((x) => fold(x.name) === fold(name));
+  if (!p) { toast(name + " is not in this profile's load order."); return; }
+  showTab("plugins");
+  if (p.row.hidden) clearPluginFilters();
+  flash(p.row);
+  showPlugin(p.name, p.row);
+}
+
+function pluginLink(name) {
+  const b = el("button", { type: "button", class: "linkish mono", text: name, title: "Show this plugin" });
+  b.addEventListener("click", () => gotoPlugin(name));
+  return b;
+}
+
+function modLink(name, text) {
+  if (!findMod(name)) return el("span", { text: text || name });
+  const b = el("button", { type: "button", class: "linkish", text: text || name, title: "Show this mod in the Mods tab" });
+  b.addEventListener("click", () => gotoMod(name));
+  return b;
 }
 
 async function showPlugin(name, tr) {
@@ -228,14 +428,16 @@ async function showPlugin(name, tr) {
   try { p = await api("/api/plugin?name=" + encodeURIComponent(name)); } catch (e) { box.replaceChildren(el("p", { class: "dim", text: e.message })); return; }
   const list = (title, items, mark) => [el("h3", { text: title + " (" + items.length + ")" }),
     items.length ? el("ul", {}, ...items.map((i) => {
-      const li = el("li", { class: "mono", text: i });
+      const li = el("li", {}, pluginLink(i));
       if (mark && mark.missing.includes(i)) li.append(el("span", { class: "tag bad", text: "missing" }));
       if (mark && mark.inactive.includes(i)) li.append(el("span", { class: "tag warn", text: "not active" }));
       return li;
     })) : el("p", { class: "dim", text: "none" })];
+  const where = p.mod === "<game>" ? ["the game's Data folder"] : p.mod === "<overwrite>" ? ["Overwrite"]
+    : p.mod ? ["mod ", modLink(p.mod, "“" + p.mod + "”"), ", priority " + p.mod_priority] : ["no enabled mod"];
   box.replaceChildren(...[el("h2", { class: "mono", text: p.name }),
-    el("p", { class: "dim", text: "Position " + (p.position == null ? "none" : p.position) + " · " + (p.kind || "kind unknown") + " · " +
-      (p.active ? "active" : "not active") + " · in " + (p.mod === "<game>" ? "the game's Data folder" : p.mod ? "mod “" + p.mod + "”, priority " + p.mod_priority : "no enabled mod") }),
+    el("p", { class: "dim" }, "Position " + (p.position == null ? "none" : p.position) + " · " + (p.kind || "kind unknown") + " · " +
+      (p.active ? "active" : "not active") + " · in ", ...where),
     p.unreadable ? el("p", { class: "message bad", text: "Could not be read: " + p.unreadable }) : null,
     p.also_in.length ? el("p", { class: "dim", text: "Also in, and overridden: " + p.also_in.join(", ") }) : null,
     p.author ? el("p", { class: "dim", text: "Author field: " + p.author }) : null,
@@ -254,7 +456,10 @@ const READING = {
 async function renderSelection() {
   const box = $("selection");
   if (!state.picked.size) {
-    box.replaceChildren(el("p", { class: "dim", text: "Tick mods on the Mods tab to see what depends on them." }));
+    const go = el("button", { type: "button", text: "Go to the Mods tab" });
+    go.addEventListener("click", () => showTab("mods"));
+    box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Nothing is ticked yet" }),
+      el("p", { class: "dim", text: "Tick the mods you want to take out on the Mods tab. This tab then shows every plugin that depends on them, and from here you start the dry run. Tip: “Has dependants” on the Mods tab shows the mods that cannot simply be disabled." }), go));
     return;
   }
   const cards = [];
@@ -268,21 +473,21 @@ async function renderSelection() {
     const card = el("div", { class: "card" });
     const un = el("button", { text: "Untick" });
     un.addEventListener("click", () => togglePick(name, false));
-    card.append(el("div", { class: "card-head" }, el("h2", { text: d.name }), un));
+    card.append(el("div", { class: "card-head" }, el("h2", {}, modLink(d.name)), un));
     if (d.error) { card.append(el("p", { class: "message bad", text: d.error })); cards.push(card); continue; }
     const n = d.groups.reduce((a, g) => a + g.plugins.length, 0);
-    card.append(el("p", { class: "dim", text: "Priority " + d.priority + " · " + (d.enabled ? "enabled" : "disabled") + " · provides " +
-      d.plugins.map((p) => p.name + " (position " + p.position + ", " + p.kind + ")").join(", ") }));
+    card.append(el("p", { class: "dim" }, "Priority " + d.priority + " · " + (d.enabled ? "enabled" : "disabled") + " · provides ",
+      ...d.plugins.flatMap((p, i) => [i ? ", " : "", pluginLink(p.name), " (position " + p.position + ", " + p.kind + ")"])));
     card.append(el("p", { text: n ? plural(n, "plugin") + " in " + plural(d.groups.length, "other mod") + " list it as a master. Disabling it now would leave them with a missing master."
       : "Nothing depends on this mod's plugins: it can be disabled in MO2 as it is." }));
     for (const g of d.groups) {
       const [label, hint] = READING[g.reading];
-      const head = el("div", { class: "head" }, el("strong", { text: g.mod }), el("span", { class: "dim", text: "priority " + g.priority }),
+      const head = el("div", { class: "head" }, el("strong", {}, modLink(g.mod)), el("span", { class: "dim", text: "priority " + g.priority }),
         el("span", { class: "tag " + (g.reading === "output" ? "warn" : ""), text: g.reading === "output" ? "made by " + g.made_by.join(", ") : label }));
       if (g.reading === "some plugins") head.append(el("span", { class: "dim", text: g.others + " other plugin(s) here do not depend on it" }));
       if (g.reading === "most of the mod") head.append(el("span", { class: "dim", text: "the rest: " + g.leftover.join(", ") }));
       card.append(el("div", { class: "group" }, head, el("div", { class: "dim", text: hint }),
-        el("ul", {}, ...g.plugins.map((p) => el("li", {}, el("span", { class: "mono", text: p.name }),
+        el("ul", {}, ...g.plugins.map((p) => el("li", {}, pluginLink(p.name),
           el("span", { class: "dim", text: "  position " + p.position + " · " + p.kind + " · " + plural(p.masters, "master") }))))));
     }
     cards.push(card);
@@ -361,6 +566,21 @@ function renderJob(job) {
   if (!active) parts.push(el("p", { class: "dim" }, "This run's files (the report, xEdit's own log, the copies of the dependants): ", el("span", { class: "mono", text: job.folder })));
   if (active) parts.push(el("p", { class: "dim", text: "Watch xEdit's own window and the lines on the right. Nothing is being changed." }));
   const r = job.result;
+  if (r && r.files.length) {
+    const n = (k) => r.files.filter((f) => f.reading === k).length;
+    const bits = [[n("can be demastered"), "can be demastered automatically", "good"], [n("patch only"), "patch only: would be switched off", "good"],
+      [n("needs you"), "need you", "warn"], [n("not finished"), "not read to the end", "bad"]].filter((b) => b[0]);
+    const all = el("button", { type: "button", text: "Show every record" });
+    all.addEventListener("click", () => {
+      const ds = [...box.querySelectorAll("details")];
+      const open = ds.some((d) => !d.open);
+      ds.forEach((d) => { d.open = open; });
+      all.textContent = open ? "Hide the records" : "Show every record";
+    });
+    parts.push(el("div", { class: "card summary-card" }, el("h2", { text: "Of " + plural(r.files.length, "dependant") + ":" }),
+      el("div", { class: "summary" }, ...bits.map((b) => el("span", { class: "chip " + b[2], text: b[0] + " " + b[1] }))),
+      el("p", { class: "dim", text: "Nothing was changed: this is what a demaster would do. “Needs you” means ModTrap would leave that plugin alone and tell you what to look at." }), all));
+  }
   if (r) {
     if (r.not_loaded.length) parts.push(el("p", { class: "message bad", text: "xEdit did not load: " + r.not_loaded.join(", ") }));
     if (r.held_changed.length) parts.push(el("p", { class: "message", text: "xEdit held these as changed although the script changed nothing; the marks were cleared and the files are unchanged on disk: " + r.held_changed.join(", ") }));
@@ -393,7 +613,7 @@ function renderJob(job) {
 }
 
 async function pollJob() {
-  try { const d = await api("/api/job"); state.job = d.job; renderJob(d.job); } catch (e) { /* next round */ }
+  try { const d = await api("/api/job"); state.job = d.job; renderJob(d.job); renderSteps(); } catch (e) { /* next round */ }
 }
 
 // --- tabs, the log, and the loop -------------------------------------------------------------------------------------
@@ -402,6 +622,7 @@ function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => { t.hidden = t.id !== "tab-" + name; });
   state.tab = name;
+  updateTray();
 }
 
 async function pollLog() {
@@ -428,14 +649,16 @@ async function loadLists(key) {
   state.mods = m.mods;
   state.plugins = p.plugins;
   state.details.clear();
-  const names = new Set(state.mods.map((x) => x.name));
+  const names = new Set(state.mods.filter((x) => x.kind === "mod" && x.plugins.length).map((x) => x.name));
   for (const n of [...state.picked]) if (!names.has(n)) state.picked.delete(n);
   state.loaded = key;
   renderMods();
   renderPlugins();
   $("sel-count").textContent = state.picked.size;
+  $("sel-count").classList.toggle("on", state.picked.size > 0);
   $("dry-run").disabled = !state.picked.size;
   renderSelection();
+  renderSteps();
   showTab(state.tab || "mods");
 }
 
@@ -542,6 +765,24 @@ $("job-stop").addEventListener("click", async () => {
   if (!window.confirm("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
   try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }
   tick();
+});
+$("mods-order").addEventListener("change", layoutMods);
+$("collapse-all").addEventListener("click", () => { for (const g of state.groups) if (g.sep) state.collapsed.add(g.sep.name); filterMods(); });
+$("expand-all").addEventListener("click", () => { state.collapsed.clear(); filterMods(); });
+$("mods-clear").addEventListener("click", clearModFilters);
+$("plugins-clear").addEventListener("click", clearPluginFilters);
+$("tray-review").addEventListener("click", () => showTab("selection"));
+$("tray-clear").addEventListener("click", () => { for (const n of [...state.picked]) togglePick(n, false); });
+$("s-health").addEventListener("click", () => showTab("health"));
+$("s-tools").addEventListener("click", () => showTab("tools"));
+for (const li of $("steps").children) li.addEventListener("click", () => { if (li.dataset.tab) showTab(li.dataset.tab); });
+$("log-copy").addEventListener("click", () => copyText($("log").textContent, "The log"));
+$("job-copy").addEventListener("click", () => copyText($("job-log").textContent, "The dry run's lines"));
+document.addEventListener("keydown", (ev) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  const box = state.tab === "plugins" ? $("plugins-search") : state.tab === "mods" ? $("mods-search") : null;
+  if (ev.key === "/" && !typing && box && !$("tabs").hidden) { ev.preventDefault(); box.focus(); box.select(); }
+  if (ev.key === "Escape" && document.activeElement === box && box.value) { box.value = ""; (state.tab === "plugins" ? filterPlugins : filterMods)(); }
 });
 let debounce;
 const later = (fn) => () => { clearTimeout(debounce); debounce = setTimeout(fn, 120); };

@@ -60,7 +60,7 @@ is the same across them, and xEdit does the rest.
 
 - **Instance bar.** The modlist folder (dropped on the page or pasted, MT19; found as in WHY§30; remembered), the profile, the game and its version, the tools
   found (§13), whether MO2 is open, and the health check's result.
-- **Mods.** The full modlist in MO2's order, each row with its priority number, enabled or disabled, its plugins,
+- **Mods.** The full modlist in MO2's order, under its separators as groups that fold (WHY§32), each row with its priority number, enabled or disabled, its plugins,
   and a count of dependants; a search box and filters (enabled only; has plugins; has dependants; changed by
   ModTrap). A mod with no plugins, or whose plugins nothing depends on, shows "can be disabled as it is".
 - **Plugins.** The full load order, each row with its position, its kind (esm, esp, esl or light-flagged), its mod,
