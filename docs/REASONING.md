@@ -52,6 +52,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 27 | 2026-11-20 | The real list shows generated outputs and loose files, as the design assumed | FACT | #tools #procedure |
 | 28 | 2026-11-20 | The second scan: a patch with no master, MO2's output setting, and its limits | FACT | #tools #mo2 #procedure |
 | 29 | 2026-11-20 | Version 0.1's page: what was built, how it was tested, what was not | METHOD | #server #page #process |
+| 30 | 2026-11-20 | A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini | METHOD | #page #mo2 #safety |
 
 ## Entries
 
@@ -418,3 +419,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   the owner's PC will be set by the disk (3,751 plugin files opened), not by this code.
 - Not built yet from DESIGN§4: the tools' versions in the instance bar (DESIGN§13), the Steps and History tabs, a
   folder picker (the folder is typed or pasted), and the built launcher and updater (MT11).
+
+### 30. A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini
+
+`2026-11-20` · METHOD · `#page #mo2 #safety` · refs: MT19, WHY§29, MO01§2, DESIGN§4
+
+- FACT (the owner's report): the first page's Open button "did nothing". With an empty box the server's refusal
+  was shown and at once painted over by the next refresh, and the grey example path in the box read as a real
+  value. Fixed: an empty box is answered on the page, a refusal stays until a modlist is being read, and the box's
+  hint no longer looks like a path. The form had only ever been tested through the start-up option, never through
+  the button: the browser test now presses it.
+- FACT: a browser gives a page a dropped folder's name and lets it read files inside, but never its path. So the
+  page reads one file from the dropped folder, `ModOrganizer.ini`, and sends its bytes and the folder's name; it
+  never walks the folder.
+- METHOD: the server finds the folder (`modtrap/locate.py`): folders opened before; then every ancestor of every
+  absolute path in that ini (MO2's executables and the game usually sit inside the instance, MO01§2); then a
+  bounded search for a folder of that name. A candidate is accepted when its own ini has the same sha256.
+- From the session that started ModTrap, whose DataPiler has a folder picker and detection but never met a
+  dropped folder: handle the drag for the whole page, or a near miss makes the browser open the dropped thing;
+  never log, store or echo the ini (it holds the owner's paths); the search only on fixed drives, never through a
+  link or junction, never opening a cloud drive's placeholder; and MO2 rewrites its ini, so fall back from the
+  byte match to identity (the one folder of that name that is an instance of the same game). All taken.
+- Not taken, and why: asking "Use this folder?" before registering it. ModTrap at this stage only reads, the owner
+  asked that the drop register the path, and the page shows at once what was found. A confirmation belongs before
+  the first job that writes, where the plan already is (DESIGN§6.1).
+- Next, from the same advice: detection (a running MO2's folder; MO2's own records of its instances), and
+  DataPiler's in-page folder picker as a Browse button. A native folder dialog was ruled out there: it opens
+  behind the browser.
+- Tested here in a browser with a simulated drop (a real drag from Explorer cannot be driven from a test), and on
+  Linux only. The drive search and the Windows file attributes are untested until the owner's PC.

@@ -12,6 +12,14 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Se
 header { padding: 12px 16px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .mark { font-size: 20px; font-weight: 650; letter-spacing: .3px; color: var(--accent); }
+.drop { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px 10px; }
+.drop.compact { border-style: solid; border-color: transparent; padding: 0; }
+.drop.compact .drop-title { display: none; }
+body.dragging .drop, .drop.over { border-color: var(--accent); border-style: dashed; background: rgba(185, 163, 255, .08); padding: 8px 12px 10px; }
+body.dragging .drop .drop-title { display: block; }
+.drop-title { font-weight: 650; color: var(--accent); margin-bottom: 6px; }
+.qm { display: inline-block; width: 18px; height: 18px; line-height: 17px; text-align: center; border: 1px solid var(--line);
+  border-radius: 50%; font-size: 12px; color: var(--dim); cursor: help; margin-left: 4px; }
 #open-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #open-form label { color: var(--dim); }
 input[type=text], input[type=search], select { background: var(--bg); color: var(--text); border: 1px solid var(--line);

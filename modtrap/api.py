@@ -3,11 +3,13 @@ what. Nothing here writes to an instance; the one thing saved is the chosen fold
 
 from __future__ import annotations
 
+import base64
+import binascii
 import threading
 from pathlib import Path
 from typing import Callable
 
-from . import NAME, VERSION, instance, logbook, model, paths, plugin
+from . import NAME, VERSION, instance, locate, logbook, model, paths, plugin
 from .server import Bad
 
 log = logbook.get("app")
@@ -99,11 +101,38 @@ class Api:
                 return
             self.status, self.message, self.model, self.profile = "ready", "", m, inst.profile
         settings = paths.load_settings()
-        settings.update({"folder": folder, "profile": inst.profile})
+        recent = [r for r in settings.get("recent", []) if isinstance(r, str) and r != folder]
+        settings.update({"folder": folder, "profile": inst.profile, "recent": [folder, *recent][:8]})
         try:
             paths.save_settings(settings)
         except OSError as e:
             log.warn("the chosen folder could not be remembered: %s", logbook.why(e))
+
+    def locate(self, body: dict) -> dict:
+        """A folder dropped on the page (WHY§30): its name and its ModOrganizer.ini. Finds it on disk and opens it."""
+        name, data = body.get("name"), body.get("ini")
+        if name is not None and (not isinstance(name, str) or not name or len(name) > 255 or "/" in name
+                                 or "\\" in name):
+            raise Bad("the dropped folder's name is not usable")
+        if not isinstance(data, str):
+            raise Bad("the dropped folder's ModOrganizer.ini did not arrive")
+        try:
+            ini = base64.b64decode(data, validate=True)
+        except (binascii.Error, ValueError):
+            raise Bad("the dropped folder's ModOrganizer.ini did not arrive whole") from None
+        if not ini or len(ini) > locate.INI_CAP:
+            raise Bad("that ModOrganizer.ini is empty or larger than ModTrap reads")
+        settings = paths.load_settings()
+        recents = [r for r in [settings.get("folder"), *settings.get("recent", [])] if isinstance(r, str) and r]
+        folder, how = locate.find(name, ini, recents)
+        if folder is None:
+            log.warn("a dropped modlist folder was not found on this PC's drives")
+            raise Bad("ModTrap could not find that folder on this PC by itself (a browser never tells a page where "
+                      "a dropped folder is). Paste the folder's path into the box instead: in Explorer, click the "
+                      "address bar and copy it.")
+        log.info("the dropped folder was found through %s", how)
+        self.open(str(folder))
+        return {"status": "reading", "how": how}
 
     # --- answers ---------------------------------------------------------------------------------------------------
 
@@ -217,6 +246,8 @@ class Api:
                 raise Bad("the profile's name is not usable", "profile")
             self.open(folder, profile or None)
             return 200, {"status": "reading"}, None
+        if path == "/api/locate":
+            return 200, self.locate(body), None
         if path == "/api/rescan":
             if not self.folder:
                 raise Bad("no modlist is open")

@@ -9,13 +9,18 @@
 <body data-token="__TOKEN__">
 <header>
   <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
-  <form id="open-form" autocomplete="off">
-    <label for="folder">Modlist folder</label>
-    <input id="folder" name="folder" type="text" spellcheck="false" placeholder="C:\Modlists\Example">
-    <select id="profile" title="Profile" hidden></select>
-    <button type="submit">Open</button>
-    <button type="button" id="rescan" hidden>Rescan</button>
-  </form>
+  <div id="drop" class="drop">
+    <div class="drop-title">Drop your modlist folder here
+      <span class="qm" tabindex="0" title="Drag the modlist's folder (the one with ModOrganizer.exe in it) from Explorer onto this page. A browser never tells a page where a dropped folder is, so ModTrap reads one small file from it, ModOrganizer.ini, and uses it to find the folder on this PC. Nothing else in the folder is read at that point, and nothing is sent anywhere.">?</span>
+    </div>
+    <form id="open-form" autocomplete="off">
+      <label for="folder">or paste its path</label>
+      <input id="folder" name="folder" type="text" spellcheck="false" placeholder="Paste the modlist folder's path here" aria-describedby="message">
+      <select id="profile" title="Profile" hidden></select>
+      <button type="submit">Open</button>
+      <button type="button" id="rescan" hidden>Rescan</button>
+    </form>
+  </div>
   <div id="summary" class="summary" hidden>
     <span class="chip" id="s-game"></span>
     <span class="chip" id="s-mods"></span>

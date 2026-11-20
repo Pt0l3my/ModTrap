@@ -16,7 +16,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT14 (the safe folder and Revert) and MT15 (the full modlist and load order, and a history).
   Later the same day: MT17 (the result that counts; the method is ModTrap's to choose), under which MT4 (cases A and
   B automatic, the rest reported) and MT5 (a ModTrap mod above the originals) were settled; MT18 (generated
-  patches, their tools, and a Steps tab); MT16 settled by the facts.
+  patches, their tools, and a Steps tab); MT16 settled by the facts; MT19 (a drop box for the modlist folder).
 - **Open.** None. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -367,3 +367,13 @@ the tools, the modlist's patches and what depends on what (DESIGN§13, DESIGN§1
 synthesis) if required, and instruct the user to run the tool. Perhaps best way to do this would be to add a "Steps"
 tab for each Demaster job which tab compiles the steps required for the full demaster for the user (by detecting
 mods, tools, modlist patches and their dependencies, etc.)."
+
+## MT19
+
+**A drop box for the modlist folder** · *2026-11-20 · The owner's request*
+
+**Decision.** The page has a drop box: the owner drops the modlist's folder on it, and ModTrap finds the MO2
+instance and registers its path (WHY§30). The path can still be pasted.
+
+**Owner's words.** "can you also add a dropbox (ask engine agent about design) so users can just drop the modlist
+directory and the ModTrap reads the executable of the MO2 and registers the path?"

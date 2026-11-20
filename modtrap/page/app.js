@@ -35,6 +35,12 @@ const fold = (s) => s.toLowerCase();
 
 // --- the instance bar ----------------------------------------------------------------------------------------------
 
+// A message the owner must get to read (a refused folder, a failed drop) stays until a modlist is being read.
+function problem(text) {
+  state.sticky = text;
+  showMessage(text, true);
+}
+
 function showMessage(text, bad) {
   const m = $("message");
   m.hidden = !text;
@@ -44,14 +50,17 @@ function showMessage(text, bad) {
 
 function renderState(s) {
   $("version").textContent = s.version ? "version " + s.version : "";
-  if (document.activeElement !== $("folder") && s.folder && !$("folder").value) $("folder").value = s.folder;
+  if (document.activeElement !== $("folder") && s.folder && (!$("folder").value || s.status === "ready")) $("folder").value = s.folder;
   const ready = s.status === "ready";
   $("summary").hidden = !ready;
   $("tabs").hidden = !ready;
   $("rescan").hidden = !ready;
-  if (s.status === "reading") showMessage("Reading the modlist: its mods, and the header of every plugin…");
+  $("drop").classList.toggle("compact", ready);
+  if (s.status === "reading" || ready) state.sticky = "";
+  if (state.sticky) showMessage(state.sticky, true);
+  else if (s.status === "reading") showMessage("Reading the modlist: its mods, and the header of every plugin…");
   else if (s.status === "error") showMessage(s.message, true);
-  else if (s.status === "none") showMessage("Give the folder of an MO2 modlist (the one MO2 itself is in) and press Open. ModTrap only reads it.");
+  else if (s.status === "none") showMessage("Drop the folder of an MO2 modlist on this page (the one MO2 itself is in), or paste its path and press Open. ModTrap only reads it.");
   else showMessage("");
   if (!ready) {
     document.querySelectorAll(".tab").forEach((t) => { t.hidden = true; });
@@ -334,19 +343,82 @@ function loop() {
   tick().finally(() => setTimeout(loop, state.status === "reading" ? 700 : 2500));
 }
 
-$("open-form").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const sel = $("profile");
+async function openFolder(folder, profile) {
+  state.sticky = "";
   try {
     state.gen = (state.gen || 0) + 1;
-    await api("/api/open", { folder: $("folder").value, profile: sel.hidden ? null : sel.value });
+    await api("/api/open", { folder: folder, profile: profile || null });
     state.status = "reading";
-  } catch (e) { showMessage(e.message, true); }
+  } catch (e) { problem(e.message); }
   tick();
+}
+
+$("open-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const folder = $("folder").value.trim().replace(/^"|"$/g, "");
+  if (!folder) {
+    problem("The box is empty. Paste the modlist folder's path into it (in Explorer, click the address bar and copy it), or drag the folder onto this page.");
+    $("folder").focus();
+    return;
+  }
+  const sel = $("profile");
+  openFolder(folder, sel.hidden ? null : sel.value);
 });
+
+// --- dropping the modlist folder (WHY§30) ---------------------------------------------------------------------------
+
+function toBase64(buf) {
+  const u = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+async function giveIni(name, file) {
+  if (file.size > 2 * 1024 * 1024) { problem("That ModOrganizer.ini is larger than ModTrap reads."); return; }
+  showMessage("Finding " + (name ? "“" + name + "”" : "that modlist") + " on this PC…");
+  state.sticky = "";
+  try {
+    const buf = await file.arrayBuffer();
+    state.gen = (state.gen || 0) + 1;
+    await api("/api/locate", { name: name, ini: toBase64(buf) });
+    $("folder").value = "";
+    state.status = "reading";
+  } catch (e) { problem(e.message); }
+  tick();
+}
+
+function dropped(ev) {
+  const dt = ev.dataTransfer;
+  if (!dt) return;
+  // The entries must be taken while the drop event is still being handled.
+  const items = dt.items ? Array.from(dt.items).filter((i) => i.kind === "file") : [];
+  const entry = items.length && items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+  if (entry && entry.isDirectory) {
+    entry.getFile("ModOrganizer.ini", {}, (fe) => fe.file((f) => giveIni(entry.name, f), () => problem("ModOrganizer.ini in that folder could not be read.")),
+      () => problem("There is no ModOrganizer.ini in “" + entry.name + "”. Drop the modlist's own folder: the one with ModOrganizer.exe in it."));
+    return;
+  }
+  if (entry && entry.isFile) {
+    if (/^modorganizer\.ini$/i.test(entry.name)) { entry.file((f) => giveIni(null, f), () => problem("That file could not be read.")); return; }
+    problem("Drop the modlist's folder itself (the one with ModOrganizer.exe in it), not a file from it. A page cannot tell where a dropped file lives.");
+    return;
+  }
+  const text = (dt.getData && dt.getData("text/plain") || "").trim();
+  if (text && text.length < 1000 && !text.includes("\n")) { $("folder").value = text; openFolder(text, null); return; }
+  problem("That could not be used. Drop the modlist's folder, or paste its path into the box.");
+}
+
+let dragDepth = 0;
+const dragOn = (yes) => document.body.classList.toggle("dragging", yes);
+document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dragOn(true); });
+document.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; });
+document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dragOn(false); });
+document.addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; dragOn(false); dropped(e); });
+
 $("profile").addEventListener("change", () => $("open-form").requestSubmit());
 $("rescan").addEventListener("click", async () => {
-  try { state.gen = (state.gen || 0) + 1; await api("/api/rescan", {}); state.status = "reading"; } catch (e) { showMessage(e.message, true); }
+  try { state.gen = (state.gen || 0) + 1; await api("/api/rescan", {}); state.status = "reading"; } catch (e) { problem(e.message); }
   tick();
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));

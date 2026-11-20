@@ -28,6 +28,8 @@ PAGE_DIR = Path(__file__).resolve().parent / "page"
 PAGE_JS = ("app.js",)
 PAGE_CSS = ("app.css",)
 TOKEN_HEADER = "X-ModTrap-Token"
+LOCATE_PATH = "/api/locate"
+LOCATE_MAX = 3 * 1024 * 1024      # a dropped folder's ModOrganizer.ini in base64, and the folder's name
 POST_MAX = 64 * 1024
 # A request refused before its body is read: the answer is sent, then whatever of the body is still arriving is read
 # and dropped, up to these limits, before the connection closes. Closing with it unread makes Windows send a reset,
@@ -265,7 +267,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             n = -1
-        cap = POST_MAX
+        cap = LOCATE_MAX if path == LOCATE_PATH else POST_MAX
         if n < 0:
             self._will_not_read()
             return self.send(400, {"error": "no length"})

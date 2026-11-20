@@ -58,7 +58,7 @@ is the same across them, and xEdit does the rest.
 
 ## 4. The page
 
-- **Instance bar.** The modlist folder (picked once, remembered), the profile, the game and its version, the tools
+- **Instance bar.** The modlist folder (dropped on the page or pasted, MT19; found as in WHY§30; remembered), the profile, the game and its version, the tools
   found (§13), whether MO2 is open, and the health check's result.
 - **Mods.** The full modlist in MO2's order, each row with its priority number, enabled or disabled, its plugins,
   and a count of dependants; a search box and filters (enabled only; has plugins; has dependants; changed by
