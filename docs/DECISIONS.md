@@ -15,7 +15,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   records them, and can re-enable them), MT10 (the repository exists), MT11 (installed and started as DataPiler),
   MT14 (the safe folder and Revert) and MT15 (the full modlist and load order, and a history).
 - **Open.** MT4 (which records and entries ModTrap may take out of a dependant by itself; put again), MT5 (how the
-  verified files are put in place), MT16 (the first push). Followed meanwhile, for the owner to confirm: MT12 (no
+  verified files are put in place). Followed meanwhile, for the owner to confirm: MT12 (no
   session link in commits), MT13 (the reference system).
 
 ## MT1
@@ -228,6 +228,9 @@ uses the owner's public handle).
 
 **Still to settle.** The name on the licence's copyright line, and the first push (MT16).
 
+**Note, 2026-11-20, later.** The repository came with a `main` holding the owner's own `LICENSE` (MIT), whose
+copyright line the owner chose. That file is kept as it is; the copyright line is settled.
+
 ## MT11
 
 **How ModTrap is installed and started** · *2026-11-20 · Decided by the owner*
@@ -299,7 +302,7 @@ time)."
 
 ## MT16
 
-**The first push** · *Open*
+**The first push** · *2026-11-20 · Settled by the facts*
 
 **Question.** The repository is empty. The rule is to work on a topic branch, never on `main` unless the owner
 asks; but an empty repository has no `main` yet, and the first branch pushed becomes its default.
@@ -309,3 +312,7 @@ rules, and the design goes on its branch `design/0001-design`; (b) everything so
 design branch is pushed, and becomes the default until a `main` exists.
 
 **Recommendation.** (a).
+
+**Outcome, 2026-11-20.** The question fell away: the repository was not empty. Its `main` already held the owner's
+first commit (the licence), so the design branch was placed on top of it and pushed as `design/0001-design` at the
+owner's word ("I installed the GitHub App, try pushing now"). `main` is untouched.
