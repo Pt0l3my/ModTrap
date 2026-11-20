@@ -46,6 +46,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 21 | 2026-11-20 | What "clean" can and cannot be checked by a tool | METHOD | #safety #procedure |
 | 22 | 2026-11-20 | Telling which tool made a patch: evidence, and marks kept as data | METHOD | #tools #mo2 |
 | 23 | 2026-11-20 | MO2's plugin lists and the plugin header are read from their sources | FACT | #mo2 #xedit |
+| 24 | 2026-11-20 | Version 0.1's reader exists, and what it has not yet met | METHOD | #mo2 #process |
 
 ## Entries
 
@@ -307,3 +308,16 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   from that description and stops at the end of the header.
 - METHOD: the reader and the instance model are built first (version 0.1), with invented plugins written by the
   test code, since everything else stands on them.
+
+### 24. Version 0.1's reader exists, and what it has not yet met
+
+`2026-11-20` · METHOD · `#mo2 #process` · refs: DESIGN§3, DESIGN§10, MO01§2, XE02§5, MT17
+
+- METHOD: `modtrap/plugin.py` reads a plugin's header and nothing more; `modtrap/instance.py` reads the instance's
+  ini and the profile's three lists; `modtrap/model.py` works out who provides each plugin, its masters, its
+  dependants, and the health check. `python -m modtrap scan FOLDER` prints the result and writes nothing.
+- METHOD: tested on an invented instance written by the test code. Not yet met: a real instance. The ini's
+  escaping rules are written from how such files look, not read in Qt's source (LIKELY), so the first scan of the
+  owner's modlist is the real test, and its summary (counts, notes, health) is what to compare with MO2's own view.
+- Left out on purpose until needed: plugins inside a mod's subfolders (MO2 ignores them), the VR and LE games
+  (MT7), and anything that writes.

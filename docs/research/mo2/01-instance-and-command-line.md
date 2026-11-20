@@ -33,6 +33,9 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
   the bare name for an inactive one; the game's own primary plugins are not written
   (`src/creation/creationgameplugins.cpp:39-104`). Reading skips `#` lines, and a plugin the file does not name
   counts as inactive (`:106-175`).
+- **FACT (same source).** For Skyrim SE the game's primary plugins are `Skyrim.esm`, `Update.esm`, `Dawnguard.esm`,
+  `HearthFires.esm` and `Dragonborn.esm`, then every plugin named in `Skyrim.ccc` in the game's folder (the Creation
+  Club list) (`src/games/skyrimse/gameskyrimse.cpp:247-307`).
 - **FACT (same source).** `loadorder.txt` has every plugin, one a line, in load order, in UTF-8
   (`src/gamebryo/gamebryogameplugins.cpp:87-116`). MO2 reads the order from whichever of the two files is newer
   (`:39-61`; `creationgameplugins.cpp:22-37`).
