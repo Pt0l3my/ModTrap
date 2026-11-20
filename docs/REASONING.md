@@ -58,6 +58,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 33 | 2026-11-20 | Sessions and Quit: how the state is kept, and what "safe to finish" means for now | METHOD | #page #safety #process |
 | 34 | 2026-11-20 | The script checked against the script engine's source, without running it | METHOD | #xedit #process |
 | 35 | 2026-11-20 | The Steps tab: a checklist the modlist's own files tick off | METHOD | #page #procedure #tools |
+| 36 | 2026-11-20 | Groundwork for the demaster, built ahead and switched off | METHOD | #safety #mo2 #process |
 
 ## Entries
 
@@ -596,3 +597,34 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Limits: files inside a mod's archive are not seen (the archive's table is not read); the search of settings files
   stops after a time and a count, and says so; the caution about saves and compiled scripts is general modding
   knowledge, worded as such.
+
+### 36. Groundwork for the demaster, built ahead and switched off
+
+`2026-11-20` · METHOD · `#safety #mo2 #process` · refs: MT9, MT14, MT15, WHY§16, WHY§26, WHY§6, DESIGN§8, DESIGN§9, DESIGN§11, DESIGN§12, MO01§2, XE02
+
+- METHOD: four parts of the demaster step can be written and tested without xEdit, so they were, while the dry run
+  waits for its first real run. None is called by anything the page can reach; a test checks that the module
+  behind the page imports none of them.
+- `modtrap/profile.py`: enabling and disabling mods in `modlist.txt`, activating and deactivating plugins in
+  `plugins.txt`, adding a mod on top. It works on the file's bytes line by line: only the changed lines differ, and
+  disabling then enabling gives the original file back byte for byte (order, line ends, comment, encoding). It
+  refuses, writing nothing, a name that is not listed, a mod MO2 does not manage, and a file that is not the one
+  the change was planned against or that changed meanwhile. It answers with each line changed and the mod's
+  priority as MO2 numbers it, for the history.
+- `modtrap/safe.py`: the safe folder. A file may be changed only if its copy is there and matches; what ModTrap
+  writes is noted; Revert first checks every file and writes nothing at all if one was changed since by something
+  else, unless told to go ahead; files ModTrap made are removed only if still as made. The record is written after
+  every step, so a new start of ModTrap can still revert.
+- `modtrap/history.py`: the append-only record, one event a line, flushed to disk as written; a line cut short by
+  a crash is passed over. It answers which mods and plugins ModTrap switched off and not on again, with where they
+  were: what Re-enable needs.
+- `modtrap/probe.py`: three invented plugins with real records for the probe: a mod to take out, a plugin that
+  overrides one of its records and holds a list with one entry pointing at it, and a patch made only for it; and
+  what a dry run and a demaster of them must give. LIKELY: the layout of records and groups is the format as widely
+  documented, not read in a source; ModTrap's own tests read the files back, and whether xEdit loads them is the
+  first thing the probe will show.
+- Not written: the script's mode that changes plugins. It waits for the first real report, which shows xEdit's
+  names and behaviour; and it must not share a file with the report mode until that mode is proven, since an error
+  in it could stop the script from loading at all.
+- Still open before any of this is switched on: what MO2 does with a re-enabled mod's plugins (MO01§6), whether a
+  rewritten `plugins.txt` keeps the load order through MO2's next start (WHY§26), and detecting that MO2 is closed.
