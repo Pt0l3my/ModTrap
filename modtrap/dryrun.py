@@ -30,8 +30,8 @@ TIME_LIMIT = 60 * 60            # seconds a dry run may take before ModTrap give
 START_LIMIT = 20 * 60           # seconds xEdit may take to load before the script's first line
 GONE_GRACE = 8                  # seconds xEdit must be gone, with no end line in the report, to count as closed
 # Arrays whose entries can be taken out without changing what the rest of the record means (MT4, case B): by the
-# record's signature ("*" for any) and the last part of the array's path as xEdit names it. LIKELY until the first
-# real report shows xEdit's exact names (WHY§31).
+# record's signature ("*" for any) and the list's name as xEdit gives it. LIKELY until the first real report shows
+# xEdit's exact names (WHY§31); the report carries every name, so the list can be corrected without a new script.
 SAFE_ARRAYS = (("FLST", "FormIDs"), ("LVLI", "Leveled List Entries"), ("LVLN", "Leveled List Entries"),
                ("LVSP", "Leveled List Entries"), ("*", "KWDA - Keywords"))
 
@@ -151,7 +151,9 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
              "trap.count=%d" % len(p.trapped)]
     lines += ["trap.%d=%s" % (i, n) for i, n in enumerate(p.trapped)]
     lines += ["dep.count=%d" % len(p.dependants)] + ["dep.%d=%s" % (i, n) for i, n in enumerate(p.dependants)]
-    paths.write_atomic(script_dir / "modtrap-job.txt", ("\r\n".join(lines) + "\r\n").encode("utf-8"))
+    # With a byte-order mark: the script's string list then reads the file as UTF-8, whatever the PC's own text
+    # encoding, so a folder name with letters outside it still arrives whole (WHY§34).
+    paths.write_atomic(script_dir / "modtrap-job.txt", ("\r\n".join(lines) + "\r\n").encode("utf-8-sig"))
     primary = {fold(x) for x in m.instance.primary}
     listed = ["*" + n for n in p.load if fold(n) not in primary]
     try:
@@ -194,9 +196,31 @@ def command(p: Plan, job_dir: Path) -> list[str]:
 
 # --- the report ---------------------------------------------------------------------------------------------------
 
-def _safe_array(signature: str, array_path: str) -> bool:
-    last = array_path.rsplit("\\", 1)[-1].strip()
-    return any((sig in ("*", signature)) and last == name for sig, name in SAFE_ARRAYS)
+ARRAY_ELEMENTS = ("etArray", "etSubRecordArray")      # xEdit's names for an element that is a list
+ARRAY_VALUES = ("dtArray", "dtSubRecordArray")         # and for a value that is one (a list inside one field)
+
+
+def _safe_array(signature: str, array_name: str) -> bool:
+    return any((sig in ("*", signature)) and array_name.strip() == name for sig, name in SAFE_ARRAYS)
+
+
+def read_chain(text: str) -> dict:
+    """What the script's chain says about one element (XE01§7, WHY§34): is it, or something above it, an entry of
+    a list; and which list, and how long. The chain runs from the element up to its record; a step is "name,
+    element kind, value kind, how many elements it holds, its place in the step above"."""
+    steps = []
+    for item in text.split("\x1e"):
+        parts = item.split("\x1f")
+        if len(parts) >= 5:
+            steps.append({"name": parts[0], "element": parts[1], "value": parts[2],
+                          "count": int(parts[3]) if parts[3].lstrip("-").isdigit() else 0,
+                          "index": int(parts[4]) if parts[4].lstrip("-").isdigit() else -1})
+    for i in range(len(steps) - 1):
+        above = steps[i + 1]
+        if above["element"] in ARRAY_ELEMENTS or above["value"] in ARRAY_VALUES:
+            return {"kind": "entry", "entry": steps[i]["name"], "index": steps[i]["index"], "array": above["name"],
+                    "array_length": above["count"], "steps": steps}
+    return {"kind": "field", "entry": "", "index": -1, "array": "", "array_length": 0, "steps": steps}
 
 
 def parse_report(text: str) -> dict:
@@ -206,8 +230,8 @@ def parse_report(text: str) -> dict:
     out: dict = {"format": "", "xedit": "", "end": "", "reason": "", "files": [], "not_loaded": [], "held_changed": []}
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
-    for line in text.splitlines():
-        f = line.split("\t")
+    for line in text.split("\n"):              # not splitlines(): the chain's separators would count as line ends
+        f = line.rstrip("\r").split("\t")
         kind = f[0]
         if kind == "H" and len(f) >= 4:
             out["format"], out["xedit"] = f[1], f[3]
@@ -220,12 +244,15 @@ def parse_report(text: str) -> dict:
                    "elements": []}
             records[(f[1], f[3])] = rec
             files[f[1]]["items"].append(rec)
-        elif kind == "E" and len(f) >= 10 and (f[1], f[2]) in records:
+        elif kind == "E" and len(f) >= 7 and (f[1], f[2]) in records:
             rec = records[(f[1], f[2])]
-            safe = f[3] == "entry" and _safe_array(rec["signature"], f[5])
-            rec["elements"].append({"kind": f[3], "entry": f[4], "array": f[5], "array_length": int(f[6] or 0),
-                                    "path": f[7], "target_file": f[8], "target_form": f[9],
-                                    "would": "entry" if safe else "needs you"})
+            c = read_chain(f[6])
+            safe = c["kind"] == "entry" and _safe_array(rec["signature"], c["array"])
+            rec["elements"].append({"kind": c["kind"], "entry": c["entry"], "index": c["index"], "array": c["array"],
+                                    "array_length": c["array_length"], "path": f[3], "target_file": f[4],
+                                    "target_form": f[5], "would": "entry" if safe else "needs you",
+                                    "chain": [[st["name"], st["element"], st["value"], st["count"]]
+                                              for st in c["steps"]]})
         elif kind == "D" and len(f) >= 4 and f[1] in files:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:
@@ -454,7 +481,7 @@ def _lines(path: Path) -> list[str]:
 
 def _ended(report: Path) -> bool:
     text = _read(report)
-    return any(ln.startswith("X\t") for ln in text.splitlines()[-3:])
+    return any(ln.startswith("X\t") for ln in text.split("\n")[-3:])
 
 
 class PastJob:

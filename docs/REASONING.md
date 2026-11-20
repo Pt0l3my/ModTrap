@@ -56,6 +56,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 31 | 2026-11-20 | The dry run is built; what its first run on the owner's PC has to show | METHOD | #xedit #mo2 #safety #process |
 | 32 | 2026-11-20 | A friendlier page: what was changed and why | METHOD | #page |
 | 33 | 2026-11-20 | Sessions and Quit: how the state is kept, and what "safe to finish" means for now | METHOD | #page #safety #process |
+| 34 | 2026-11-20 | The script checked against the script engine's source, without running it | METHOD | #xedit #process |
+| 35 | 2026-11-20 | The Steps tab: a checklist the modlist's own files tick off | METHOD | #page #procedure #tools |
 
 ## Entries
 
@@ -541,3 +543,56 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   locked until the first was finished. Not tested on Windows.
 - Not built: deleting a session (it will hold safe folders, so deleting needs the same care as Revert), and what a
   demaster cut short by Quit should do.
+
+### 34. The script checked against the script engine's source, without running it
+
+`2026-11-20` · METHOD · `#xedit #process` · refs: WHY§31, XE01§7, XE01§9, MT4
+
+- METHOD: xEdit's scripts run in JVCL's interpreter, whose source is not in xEdit's repository. It was read at
+  `github.com/project-jedi/jvcl`, commit `b045b99` (2026-05-29; MPL 1.1 by its file headers; only
+  `jvcl/run/JvInterpreter*.pas`, read only), together with xEdit's own adapter units at the 4.1.5f tag.
+- FACT: every keyword and form the script uses is in the interpreter's parser: `unit`, `while`, `mod`, `try` with
+  `except on E: Exception`, a bare `raise` to pass an error on, `exit`, character constants such as `#9`
+  (`JvInterpreterParser.pas:104-150`, `:336-381`, `:740-748`; `JvInterpreter.pas:7640-7648`).
+- FACT (a real find): the interpreter looks names up without regard to case, across everything registered. Four
+  of the script's own variable names were names xEdit registers: `formId` (xEdit's `FormID` function), `tFile` and
+  `tForm` (the classes `TFile` and `TForm`) and `fileName`. They are renamed. Every name the script declares was
+  then compared by a small program with all 3,741 names the two sources register; what is left in common are the
+  entry point `Initialize` and the one-letter names xEdit's own scripts use.
+- FACT: xEdit catches an error a script lets through and writes it with its place in the script
+  (`xEdit/xeMainForm.pas:8469-8474`). So the script now records its failure and passes the error on: xEdit's log
+  names the line, and ModTrap prints that log's tail (WHY§31).
+- METHOD: the script no longer decides what an element is. For each element that points at a trapped plugin it
+  writes the chain of elements up to the record: each one's name, kind of element, kind of value, size and place.
+  ModTrap's own code reads the chain (`dryrun.read_chain`): an entry of a list is an element whose parent is a list
+  by either kind. A keyword list is a list by its value, not by its element kind, which the first version of the
+  script would have missed. A wrong reading can now be put right in ModTrap without the owner running xEdit again
+  on a new script.
+- METHOD: the job file is written as UTF-8 with a byte-order mark, which the script's string list honours, so a
+  folder name with letters outside the PC's own text encoding still arrives whole. The script's own files come back
+  in the PC's encoding; ModTrap reads them as UTF-8 if valid, else as that.
+- Still unproven, as WHY§31 lists: only a run can show the rest.
+
+### 35. The Steps tab: a checklist the modlist's own files tick off
+
+`2026-11-20` · METHOD · `#page #procedure #tools` · refs: MT18, MT17, DESIGN§14, DESIGN§13, WHY§21, WHY§27, WHY§28
+
+- METHOD: until ModTrap can change a modlist, the steps of a demaster are a checklist for doing it by hand, made
+  for whichever mods are ticked: the dry run; the patches to switch off; the plugins to demaster; the tool outputs
+  to rebuild; the mods to disable; the tools to run again; the settings files to look at; the health check; play.
+  It replaces a guide written for one mod with one worked out from the modlist.
+- METHOD: a step is "done" when the modlist's files show it, at every reading: a plugin no longer lists the mod as
+  a master, a plugin is inactive, a mod is disabled, the health check is clean. Only what no file can show (a tool
+  was run again, a settings file was looked at, the game plays) is ticked off by the owner, and kept in the session.
+- METHOD: three things no master list shows are now found (WHY§27). What the ticked mod carries besides plugins,
+  by file name: animations and behaviours lead to the behaviour tool set up in MO2, LOD files to the LOD tools.
+  Mods that only replace the ticked mod's files (a hotfix): a mod at least four fifths made of files the ticked mod
+  also has. And small settings files of other mods that name a ticked plugin: lines for something that works while
+  the game runs. The last reads the content of other mods' settings files, and nothing else of them.
+- LIKELY: the file-name patterns for each kind (`steps.KINDS`) are from general knowledge of how Skyrim mods lay
+  out their files, not from a source; the page says "for example" and shows the files it went by.
+- FACT: a mod that also provides a ticked plugin (a second copy of it, higher or lower in priority) is listed with
+  the mods to disable: the plugin stays in the game while any of them is enabled.
+- Limits: files inside a mod's archive are not seen (the archive's table is not read); the search of settings files
+  stops after a time and a count, and says so; the caution about saves and compiled scripts is general modding
+  knowledge, worded as such.

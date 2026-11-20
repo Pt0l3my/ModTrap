@@ -14,7 +14,7 @@
       <li data-step="open" data-tab="mods"><span class="n">1</span><span class="t">Modlist open</span></li>
       <li data-step="pick" data-tab="mods"><span class="n">2</span><span class="t" id="step-pick">Tick the mods to take out</span></li>
       <li data-step="dry" data-tab="selection"><span class="n">3</span><span class="t" id="step-dry">Dry run</span></li>
-      <li data-step="trap" class="later" title="Not built yet: the step that actually demasters"><span class="n">4</span><span class="t">Demaster</span></li>
+      <li data-step="trap" data-tab="steps" title="The steps of the demaster itself. ModTrap cannot do them for you yet: the Steps tab lists them to do by hand, and checks them."><span class="n">4</span><span class="t">Demaster: the steps</span></li>
     </ol>
     <div class="top-right">
       <button id="session-btn" type="button" class="session-btn" aria-haspopup="true" aria-expanded="false" title="Sessions: each is one piece of work on one modlist, kept when you quit" hidden></button>
@@ -51,6 +51,7 @@
   <button data-tab="plugins">Plugins</button>
   <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
+  <button data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
   <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-tab="tools">Tools</button>
   <button data-tab="log">Log</button>
@@ -152,6 +153,16 @@
       <div id="job-result" class="scroll pad"><p class="dim">Tick mods on the Mods tab, then press “Dry run through xEdit” on the Selection tab.</p></div>
       <pre id="job-log" class="terminal side" tabindex="0" aria-label="The dry run's lines"></pre>
     </div>
+  </section>
+
+  <section id="tab-steps" class="tab" hidden>
+    <div class="tools">
+      <strong id="steps-summary">Steps</strong>
+      <span id="steps-info" class="dim"></span>
+      <span class="spacer"></span>
+      <button id="steps-rescan" type="button" title="Read the modlist again, to see which steps its files now show as done">Rescan to check</button>
+    </div>
+    <div id="steps-list" class="scroll pad"></div>
   </section>
 
   <section id="tab-health" class="tab" hidden>

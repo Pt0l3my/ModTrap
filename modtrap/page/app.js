@@ -90,9 +90,10 @@ function renderSteps() {
     const k = li.dataset.step;
     const done = k === "open" || (k === "pick" && picked > 0) || (k === "dry" && dryDone);
     li.classList.toggle("done", done);
-    li.classList.toggle("now", k === at && !done && k !== "trap");
+    li.classList.toggle("now", k === at && !done);
   }
   steps.querySelector('[data-step="dry"]').dataset.tab = job ? "job" : "selection";
+  steps.querySelector('[data-step="trap"]').dataset.tab = "steps";
 }
 
 function renderTools(s) {
@@ -191,7 +192,7 @@ function currentUi() {
     tab: state.tab || "mods", picked: [...state.picked], order: $("mods-order").value,
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
-    collapsed: [...(state.collapsed || [])], plugin: state.plugin || "",
+    collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
   };
 }
 
@@ -218,6 +219,8 @@ function applyUi(ui) {
     $("plugins-search").value = ui.pSearch || "";
     $("p-problems").checked = !!ui.pProblems; $("p-deps").checked = !!ui.pDeps;
     state.collapsed = new Set(Array.isArray(ui.collapsed) ? ui.collapsed : []);
+    state.stepsDone = ui.stepsDone && typeof ui.stepsDone === "object" ? ui.stepsDone : {};
+    state.stepsText = "";
     state.picked = new Set();
     for (const n of Array.isArray(ui.picked) ? ui.picked : []) {
       const m = findMod(n);
@@ -490,7 +493,7 @@ function gotoMod(name) {
 function updateTray() {
   const n = state.picked.size;
   const tab = state.tab || "mods";
-  $("tray").hidden = !n || tab === "selection" || tab === "job";
+  $("tray").hidden = !n || tab === "selection" || tab === "job" || tab === "steps";
   const names = [...state.picked];
   $("tray-review").textContent = n === 1 ? "See what depends on it" : "See what depends on them";
   $("tray-text").textContent = plural(n, "mod") + " ticked: " + names.slice(0, 3).join(", ") + (n > 3 ? " and " + (n - 3) + " more" : "");
@@ -781,6 +784,97 @@ async function pollJob() {
   try { const d = await api("/api/job"); state.job = d.job; renderJob(d.job); renderSteps(); } catch (e) { /* next round */ }
 }
 
+// --- the Steps tab (DESIGN§14) --------------------------------------------------------------------------------------
+
+const STEP_STATE = {
+  "done": ["done", "good"], "not needed": ["not needed", "good"], "to do": ["to do", ""], "going": ["going…", "warn"],
+  "waiting": ["waits for the steps above", ""], "waiting for the dry run": ["waits for the dry run", ""],
+};
+
+function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
+
+function stepItem(it) {
+  if (it.tool) return el("li", { text: "“" + it.tool + "” in MO2's list of tools" });
+  if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
+  if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
+    el("span", { class: "tag " + (it.what === "missing" ? "bad" : "warn"), text: it.what === "missing" ? "missing" : "not active" }));
+  if (it.plugin) {
+    const li = el("li", {}, pluginLink(it.plugin), el("span", { class: "dim", text: "  position " + it.position + ", in " }), modLink(it.mod));
+    if (it.made_by && it.made_by.length) li.append(el("span", { class: "tag warn", text: "made by " + it.made_by.join(", ") }));
+    if (it.verdict) li.append(el("span", { class: "tag " + (it.verdict === "needs you" ? "warn" : "good"), text: it.verdict }),
+      el("span", { class: "dim", text: "  " + it.own + " of the mod's own records, " + it.entries + " list entries, " + it.needs_you + " that need you" }));
+    return li;
+  }
+  const li = el("li", {}, modLink(it.mod), it.priority == null ? null : el("span", { class: "dim", text: "  priority " + it.priority }),
+    el("span", { class: "tag " + (it.enabled ? "" : "good"), text: it.enabled ? "enabled" : "disabled" }));
+  if (it.why && it.why !== "ticked") li.append(el("span", { class: "dim", text: "  " + it.why }));
+  return li;
+}
+
+function renderSteps2(d) {
+  const done = state.stepsDone || {};
+  let open = 0;
+  const cards = d.steps.map((st) => {
+    const ticked = st.manual && !!done[stepKey(st.key)];
+    const isDone = ticked || st.state === "done" || st.state === "not needed";
+    const waiting = !isDone && st.state.startsWith("waiting");
+    if (!isDone) open++;
+    const [word, cls] = ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
+    const body = el("div", {},
+      el("h3", {}, st.title, el("span", { class: "who" + (st.who === "you" ? " you" : ""), text: st.who === "you" ? "You" : "ModTrap" }),
+        el("span", { class: "tag " + cls, text: word })),
+      el("p", { class: "dim", text: st.why }),
+      st.note ? el("p", { text: st.note }) : null,
+      st.items.length ? el("ul", {}, ...st.items.slice(0, 200).map(stepItem)) : null,
+      st.items.length > 200 ? el("p", { class: "dim", text: "Showing the first 200 of " + st.items.length + "." }) : null);
+    if (st.manual) {
+      const box = el("input", { type: "checkbox", checked: ticked });
+      box.addEventListener("change", () => {
+        state.stepsDone = state.stepsDone || {};
+        if (box.checked) state.stepsDone[stepKey(st.key)] = true; else delete state.stepsDone[stepKey(st.key)];
+        saveUi();
+        renderSteps2(d);
+      });
+      body.append(el("label", { class: "tickoff" }, box, "I have done this"));
+    }
+    return el("div", { class: "step " + (isDone ? "done" : waiting ? "waiting" : "todo") }, el("div", { class: "num", text: isDone ? "✓" : st.n }), body);
+  });
+  const box = $("steps-list");
+  const badge = $("steps-count");
+  if (!d.steps.length) {
+    badge.hidden = true;
+    $("steps-summary").textContent = "Steps";
+    $("steps-info").textContent = "";
+    box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "No mod is ticked" }),
+      el("p", { class: "dim", text: "Tick the mods you want to take out on the Mods tab. This tab then lists every step that takes: what ModTrap does, what is yours to do, and which steps the modlist's own files already show as done." })));
+    return;
+  }
+  badge.hidden = false;
+  badge.textContent = open ? open : "✓";
+  badge.className = "count " + (open ? "todo" : "ok");
+  $("steps-summary").textContent = open ? plural(open, "step") + " to go" : "Every step is done";
+  const carries = Object.entries(d.contents || {}).filter(([k]) => k !== "other files").map(([k, n]) => n + " " + k);
+  $("steps-info").textContent = "Taking out " + d.mods.join(", ") + (d.looking ? " · still looking into the mods' folders…" : carries.length ? " · besides plugins it carries: " + carries.join(", ") : "");
+  const intro = el("div", { class: "card" },
+    el("p", { text: "Everything it takes to get " + (d.mods.length === 1 ? "this mod" : "these mods") + " out of the modlist, in order. ModTrap cannot change your modlist yet, so the steps marked “You” are done by hand in MO2 and xEdit for now; ModTrap checks them against the modlist's files each time it is read." }),
+    el("p", { class: "dim", text: "Plugins to take out: " + d.trapped.join(", ") }));
+  box.replaceChildren(intro, ...cards);
+}
+
+async function pollSteps(force) {
+  if (state.status !== "ready") return;
+  const mods = [...state.picked];
+  const key = mods.slice().sort().join("|") + "#" + state.loaded + "#" + (state.job ? state.job.id + state.job.state : "");
+  if (!force && key === state.stepsKey && !state.stepsLooking && state.tab !== "steps") return;
+  try {
+    const d = await api("/api/steps", { mods: mods });
+    state.stepsKey = key;
+    state.stepsLooking = d.looking;
+    const text = JSON.stringify(d);
+    if (text !== state.stepsText) { state.stepsText = text; renderSteps2(d); }
+  } catch (e) { /* the next round tries again */ }
+}
+
 // --- tabs, the log, and the loop -------------------------------------------------------------------------------------
 
 function showTab(name) {
@@ -845,6 +939,7 @@ async function tick() {
   }
   updateDryButton();
   await pollJob();
+  await pollSteps(false);
   await pollLog();
 }
 
@@ -940,6 +1035,7 @@ $("job-stop").addEventListener("click", async () => {
   tick();
 });
 $("quit").addEventListener("click", quitModTrap);
+$("steps-rescan").addEventListener("click", () => $("rescan").click());
 $("session-btn").addEventListener("click", () => {
   const panel = $("session-panel");
   panel.hidden = !panel.hidden;

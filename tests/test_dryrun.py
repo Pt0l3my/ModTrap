@@ -64,7 +64,9 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual(cmd[-1], "xEdit")
         for part in ("-sse", '-script:"', '-P:"', "-autoload", "-autoexit", "-nobuildrefs", '-B:"', '-R:"'):
             self.assertIn(part, cmd[6])
-        job = (job_dir / "script" / "modtrap-job.txt").read_text()
+        raw = (job_dir / "script" / "modtrap-job.txt").read_bytes()
+        self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))             # so that xEdit reads it as UTF-8
+        job = raw.decode("utf-8-sig")
         self.assertIn("mode=report", job)
         self.assertIn("trap.0=Bramble.esp", job)
         self.assertIn("dep.3=Generated.esp", job)
@@ -146,17 +148,38 @@ class DryRunTests(unittest.TestCase):
 
 class ReportTests(unittest.TestCase):
     def test_reading_of_a_file(self):
+        ch = lambda *steps: "\x1e".join("\x1f".join(str(x) for x in st) for st in steps)   # noqa: E731
+        alias = ch(("ALFR - Forced Reference", "etSubRecord", "dtFormID", 0, 3), ("Alias", "etSubRecordStruct", "dtStruct", 6, 1),
+                   ("Aliases", "etSubRecordArray", "dtSubRecordArray", 3, 12))
         text = "\r\n".join([
-            "H\tmodtrap-report/1\treport\t1", "F\tPatch.esp\t2\tSkyrim.esm,Bad.esp",
+            "H\tmodtrap-report/2\treport\t1", "F\tPatch.esp\t2\tSkyrim.esm,Bad.esp",
             "R\tPatch.esp\tMISC\t05000801\tBad.esp\t1\tA", "R\tPatch.esp\tMISC\t05000802\tBad.esp\t1\tB",
             "D\tPatch.esp\t2\t2", "F\tOther.esp\t9\tSkyrim.esm,Bad.esp",
             "R\tOther.esp\tQUST\t00011111\tSkyrim.esm\t0\tQ",
-            "E\tOther.esp\t00011111\tentry\tQUST \\ Aliases \\ Alias\tQUST \\ Aliases\t3\tQUST \\ Aliases \\ Alias \\ ALFR\tBad.esp\t05000801",
+            "E\tOther.esp\t00011111\tQUST \\ Aliases \\ Alias \\ ALFR\tBad.esp\t05000801\t" + alias,
             "D\tOther.esp\t9\t1", "U\tOther.esp", "X\tok\t"])
         r = dryrun.parse_report(text)
         self.assertEqual([(f["name"], f["reading"]) for f in r["files"]],
-                         [("Patch.esp", "patch only"), ("Other.esp", "needs you")])   # an alias array is not a safe list
+                         [("Patch.esp", "patch only"), ("Other.esp", "needs you")])   # an alias list is not a safe list
         self.assertEqual((r["end"], r["held_changed"]), ("ok", ["Other.esp"]))
+        e = r["files"][1]["items"][0]["elements"][0]
+        self.assertEqual((e["kind"], e["entry"], e["array"], e["array_length"]), ("entry", "Alias", "Aliases", 3))
+
+    def test_chains(self):
+        ch = lambda *steps: "\x1e".join("\x1f".join(str(x) for x in st) for st in steps)   # noqa: E731
+        # A keyword: the list is the value of one field (the field holds an array).
+        kw = dryrun.read_chain(ch(("Keyword", "etValue", "dtFormID", 0, 2), ("KWDA - Keywords", "etSubRecord", "dtArray", 5, 4)))
+        self.assertEqual((kw["kind"], kw["entry"], kw["array"], kw["array_length"]), ("entry", "Keyword", "KWDA - Keywords", 5))
+        self.assertTrue(dryrun._safe_array("ARMO", kw["array"]))
+        # A form list entry: the list is an element of its own.
+        fl = dryrun.read_chain(ch(("LNAM - FormID", "etSubRecord", "dtFormID", 0, 0), ("FormIDs", "etSubRecordArray", "dtSubRecordArray", 9, 1)))
+        self.assertEqual((fl["kind"], fl["array"]), ("entry", "FormIDs"))
+        self.assertTrue(dryrun._safe_array("FLST", "FormIDs"))
+        self.assertFalse(dryrun._safe_array("QUST", "FormIDs"))
+        # A single field, with no list between it and its record.
+        one = dryrun.read_chain(ch(("RNAM - Race", "etSubRecord", "dtFormID", 0, 9)))
+        self.assertEqual(one["kind"], "field")
+        self.assertEqual(dryrun.read_chain("")["kind"], "field")
 
 
 if __name__ == "__main__":

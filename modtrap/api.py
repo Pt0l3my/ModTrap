@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import NAME, VERSION, dryrun, instance, locate, logbook, model, paths, plugin, sessions
+from . import NAME, VERSION, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps
 from .server import Bad
 
 log = logbook.get("app")
@@ -80,6 +80,7 @@ class Api:
         self.model: model.Model | None = None
         self._run = 0
         self._lists: dict[str, tuple[object, dict]] = {}
+        self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
@@ -414,6 +415,35 @@ class Api:
         job.start()
         return job.public()
 
+    def steps(self, body: dict) -> dict:
+        """The steps for the ticked mods (DESIGN§14). The part that reads folders takes seconds on a large list:
+        it runs once, off the request, and the answer says while it is still going."""
+        m = self._need()
+        mods = body.get("mods")
+        if not isinstance(mods, list) or len(mods) > 50 or not all(isinstance(x, str) and x for x in mods):
+            raise Bad("the ticked mods did not arrive")
+        key = (id(m), tuple(sorted(mods)))
+        with self._lock:
+            started = key in self._deep
+            if not started and mods:
+                self._deep = {k: v for k, v in self._deep.items() if k[0] == id(m)}     # an older reading's are dropped
+                self._deep[key] = None
+        if not started and mods:
+            def work() -> None:
+                try:
+                    found = steps.look_deeper(m, mods)
+                except Exception as e:
+                    log.warn("looking into the ticked mods' folders failed: %s", logbook.why(e))
+                    found = {}
+                with self._lock:
+                    self._deep[key] = found
+            threading.Thread(target=work, name="steps-deep", daemon=True).start()
+        deep = self._deep.get(key)
+        job = self.job.public() if self.job else None
+        out = steps.compile_steps(m, mods, job, deep)
+        out["looking"] = bool(mods) and deep is None
+        return out
+
     def job_state(self) -> dict:
         return {"job": self.job.public() if self.job else None}
 
@@ -567,6 +597,8 @@ class Api:
             return 200, self.dry_plan(body), None
         if path == "/api/dryrun/start":
             return 200, self.dry_start(body), None
+        if path == "/api/steps":
+            return 200, self.steps(body), None
         if path == "/api/job/stop":
             if self.job is None:
                 raise Bad("no dry run is going")

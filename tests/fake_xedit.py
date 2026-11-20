@@ -9,12 +9,17 @@ import time
 from pathlib import Path
 
 
+def chain(*steps):
+    """The chain the real script writes for an element: steps from the element up to its record."""
+    return "\x1e".join("\x1f".join(str(x) for x in st) for st in steps)
+
+
 def main(argv):
     args = argv[argv.index("-a") + 1]
     mode = argv[argv.index("-a") + 2]   # the tool's title; the tests use it to choose a behaviour
     script = Path(re.search(r'-script:"([^"]+)"', args).group(1))
     plugins = Path(re.search(r'-P:"([^"]+)"', args).group(1))
-    job = dict(ln.split("=", 1) for ln in (script.parent / "modtrap-job.txt").read_text().splitlines() if "=" in ln)
+    job = dict(ln.split("=", 1) for ln in (script.parent / "modtrap-job.txt").read_text(encoding="utf-8-sig").splitlines() if "=" in ln)
     loaded = [ln[1:] for ln in plugins.read_text(encoding="cp1252").splitlines() if ln.startswith("*")]
     trap = [job["trap.%d" % i] for i in range(int(job["trap.count"]))]
     deps = [job["dep.%d" % i] for i in range(int(job["dep.count"]))]
@@ -30,7 +35,7 @@ def main(argv):
     say("xEdit has loaded %d files; %d trapped plugin(s)" % (len(loaded) + 5, len(trap)))
     if mode == "crash":
         return 3
-    out.append("H\tmodtrap-report/1\treport\t67175680")
+    out.append("H\tmodtrap-report/2\treport\t67175680")
     for d in deps:
         if d not in loaded:
             out.append("M\t" + d)
@@ -39,12 +44,13 @@ def main(argv):
         say("reading %s (3 records)" % d)
         out.append("R\t%s\tMISC\t05000801\t%s\t1\tInventedThing" % (d, trap[0]))
         out.append("R\t%s\tFLST\t00012345\tSkyrim.esm\t0\tInventedList" % d)
-        out.append("E\t%s\t00012345\tentry\tFLST \\ FormIDs \\ LNAM - FormID\tFLST \\ FormIDs\t4\t"
-                   "FLST \\ FormIDs \\ LNAM - FormID\t%s\t05000801" % (d, trap[0]))
+        out.append("E\t%s\t00012345\tFLST \\ FormIDs \\ LNAM - FormID\t%s\t05000801\t%s" % (d, trap[0], chain(
+            ("LNAM - FormID", "etSubRecord", "dtFormID", 0, 2), ("FormIDs", "etSubRecordArray", "dtSubRecordArray", 4, 1))))
         n = 2
         if "Lantern" in d:
             out.append("R\t%s\tNPC_\t00054321\tSkyrim.esm\t0\tInventedPerson" % d)
-            out.append("E\t%s\t00054321\tfield\t\t\t0\tNPC_ \\ RNAM - Race\t%s\t05000802" % (d, trap[0]))
+            out.append("E\t%s\t00054321\tNPC_ \\ RNAM - Race\t%s\t05000802\t%s" % (d, trap[0], chain(
+                ("RNAM - Race", "etSubRecord", "dtFormID", 0, 9))))
             n = 3
         out.append("D\t%s\t3\t%d" % (d, n))
         say("done %s: %d of 3 records need a trapped plugin" % (d, n))
