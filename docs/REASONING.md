@@ -51,6 +51,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 26 | 2026-11-20 | A patch is often one plugin in a collection: disable the plugin, not the mod | METHOD | #procedure #mo2 |
 | 27 | 2026-11-20 | The real list shows generated outputs and loose files, as the design assumed | FACT | #tools #procedure |
 | 28 | 2026-11-20 | The second scan: a patch with no master, MO2's output setting, and its limits | FACT | #tools #mo2 #procedure |
+| 29 | 2026-11-20 | Version 0.1's page: what was built, how it was tested, what was not | METHOD | #server #page #process |
 
 ## Entries
 
@@ -399,3 +400,21 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - FACT: the dependants' master lists run from 4 to 200 plugins; the largest are the list's merged and generated
   patches. Loading "the dependants and their masters" (XE01§3) is still far less than the whole load order for the
   small patches, but close to all of it for the largest; the dry run's time will be set by those.
+
+### 29. Version 0.1's page: what was built, how it was tested, what was not
+
+`2026-11-20` · METHOD · `#server #page #process` · refs: DESIGN§2, DESIGN§4, DESIGN§10, WHY§9, MT11
+
+- METHOD: `python -m modtrap` (or `ModTrap.cmd`) starts the server on 127.0.0.1 and opens the page. The server is
+  DataPiler's, taken whole (NOTICE); the log is a small one of our own on DataPiler's pattern; the API reads only.
+  The chosen folder is kept in ModTrap's own folder under the user's local application data, never in the instance.
+- METHOD: an instance is read on a thread of its own, and plugin headers are cached by path, size and time, so a
+  rescan re-reads only what changed.
+- FACT: tested here with the standard library's test runner (server guards, API, masking, nothing written to the
+  instance) and in a real browser against two invented instances, one the size of the owner's (about 3,600 mods and
+  3,900 plugins): read and modelled in well under a second, first rows on the page in under a second, filtering
+  instant, no errors in the browser's console under the strict content policy.
+- Not tested: on Windows at all, the `.cmd` starter included; the page against the owner's real modlist. Timings on
+  the owner's PC will be set by the disk (3,751 plugin files opened), not by this code.
+- Not built yet from DESIGN§4: the tools' versions in the instance bar (DESIGN§13), the Steps and History tabs, a
+  folder picker (the folder is typed or pasted), and the built launcher and updater (MT11).

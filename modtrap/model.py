@@ -47,13 +47,19 @@ class Model:
     plugins: dict[str, PluginRow]   # by folded name
     order: list[str]                # folded names in load order, then those outside it by name
     issues: list[Issue]
+    _by_source: dict[str, list[PluginRow]] = field(default_factory=dict, repr=False)
 
     def row(self, name: str) -> PluginRow | None:
         return self.plugins.get(fold(name))
 
     def provided_by(self, mod: Mod) -> list[PluginRow]:
         """The mod's plugins that MO2 would use (it wins them), in load order."""
-        return [self.plugins[f] for f in self.order if self.plugins[f].source == mod.name]
+        if not self._by_source:
+            for f in self.order:
+                r = self.plugins[f]
+                if r.source is not None:
+                    self._by_source.setdefault(r.source, []).append(r)
+        return self._by_source.get(mod.name, [])
 
     def dependants_of_mod(self, mod: Mod) -> list[PluginRow]:
         """Plugins of other mods that list one of this mod's plugins as a master, in load order."""

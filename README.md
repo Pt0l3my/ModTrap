@@ -4,15 +4,25 @@ A local tool for Mod Organizer 2 and Skyrim that takes a mod out of a modlist th
 body: it removes the mod as a master from every plugin that depends on it, so that the mod can be disabled without
 "missing master" errors.
 
-**Status: design, and the first piece of version 0.1.** The reader exists: it reads an MO2 instance and works out
-which plugins depend on which. Nothing that changes a file exists yet.
+**Status: version 0.1 in the making. It only reads.** ModTrap opens a page in your browser that shows an MO2
+modlist as MO2 has it: every mod with its priority, every plugin with its place in the load order, each plugin's
+masters and what needs it, and, for the mods you tick, everything that depends on them. Nothing that changes a file
+exists yet; "Demaster Selected" arrives in later versions.
+
+To try it (Windows, Python 3.10 or newer): download this repository, then double-click `ModTrap.cmd`, or run
+
+```
+python -m modtrap
+```
+
+in its folder. Give it your modlist's folder (the one MO2 itself is in) and press Open. The page is served on your
+own PC only (127.0.0.1), and nothing is sent anywhere. For a quick look without the page:
 
 ```
 python -m modtrap scan "C:\Modlists\Example" --mod "Some Mod"
 ```
 
-prints the mods, the load order's health and what depends on a mod. It needs Python 3.10 or newer and writes
-nothing. See:
+See:
 
 - [docs/design/0001-design.md](docs/design/0001-design.md): what ModTrap is to do and how;
 - [docs/DECISIONS.md](docs/DECISIONS.md): the owner's decisions, and the questions still open;

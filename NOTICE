@@ -19,8 +19,13 @@ ModTrap is our own code under the MIT licence (LICENSE).
   there, itself adapted from the workplan tool in the owner's Skyrizz. ModTrap's document list and codes replace
   EldenNet's.
 
-Planned, not yet taken: parts of DataPiler (MIT): its local page server and its checks, its log ring and job
-format, its updater and its Windows launcher. Each is listed here when it lands, with the file it came from.
+- modtrap/server.py (the local page server: the Host, Origin and token checks, the response headers and content
+  policy, the page's assembly): taken from the owner's DataPiler (MIT), datapiler/server.py there, with ModTrap's
+  token header, page files and log, and without DataPiler's upload paths.
+
+Planned, not yet taken: DataPiler's updater and its Windows launcher. Each is listed here when it lands, with the
+file it came from. ModTrap's log (modtrap/logbook.py) follows DataPiler's idea of a numbered, masked ring of
+lines, and is our own code.
 
 3. Dependencies
 ---------------

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ModTrap</title>
+<style nonce="__NONCE__">/*__CSS__*/</style>
+</head>
+<body data-token="__TOKEN__">
+<header>
+  <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
+  <form id="open-form" autocomplete="off">
+    <label for="folder">Modlist folder</label>
+    <input id="folder" name="folder" type="text" spellcheck="false" placeholder="C:\Modlists\Example">
+    <select id="profile" title="Profile" hidden></select>
+    <button type="submit">Open</button>
+    <button type="button" id="rescan" hidden>Rescan</button>
+  </form>
+  <div id="summary" class="summary" hidden>
+    <span class="chip" id="s-game"></span>
+    <span class="chip" id="s-mods"></span>
+    <span class="chip" id="s-plugins"></span>
+    <span class="chip" id="s-tools" title=""></span>
+    <span class="chip" id="s-health"></span>
+  </div>
+  <p id="message" class="message" hidden></p>
+  <ul id="notes" class="notes" hidden></ul>
+</header>
+
+<nav id="tabs" hidden>
+  <button data-tab="mods" class="on">Mods</button>
+  <button data-tab="plugins">Plugins</button>
+  <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
+  <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
+  <button data-tab="log">Log</button>
+</nav>
+
+<main>
+  <section id="tab-mods" class="tab" hidden>
+    <div class="tools">
+      <input id="mods-search" type="search" placeholder="Search mods and plugins" spellcheck="false">
+      <label><input type="checkbox" id="f-enabled"> Enabled only</label>
+      <label><input type="checkbox" id="f-plugins"> Has plugins</label>
+      <label><input type="checkbox" id="f-deps"> Has dependants</label>
+      <span id="mods-shown" class="dim"></span>
+    </div>
+    <div class="scroll"><table id="mods-table">
+      <thead><tr><th class="c-tick"></th><th class="c-num">Priority</th><th>Mod</th><th>Plugins</th>
+        <th class="c-num" title="Plugins of other mods that list one of this mod's plugins as a master">Dependants</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section id="tab-plugins" class="tab" hidden>
+    <div class="tools">
+      <input id="plugins-search" type="search" placeholder="Search plugins and their mods" spellcheck="false">
+      <label><input type="checkbox" id="p-problems"> With problems</label>
+      <label><input type="checkbox" id="p-deps"> Needed by others</label>
+      <span id="plugins-shown" class="dim"></span>
+    </div>
+    <div class="split">
+      <div class="scroll"><table id="plugins-table">
+        <thead><tr><th class="c-num">Position</th><th>Plugin</th><th>Kind</th><th>Mod</th><th class="c-num">Mod priority</th>
+          <th class="c-num">Masters</th><th class="c-num">Needed by</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <aside id="plugin-detail" class="detail"><p class="dim">Click a plugin to see its masters and what needs it.</p></aside>
+    </div>
+  </section>
+
+  <section id="tab-selection" class="tab" hidden>
+    <div class="tools">
+      <button id="demaster" disabled title="Arrives with version 0.3: this version only reads">Demaster Selected</button>
+      <span class="dim">This version only reads your modlist. It shows what a demaster of the ticked mods would involve; it changes nothing.</span>
+    </div>
+    <div id="selection" class="scroll pad"></div>
+  </section>
+
+  <section id="tab-health" class="tab" hidden>
+    <div id="health" class="scroll pad"></div>
+  </section>
+
+  <section id="tab-log" class="tab" hidden>
+    <pre id="log" class="terminal" tabindex="0"></pre>
+  </section>
+</main>
+<script nonce="__NONCE__">/*__JS__*/</script>
+</body>
+</html>

@@ -1,12 +1,17 @@
-"""`python -m modtrap scan FOLDER [--profile NAME] [--mod NAME] [--plugin NAME]`: read an MO2 instance and print what ModTrap
-sees. Read-only: it opens the instance's text files and each plugin's header, and writes nothing anywhere."""
+"""ModTrap's command line.
+
+`python -m modtrap` starts ModTrap: a page in your browser, served on this PC only (127.0.0.1).
+`python -m modtrap scan FOLDER [--profile NAME] [--mod NAME] [--plugin NAME]` prints what ModTrap sees in an MO2
+instance. Both only read the instance: its text files and each plugin's header."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+import threading
+import webbrowser
 
-from . import NAME, VERSION, instance, model
+from . import NAME, VERSION, instance, logbook, model, paths
 
 
 def scan(a: argparse.Namespace) -> int:
@@ -73,16 +78,59 @@ def scan(a: argparse.Namespace) -> int:
     return 1 if m.issues else 0
 
 
+DEFAULT_PORT = 8737
+
+
+def serve(a: argparse.Namespace) -> int:
+    from . import api as api_mod, server          # imported here so that `scan` needs neither
+
+    api = api_mod.Api()
+    app = server.App(api)
+    try:
+        httpd = server.Server(a.port, app)
+    except OSError:
+        if a.port == 0:
+            raise
+        try:
+            httpd = server.Server(0, app)         # the usual port is taken: any free one
+        except OSError as e:
+            print("%s could not open a port on this PC: %s" % (NAME, logbook.why(e)))
+            return 2
+    url = "http://127.0.0.1:%d/" % httpd.port
+    log = logbook.get("app")
+    log.info("%s %s, Python %s on %s", NAME, VERSION, sys.version.split()[0], sys.platform)
+    log.info("the page is at %s (this PC only)", url)
+    folder = a.folder or paths.load_settings().get("folder")
+    if isinstance(folder, str) and folder:
+        api.open(folder, a.profile or paths.load_settings().get("profile") or None)
+    if not a.no_browser:
+        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    print("%s is running. Leave this window open; press Ctrl+C here to stop it." % NAME, file=sys.stderr)
+    try:
+        httpd.serve_forever(poll_interval=0.25)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="modtrap", description=__doc__.split("\n")[0])
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    ap = argparse.ArgumentParser(prog="modtrap", description="ModTrap: demaster mods in an MO2 modlist")
+    sub = ap.add_subparsers(dest="cmd")
+    v = sub.add_parser("serve", help="start ModTrap and open its page (the default)")
+    for p in (ap, v):
+        p.add_argument("--port", type=int, default=DEFAULT_PORT, help="the port on 127.0.0.1 (default %(default)s)")
+        p.add_argument("--no-browser", action="store_true", help="do not open the browser")
+        p.add_argument("--folder", help="open this modlist folder at start")
+        p.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
     s = sub.add_parser("scan", help="read an instance and print a summary; writes nothing")
     s.add_argument("folder", help="the modlist's folder (the one holding ModOrganizer.ini)")
     s.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
     s.add_argument("--mod", help="also list this mod's plugins and what depends on them")
     s.add_argument("--plugin", help="also list this plugin's masters and what needs it")
     a = ap.parse_args(argv)
-    return scan(a)
+    return scan(a) if a.cmd == "scan" else serve(a)
 
 
 if __name__ == "__main__":

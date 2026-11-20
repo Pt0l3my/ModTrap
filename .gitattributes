@@ -3,3 +3,6 @@
 
 *.exe binary
 *.ico binary
+
+# The Windows starter keeps its CRLF line ends
+*.cmd text eol=crlf
