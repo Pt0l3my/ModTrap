@@ -248,8 +248,8 @@ order around it has changed since.
   3. its file name is one the tool is known to use;
   4. it lives under one of the modlist's separators for tool output.
 
-  The marks and names for 2 and 3 are in a data file ModTrap ships, one entry a tool, each with its source; they
-  are not in code (WHY§22). With only weak evidence the page says "probably made by", never more.
+  The marks and names for 2 and 3 are in a data file ModTrap ships (`modtrap/data/tools.json`), one entry a tool,
+  each with its source in TL01; they are not in code (WHY§22, WHY§37). With only weak evidence the page says "probably made by", never more.
 - A generated patch among a job's dependants is not demastered by default: its treatment is **run the tool again**,
   after the trapped mods are disabled, so that the tool rebuilds it without them. Demastering it is the
   alternative the owner can pick, for a tool they no longer have.

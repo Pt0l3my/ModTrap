@@ -13,7 +13,7 @@ import re
 import time
 from pathlib import Path
 
-from . import model
+from . import model, tools
 from .instance import GAME, OVERWRITE, Instance, Mod, fold
 
 WALK_FILES = 60_000            # file names listed in one mod's folder at most
@@ -204,16 +204,21 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
     if result and same_job:
         verdict = {fold(f["name"]): f for f in result["files"]}
 
-    made_by: dict[str, list[str]] = {}
-    for title, mod_name in inst.output_mods.items():
-        made_by.setdefault(fold(mod_name), []).append(title)
+    binaries = {e.title: e.binary for e in inst.executables}
+    made: dict[str, list] = {}                # plugin (folded) -> the evidence for who made it (TL01§7)
+
+    def makers(r: model.PluginRow) -> list:
+        if fold(r.name) not in made:
+            made[fold(r.name)] = tools.identify(r.name, r.author, r.source or "", inst.output_mods, binaries)
+        return made[fold(r.name)]
 
     def brief(r: model.PluginRow) -> dict:
         v = verdict.get(fold(r.name))
         return {"plugin": r.name, "mod": r.source, "position": r.position, "active": r.active,
                 "verdict": v["reading"] if v else "", "own": v["own"] if v else None,
                 "entries": v["entries"] if v else None, "needs_you": v["needs_you"] if v else None,
-                "made_by": sorted(made_by.get(fold(r.source or ""), []))}
+                "made_by": [e.tool + ("" if e.strong else " (probably)") for e in makers(r)],
+                "how": "; ".join(e.how for e in makers(r))}
 
     # 1. The dry run.
     if not mods:
@@ -232,9 +237,9 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
          dry_state, note=dry_note)
 
     # 2-4. The dependants, sorted by what is to be done with them.
-    outputs = [r for r in active_left if made_by.get(fold(r.source or ""))]
-    editors = [r for r in outputs if any("edit" in t.lower() for t in made_by[fold(r.source or "")])]
-    regen = [r for r in outputs if r not in editors]
+    outputs = [r for r in active_left if makers(r)]
+    regen = [r for r in outputs if tools.proposal(makers(r)) != "demaster"]
+    editors = [r for r in outputs if r not in regen]          # written through an editor: cannot be made again
     rest = [r for r in active_left if r not in outputs]
     patch_only = [r for r in rest if verdict.get(fold(r.name), {}).get("reading") == "patch only"]
     to_demaster = [r for r in rest if r not in patch_only] + editors

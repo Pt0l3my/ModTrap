@@ -554,7 +554,8 @@ class Api:
                 "plugins": [dict(brief(r), master_names=list(r.masters)) for r in m.provided_by(mod)],
                 "groups": [{"mod": g.mod.name, "priority": g.mod.priority, "enabled": g.mod.enabled,
                             "reading": g.reading, "others": g.others, "made_by": list(g.made_by),
-                            "leftover": list(g.leftover), "plugins": [brief(r) for r in g.dependants]}
+                            "leftover": list(g.leftover), "evidence": list(g.evidence), "proposal": g.proposal,
+                            "plugins": [brief(r) for r in g.dependants]}
                            for g in model.groups(m, mod)]}
 
     # --- the server's two entry points -----------------------------------------------------------------------------

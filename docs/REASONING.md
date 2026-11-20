@@ -59,6 +59,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 34 | 2026-11-20 | The script checked against the script engine's source, without running it | METHOD | #xedit #process |
 | 35 | 2026-11-20 | The Steps tab: a checklist the modlist's own files tick off | METHOD | #page #procedure #tools |
 | 36 | 2026-11-20 | Groundwork for the demaster, built ahead and switched off | METHOD | #safety #mo2 #process |
+| 37 | 2026-11-20 | Which tool made a plugin: read in the tools' own sources, kept as data | FACT | #tools |
 
 ## Entries
 
@@ -628,3 +629,21 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   in it could stop the script from loading at all.
 - Still open before any of this is switched on: what MO2 does with a re-enabled mod's plugins (MO01§6), whether a
   rewritten `plugins.txt` keeps the load order through MO2's next start (WHY§26), and detecting that MO2 is closed.
+
+### 37. Which tool made a plugin: read in the tools' own sources, kept as data
+
+`2026-11-20` · FACT (the tools' repositories at named commits, TL01) · `#tools` · refs: MT18, WHY§22, WHY§28, TL01§2, TL01§3, TL01§4, TL01§5, TL01§7, DESIGN§13
+
+- FACT: Wrye Bash marks its patch in the header's author field and names it by a fixed pattern (TL01§2);
+  ParallaxGen names its split outputs by a fixed pattern and chooses its own output folder, which is why MO2's
+  setting missed it on the owner's list (TL01§4, WHY§28); Synthesis has a default name, but a group's output is
+  named by the modlist's maker and carries no mark of the tool (TL01§3).
+- METHOD: `modtrap/data/tools.json` holds one entry a tool with its marks, names, kind and source; `modtrap/tools.py`
+  applies it. Evidence in order: MO2's own record of where a tool's new files go, the author field, a known file
+  name, and last a name that only begins like a tool's (weak: shown as "probably"). The page shows the evidence.
+- METHOD: what follows from the kind. A patcher's or generator's output is proposed for "run the tool again". An
+  editor's output (xEdit, zEdit) cannot be made again by ModTrap and is demastered. A tool ModTrap does not know,
+  but whose output mod MO2 records, is taken for a tool, not an editor.
+- LIKELY: DynDOLOD's names (TL01§5); its source is not public and its documentation is still to be read.
+- On the owner's list this now recognises the texture tool's output plugin by its name, where MO2's setting alone
+  had read it as an ordinary mod.

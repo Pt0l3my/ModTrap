@@ -39,11 +39,12 @@ def tokens(text_or_bytes):
 #
 # Canonical forms:  MO01, MO01§3.2   MO2 research note 01 (docs/research/mo2/01-*.md)
 #                   XE01, XE01§4     xEdit research note 01 (docs/research/xedit/01-*.md)
+#                   TL01, TL01§3     tools research note 01 (docs/research/tools/01-*.md)
 #                   DESIGN§6.3       the design (docs/design/0001-design.md)
 #                   WHY§12           an entry of the reasoning log (docs/REASONING.md)
 #                   MT4              one of the owner's decisions (docs/DECISIONS.md)
 
-NOTE = re.compile(r"(?<![\w#/-])(MO|XE)(0\d)(?![\w-])(?:\s?§\s?(\d+(?:\.\d+)*[a-z]?))?")
+NOTE = re.compile(r"(?<![\w#/-])(MO|XE|TL)(0\d)(?![\w-])(?:\s?§\s?(\d+(?:\.\d+)*[a-z]?))?")
 DOC_SECTION = re.compile(r"(?<![\w:-])(DESIGN|WHY)\s?§\s?(\d+(?:\.\d+)*)")
 # The owner's decisions, MT1 onwards (docs/DECISIONS.md), cited as codes of their own: `wp refs MT4`.
 DECISION = re.compile(r"(?<![\w:#-])(MT\d{1,3})(?![\w-])")
@@ -51,7 +52,7 @@ DECISION = re.compile(r"(?<![\w:#-])(MT\d{1,3})(?![\w-])")
 
 def aliases_for(path):
     """Which prefixes mean which note series. ModTrap's notes cite each other in the full form only."""
-    return {"MO": "MO", "XE": "XE"}
+    return {"MO": "MO", "XE": "XE", "TL": "TL"}
 
 
 def cited_codes(text, path=""):

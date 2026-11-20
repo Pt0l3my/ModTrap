@@ -27,6 +27,13 @@ Planned, not yet taken: DataPiler's updater and its Windows launcher. Each is li
 file it came from. ModTrap's log (modtrap/logbook.py) follows DataPiler's idea of a numbered, masked ring of
 lines, and is our own code.
 
+2a. Other tools ModTrap knows about and never contains
+------------------------------------------------------
+
+Wrye Bash, Synthesis, ParallaxGen (each GPL-3.0), DynDOLOD and the JVCL script engine inside xEdit (MPL 1.1) were
+read to learn how they name and mark their output, or which script constructs they accept (docs/research). Nothing
+of them is copied: ModTrap keeps only names, marks and facts, as data and notes.
+
 3. Dependencies
 ---------------
 

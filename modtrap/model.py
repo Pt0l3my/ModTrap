@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import plugin
+from . import plugin, tools
 from .instance import GAME, Instance, Mod, fold
 
 
@@ -79,17 +79,17 @@ class Group:
     mod: Mod
     dependants: list[PluginRow]
     others: int                     # the mod's plugins (that it wins) that do not depend on the trapped mod
-    made_by: tuple[str, ...]        # tools MO2 sends new files of to this mod (MO01§2): a generated output
+    made_by: tuple[str, ...]        # the tools that made these plugins, as far as the evidence goes (TL01§7)
     reading: str                    # "output", "whole mod", "most of the mod", "some plugins"
     leftover: tuple[str, ...] = ()  # for "most of the mod": its plugins that do not depend on the trapped mod
+    evidence: tuple[dict, ...] = () # per plugin: {"plugin", "tool", "kind", "how", "strong"}
+    proposal: str = ""              # for an output: "run the tool again", "probably run the tool again", "demaster"
 
 
 def groups(model: Model, trapped: Mod) -> list[Group]:
     """The trapped mod's dependants grouped by the mod they live in, in load order of their first plugin."""
     inst = model.instance
-    tools: dict[str, list[str]] = {}
-    for title, mod_name in inst.output_mods.items():
-        tools.setdefault(fold(mod_name), []).append(title)
+    binaries = {e.title: e.binary for e in inst.executables}
     by_mod: dict[str, list[PluginRow]] = {}
     for r in model.dependants_of_mod(trapped):
         by_mod.setdefault(r.source or "", []).append(r)
@@ -99,7 +99,11 @@ def groups(model: Model, trapped: Mod) -> list[Group]:
         if mod is None:
             continue
         others = len(model.provided_by(mod)) - len(rows)
-        made_by = tuple(sorted(tools.get(fold(name), [])))
+        found = {r.name: tools.identify(r.name, r.author, name, inst.output_mods, binaries) for r in rows}
+        every = all(found[r.name] for r in rows)            # each of these plugins has a maker we can name
+        made_by = tuple(sorted({e.tool for evs in found.values() for e in evs})) if every else ()
+        evidence = tuple({"plugin": pn, "tool": e.tool, "kind": e.kind, "how": e.how, "strong": e.strong}
+                         for pn, evs in found.items() for e in evs)
         dep = {fold(r.name) for r in rows}
         rest = [r for r in model.provided_by(mod) if fold(r.name) not in dep]
         # "Most of the mod": more of its plugins depend on the trapped mod than not, and nothing outside the mod
@@ -113,8 +117,9 @@ def groups(model: Model, trapped: Mod) -> list[Group]:
             reading = "whole mod"
         else:
             reading = "most of the mod" if mostly else "some plugins"
+        proposal = tools.proposal([e for evs in found.values() for e in evs]) if made_by else ""
         out.append(Group(mod, rows, others, made_by, reading,
-                         tuple(r.name for r in rest) if reading == "most of the mod" else ()))
+                         tuple(r.name for r in rest) if reading == "most of the mod" else (), evidence, proposal))
     return out
 
 
