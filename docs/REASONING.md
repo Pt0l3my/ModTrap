@@ -15,7 +15,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   **LIKELY** (strong inference, not yet checked), **SPECULATION** (a guess worth recording), **METHOD** (how
   something is done, and why), **DECIDED** (a pointer to the decision that settled it).
 - **Tags:** `#procedure` (the manual master removal), `#xedit`, `#mo2`, `#vfs` (MO2's virtual file system and what
-  a write does), `#safety` (originals untouched), `#server`, `#page`, `#datapiler`, `#process`.
+  a write does), `#safety` (backups, Revert, nothing lost), `#tools` (the modlist's tools and their versions), `#server`, `#page`, `#datapiler`, `#process`.
 - The privacy rules bind it as every file: nothing personal, no paths from the owner's PC, nothing taken from a
   real mod. No model identifiers.
 
@@ -36,6 +36,12 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 11 | 2026-11-20 | Rejected: driving xEdit's window, and a script generated per job | METHOD | #xedit |
 | 12 | 2026-11-20 | The session link is left out of commits | FACT | #process |
 | 13 | 2026-11-20 | The owner's reference system adopted | METHOD | #process |
+| 14 | 2026-11-20 | The owner's xEdit is 4.1.5f, in a tools folder inside the modlist folder | FACT | #xedit #tools |
+| 15 | 2026-11-20 | Compatibility is decided by the probe, not by a list of versions | METHOD | #xedit #tools |
+| 16 | 2026-11-20 | Auto disable means writing modlist.txt, and only with MO2 closed | METHOD | #mo2 #safety |
+| 17 | 2026-11-20 | The safe folder is taken after the dry run, and Revert checks before it writes | METHOD | #safety |
+| 18 | 2026-11-20 | Replace the originals, or a ModTrap mod above them | METHOD | #vfs #safety |
+| 19 | 2026-11-20 | "Nothing gets removed" was about the mod, not about records | METHOD | #procedure #process |
 
 ## Entries
 
@@ -178,3 +184,73 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   are read by section, never whole. The index it builds is generated and not committed.
 - Not taken yet: the roadmap with stage and step ids. Design 0001's build order (DESIGN§10) is short enough; a
   roadmap comes when there is more work to plan than that.
+
+### 14. The owner's xEdit is 4.1.5f, in a tools folder inside the modlist folder
+
+`2026-11-20` · FACT (the owner's screenshots of the folder and of the program file's details) · `#xedit #tools` · refs: MT8, XE01§1, XE01§6, DESIGN§13
+
+- FACT: the modlist folder has a `tools` folder holding xEdit and the list's other tools (LOD generators, an INI
+  editor, a patcher, mesh and texture tools). xEdit's folder holds a 32-bit and a 64-bit program, and its own
+  `Edit Scripts` folder.
+- FACT: the program file's details give version 4.1.5.0 and a date of 2024-04-27, the date of tag `xedit-4.1.5f`
+  (XE01§1). The letter is not in the version details: the version and the date together identify the release.
+- FACT: a script-mode log already sits in that folder, so script mode has run on this setup before (XE01§6).
+- The research of XE01 was done at exactly this release.
+
+### 15. Compatibility is decided by the probe, not by a list of versions
+
+`2026-11-20` · METHOD · `#xedit #tools` · refs: MT8, WHY§6, WHY§14, DESIGN§9, DESIGN§13
+
+- The owner asked that ModTrap detect the version and work with the popular ones. A list of approved versions
+  would always lag, and the letter cannot be read from the file (WHY§14).
+- METHOD: ModTrap detects and shows the version, refuses only what is known not to work (versions before the
+  switches of XE01§2 to XE01§4 existed; to be researched per release), and lets the probe on invented plugins decide
+  for everything else. A version that passes the probe is one ModTrap works with, and the history records it.
+- Next step: read xEdit's release notes for when `-script`, `-autoload`, `-autoexit` and `-P:` arrived, and check
+  the newest release's scripting functions against XE01§7.
+
+### 16. Auto disable means writing modlist.txt, and only with MO2 closed
+
+`2026-11-20` · METHOD · `#mo2 #safety` · refs: MT9, MO01§2, MO01§6, DESIGN§6.5, DESIGN§7, DESIGN§12
+
+- FACT: the file's form is simple and known (MO01§2): disabling a mod is changing its line's `+` to `-`; its place
+  in the file, and so its priority, does not change.
+- FACT: an open MO2 writes the file from memory (MO01§2), so ModTrap writes it only while MO2 is closed, and asks
+  the owner to close it for that step.
+- LIKELY: ModTrap need not write the plugin files to disable a mod; MO2 drops the plugins itself (MO01§2). Putting
+  plugins back at their old positions on Re-enable does need them, which is why the history keeps each plugin's
+  position and why MO01§6's research comes before that feature.
+- Rejected: asking MO2 to do it. Its command line has no command to enable or disable a mod (MO01§3).
+
+### 17. The safe folder is taken after the dry run, and Revert checks before it writes
+
+`2026-11-20` · METHOD · `#safety` · refs: MT14, DESIGN§6.2, DESIGN§11
+
+- The owner's point: only after the dry run is it known exactly which files a job touches, so that is when the
+  copies are taken, automatically, with no way to skip it.
+- METHOD: the safe folder also holds the profile's three files, since Auto changes one of them and MO2 rewrites the
+  others.
+- METHOD: Revert compares each file with what ModTrap left there before overwriting it. If the owner or another
+  tool changed it since, a blind copy-back would lose that work, so ModTrap shows it and asks.
+
+### 18. Replace the originals, or a ModTrap mod above them
+
+`2026-11-20` · METHOD · `#vfs #safety` · refs: MT5, WHY§4, WHY§8, DESIGN§6.5
+
+- The owner proposed: work on copies, verify, then put them into the modlist in place of the originals, and verify
+  again. The first, second and last steps are in the design either way (DESIGN§6.3 to DESIGN§6.5).
+- For the third step there are two ways with the same result in the game. Replacing: the modlist's folders stay as
+  they were in number and order, but files of a list installed by an installer now differ from what it installed,
+  so an update or repair of the list may flag or restore them. A ModTrap mod above the originals: one more mod in
+  the list, originals untouched, Revert is one disabled mod; with Auto (MT9) it costs the owner no extra step.
+- Recommended: the ModTrap mod. The owner decides (MT5).
+
+### 19. "Nothing gets removed" was about the mod, not about records
+
+`2026-11-20` · METHOD · `#procedure #process` · refs: MT4, MT9, WHY§2
+
+- The owner's answer to MT4 was that the mod is disabled and stays in place. That is now MT9's rule: ModTrap never
+  deletes a mod or a plugin.
+- MT4 asks something else: demastering a dependant means taking out of that dependant the records and entries
+  that point at the unwanted mod, as the guide does by hand (WHY§2). Without that, Clean Masters cannot drop the
+  master. The question was worded badly ("what gets removed") and is put again in plain words.

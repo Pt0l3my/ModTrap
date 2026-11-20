@@ -38,8 +38,9 @@ in [docs/design/](docs/design/).
 - Never commit, upload or redistribute anyone's mod files, plugins or their contents, nor record names, FormIDs or
   text taken from a real mod. ModTrap's output stays on the owner's PC.
 - Test fixtures are invented: tiny plugins written by ModTrap's own code, with invented names.
-- ModTrap never changes a file in the game's folder or in an original mod's folder. What it writes goes to its own
-  work folder and to its own output mod.
+- ModTrap never changes a file in the game's folder or in a trapped mod's folder, and never deletes a mod or a
+  plugin: a mod is only ever disabled (MT9). It changes no file before a copy of it is in the job's safe folder
+  (MT14), writes only what a confirmed plan named (DESIGN§8), and records every change in its history (MT15).
 
 ## Licences
 

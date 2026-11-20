@@ -14,11 +14,20 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
   and `settings.ini` (`profile.cpp:94-99`, `:946-966`).
 - **FACT.** A portable instance is one whose files sit in MO2's own folder; MO2 uses it when it exists
   (`instancemanager.cpp:559-566`).
-- **LIKELY.** `modlist.txt` lists mods one a line, highest priority first, each with `+` (enabled), `-` (disabled)
-  or `*` (not managed by MO2) before its name. `plugins.txt` marks an active plugin with `*` before its name;
-  `loadorder.txt` lists every plugin in order. From long use of MO2, not yet read in its source.
-- **LIKELY.** The executables set up in MO2 (their names, programs and arguments) are kept in `ModOrganizer.ini`
-  under `[customExecutables]`. Not yet read in its source.
+- **FACT.** `modlist.txt` is UTF-8 with CRLF line ends. Its first line is a `#` comment; then one mod a line,
+  highest priority first, each with `+` (enabled), `-` (disabled) or `*` (not managed by MO2) before its name
+  (`profile.cpp:243-281`). On reading, the order of the lines gives the priorities, empty and `#` lines are
+  skipped, a line with no sign counts as enabled, and a mod folder the file does not name is added above the others
+  (`profile.cpp:392-470`).
+- **FACT.** MO2 writes the file itself from what it holds in memory, and writes pending changes before it re-reads
+  (`profile.cpp:426`). So a change made to the file while MO2 is open can be lost.
+- **FACT.** The executables set up in MO2 are stored as the `customExecutables` array of `ModOrganizer.ini`
+  (`settings.cpp:369-401`). The keys of an entry were not read.
+- **LIKELY.** `plugins.txt` marks an active plugin with `*` before its name, and `loadorder.txt` lists every plugin
+  in order. Both are written by MO2's game plugin, which is in another repository (`pluginlist.cpp:802-806` hands
+  the work to it); not yet read.
+- **LIKELY.** When a mod is disabled, MO2 drops its plugins from the plugin lists at its next refresh; when it is
+  enabled again, its plugins come back at the end unless `loadorder.txt` still places them. Not yet read.
 
 ## 3. Running a program in the virtual file system
 
@@ -47,6 +56,6 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 
 ## 6. Open points
 
-- **METHOD.** §2's two LIKELY items: read `profile.cpp`, `pluginlist.cpp` and `executableslist.cpp` before the
-  reader is written.
+- **METHOD.** §2's LIKELY items: read MO2's game plugin for Skyrim SE (its own repository) for the two plugin
+  files, and `executableslist.cpp` for an executable's keys, before the reader and the writer are written.
 - **METHOD.** §4 and §5: the probe on the owner's PC (DESIGN§9).

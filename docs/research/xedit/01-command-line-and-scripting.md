@@ -46,8 +46,10 @@ written from scratch.
 
 ## 6. Logs
 
-- **FACT.** The message log is written on close to `<xEdit's folder>\SSEEditScript_log.txt`, and to the file named
-  with `-R:` (`xeMainForm.pas:6221-6225`). Neither is written while xEdit works.
+- **FACT.** The message log is written on close to a file in xEdit's folder named from the game and the mode,
+  and to the file named with `-R:` (`xeMainForm.pas:6221-6225`). Neither is written while xEdit works.
+- **FACT (the owner's screenshot, 2026-11-20).** In an SSEEdit folder the two names are `SSEEdit_log.txt` and, for
+  script mode, `SSEScript_log.txt`. An earlier draft of this note had the second name wrong.
 
 ## 7. Functions a script can call
 
