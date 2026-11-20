@@ -180,3 +180,7 @@ out the link to the chat session. The owner did not recall the rule; the session
 where it comes from.
 
 **Until decided.** The link is left out (the cautious choice: it can be added later, but not removed once pushed).
+
+**Note, 2026-11-20.** That session answered: it is the owner's own choice of 2026-11-16 for their other projects
+("Stop adding them"), made because the link points to a private transcript and tells a reader nothing (R29). Open
+only until the owner confirms it holds for ModTrap too.

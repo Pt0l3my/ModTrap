@@ -118,3 +118,24 @@ Sources, read only, never built or run, each cloned outside this repository:
   unnecessary given R4 to R10.
 - **R28 · DECIDED against: generating a script per job.** The script is one fixed file of ours; a job reaches it
   as a small data file beside it (R4). Jobs stay data, never code (R25).
+
+### From the session that started ModTrap (its answer of 2026-11-20, not verified here)
+
+- **R29 · LIKELY.** The session-link rule (MT12) is reported to be the owner's own choice of 2026-11-16 in that
+  session, for the owner's other projects: stop adding the link, because it points to a private transcript and tells
+  a reader of the repository nothing; the `Co-Authored-By` line stays. The note recording it is in an unpushed
+  DataPiler commit, so it could not be read here.
+- **R30 · FACT (DataPiler, as reported and matching its file list).** DataPiler never starts an outside program
+  from Python. What to take from it: finding a running program by its executable and watching it from a thread
+  (`smithbox.py`, `gamewatch.py`: poll every 2 s, fail closed, report a close only after two checks in a row); one
+  Windows adapter module, faked in tests (`winapi.py`); a job's lines kept in a numbered ring and fetched by the
+  page with "lines after N" polling, no SSE or WebSocket (`logbook.py`, `api.py`, `events.py`); the job format as a
+  closed set of operations with a schema version (`jobs.py`); atomic writes and bounded reads (`fileio.py`).
+  `guard.py` is about what may leave the PC, not about where a job may write.
+- **R31 · METHOD.** Starting xEdit is ModTrap's own code: a process started from an argument list, never through a
+  shell, with a time limit, Stop, and its exit code read. Lessons carried over: logs mask the owner's paths so a log
+  can be shared; the first log lines state versions and environment; ask before Stop; every folder check says what
+  it found in plain words; updates from a dropped release zip.
+- **R32 · LIKELY.** The same session independently expects R22 (a save through MO2 lands in the original mod's
+  folder) and suggests the copy-first route, which is design 0001's fallback (§6.3), and checking MO2's per-executable
+  setting that sends newly created files to a chosen mod instead of `overwrite`. Added to the probe's list (§9).
