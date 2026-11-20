@@ -139,3 +139,6 @@ Sources, read only, never built or run, each cloned outside this repository:
 - **R32 · LIKELY.** The same session independently expects R22 (a save through MO2 lands in the original mod's
   folder) and suggests the copy-first route, which is design 0001's fallback (§6.3), and checking MO2's per-executable
   setting that sends newly created files to a chosen mod instead of `overwrite`. Added to the probe's list (§9).
+- **R33 · FACT.** Corrects R29 from LIKELY to read: DataPiler's `CLAUDE.md` at branch `feat/v0.2.41` (commit
+  `75cea6f`) carries the rule "No `Claude-Session` link in commit messages or pull requests (owner, 2026-11-16)".
+  That branch, not `main`, is the newest DataPiler and the one to read for the patterns in R30.

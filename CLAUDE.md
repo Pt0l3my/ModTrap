@@ -19,6 +19,8 @@ findings in [docs/REASONING.md](docs/REASONING.md), its design in [docs/design/]
   Examples and tests use placeholders, with paths on drive C:.
 - Commit identities are noreply addresses only; use the environment's default git identity. No model identifiers of
   the assistant in files, apart from the commit trailer.
+- No `Claude-Session` link in commit messages or pull requests (the owner's rule of 2026-11-16 for their other
+  projects, MT12): it points to a private transcript and tells readers nothing. The `Co-Authored-By` trailer stays.
 
 ## Mods
 

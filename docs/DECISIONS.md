@@ -184,3 +184,6 @@ where it comes from.
 **Note, 2026-11-20.** That session answered: it is the owner's own choice of 2026-11-16 for their other projects
 ("Stop adding them"), made because the link points to a private transcript and tells a reader nothing (R29). Open
 only until the owner confirms it holds for ModTrap too.
+
+**Note, 2026-11-20, later.** Verified: the rule is in DataPiler's `CLAUDE.md` on its branch `feat/v0.2.41`, pushed
+that day, in those words and with that date (R33). ModTrap follows it; the owner can still say otherwise.
