@@ -201,3 +201,19 @@ body.dragging .welcome-box { outline: none; }
 .step ul { margin: 6px 0 2px; padding-left: 20px; }
 .step label.tickoff { display: inline-flex; gap: 6px; align-items: center; margin-top: 6px; color: var(--text); }
 .count.todo { background: var(--accent); color: var(--accent-ink); }
+
+/* --- the folder picker (WHY§38) ---------------------------------------------------------------------------------- */
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.picker { width: min(760px, 100%); max-height: min(86vh, 760px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 14px 16px; box-shadow: 0 14px 44px rgba(0, 0, 0, .6); }
+.picker-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; margin: 4px 0 8px; }
+.crumbs button { padding: 2px 8px; font-size: 13px; }
+.crumbs .sep { color: var(--dim); }
+.picker-list { flex: 1; min-height: 160px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; background: var(--bg); }
+.prow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px; border: 0; border-bottom: 1px solid #23262f; border-radius: 0;
+  background: none; text-align: left; }
+.prow:hover, .prow:focus-visible { background: #20232c; }
+.prow.is-modlist { color: var(--good); font-weight: 600; }
+.prow .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actions button { white-space: nowrap; }

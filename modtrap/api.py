@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import NAME, VERSION, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps
+from . import NAME, VERSION, browse, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps
 from .server import Bad
 
 log = logbook.get("app")
@@ -598,6 +598,14 @@ class Api:
             return 200, self.dry_plan(body), None
         if path == "/api/dryrun/start":
             return 200, self.dry_start(body), None
+        if path == "/api/browse":
+            where = body.get("path", "")
+            if not isinstance(where, str):
+                raise Bad("that is not a folder's path")
+            try:
+                return 200, browse.listing(where), None
+            except browse.Refused as e:
+                raise Bad(str(e)) from None
         if path == "/api/steps":
             return 200, self.steps(body), None
         if path == "/api/job/stop":

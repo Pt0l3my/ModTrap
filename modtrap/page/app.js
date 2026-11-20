@@ -973,6 +973,65 @@ $("open-form").addEventListener("submit", (ev) => {
   openFolder(folder, sel.hidden ? null : sel.value);
 });
 
+// --- the folder picker (WHY§38) -------------------------------------------------------------------------------------
+
+const picker = { path: "", data: null };
+
+async function pickerGo(path) {
+  const msg = $("picker-message");
+  let d;
+  try { d = await api("/api/browse", { path: path }); } catch (e) { msg.hidden = false; msg.textContent = e.message; return; }
+  msg.hidden = true;
+  picker.path = d.path;
+  picker.data = d;
+  $("picker-filter").value = "";
+  const crumbs = [el("button", { type: "button", text: "This PC" })];
+  crumbs[0].addEventListener("click", () => pickerGo(""));
+  for (const c of d.crumbs) {
+    const b = el("button", { type: "button", text: c.name });
+    b.addEventListener("click", () => pickerGo(c.path));
+    crumbs.push(el("span", { class: "sep", text: "›" }), b);
+  }
+  $("picker-crumbs").replaceChildren(...crumbs);
+  $("picker-open").disabled = !d.modlist;
+  $("picker-here").textContent = !d.path ? "Pick a drive to start." : d.modlist ? "This folder holds an MO2 modlist." :
+    "This folder is not a modlist: it has no ModOrganizer.ini. Go into the folder that has ModOrganizer.exe in it.";
+  pickerList();
+}
+
+function pickerList() {
+  const d = picker.data;
+  if (!d) return;
+  const q = fold($("picker-filter").value.trim());
+  const rows = d.folders.filter((f) => !q || fold(f.name).includes(q)).map((f) => {
+    const b = el("button", { type: "button", class: "prow" + (f.modlist ? " is-modlist" : "") },
+      el("span", { class: "name", text: f.name }), f.modlist ? el("span", { class: "tag good", text: "MO2 modlist" }) : null);
+    b.addEventListener("click", () => pickerGo(f.path));
+    return b;
+  });
+  if (d.cut) rows.push(el("p", { class: "dim small pad", text: "More folders than are shown: use the filter, or paste the path." }));
+  $("picker-list").replaceChildren(...(rows.length ? rows : [el("p", { class: "empty", text: d.folders.length ? "No folder matches." : "No folders in here." })]));
+}
+
+function pickerOpen() {
+  $("picker").hidden = false;
+  const start = state.session ? state.session.folder.replace(/[\\/][^\\/]*$/, "") : "";
+  pickerGo(start || "").then(() => { if (!picker.data) pickerGo(""); $("picker-filter").focus(); });
+}
+
+function pickerClose() { $("picker").hidden = true; $("browse").focus(); }
+
+$("browse").addEventListener("click", pickerOpen);
+$("picker-close").addEventListener("click", pickerClose);
+$("picker").addEventListener("click", (ev) => { if (ev.target === $("picker")) pickerClose(); });
+$("picker-filter").addEventListener("input", pickerList);
+$("picker-open").addEventListener("click", () => {
+  const path = picker.path;
+  pickerClose();
+  $("folder").value = path;
+  openFolder(path, null);
+});
+
 // --- dropping the modlist folder (WHY§30) ---------------------------------------------------------------------------
 
 function toBase64(buf) {
@@ -1065,6 +1124,7 @@ document.addEventListener("keydown", (ev) => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   const box = state.tab === "plugins" ? $("plugins-search") : state.tab === "mods" ? $("mods-search") : null;
   if (ev.key === "/" && !typing && box && !$("tabs").hidden) { ev.preventDefault(); box.focus(); box.select(); }
+  if (ev.key === "Escape" && !$("picker").hidden) { pickerClose(); return; }
   if (ev.key === "Escape" && !$("session-panel").hidden) { $("session-panel").hidden = true; $("session-btn").setAttribute("aria-expanded", "false"); $("session-btn").focus(); }
   if (ev.key === "Escape" && document.activeElement === box && box.value) { box.value = ""; (state.tab === "plugins" ? filterPlugins : filterMods)(); }
 });

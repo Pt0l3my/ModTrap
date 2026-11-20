@@ -30,6 +30,7 @@
       <label for="folder" id="folder-label">or paste its path</label>
       <input id="folder" name="folder" type="text" spellcheck="false" placeholder="Paste the modlist folder's path here" aria-describedby="message">
       <select id="profile" title="Profile: which of this modlist's profiles to read" hidden></select>
+      <button type="button" id="browse" title="Look for the modlist's folder on this PC">Browse…</button>
       <button type="submit">Open</button>
       <button type="button" id="rescan" title="Read the modlist again, after you have changed something in MO2" hidden>Rescan</button>
     </form>
@@ -183,6 +184,23 @@
   </section>
 </main>
 
+<div id="picker" class="overlay" hidden>
+  <div class="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+    <div class="picker-head">
+      <h2 id="picker-title">Find your modlist's folder</h2>
+      <button type="button" id="picker-close" aria-label="Close">Close</button>
+    </div>
+    <p class="dim small">Folders that hold an MO2 modlist are marked. ModTrap lists folder names only here: it opens no file.</p>
+    <div id="picker-crumbs" class="crumbs"></div>
+    <input id="picker-filter" type="search" placeholder="Filter the folders shown" spellcheck="false" aria-label="Filter folders">
+    <div id="picker-list" class="picker-list" tabindex="0"></div>
+    <p id="picker-message" class="message" hidden></p>
+    <div class="actions">
+      <button type="button" id="picker-open" class="primary" disabled>Open this folder</button>
+      <span id="picker-here" class="dim"></span>
+    </div>
+  </div>
+</div>
 <div id="tray" class="tray" hidden>
   <span id="tray-text"></span>
   <button id="tray-review" class="primary" type="button">See what depends on them</button>

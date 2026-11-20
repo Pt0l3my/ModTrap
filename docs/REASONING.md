@@ -60,6 +60,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 35 | 2026-11-20 | The Steps tab: a checklist the modlist's own files tick off | METHOD | #page #procedure #tools |
 | 36 | 2026-11-20 | Groundwork for the demaster, built ahead and switched off | METHOD | #safety #mo2 #process |
 | 37 | 2026-11-20 | Which tool made a plugin: read in the tools' own sources, kept as data | FACT | #tools |
+| 38 | 2026-11-20 | A Browse button: an in-page folder picker | METHOD | #page |
 
 ## Entries
 
@@ -647,3 +648,18 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - LIKELY: DynDOLOD's names (TL01§5); its source is not public and its documentation is still to be read.
 - On the owner's list this now recognises the texture tool's output plugin by its name, where MO2's setting alone
   had read it as an ordinary mod.
+
+### 38. A Browse button: an in-page folder picker
+
+`2026-11-20` · METHOD · `#page` · refs: MT19, WHY§30, DESIGN§4
+
+- METHOD: a third way to open a modlist, beside dropping its folder and pasting its path: a picker over the page
+  that walks this PC's folders (`modtrap/browse.py`). It lists folder names only, never files, marks each folder
+  that holds a `ModOrganizer.ini`, and lets a folder be opened only if it is such a folder. It starts at the fixed
+  drives, shows no link, junction or system folder, and refuses network and device paths.
+- In-page and not a native dialog, on the advice from the owner's DataPiler (WHY§30): a dialog opened by ModTrap's
+  own process tends to open behind the browser.
+- FACT: tested here with the test runner and in a browser on Linux, where the start is the root folder. The list
+  of drives on Windows comes from the same code as the drop's search and is untested until the owner's PC.
+- Not done from the same advice: detecting a running MO2 and offering its folder, and showing each tool's version;
+  both need Windows calls that cannot be tried here, and are better written when the owner can run them.
