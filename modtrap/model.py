@@ -66,6 +66,38 @@ class Model:
         return [self.plugins[f] for f in self.order if f in out]
 
 
+@dataclass
+class Group:
+    """The dependants of a trapped mod that live in one other mod, and a first reading of what they are
+    (DESIGN§5). The dry run through xEdit refines it; this much is known from the headers alone."""
+    mod: Mod
+    dependants: list[PluginRow]
+    others: int                     # the mod's plugins (that it wins) that do not depend on the trapped mod
+    made_by: tuple[str, ...]        # tools MO2 sends new files of to this mod (MO01§2): a generated output
+    reading: str                    # "output", "whole mod", "some plugins"
+
+
+def groups(model: Model, trapped: Mod) -> list[Group]:
+    """The trapped mod's dependants grouped by the mod they live in, in load order of their first plugin."""
+    inst = model.instance
+    tools: dict[str, list[str]] = {}
+    for title, mod_name in inst.output_mods.items():
+        tools.setdefault(fold(mod_name), []).append(title)
+    by_mod: dict[str, list[PluginRow]] = {}
+    for r in model.dependants_of_mod(trapped):
+        by_mod.setdefault(r.source or "", []).append(r)
+    out = []
+    for name, rows in by_mod.items():
+        mod = inst.mod(name)
+        if mod is None:
+            continue
+        others = len(model.provided_by(mod)) - len(rows)
+        made_by = tuple(sorted(tools.get(fold(name), [])))
+        reading = "output" if made_by else ("whole mod" if others == 0 else "some plugins")
+        out.append(Group(mod, rows, others, made_by, reading))
+    return out
+
+
 def build(inst: Instance, read=plugin.read) -> Model:
     """The model of an instance. `read` reads one plugin's header (replaced in tests)."""
     # Who provides each plugin: the highest enabled mod holding a file of that name; the game's folder is lowest.

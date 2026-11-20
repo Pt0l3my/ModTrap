@@ -1,4 +1,4 @@
-"""`python -m modtrap scan FOLDER [--profile NAME] [--mod NAME]`: read an MO2 instance and print what ModTrap
+"""`python -m modtrap scan FOLDER [--profile NAME] [--mod NAME] [--plugin NAME]`: read an MO2 instance and print what ModTrap
 sees. Read-only: it opens the instance's text files and each plugin's header, and writes nothing anywhere."""
 
 from __future__ import annotations
@@ -45,11 +45,28 @@ def scan(a: argparse.Namespace) -> int:
         for r in m.provided_by(mod):
             print("  plugin %s  [%s]  position %s  masters: %s" % (r.name, r.kind, r.position,
                                                                   ", ".join(r.masters) or "none"))
-        deps = m.dependants_of_mod(mod)
-        print("  %d plugin(s) of other mods depend on it:" % len(deps))
-        for r in deps:
-            print("    %-50s position %-5s in mod '%s' (priority %s)" % (r.name, r.position, r.source,
-                                                                         r.source_priority))
+        gs = model.groups(m, mod)
+        print("  %d plugin(s) in %d other mod(s) depend on it:" % (sum(len(g.dependants) for g in gs), len(gs)))
+        words = {"output": "made by a tool: %s",
+                 "whole mod": "every plugin of this mod depends on it",
+                 "some plugins": "%d other plugin(s) of this mod do not depend on it"}
+        for g in gs:
+            what = words[g.reading] % (", ".join(g.made_by) if g.reading == "output" else g.others) \
+                if g.reading != "whole mod" else words[g.reading]
+            print("  in mod '%s' (priority %d): %s" % (g.mod.name, g.mod.priority, what))
+            for r in g.dependants:
+                print("    %-58s position %-5s masters: %d" % (r.name, r.position, len(r.masters)))
+    if a.plugin:
+        r = m.row(a.plugin)
+        if r is None:
+            print("No plugin of that name in this profile.")
+            return 1
+        print("\n%s  [%s]  position %s  %s  in mod '%s'" % (r.name, r.kind or "?", r.position,
+                                                         "active" if r.active else "not active", r.source))
+        if r.unreadable:
+            print("  could not be read: " + r.unreadable)
+        print("  masters (%d): %s" % (len(r.masters), ", ".join(r.masters) or "none"))
+        print("  needed by (%d): %s" % (len(r.dependants), ", ".join(r.dependants) or "nothing"))
     return 1 if m.issues else 0
 
 
@@ -60,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("folder", help="the modlist's folder (the one holding ModOrganizer.ini)")
     s.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
     s.add_argument("--mod", help="also list this mod's plugins and what depends on them")
+    s.add_argument("--plugin", help="also list this plugin's masters and what needs it")
     a = ap.parse_args(argv)
     return scan(a)
 

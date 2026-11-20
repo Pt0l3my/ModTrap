@@ -17,7 +17,8 @@ Words used below:
 
 - **trapped mod**: a mod the owner ticked. Its plugins are the **trapped plugins**.
 - **dependant**: a plugin of another mod that lists a trapped plugin among its masters.
-- **patch-only mod**: a mod whose plugins exist only for a trapped mod; it is disabled, not demastered (MT6).
+- **patch-only**: a plugin that exists only for a trapped mod. It is switched off, not demastered (MT6): its mod is
+  disabled, or the plugin alone is deactivated when its mod holds other plugins (WHY§26).
 - **safe folder**: ModTrap's copies of every file a job will change, taken before it changes any (MT14).
 - **history**: ModTrap's dated record of every change it made to the instance (MT15).
 
@@ -65,7 +66,7 @@ is the same across them, and xEdit does the rest.
 - **Plugins.** The full load order, each row with its position, its kind (esm, esp, esl or light-flagged), its mod,
   active or not, its masters and its dependants.
 - **Selection panel.** For the ticked mods: every dependant, grouped by the mod it lives in, with what ModTrap
-  proposes for it (§5) and a way to change that per dependant; and the patch-only mods proposed for disabling.
+  proposes for it (§5) and a way to change that per dependant.
 - **Demaster Selected.** Opens the plan (§6.1). Nothing has run yet.
 - **Terminal.** A live, scrolling log of the job: ModTrap's own steps, and the lines our script writes as xEdit
   works (WHY§5). A copy is kept in ModTrap's work folder.
@@ -75,11 +76,14 @@ is the same across them, and xEdit does the rest.
 
 ## 5. What happens to each dependant
 
-For each dependant, one of three treatments. ModTrap proposes one; the owner can change it (MT6):
+For each dependant plugin, one treatment. ModTrap proposes it; the owner can change it (MT6):
 
-- **Demaster** (the default): §6.
-- **Disable its mod** (patch-only): proposed when the dry run shows that nothing, or almost nothing, of the
-  mod's plugins would remain once the trapped mod's records are taken out, and no other enabled plugin needs them.
+- **Demaster** (§6): the plugin does other things too, and should go on working without the trapped mod.
+- **Switch off** (patch-only): the plugin exists only for the trapped mod. ModTrap **disables its mod** when every
+  plugin that mod provides is patch-only, and **deactivates the plugin alone** when it is one among others, as in a
+  patch collection (WHY§26). The first reading comes from the headers (which of a mod's plugins depend on the
+  trapped mod); the dry run settles it (nothing, or almost nothing, of the plugin would remain).
+- **Run the tool again**: the plugin is a tool's generated output (§13).
 - **Skip**: the owner will deal with it another way; the job then cannot disable the trapped mod, and says so.
 
 Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4): A and B
@@ -140,7 +144,8 @@ A copy that fails is dropped and its dependant reported; the others can go on.
 1. **Insert.** The verified copies go into the modlist under their original file names, in a ModTrap mod placed
    above the originals (MT5), which MO2 then uses in their place. The originals stay as installed.
 2. **Disable** (MT9, Auto on by default). With MO2 closed, ModTrap disables the trapped mods and the patch-only
-   mods in the profile's `modlist.txt`; with Auto off, it lists them for the owner to disable in MO2.
+   mods in the profile's `modlist.txt`, and deactivates the patch-only plugins of other mods in `plugins.txt`
+   (WHY§26); with Auto off, it lists them for the owner to do in MO2.
 3. **Verify the instance.** ModTrap reads the instance again (§3) and runs the health check: no active plugin may
    list a master that is missing or inactive, and the load order must otherwise be as it was. Then it asks the
    owner to open MO2 and confirm that MO2 shows no missing-master warning; the answer is kept in the history.
@@ -163,7 +168,8 @@ nothing is installed into either.
 ## 8. Safety rules (the guard)
 
 1. ModTrap writes only: inside its own work folder (the safe folders and the history are there); the files a
-   confirmed plan named, which are ModTrap's own mod in the instance (MT5) and the profile's `modlist.txt`. Every path is checked after resolving links, before the job starts and again before each write.
+   confirmed plan named, which are ModTrap's own mod in the instance (MT5) and the profile's `modlist.txt` and
+   `plugins.txt`. Every path is checked after resolving links, before the job starts and again before each write.
 2. It never writes in the game's folder, in a trapped mod's folder, in `overwrite`, or to any file the plan did
    not name. It never deletes a mod or a plugin.
 3. No file is changed before its copy in the safe folder exists and matches it by size and SHA-256.
@@ -216,6 +222,8 @@ instance:
   left alone and why, the result of each verification, and the owner's confirmation from MO2;
 - each mod disabled or re-enabled: its name, its **priority in the modlist**, and for each of its plugins its
   **position in the load order** and its kind (esm, esp, esl), as they were at that moment;
+- each plugin deactivated or reactivated by itself: its name, position and kind, and its mod and that mod's
+  priority;
 - each change of order: the file, the old and new positions, with date and time;
 - each Revert.
 

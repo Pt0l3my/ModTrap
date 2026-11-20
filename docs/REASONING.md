@@ -47,6 +47,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 22 | 2026-11-20 | Telling which tool made a patch: evidence, and marks kept as data | METHOD | #tools #mo2 |
 | 23 | 2026-11-20 | MO2's plugin lists and the plugin header are read from their sources | FACT | #mo2 #xedit |
 | 24 | 2026-11-20 | Version 0.1's reader exists, and what it has not yet met | METHOD | #mo2 #process |
+| 25 | 2026-11-20 | The first scan of the owner's modlist agrees with MO2 | FACT | #mo2 #process |
+| 26 | 2026-11-20 | A patch is often one plugin in a collection: disable the plugin, not the mod | METHOD | #procedure #mo2 |
+| 27 | 2026-11-20 | The real list shows generated outputs and loose files, as the design assumed | FACT | #tools #procedure |
 
 ## Entries
 
@@ -321,3 +324,50 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   owner's modlist is the real test, and its summary (counts, notes, health) is what to compare with MO2's own view.
 - Left out on purpose until needed: plugins inside a mod's subfolders (MO2 ignores them), the VR and LE games
   (MT7), and anything that writes.
+
+### 25. The first scan of the owner's modlist agrees with MO2
+
+`2026-11-20` · FACT (the scan's output and a screenshot of MO2 2.5.2, both from the owner) · `#mo2 #process` · refs: WHY§24, MO01§2, XE02, DESIGN§3
+
+- FACT: on the owner's list (about 3,600 mods, 135 separators, 3,751 plugins, all active) the scan read every
+  plugin's header with none unreadable, and the health check was clean, as MO2 shows it.
+- FACT: for the mod the owner picked, the scan's priority and its plugin's load-order position are the numbers
+  MO2 shows for them. The ini's escaping (LIKELY in WHY§24), the modlist order and the plugin lists therefore
+  hold on a real instance of this size.
+- FACT: the scan found 17 dependants in 9 mods. Every plugin the community guide names for this mod is among
+  them, under the names this version of the list gives them, and two more that the guide does not name. The guide
+  is older than the list; reading the masters is not.
+- Open: one plugin that sits among the mod's patches in MO2's list, and by its name should depend on it, is not
+  among the 17. Either it does not list the mod as a master or the reader missed it; the owner is asked to run
+  `scan --plugin` on it.
+- FACT: the executable to start is titled as the 64-bit xEdit in this MO2, one of 24 configured.
+
+### 26. A patch is often one plugin in a collection: disable the plugin, not the mod
+
+`2026-11-20` · METHOD · `#procedure #mo2` · refs: MT6, MT9, MT17, WHY§25, MO01§2, DESIGN§5, DESIGN§6.5
+
+- FACT: on the real list, five of the nine mods holding dependants are patch collections: each has one or two
+  plugins for the trapped mod among many for other mods. The guide's "disable plugins" list is exactly these.
+  Disabling such a mod would switch off patches the list still needs.
+- METHOD: so the treatments are per plugin, and there are two ways to switch a patch off: **disable the mod** when
+  every plugin it provides depends on the trapped mod, **deactivate the plugin** when it is one among others.
+  `model.groups` gives this first reading from the headers alone ("whole mod", "some plugins", "output").
+- METHOD: deactivating a plugin means writing `plugins.txt` (removing its star), in MO2's form and encoding, with
+  MO2 closed and the file in the safe folder first. MO2 takes the order from the newer of its two list files
+  (MO01§2), and a rewritten `plugins.txt` is the newer one, so ModTrap must write every line in the same order and
+  check, after MO2's next start, that the order is unchanged. This goes to the probe.
+- Design 0001's "patch-only mod" becomes "patch-only plugin or mod" (DESIGN§5).
+
+### 27. The real list shows generated outputs and loose files, as the design assumed
+
+`2026-11-20` · FACT (the same scan and screenshot) · `#tools #procedure` · refs: MT18, WHY§22, DESIGN§13, DESIGN§14
+
+- FACT: two of the 17 dependants live in mods named as tools' outputs, one of them the output of a tool whose
+  work is textures and meshes, which nonetheless writes a plugin. Whether MO2's per-executable output setting
+  (MO01§2) names those mods on this list is not yet known: the scan now reads it and says so.
+- FACT: the trapped mod holds, beside its plugin and an archive, loose animation and behaviour files and settings
+  files for a script-extender plugin. The guide's step to re-run the animation tool matches the first; nothing in
+  any plugin's masters would have shown it. This is DESIGN§13's "what masters cannot show", met in practice.
+- FACT: the guide also disables a mod that holds no plugin, a hotfix for the trapped mod. No master points to
+  it. LIKELY: a mod whose files do nothing but replace the trapped mod's files can be found by comparing file
+  names between the two folders; that is the file-conflict idea of WHY§21, now with a concrete case.

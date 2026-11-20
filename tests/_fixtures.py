@@ -21,7 +21,8 @@ def write(path: Path, data: bytes | str) -> Path:
 
 def make_instance(root: Path, mods: list[tuple[str, str, dict[str, bytes]]], *, load_order: list[str],
                   inactive: tuple[str, ...] = (), profile: str = "Default", extra_ini: str = "",
-                  game: bool = True, overwrite: dict[str, bytes] | None = None) -> Path:
+                  game: bool = True, overwrite: dict[str, bytes] | None = None,
+                  profile_settings: str = "") -> Path:
     """An instance in `root`. `mods` is (sign, name, {file name: bytes}) from the HIGHEST priority down, as
     modlist.txt lists them; a name ending _separator gets an empty folder. `load_order` lists every plugin that is
     not the game's own, in order; those in `inactive` are written without the star."""
@@ -49,6 +50,8 @@ def make_instance(root: Path, mods: list[tuple[str, str, dict[str, bytes]]], *, 
     write(pdir / "loadorder.txt", head + "".join(n + "\r\n" for n in list(GAME_PLUGINS) + load_order))
     write(pdir / "plugins.txt", head + "".join(("" if n in inactive else "*") + n + "\r\n" for n in load_order))
     os.utime(pdir / "plugins.txt", (1_700_000_000, 1_700_000_000))      # older than loadorder.txt
+    if profile_settings:
+        write(pdir / "settings.ini", profile_settings)
     (root / "overwrite").mkdir(exist_ok=True)
     for fname, data in (overwrite or {}).items():
         write(root / "overwrite" / fname, data)
@@ -57,9 +60,13 @@ def make_instance(root: Path, mods: list[tuple[str, str, dict[str, bytes]]], *, 
 
 def small_list(root: Path) -> Path:
     """The standard invented list. Bramble is the mod to trap; Lantern depends on it and on the game; the
-    Bramble-Lantern patch exists only for the pair; Quill has nothing to do with any of them."""
+    Bramble-Lantern patch exists only for the pair; Quill has nothing to do with Bramble; a patch collection holds one
+    patch for Bramble among others; and an invented patcher's output mod holds a generated plugin."""
     b = plugin.build
     return make_instance(root, [
+        ("+", "Tool Output", {"Generated.esp": b(("Skyrim.esm", "Bramble.esp", "Quill.esp"))}),
+        ("+", "Patch Collection", {"Collection - Bramble.esp": b(("Skyrim.esm", "Bramble.esp")),
+                                   "Collection - Quill.esp": b(("Skyrim.esm", "Quill.esp"))}),
         ("+", "Bramble - Lantern Patch", {"BrambleLanternPatch.esp": b(("Skyrim.esm", "Bramble.esp", "Lantern.esp"),
                                                                      flags=plugin.FLAG_ESL)}),
         ("+", "Outputs_separator", {}),
@@ -68,4 +75,6 @@ def small_list(root: Path) -> Path:
         ("-", "Old Lantern", {"Lantern.esp": b(("Skyrim.esm",))}),
         ("+", "Bramble", {"Bramble.esp": b(("Skyrim.esm",)), "readme.txt": b"invented"}),
         ("*", "DLC: Dawnguard", {}),
-    ], load_order=["Bramble.esp", "Lantern.esp", "Quill.esp", "BrambleLanternPatch.esp"])
+    ], load_order=["Bramble.esp", "Lantern.esp", "Quill.esp", "BrambleLanternPatch.esp", "Collection - Bramble.esp",
+                   "Collection - Quill.esp", "Generated.esp"],
+        profile_settings="[custom_overwrites]\r\nInvented%20Patcher=Tool Output\r\n")

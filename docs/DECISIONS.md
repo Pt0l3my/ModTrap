@@ -226,6 +226,11 @@ re-enable them."
 **Note.** This relaxes the brief's "never alter the profile": ModTrap now changes `modlist.txt`, under MT14's
 backups.
 
+**Note, 2026-11-20, later (under MT17).** The owner's real modlist showed that a patch is often one plugin inside a
+patch collection (WHY§26). Auto therefore also deactivates single plugins, in the profile's `plugins.txt`, where
+disabling the whole mod would switch off patches the list still needs. The history records these the same way,
+with a Reactivate on each.
+
 ## MT10
 
 **The repository** · *2026-11-20 · Decided by the owner*
