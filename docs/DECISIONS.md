@@ -3,8 +3,8 @@
 The project owner's decisions on ModTrap, binding, one entry each, numbered MT1 onwards. A new question takes the next
 free id as an entry marked **Open**, with its options and a recommendation; the owner's answer is recorded in the
 entry with its date and their words; a later decision amends an earlier one by a dated note, never by rewriting it,
-and ids are never renumbered. Findings are cited from [REASONING.md](REASONING.md) as R-numbers, the design as
-[design 0001](design/0001-design.md).
+and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reasoning log](REASONING.md), `MO01` and `XE01` are the
+[research notes](research/README.md), `DESIGN§n` is [design 0001](design/0001-design.md).
 
 ## By date
 
@@ -12,7 +12,8 @@ and ids are never renumbered. Findings are cited from [REASONING.md](REASONING.m
   DataPiler; the sweep), all from the owner's messages of that day.
 - **Open.** MT4 (what is removed, and what is never forced), MT5 (where the result goes), MT6 (dependants that
   should be disabled, not demastered), MT7 (which games), MT8 (which xEdit), MT9 (who enables and disables mods in
-  MO2), MT10 (the repository), MT11 (how ModTrap is installed and started), MT12 (the session link in commits).
+  MO2), MT10 (the repository), MT11 (how ModTrap is installed and started), MT12 (the session link in commits; followed meanwhile), MT13 (the
+  reference system; adopted meanwhile).
 
 ## MT1
 
@@ -21,7 +22,7 @@ and ids are never renumbered. Findings are cited from [REASONING.md](REASONING.m
 **Question.** Three meanings were put: (a) remove a mod as a master from every plugin that depends on it, dealing
 with what they take from it; (b) xEdit's Clean Masters only; (c) clearing a plugin's ESM flag.
 
-**Decision.** (a), with (b) as its last step: the "Master Removal" procedure of the guide the owner supplied (R1).
+**Decision.** (a), with (b) as its last step: the "Master Removal" procedure of the guide the owner supplied (WHY§2).
 For each plugin that depends on the unwanted mod: report what needs it, remove those records or elements, Clean
 Masters, report again until nothing is left.
 
@@ -38,7 +39,7 @@ scanned list; one button, "Demaster Selected", starts the work; the work is show
 directory), then let the user select mods to demaster from the scanned mod list. Click a button "Demaster Selected",
 and watch it do its work (terminal)."
 
-**Note.** Design 0001 puts a plan and a dry run between the button and the changes (§6.1, §6.2). Whether the owner
+**Note.** Design 0001 puts a plan and a dry run between the button and the changes (DESIGN§6.1, DESIGN§6.2). Whether the owner
 wants those two confirmations, or one, is part of MT4.
 
 ## MT3
@@ -62,7 +63,7 @@ tool needs rules. Which?
 
 **Options.**
 
-- (a) **Four cases, nothing forced** (design §5). A: the dependant's copy of a record that belongs to the trapped
+- (a) **Four cases, nothing forced** (DESIGN§5). A: the dependant's copy of a record that belongs to the trapped
   mod is removed. B: an entry in a list (a FormID list, a levelled list, keywords) is removed and the record kept.
   C: a single field that cannot be absent gets the value it has in the dependant's remaining masters. D: anything
   else stops that dependant, which is left untouched and reported as "needs you". Always a dry run first that lists
@@ -87,11 +88,11 @@ ModTrap?
 
 - (a) **A new mod.** The demastered plugins are written to a new mod folder, `ModTrap - <name>`, in the instance's
   mods folder. Enabled, it wins over the originals; deleted, everything is as before. The originals are never
-  changed, and are checked by hash before and after (design §6.3 to §6.5).
+  changed, and are checked by hash before and after (DESIGN§6.3 to DESIGN§6.5).
 - (b) **In place**, as in the guide, with ModTrap's own backups and a restore button.
 
 **Recommendation.** (a). A Wabbajack-installed list also stays verifiable against its original files this way. It
-rests on one unproven point about xEdit (R12), which the probe settles first (design §9); the fallback keeps (a)
+rests on one unproven point about xEdit (WHY§4), which the probe settles first (DESIGN§9); the fallback keeps (a)
 either way.
 
 ## MT6
@@ -99,7 +100,7 @@ either way.
 **Dependants that should be disabled, not demastered** · *Open*
 
 **Question.** The guide disables patches that exist only for the unwanted mod, and demasters only the plugins that
-do other things too (R2). How should ModTrap tell them apart?
+do other things too (WHY§2). How should ModTrap tell them apart?
 
 **Options.**
 
@@ -182,8 +183,19 @@ where it comes from.
 **Until decided.** The link is left out (the cautious choice: it can be added later, but not removed once pushed).
 
 **Note, 2026-11-20.** That session answered: it is the owner's own choice of 2026-11-16 for their other projects
-("Stop adding them"), made because the link points to a private transcript and tells a reader nothing (R29). Open
+("Stop adding them"), made because the link points to a private transcript and tells a reader nothing (WHY§12). Open
 only until the owner confirms it holds for ModTrap too.
 
 **Note, 2026-11-20, later.** Verified: the rule is in DataPiler's `CLAUDE.md` on its branch `feat/v0.2.41`, pushed
-that day, in those words and with that date (R33). ModTrap follows it; the owner can still say otherwise.
+that day, in those words and with that date (WHY§12). ModTrap follows it; the owner can still say otherwise.
+
+## MT13
+
+**The owner's reference system** · *2026-11-20 · Adopted on the word of the session that started ModTrap; for the owner to confirm*
+
+**Question.** That session passed on, as the owner's request, that ModTrap use the reference, tag and label system
+of the owner's other projects.
+
+**Done.** `wp` (`tools/workplan`) taken from EldenNet with ModTrap's codes; research notes MO01 and XE01 with a
+label and a source on every statement; the reasoning log in the same form as EldenNet's; the rules in `CLAUDE.md`
+(WHY§13). The roadmap with stage ids is left for when there is more to plan.

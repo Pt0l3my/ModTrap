@@ -1,144 +1,180 @@
 # Reasoning log
 
-Append-only. Each entry is dated and labelled: **FACT** (read in a named source), **LIKELY** (inferred, not yet
-proven), **SPECULATION**, **METHOD** (how something was or will be found out) or **DECIDED** (points to a decision).
-An entry is never rewritten; a later entry corrects it and names it (R-number).
+The working-out behind findings, conclusions, rejected paths and workarounds, in brief, so that a new session or a
+switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIONS.md) and source facts in
+[the research notes](research/README.md); an entry here points to them and does not repeat them.
 
-Sources, read only, never built or run, each cloned outside this repository:
+**How to use it.**
 
-- **xEdit**: `github.com/TES5Edit/TES5Edit`, tag `xedit-4.1.5f` (commit `f5c00f3`, 2024-04-27), the version the
-  owner's screenshots show. Licence file: MPL-2.0. Cited as `xEdit:<file>:<line>`.
-- **MO2**: `github.com/ModOrganizer2/modorganizer`, `master` at commit `4ba22f0` (2026-10-05). Licence file:
-  GPL-3.0. Cited as `MO2:<file>:<line>`.
-- **DataPiler**: the owner's own MIT project, `main` at `6c9ec49` (2026-11-15).
-- **The guide**: screenshots the owner supplied on 2026-11-20 of a modlist community's "Master Removal" procedure.
-  Described here in our own words; nothing of it is copied into the repository.
+- Read the index below at the start of a session and after a model switch, then open an entry by its code:
+  `wp show WHY§4`. `wp find` and `wp grep` search it; `wp refs MT5` lists the entries citing a decision.
+- Append only. Entries are numbered in order and never renumbered or rewritten; a later finding adds a dated
+  **Later** line to the entry, or a new entry that supersedes it.
+- One entry per finding, a few lines: what was seen, what follows, what was ruled out, and the next step if any.
+- **Labels**, as the research notes use them: **FACT** (read in a named source, or seen on the owner's PC),
+  **LIKELY** (strong inference, not yet checked), **SPECULATION** (a guess worth recording), **METHOD** (how
+  something is done, and why), **DECIDED** (a pointer to the decision that settled it).
+- **Tags:** `#procedure` (the manual master removal), `#xedit`, `#mo2`, `#vfs` (MO2's virtual file system and what
+  a write does), `#safety` (originals untouched), `#server`, `#page`, `#datapiler`, `#process`.
+- The privacy rules bind it as every file: nothing personal, no paths from the owner's PC, nothing taken from a
+  real mod. No model identifiers.
 
-## 2026-11-20
+## Index
 
-### What the manual procedure is
+| # | Date | Entry | Label | Tags |
+|---|---|---|---|---|
+| 1 | 2026-11-20 | Why this log exists, and its form | METHOD | #process |
+| 2 | 2026-11-20 | The manual procedure that defines "demaster" | FACT | #procedure |
+| 3 | 2026-11-20 | xEdit can do the procedure unattended, from our own script | FACT | #xedit |
+| 4 | 2026-11-20 | Write the changed plugin elsewhere and keep xEdit from saving the original | LIKELY | #xedit #vfs #safety |
+| 5 | 2026-11-20 | Progress for the page comes from a file the script writes | LIKELY | #xedit #page |
+| 6 | 2026-11-20 | What cannot be proven here is proven by a probe on invented plugins | METHOD | #xedit #mo2 #safety |
+| 7 | 2026-11-20 | MO2 starts a tool from the command line, open or closed | FACT | #mo2 |
+| 8 | 2026-11-20 | A save through MO2 lands in the original mod's folder | LIKELY | #vfs #safety |
+| 9 | 2026-11-20 | What ModTrap takes from DataPiler | FACT | #datapiler #server #page |
+| 10 | 2026-11-20 | Rejected: editing plugins with our own code | METHOD | #safety #xedit |
+| 11 | 2026-11-20 | Rejected: driving xEdit's window, and a script generated per job | METHOD | #xedit |
+| 12 | 2026-11-20 | The session link is left out of commits | FACT | #process |
+| 13 | 2026-11-20 | The owner's reference system adopted | METHOD | #process |
 
-- **R1 · FACT (the guide).** To disable a mod whose plugin is a master of other plugins, the guide has the user,
-  for each dependant plugin: keep the unwanted mod enabled; open xEdit through MO2 and load the dependant (its
-  masters load with it); run xEdit's own "Report masters" script on the dependant and tick the unwanted plugin;
-  read the list of records and elements that need it; for each, remove the whole record from the dependant, or
-  remove just the element that refers to the unwanted plugin (the example removes one entry from a FormID list);
-  run "Clean Masters" on the dependant; run the report again until it shows no hits; save. Then the unwanted mod can
-  be disabled.
-- **R2 · FACT (the guide).** The same guide does not demaster every dependant: patches that exist only for the
-  unwanted mod are simply disabled, and only plugins that serve other purposes too are demastered.
-- **R3 · DECIDED.** This procedure is what "demaster" means for ModTrap (MT1).
+## Entries
 
-### xEdit 4.1.5f
+### 1. Why this log exists, and its form
 
-- **R4 · FACT.** `-script:<file>` puts xEdit into its script tool mode; a relative name is looked up in the scripts
-  folder, an absolute path is taken as given (`xEdit:xEdit/xeInit.pas:616-630`,
-  `xEdit:xEdit/xeMainForm.pas:4895-4898`). The scripts folder then becomes the script's own folder (`:4912`), and a
-  script can read it as `ScriptsPath` (`xEdit:xEdit/JvI/xejviScriptHost.pas:126-128`).
-- **R5 · FACT.** In script mode xEdit sets "I know what I'm doing", loads BSAs and builds references
-  (`xeInit.pas:1307-1311`); `-nobuildrefs` turns reference building off (`:1385`).
-- **R6 · FACT.** `-autoload` skips the module selection window and loads the active plugins of the plugins file
-  (`xeInit.pas:1075`, `xeMainForm.pas:5299-5307`). `-P:<file>` names the plugins file to use instead of the game's
-  own (`xeInit.pas:493-510`). So ModTrap can hand xEdit a short plugins file of its own and load only what a job
-  needs, not the whole load order.
-- **R7 · FACT.** Once loading ends, script mode runs the script by itself (`xeMainForm.pas:20427-20431`,
-  `:17277-17278`), on every loaded file (`:4915`), and `-autoexit` then closes xEdit (`:17280`, `:16980`). A script
-  need not have a `Process` function: `Initialize` and `Finalize` are each called only if present
-  (`:8434-8459`), so a script can do all its work in `Initialize`.
-- **R8 · FACT.** Script mode is one of xEdit's "auto modes" (`xEdit:Core/wbInterface.pas:4753-4765`). On close, an
-  auto mode saves every changed file without showing the "Save changed files" window (`xeMainForm.pas:15618-15630`).
-  A save writes `<plugin>.save.<timestamp>` beside the plugin and renames it over the plugin, at once or at shutdown
-  (`:15690-15760`); the old file goes to the backup folder, by default `<Data>\SSEEdit Backups\`, or the folder given
-  with `-B:` (`xeInit.pas:518-520`), unless backups are switched off in xEdit's settings.
-- **R9 · FACT.** xEdit writes its message log on close to `<xEdit's folder>\SSEEditScript_log.txt`, and to a second
-  file named with `-R:<file>` (`xeMainForm.pas:6221-6225`, `xeInit.pas:535`). Neither is written while it works.
-- **R10 · FACT.** The scripting functions the manual procedure maps to all exist (`xejviScriptAdapter.pas`):
-  `ReportRequiredMasters` (`:641`, `:2117`), `Remove` (`:2097`), `RemoveElement`, `CleanMasters` and `SortMasters`
-  (`:1520-1533`), `MasterCount`, `MasterByIndex`, `HasMaster`, and `FileWriteToStream` (`:1658`), which writes a
-  loaded plugin to a stream the script opens. xEdit's own "Report masters" script is a short loop over
-  `ReportRequiredMasters` (`xEdit:Build/Edit Scripts/Report masters.pas`).
-- **R11 · FACT.** A script can read and clear an element's states; `esUnsaved` is among them
-  (`xejviScriptAdapter.pas:280-290`, `:1996`).
-- **R12 · LIKELY.** A script can therefore: change a plugin in memory, write the changed plugin to a new file
-  somewhere else with `FileWriteToStream`, then clear `esUnsaved` on that file so that xEdit's save on close (R8)
-  leaves the original alone. Not proven: whether clearing the state on a file is enough for R8's test, and whether
-  `CleanMasters` behaves the same when called from a script as from the menu.
-- **R13 · LIKELY.** A script can append lines to a text file as it goes (xEdit's own scripts save string lists to
-  files), which is how ModTrap's page can show progress while xEdit works, since xEdit's own log (R9) only appears
-  at the end.
-- **R14 · LIKELY.** xEdit has no headless mode in this version: none of its command-line switches
-  (`xeInit.pas`, all read) hides the window. The owner will see xEdit's window open, work and close.
-- **R15 · METHOD.** R12 and R13 cannot be proven here: xEdit is a Windows program, and the rule is that nothing
-  cloned is built or run. They are to be proven on the owner's PC with a first, harmless probe: ModTrap's script run
-  on invented plugins that ModTrap's own code writes into its own test mod. The design has a fallback if R12 fails
-  (design §6.3).
+`2026-11-20` · METHOD · `#process` · refs: MT3
 
-### MO2
+- METHOD: the form is that of the owner's other projects (EldenNet's log): an index, numbered entries, labels,
+  tags, append-only. Facts read in MO2's and xEdit's sources live in the research notes (MO01, XE01) with their
+  file and line; this log holds what follows from them.
+- METHOD: before the first push the log was briefly a flat list (R1 to R33). Nothing had left the session, so it
+  was recast in this form once; from here on it is append-only.
 
-- **R16 · FACT.** `ModOrganizer.exe [-i <instance>] [-p <profile>] run [-e] [-a <arguments>] [-c <folder>] NAME`
-  runs a program inside the virtual file system; with `-e`, NAME is one of the instance's configured executables,
-  and `-a` replaces its arguments (`MO2:src/commandline.cpp:700-735`, `:315-330`).
-- **R17 · FACT.** The `run` command waits for the program to end (`commandline.cpp:787`). If MO2 is already open,
-  the command is passed to the open MO2 and carried out there (`commandline.cpp:195-202`, `:740`,
-  `MO2:src/main.cpp:55`). So a tool can be started through MO2 whether MO2 is open or closed.
-- **R18 · LIKELY.** When the command is passed to an open MO2, the second, short-lived process returns at once, so
-  ModTrap cannot rely on waiting for it: it must watch for xEdit's own end (the script's "done" line and the
-  process's exit). To be confirmed on the owner's PC.
-- **R19 · FACT.** MO2 also has a `refresh` command, the same as F5 (`commandline.cpp:934`).
-- **R20 · FACT.** `ModOrganizer.ini` holds, under `[General]`, `gamePath`, `gameName` and `selected_profile`, and
-  under `[Settings]`, `base_directory`, `mod_directory`, `profiles_directory` and `overwrite_directory` when they
-  differ from the defaults (`MO2:src/settings.cpp:663-706`, `:1706-1770`). A profile folder holds `modlist.txt`,
-  `plugins.txt`, `loadorder.txt`, `lockedorder.txt`, `archives.txt` and `settings.ini`
-  (`MO2:src/profile.cpp:98-99`, `:946-966`).
-- **R21 · LIKELY.** `modlist.txt` lists mods one a line, highest priority first, each with `+` (enabled), `-`
-  (disabled) or `*` (not managed by MO2) before its name; `plugins.txt` marks an active plugin with `*` before its
-  name. From long use of MO2, not yet read in its source.
-- **R22 · LIKELY.** A file a program changes inside the virtual file system is changed in the mod folder it comes
-  from; a new file goes to `overwrite`. This is why the guide's procedure alters the original plugins in place, and
-  why ModTrap's design keeps xEdit from saving in place (R12).
-- **R23 · FACT.** MO2 advises against two MO2 processes on the same instance (`commandline.cpp:446-465`). ModTrap
-  never starts MO2 with `--multiple`.
+### 2. The manual procedure that defines "demaster"
 
-### DataPiler's pattern
+`2026-11-20` · FACT (screenshots of a modlist community's guide, supplied by the owner) · `#procedure` · refs: MT1, MT6
 
-- **R24 · FACT.** DataPiler's page server binds 127.0.0.1 only, answers only its own Host, requires its own Origin
-  on a write and a per-start token on every `/api/` call, sends a strict Content-Security-Policy with nonces and no
-  outside sources, caps request sizes, and logs refusals by reason only (`datapiler/server.py`). ModTrap takes this
-  whole, renamed.
-- **R25 · FACT.** DataPiler's rules that carry over: jobs are data, never code; a guard checks everything before it
-  is written; nothing of the third-party program is bundled; the sweep comes first (its `CLAUDE.md`).
+- FACT: for each plugin that depends on the unwanted mod, the guide has the user keep the unwanted mod enabled, load
+  the dependant in xEdit through MO2, run xEdit's "Report masters" script on it for the unwanted plugin, and for
+  each record or element listed either remove the whole record from the dependant or remove just the element that
+  refers to the unwanted plugin (its example removes one entry of a FormID list); then Clean Masters; then the
+  report again until it is empty; then save.
+- FACT: the guide does not demaster every dependant. Patches that exist only for the unwanted mod are disabled;
+  only plugins that do other things too are demastered.
+- DECIDED: this is ModTrap's meaning of the word (MT1). The second point is MT6.
+- The guide is described here in our own words. Nothing of it, and no name from it, is copied into the repository.
 
-### Rejected paths
+### 3. xEdit can do the procedure unattended, from our own script
 
-- **R26 · DECIDED against: editing plugins with our own code.** ModTrap could parse and rewrite plugins itself and
-  never start xEdit. Rejected: the owner asked for xEdit inside MO2, xEdit's knowledge of every record type is years
-  of work, and a wrong rewrite of someone's plugin is the worst failure this tool could have. ModTrap's own code
-  reads only a plugin's header (its masters), to build the list and to check the result.
-- **R27 · DECIDED against: driving xEdit's window** (sending clicks and keys to do the guide's steps). Fragile, and
-  unnecessary given R4 to R10.
-- **R28 · DECIDED against: generating a script per job.** The script is one fixed file of ours; a job reaches it
-  as a small data file beside it (R4). Jobs stay data, never code (R25).
+`2026-11-20` · FACT (xEdit 4.1.5f's source) · `#xedit` · refs: XE01§2, XE01§3, XE01§4, XE01§7, XE01§8, DESIGN§7
 
-### From the session that started ModTrap (its answer of 2026-11-20, not verified here)
+- FACT: one command line starts xEdit with a script of ours, a plugins file of ours, no selection window, and an
+  exit when the script ends (XE01§2 to XE01§4).
+- FACT: every step of WHY§2 has a scripting function: the report, removing a record or an entry, Clean Masters
+  (XE01§7). xEdit's own report script is a short loop over one of them (XE01§8).
+- LIKELY: handing xEdit a short plugins file loads only the dependants and their masters, not a whole load order of
+  a thousand plugins (XE01§3). This is what makes a run take minutes, not most of an hour.
+- FACT of a kind: xEdit's window will show (XE01§4). "Watch it do its work" is the page's terminal plus xEdit's
+  own window.
 
-- **R29 · LIKELY.** The session-link rule (MT12) is reported to be the owner's own choice of 2026-11-16 in that
-  session, for the owner's other projects: stop adding the link, because it points to a private transcript and tells
-  a reader of the repository nothing; the `Co-Authored-By` line stays. The note recording it is in an unpushed
-  DataPiler commit, so it could not be read here.
-- **R30 · FACT (DataPiler, as reported and matching its file list).** DataPiler never starts an outside program
-  from Python. What to take from it: finding a running program by its executable and watching it from a thread
-  (`smithbox.py`, `gamewatch.py`: poll every 2 s, fail closed, report a close only after two checks in a row); one
-  Windows adapter module, faked in tests (`winapi.py`); a job's lines kept in a numbered ring and fetched by the
-  page with "lines after N" polling, no SSE or WebSocket (`logbook.py`, `api.py`, `events.py`); the job format as a
-  closed set of operations with a schema version (`jobs.py`); atomic writes and bounded reads (`fileio.py`).
-  `guard.py` is about what may leave the PC, not about where a job may write.
-- **R31 · METHOD.** Starting xEdit is ModTrap's own code: a process started from an argument list, never through a
-  shell, with a time limit, Stop, and its exit code read. Lessons carried over: logs mask the owner's paths so a log
-  can be shared; the first log lines state versions and environment; ask before Stop; every folder check says what
-  it found in plain words; updates from a dropped release zip.
-- **R32 · LIKELY.** The same session independently expects R22 (a save through MO2 lands in the original mod's
-  folder) and suggests the copy-first route, which is design 0001's fallback (§6.3), and checking MO2's per-executable
-  setting that sends newly created files to a chosen mod instead of `overwrite`. Added to the probe's list (§9).
-- **R33 · FACT.** Corrects R29 from LIKELY to read: DataPiler's `CLAUDE.md` at branch `feat/v0.2.41` (commit
-  `75cea6f`) carries the rule "No `Claude-Session` link in commit messages or pull requests (owner, 2026-11-16)".
-  That branch, not `main`, is the newest DataPiler and the one to read for the patterns in R30.
+### 4. Write the changed plugin elsewhere and keep xEdit from saving the original
+
+`2026-11-20` · LIKELY · `#xedit #vfs #safety` · refs: XE01§5, XE01§7, XE01§9, WHY§8, MT5, DESIGN§6.3
+
+- FACT: in script mode xEdit saves every changed plugin on close, without asking (XE01§5).
+- FACT: a script can write a loaded plugin to a stream of its own, and can clear a file's "unsaved" state (XE01§7).
+- LIKELY: so the script can change a dependant in memory, write the result into ModTrap's output mod, and clear
+  the state so that the original is never saved over. Not proven (XE01§9).
+- Fallback if it fails: copy the dependants into the output mod first, enabled above the originals, and let xEdit
+  save those copies in place (DESIGN§6.3). Either way no original is changed, and ModTrap hashes them before and
+  after to be sure.
+
+### 5. Progress for the page comes from a file the script writes
+
+`2026-11-20` · LIKELY · `#xedit #page` · refs: XE01§6, XE01§7, DESIGN§4
+
+- FACT: xEdit writes its log only on close, and it is a window program with nothing to read from its output
+  (XE01§6).
+- LIKELY: the script can append a line to a text file after each step, and ModTrap can follow that file. Not
+  proven: whether the script host can append without rewriting the file each time; rewriting a small file would
+  also do.
+
+### 6. What cannot be proven here is proven by a probe on invented plugins
+
+`2026-11-20` · METHOD · `#xedit #mo2 #safety` · refs: WHY§4, WHY§5, WHY§7, WHY§8, XE01§9, MO01§6, DESIGN§9
+
+- METHOD: xEdit and MO2 are Windows programs, and nothing cloned is built or run in a session. So the open points
+  are settled on the owner's PC, by ModTrap itself, before any real mod is touched: it writes three tiny invented
+  plugins into a test mod of its own and runs the whole job on them.
+- METHOD: the page allows a real job only after the probe passes, and says which point failed if it does not.
+
+### 7. MO2 starts a tool from the command line, open or closed
+
+`2026-11-20` · FACT (MO2's source) · `#mo2` · refs: MO01§3, MO01§4, DESIGN§7
+
+- FACT: `run -e` starts a configured executable in the virtual file system with arguments of ours, and an open MO2
+  takes the command over (MO01§3, MO01§4). The owner need not close MO2.
+- LIKELY: with MO2 open, the command returns at once, so ModTrap watches for xEdit's own end (the script's last
+  line, and the process), with a time limit and a Stop button.
+- FACT: ModTrap never starts a second MO2 on the instance (MO01§4).
+
+### 8. A save through MO2 lands in the original mod's folder
+
+`2026-11-20` · LIKELY · `#vfs #safety` · refs: MO01§5, WHY§4, MT5
+
+- LIKELY: this is why the guide's procedure alters the original plugins, and the reason for WHY§4.
+- The session that started ModTrap expects the same, and adds: check the per-executable setting in MO2 that sends
+  newly created files to a chosen mod. Both go to the probe (WHY§6).
+
+### 9. What ModTrap takes from DataPiler
+
+`2026-11-20` · FACT (DataPiler at its branch `feat/v0.2.41`, commit `75cea6f`) · `#datapiler #server #page` · refs: MT3, DESIGN§2, DESIGN§8
+
+- FACT: the page server, whole: 127.0.0.1 only, Host and Origin checks, a per-start token on every API call, a
+  strict content policy with nonces, size caps, refusals logged by reason only (`datapiler/server.py`).
+- FACT: a job's lines reach the page by polling "lines after N" from a numbered ring, no SSE or WebSocket
+  (`logbook.py`, `api.py`, `events.py`). It works under the strict policy and survives a reload.
+- FACT: watching an outside program by its executable from a thread that fails closed (`smithbox.py`,
+  `gamewatch.py`); one Windows adapter module, faked in tests (`winapi.py`); jobs as a closed set of operations
+  with a schema version (`jobs.py`); atomic writes and bounded reads (`fileio.py`).
+- FACT: DataPiler never starts an outside program from Python, so starting xEdit is new code: an argument list,
+  never a shell, a time limit, Stop, the exit code read.
+- METHOD: lessons carried over: logs mask the owner's paths so that a log can be shared; the first log lines state
+  versions and environment; ask before Stop; every folder check says what it found in plain words.
+- Not this: DataPiler's `guard.py` checks what may leave the PC. ModTrap's guard is about where a job may write
+  (DESIGN§8).
+
+### 10. Rejected: editing plugins with our own code
+
+`2026-11-20` · METHOD · `#safety #xedit` · refs: DESIGN§3
+
+- ModTrap could parse and rewrite plugins itself and never start xEdit. Rejected: the owner asked for xEdit inside
+  MO2; xEdit's knowledge of every record type is years of work; and a wrong rewrite of someone's plugin is the
+  worst failure this tool could have.
+- METHOD: our own code reads only a plugin's header (its masters and flags), to build the lists and to check the
+  result.
+
+### 11. Rejected: driving xEdit's window, and a script generated per job
+
+`2026-11-20` · METHOD · `#xedit` · refs: WHY§3, XE01§2, DESIGN§2
+
+- Sending clicks and keys to xEdit to do the guide's steps: fragile, and unnecessary given WHY§3.
+- Writing a new script for each job: rejected. The script is one fixed file of ours; a job reaches it as a small
+  data file beside it (XE01§2). Jobs stay data, never code.
+
+### 12. The session link is left out of commits
+
+`2026-11-20` · FACT (DataPiler's `CLAUDE.md` at `75cea6f`) · `#process` · refs: MT12
+
+- FACT: the owner's rule of 2026-11-16 for their other projects: no `Claude-Session` link in commit messages or
+  pull requests, because it points to a private transcript and tells a reader nothing; the `Co-Authored-By` line
+  stays. ModTrap follows it.
+
+### 13. The owner's reference system adopted
+
+`2026-11-20` · METHOD · `#process` · refs: MT3
+
+- METHOD: `tools/workplan` (`wp`) is taken from the owner's EldenNet (MIT), with ModTrap's documents and codes:
+  `DESIGN§n`, `WHY§n`, `MT1` onwards, `MO01` and `XE01` for the research notes, `RES` for their index. Documents
+  are read by section, never whole. The index it builds is generated and not committed.
+- Not taken yet: the roadmap with stage and step ids. Design 0001's build order (DESIGN§10) is short enough; a
+  roadmap comes when there is more work to plan than that.

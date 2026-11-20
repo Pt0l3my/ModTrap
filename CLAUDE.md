@@ -3,7 +3,18 @@
 ModTrap is a local tool on the owner's PC for Mod Organizer 2 (MO2) and Skyrim. It "demasters" chosen mods in a
 modlist: it removes them as masters from the plugins that depend on them, by running the owner's own xEdit inside the
 MO2 instance with ModTrap's own script. Its decisions are in [docs/DECISIONS.md](docs/DECISIONS.md) (MT1 onwards), its
-findings in [docs/REASONING.md](docs/REASONING.md), its design in [docs/design/](docs/design/).
+reasoning in [docs/REASONING.md](docs/REASONING.md), its research in [docs/research/](docs/research/README.md), its design
+in [docs/design/](docs/design/).
+
+## Reading the documents cheaply
+
+- Never open a whole design or research document to find something. Use `wp` ([tools/workplan](tools/workplan/README.md)):
+  `wp show CODE --list` for sizes, `wp show CODE` for one section, `wp refs CODE` for what cites it, `wp find` and
+  `wp grep` to search. Codes: `DESIGN§6.3` (the design), `WHY§4` (the reasoning log), `MT5` (a decision), `MO01§3`
+  and `XE01§7` (the research notes on MO2 and xEdit), `RES` (their index).
+- Cite by code everywhere, so that `wp refs` finds every use.
+- For code and other files: grep with line numbers first, then read only that range. Never re-read a file you have
+  just edited.
 
 ## Privacy and safety: the sweep comes first
 
@@ -43,5 +54,13 @@ findings in [docs/REASONING.md](docs/REASONING.md), its design in [docs/design/]
 - Work on a topic branch (`design/`, `feat/`, `fix/`, `docs/`, `test/`, `chore/`), never directly on `main` unless
   the owner asks. Push only at meaningful milestones or when asked. Open a pull request only when asked.
 - Ask the owner, with a recommendation, about anything the design leaves open, as an MT entry marked Open.
-- `docs/REASONING.md` is append-only: dated entries labelled FACT, LIKELY, SPECULATION, METHOD or DECIDED.
+- At the start of a session, and after a switch of model, read the index of the reasoning log,
+  [docs/REASONING.md](docs/REASONING.md) (`wp show WHY§n` opens an entry).
+- Keep that log as you work: an entry of a few lines for each finding, conclusion, rejected path or workaround that
+  DECISIONS.md does not hold, with its date, label (FACT, LIKELY, SPECULATION, METHOD, DECIDED), tags and
+  references, added to the index in the same commit. Append only: never renumber or rewrite an entry; a later
+  finding adds a dated Later line or a new entry.
+- A fact read in MO2's or xEdit's source goes in a research note (`docs/research/`), with its label and its file
+  and line at a named commit. A decision is recorded with its date and the owner's words, amended only by a dated
+  note, and its id is never renumbered.
 - Text the owner reads uses British spelling.

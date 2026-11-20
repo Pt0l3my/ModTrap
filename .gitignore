@@ -11,3 +11,6 @@ logs/
 *.port
 __pycache__/
 *.pyc
+
+# wp's section index (tools/workplan): generated
+tools/workplan/data/

@@ -1,13 +1,13 @@
 # Design 0001: ModTrap
 
 *2026-11-20 · Proposed. Nothing here is built. Open choices are in [DECISIONS.md](../DECISIONS.md) (MT4 onwards);
-findings are cited from [REASONING.md](../REASONING.md) as R-numbers.*
+findings are cited by code: `WHY§n` is [REASONING.md](../REASONING.md), `MO01` and `XE01` are [the research notes](../research/README.md).*
 
 ## 1. What ModTrap does
 
 The owner picks a modlist folder (an MO2 instance). ModTrap lists the mods installed in it. The owner ticks the mods
 to take out and presses **Demaster Selected**. ModTrap then does, by itself, what the community's "Master Removal"
-procedure has the user do by hand in xEdit (R1), for every plugin that depends on the ticked mods, and shows its
+procedure has the user do by hand in xEdit (WHY§2), for every plugin that depends on the ticked mods, and shows its
 work line by line in a terminal on the page. At the end the ticked mods can be disabled in MO2 without "missing
 master" errors.
 
@@ -24,23 +24,23 @@ such as an animation or patcher step). ModTrap ends when the masters are gone, a
 
 - One program on the owner's PC, Python standard library only, started by a launcher. It serves one page on
   `127.0.0.1` and opens it in the browser. Host, Origin and per-start token checks, a strict content policy, no CDN,
-  no remote fonts, no analytics: DataPiler's server, reused and credited (R24).
+  no remote fonts, no analytics: DataPiler's server, reused and credited (WHY§9).
 - The page reads the instance; it never writes to it. Writing happens only in a job, only after the owner confirms
   a plan, and only into ModTrap's work folder and its output mod.
 - A job is data: the instance, the profile, the trapped plugins, the dependants and what to do with each. The
-  script that xEdit runs is one fixed file of ours; it reads the job from a small file beside it (R4, R28).
+  script that xEdit runs is one fixed file of ours; it reads the job from a small file beside it (XE01§2, WHY§11).
 - ModTrap contains no part of MO2 or xEdit. It finds and calls the owner's installed copies.
 
 ## 3. Reading the instance (no xEdit needed)
 
-From `ModOrganizer.ini` and the chosen profile (R20, R21), read-only:
+From `ModOrganizer.ini` and the chosen profile (MO01§2, MO01§2), read-only:
 
 1. the mods folder, the profiles folder, the game's folder, the selected profile, and the configured executables
    (to find the owner's xEdit);
 2. `modlist.txt`: every mod, its priority, whether it is enabled;
 3. each mod folder's plugins (`.esp`, `.esm`, `.esl` at its top level);
 4. each plugin's header, read by ModTrap's own small reader: its master list and its flags. Nothing else of a
-   plugin is read by our code (R26);
+   plugin is read by our code (WHY§10);
 5. `plugins.txt` and `loadorder.txt`: which plugins are active and in what order.
 
 Where the same plugin name exists in several enabled mods, the one MO2 would use (highest priority) counts, and the
@@ -58,7 +58,7 @@ page says so. From this ModTrap builds, for every mod: its plugins, their master
   proposes for it (§5) and a way to change that per dependant.
 - **Demaster Selected.** Opens the plan (§6.1). Nothing has run yet.
 - **Terminal.** A live, scrolling log of the job: ModTrap's own steps, and the lines our script writes as xEdit
-  works (R13). A copy is kept in ModTrap's work folder.
+  works (WHY§5). A copy is kept in ModTrap's work folder.
 - **Result.** Per dependant: masters before and after, what was removed, what was left alone and why; then the
   next steps for the owner in MO2.
 
@@ -67,7 +67,7 @@ page says so. From this ModTrap builds, for every mod: its plugins, their master
 For each dependant, one of three treatments. ModTrap proposes one; the owner can change it (MT6):
 
 - **Demaster** (the default): §6.
-- **Leave for me to disable**: the dependant exists only for a trapped mod (the guide's "patch" case, R2). ModTrap
+- **Leave for me to disable**: the dependant exists only for a trapped mod (the guide's "patch" case, WHY§2). ModTrap
   proposes this when the dry run shows that nothing, or almost nothing, of the plugin would remain; the plan lists
   it under "disable these yourself".
 - **Skip**: the owner will deal with it another way.
@@ -90,7 +90,7 @@ counts as done only if the trapped plugins are gone from its master list **and**
 ### 6.1 Plan
 
 Built from §3 alone, shown before anything runs: the trapped plugins; every dependant and its treatment; the
-plugins xEdit will load (the dependants and all their masters, in load order, and nothing else, R6); the folders
+plugins xEdit will load (the dependants and all their masters, in load order, and nothing else, XE01§3); the folders
 ModTrap will write to; the exact command it will run. The owner confirms or goes back.
 
 ### 6.2 Dry run
@@ -104,18 +104,18 @@ owner confirms again, now knowing every change.
 
 xEdit is started again with the script in **apply** mode. For each dependant: do the removals, Clean Masters,
 report again, and if the dependant is done, write the changed plugin to the output mod with `FileWriteToStream`
-(R10), then mark the loaded original as not needing a save (R11, R12), so that xEdit's own save on close never
+(XE01§7), then mark the loaded original as not needing a save (XE01§7, WHY§4), so that xEdit's own save on close never
 touches the original. The script writes a line to its progress file after each step.
 
 Belt and braces, whatever the script does:
 
 - before the run, ModTrap records the size and SHA-256 of every plugin xEdit will load, and copies each dependant
   into its work folder as a backup;
-- xEdit's own backup folder is pointed at ModTrap's work folder (`-B:`, R8);
+- xEdit's own backup folder is pointed at ModTrap's work folder (`-B:`, XE01§5);
 - after the run, every recorded plugin is hashed again. If an original differs, ModTrap puts its backup back at
   once and says so plainly.
 
-**Fallback if R12 does not hold on the owner's PC** (R15): the output mod is made first, holding plain copies of
+**Fallback if WHY§4 does not hold on the owner's PC** (WHY§6): the output mod is made first, holding plain copies of
 the dependants, and enabled above the originals; xEdit then loads and saves those copies, in place, and the
 originals are still never touched. This needs the output mod to be enabled before the run (MT9), so it is the
 second choice.
@@ -136,10 +136,10 @@ mod; every original is as it was.
 
 ## 7. Starting xEdit through MO2
 
-`ModOrganizer.exe -p "<profile>" run -e -a "<arguments>" "<xEdit's name in MO2>"` (R16), where the arguments are
+`ModOrganizer.exe -p "<profile>" run -e -a "<arguments>" "<xEdit's name in MO2>"` (MO01§3), where the arguments are
 our script (`-script:`), our plugins file (`-P:`), `-autoload`, `-autoexit`, a backup folder (`-B:`) and a log
-file (`-R:`) (R4 to R9). MO2 may be open or closed (R17); ModTrap never starts a second MO2 on the instance (R23).
-ModTrap watches the script's progress file and xEdit's process for the end (R18), with a time limit and a
+file (`-R:`) (XE01§2 to XE01§6). MO2 may be open or closed (MO01§4); ModTrap never starts a second MO2 on the instance (MO01§4).
+ModTrap watches the script's progress file and xEdit's process for the end (WHY§7), with a time limit and a
 **Stop** button that closes xEdit; a stopped or crashed run writes nothing to the output mod.
 
 Our script and the job file live in ModTrap's work folder, outside the instance's mods and outside xEdit's folder:
@@ -162,7 +162,7 @@ nothing is installed into either.
 
 Before any real mod is touched, a **probe**: ModTrap writes three tiny invented plugins into a test mod of its own
 (a "bad" one, and two that depend on it in the ways of cases A and B), and runs the whole of §6 on them. It proves
-or disproves R12, R13, R18 and R22. Only when the probe passes does the page allow a real job.
+or disproves WHY§4, WHY§5, WHY§7 and WHY§8. Only when the probe passes does the page allow a real job.
 
 ## 10. Build order (proposed)
 
@@ -173,4 +173,4 @@ or disproves R12, R13, R18 and R22. Only when the probe passes does the page all
 4. **Later.** The updater and the built launcher, as in DataPiler; other games (MT7).
 
 Tests at every step use invented plugins written by the test code. The xEdit script itself can only be tested on
-the owner's PC (R15); everything around it is tested here.
+the owner's PC (WHY§6); everything around it is tested here.

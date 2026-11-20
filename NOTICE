@@ -15,9 +15,12 @@ ModTrap is our own code under the MIT licence (LICENSE).
 2. Code reused from the owner's other projects
 ----------------------------------------------
 
-None yet (design stage). The plan is to reuse parts of DataPiler (MIT): its local page server and its checks, its
-job runner's shape, its updater and its Windows launcher. Each reused part is listed here when it lands, with the
-file it came from.
+- tools/workplan (wp, the section index of the documents): taken from the owner's EldenNet (MIT), tools/workplan
+  there, itself adapted from the workplan tool in the owner's Skyrizz. ModTrap's document list and codes replace
+  EldenNet's.
+
+Planned, not yet taken: parts of DataPiler (MIT): its local page server and its checks, its log ring and job
+format, its updater and its Windows launcher. Each is listed here when it lands, with the file it came from.
 
 3. Dependencies
 ---------------
