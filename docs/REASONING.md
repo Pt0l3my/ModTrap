@@ -42,6 +42,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 17 | 2026-11-20 | The safe folder is taken after the dry run, and Revert checks before it writes | METHOD | #safety |
 | 18 | 2026-11-20 | Replace the originals, or a ModTrap mod above them | METHOD | #vfs #safety |
 | 19 | 2026-11-20 | "Nothing gets removed" was about the mod, not about records | METHOD | #procedure #process |
+| 20 | 2026-11-20 | The method is ModTrap's to choose: what was chosen for MT4 and MT5 | DECIDED | #procedure #safety |
+| 21 | 2026-11-20 | What "clean" can and cannot be checked by a tool | METHOD | #safety #procedure |
+| 22 | 2026-11-20 | Telling which tool made a patch: evidence, and marks kept as data | METHOD | #tools #mo2 |
+| 23 | 2026-11-20 | MO2's plugin lists and the plugin header are read from their sources | FACT | #mo2 #xedit |
 
 ## Entries
 
@@ -254,3 +258,52 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - MT4 asks something else: demastering a dependant means taking out of that dependant the records and entries
   that point at the unwanted mod, as the guide does by hand (WHY§2). Without that, Clean Masters cannot drop the
   master. The question was worded badly ("what gets removed") and is put again in plain words.
+
+### 20. The method is ModTrap's to choose: what was chosen for MT4 and MT5
+
+`2026-11-20` · DECIDED · `#procedure #safety` · refs: MT17, MT4, MT5, WHY§18, DESIGN§5, DESIGN§6.5
+
+- DECIDED: the owner named the result that counts and left the method to ModTrap (MT17).
+- MT4: cases A and B automatic, C and D reported as steps for the owner. A forced edit that leaves a record
+  pointing nowhere is exactly the kind of in-game issue MT17 rules out; a reported one costs a manual step.
+- MT5: a ModTrap mod above the originals (WHY§18), since ModTrap places it itself under Auto and an installed
+  list's own files stay verifiable.
+
+### 21. What "clean" can and cannot be checked by a tool
+
+`2026-11-20` · METHOD · `#safety #procedure` · refs: MT17, DESIGN§3, DESIGN§6.5, DESIGN§14
+
+- METHOD: checkable from files: no active plugin lists a missing or inactive master; no demastered plugin still
+  needs a trapped plugin (xEdit's own report, run again); every generated patch that listed a trapped plugin has
+  been rebuilt without it; the load order is otherwise unchanged; nothing was changed outside the plan.
+- Not checkable from files: that a script, a mesh or a setting of another mod quietly relied on the trapped mod's
+  loose files, or that the game plays well. ModTrap says so, lists the kinds of loose files the trapped mod
+  contained (DESIGN§13), and leaves "play, and report anything odd" as the owner's last step.
+- SPECULATION: a later version could list which loose files of the trapped mod were winning file conflicts, the
+  nearest thing to "who else relied on it" that the instance's files can show.
+
+### 22. Telling which tool made a patch: evidence, and marks kept as data
+
+`2026-11-20` · METHOD · `#tools #mo2` · refs: MT18, MO01§2, XE02§4, DESIGN§13
+
+- FACT: MO2 records, per executable, the mod that receives the files the program creates (MO01§2). A plugin found
+  in that mod is tied to that tool by MO2's own settings: the strongest evidence, and it needs no knowledge of the
+  tool.
+- LIKELY: patching tools mark their output in the plugin header's author or description, and use well-known file
+  names. From general knowledge of these tools, not yet read in their documentation.
+- METHOD: so the marks and names go in a shipped data file, one entry a tool, each with its source and a label,
+  and the page shows which evidence led to each "made by". Next step: read each tool's own documentation
+  (Synthesis, Wrye Bash, the LOD generators) before an entry is trusted.
+- Rejected: reading a tool's own settings files to learn its output. Each tool's format differs and changes; MO2's
+  setting and the plugin's header cover it.
+
+### 23. MO2's plugin lists and the plugin header are read from their sources
+
+`2026-11-20` · FACT · `#mo2 #xedit` · refs: MO01§2, XE02§2, XE02§3, XE02§4, DESIGN§3
+
+- FACT: the forms of `plugins.txt` and `loadorder.txt` are now read in MO2's game plugins (MO01§2): different
+  text encodings, the newer file gives the order, the game's primary plugins are not listed.
+- FACT: the plugin header's flags and fields are read in xEdit's definitions (XE02). ModTrap's reader is written
+  from that description and stops at the end of the header.
+- METHOD: the reader and the instance model are built first (version 0.1), with invented plugins written by the
+  test code, since everything else stands on them.
