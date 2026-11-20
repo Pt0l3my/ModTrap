@@ -1,0 +1,13 @@
+# Mod files never enter the repository (CLAUDE.md, Mods): plugins, archives, and anything ModTrap writes at run time
+*.esp
+*.esm
+*.esl
+*.bsa
+*.ba2
+work/
+output/
+logs/
+*.log
+*.port
+__pycache__/
+*.pyc
