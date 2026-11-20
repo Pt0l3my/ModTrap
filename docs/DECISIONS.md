@@ -16,7 +16,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT14 (the safe folder and Revert) and MT15 (the full modlist and load order, and a history).
   Later the same day: MT17 (the result that counts; the method is ModTrap's to choose), under which MT4 (cases A and
   B automatic, the rest reported) and MT5 (a ModTrap mod above the originals) were settled; MT18 (generated
-  patches, their tools, and a Steps tab); MT16 settled by the facts; MT19 (a drop box for the modlist folder).
+  patches, their tools, and a Steps tab); MT16 settled by the facts; MT19 (a drop box for the modlist folder); MT20 (Quit, and sessions: one
+  active session per modlist).
 - **Open.** None. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -377,3 +378,32 @@ instance and registers its path (WHY§30). The path can still be pasted.
 
 **Owner's words.** "can you also add a dropbox (ask engine agent about design) so users can just drop the modlist
 directory and the ModTrap reads the executable of the MO2 and registers the path?"
+
+## MT20
+
+**Quit, and sessions** · *2026-11-20 · The owner's request*
+
+**Decision.**
+
+- A **Quit** button closes ModTrap. The session is kept, and starting ModTrap again shows exactly the state it was
+  in before.
+- Work is kept in **sessions**, each in a folder of its own, named after its modlist by ModTrap and renameable by
+  the owner. A new session is separate from the others, and the owner can switch between sessions.
+- **One active session per modlist.** One session can hold as many demasters as the owner wants. More sessions on
+  the same modlist may be started, but they are locked until the current one is verified finished and safe for the
+  next to begin.
+
+**Owner's words.** "Can you also implement a quit button that closes down the tool (closes the browser page), but the
+session is reserved, and upon starting ModTrap again, the user is presented the exact same state of the session prior
+to quit it was in. We could also save sessions in their own directory with their (auto name them by modlist, user can
+rename manually). When the user begins a new session it will start as separate sessions, and the user cam switch
+between sessions. Only one active session should be allower per modlist in my opinion, one sessions can do as many
+demaster as the user want anyway, but multiple demaster sessions may cause conflict and confusion and messed up
+files in modlist. We can allow to start new session, but those will be locked hntil the current session is veryfied
+finished and safe for other sessions tk begin their demaster process."
+
+**How it is built, and two limits** (WHY§33). A browser lets a page close its own tab only if the page opened it,
+so after Quit the page says ModTrap has closed and that the tab can be closed. "Verified finished and safe" today
+means that nothing of the session is still going, since nothing ModTrap does yet changes a modlist; when it can
+demaster, the check also requires every step of the session's jobs to be done and the modlist's health check to be
+clean (DESIGN§14, DESIGN§15).

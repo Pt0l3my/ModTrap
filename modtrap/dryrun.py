@@ -297,6 +297,7 @@ class Job:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.manifest: dict = {}
+        self.on_end: Callable[[], None] | None = None     # called once the job has ended and is written down
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="dry-run", daemon=True)
@@ -338,6 +339,16 @@ class Job:
             self._fail(str(e))
         except Exception as e:          # the page must never wait on a job that died
             self._fail("an error inside ModTrap: " + logbook.why(e))
+        # Written down, so that the session shows this job again after ModTrap is closed and started (MT20).
+        try:
+            paths.write_atomic(self.dir / "job.json", (json.dumps(self.public(), indent=1) + "\n").encode("utf-8"))
+        except (OSError, TypeError, ValueError) as e:
+            log.warn("the dry run's outcome could not be kept for later: %s", logbook.why(e))
+        if self.on_end:
+            try:
+                self.on_end()
+            except Exception as e:
+                log.warn("after the dry run: %s", logbook.why(e))
 
     def _do(self) -> None:
         p = self.plan
@@ -446,8 +457,37 @@ def _ended(report: Path) -> bool:
     return any(ln.startswith("X\t") for ln in text.splitlines()[-3:])
 
 
-def new_job_dir() -> Path:
-    base = paths.home() / "jobs"
+class PastJob:
+    """A job of an earlier run of ModTrap, as its session kept it: only for showing."""
+
+    def __init__(self, job_dir: Path):
+        self.dir, self.id = job_dir, job_dir.name
+        try:
+            with open(job_dir / "job.json", "rb") as f:
+                data = json.loads(f.read(256 * 1024 * 1024).decode("utf-8"))
+            if not isinstance(data, dict) or "state" not in data or "plan" not in data:
+                raise ValueError
+        except (OSError, ValueError):
+            # No outcome was written: ModTrap was closed, or stopped, while the job was going.
+            plan = {"trapped_mods": [], "trapped": [], "dependants": [], "load": 0, "load_names": [], "profile": "",
+                    "tool": "", "tool_file": "", "warnings": []}
+            data = {"id": self.id, "state": "failed", "plan": plan, "seconds": 0, "unchanged": None, "result": None,
+                    "message": "ModTrap was closed while this dry run was going, so its outcome was not kept. "
+                               "xEdit only reads in a dry run; start it again when you are ready."}
+        data["folder"] = str(job_dir)
+        data["past"] = True
+        self._data = data
+        self.state = data["state"]
+
+    def public(self) -> dict:
+        return self._data
+
+    def stop(self) -> None:
+        pass
+
+
+def new_job_dir(base: Path | None = None) -> Path:
+    base = base or paths.home() / "jobs"
     base.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     for n in range(100):

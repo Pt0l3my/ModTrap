@@ -16,6 +16,11 @@
       <li data-step="dry" data-tab="selection"><span class="n">3</span><span class="t" id="step-dry">Dry run</span></li>
       <li data-step="trap" class="later" title="Not built yet: the step that actually demasters"><span class="n">4</span><span class="t">Demaster</span></li>
     </ol>
+    <div class="top-right">
+      <button id="session-btn" type="button" class="session-btn" aria-haspopup="true" aria-expanded="false" title="Sessions: each is one piece of work on one modlist, kept when you quit" hidden></button>
+      <button id="quit" type="button" title="Close ModTrap. Your session is saved, and comes back exactly as it is when you start ModTrap again.">Quit</button>
+    </div>
+    <div id="session-panel" class="session-panel" hidden></div>
   </div>
   <div id="drop" class="drop">
     <div class="drop-title">Drop your modlist folder here
@@ -36,6 +41,7 @@
     <button class="chip link" id="s-tools" type="button"></button>
     <button class="chip link" id="s-health" type="button"></button>
   </div>
+  <p id="locked" class="locked" hidden></p>
   <p id="message" class="message" role="status" hidden></p>
   <ul id="notes" class="notes" hidden></ul>
 </header>

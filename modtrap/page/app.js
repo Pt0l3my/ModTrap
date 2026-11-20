@@ -109,6 +109,8 @@ function renderTools(s) {
 }
 
 function renderState(s) {
+  state.session = s.session;
+  renderSessions(s);
   $("version").textContent = s.version ? "version " + s.version : "";
   if (document.activeElement !== $("folder") && s.folder && (!$("folder").value || s.status === "ready")) $("folder").value = s.folder;
   const ready = s.status === "ready";
@@ -178,6 +180,164 @@ function renderHealth(s) {
   card.append(ul);
   if (s.issue_count > s.issues.length) card.append(el("p", { class: "dim", text: "Showing the first " + s.issues.length + "." }));
   box.replaceChildren(card);
+}
+
+// --- sessions, and what the page remembers (MT20) -------------------------------------------------------------------
+
+const STATUS_WORDS = { active: "holds the modlist", waiting: "waiting, locked", finished: "finished" };
+
+function currentUi() {
+  return {
+    tab: state.tab || "mods", picked: [...state.picked], order: $("mods-order").value,
+    search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
+    pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
+    collapsed: [...(state.collapsed || [])], plugin: state.plugin || "",
+  };
+}
+
+let uiTimer;
+function saveUi() {
+  if (state.applying || !state.session || state.status !== "ready" || state.quit) return;
+  clearTimeout(uiTimer);
+  uiTimer = setTimeout(async () => {
+    const ui = currentUi();
+    const text = JSON.stringify(ui);
+    if (text === state.uiSaved) return;
+    try { await api("/api/session/ui", { ui: ui }); state.uiSaved = text; } catch (e) { /* tried again at the next change */ }
+  }, 500);
+}
+
+// Puts the page back as the session last had it.
+function applyUi(ui) {
+  ui = ui || {};
+  state.applying = true;
+  try {
+    $("mods-order").value = ["mo2", "rev", "deps"].includes(ui.order) ? ui.order : "mo2";
+    $("mods-search").value = ui.search || "";
+    $("f-enabled").checked = !!ui.fEnabled; $("f-plugins").checked = !!ui.fPlugins; $("f-deps").checked = !!ui.fDeps;
+    $("plugins-search").value = ui.pSearch || "";
+    $("p-problems").checked = !!ui.pProblems; $("p-deps").checked = !!ui.pDeps;
+    state.collapsed = new Set(Array.isArray(ui.collapsed) ? ui.collapsed : []);
+    state.picked = new Set();
+    for (const n of Array.isArray(ui.picked) ? ui.picked : []) {
+      const m = findMod(n);
+      if (m && m.kind === "mod" && m.plugins.length) state.picked.add(n);
+    }
+    for (const g of state.groups) for (const m of g.mods) {
+      const on = state.picked.has(m.name);
+      m.row.classList.toggle("picked", on);
+      const box = m.row.querySelector("input");
+      if (box) box.checked = on;
+    }
+    state.details.clear();
+    layoutMods();
+    filterPlugins();
+    $("sel-count").textContent = state.picked.size;
+    $("sel-count").classList.toggle("on", state.picked.size > 0);
+    $("plan").hidden = true;
+    renderSelection();
+    const tabs = [...document.querySelectorAll("#tabs button")].map((b) => b.dataset.tab);
+    showTab(tabs.includes(ui.tab) ? ui.tab : "mods");
+    state.plugin = "";
+    if (ui.plugin) {
+      const p = state.plugins.find((x) => x.name === ui.plugin);
+      if (p) showPlugin(p.name, p.row);
+    }
+    state.uiSaved = JSON.stringify(currentUi());
+  } finally { state.applying = false; }
+  updateDryButton();
+  updateTray();
+  renderSteps();
+}
+
+function updateDryButton() {
+  const busy = state.job && !["done", "failed", "stopped"].includes(state.job.state);
+  const locked = state.session && state.session.locked;
+  const b = $("dry-run");
+  b.disabled = !state.picked.size || busy || !!locked;
+  b.title = locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : "";
+}
+
+async function sessionCall(path, body, done) {
+  try { await api(path, body); if (done) toast(done); } catch (e) { problem(e.message); }
+  $("session-panel").hidden = true;
+  $("session-btn").setAttribute("aria-expanded", "false");
+  tick();
+}
+
+function renderSessions(s) {
+  const btn = $("session-btn");
+  const cur = s.session;
+  btn.hidden = !cur;
+  if (cur) btn.textContent = "Session: " + cur.name;
+  const lock = $("locked");
+  lock.hidden = !(cur && cur.locked);
+  if (cur && cur.locked) {
+    const kids = [el("span", { text: cur.locked.charAt(0).toUpperCase() + cur.locked.slice(1) + "." })];
+    const holder = s.sessions.find((x) => x.status === "active" && x.folder === cur.folder && x.id !== cur.id);
+    if (cur.status === "waiting" && holder) {
+      const go = el("button", { type: "button", text: "Go to “" + holder.name + "”" });
+      go.addEventListener("click", () => sessionCall("/api/session/switch", { id: holder.id }));
+      kids.push(go);
+    }
+    if (cur.status === "finished") {
+      const nw = el("button", { type: "button", text: "Start a new session on this modlist" });
+      nw.addEventListener("click", () => sessionCall("/api/session/new", {}, "A new session is open."));
+      kids.push(nw);
+    }
+    lock.replaceChildren(...kids);
+  }
+  const panel = $("session-panel");
+  const key = JSON.stringify([s.sessions, cur && cur.id]);
+  if (panel.hidden || key === state.sessionsKey) return;
+  state.sessionsKey = key;
+  const rows = s.sessions.map((x) => {
+    const isCur = cur && x.id === cur.id;
+    const row = el("div", { class: "srow" + (isCur ? " current" : "") },
+      el("div", { class: "who" }, el("strong", { text: x.name + (isCur ? "  (this one)" : "") }),
+        el("span", { class: "dim small", text: x.modlist + (x.profile ? " · profile " + x.profile : "") + " · started " + x.created.replace("T", " ").slice(0, 16) })),
+      el("span", { class: "tag " + (x.status === "active" ? "good" : x.status === "waiting" ? "warn" : ""), text: STATUS_WORDS[x.status] }));
+    if (!isCur) {
+      const b = el("button", { type: "button", text: x.status === "finished" ? "Look at it" : "Switch to it" });
+      b.addEventListener("click", () => sessionCall("/api/session/switch", { id: x.id }));
+      row.append(b);
+    }
+    if (x.status !== "finished") {
+      const r = el("button", { type: "button", text: "Rename" });
+      r.addEventListener("click", () => {
+        const name = window.prompt("A name for this session:", x.name);
+        if (name != null && name.trim() && name.trim() !== x.name) sessionCall("/api/session/rename", { id: x.id, name: name }, "Renamed.");
+      });
+      const f = el("button", { type: "button", text: "Finish", title: "Mark this session finished. ModTrap first checks that nothing of it is still going; the modlist is then free for the session that waits for it." });
+      f.addEventListener("click", () => {
+        if (window.confirm("Finish session “" + x.name + "”?\n\nModTrap checks that nothing of it is still going. A finished session stays to be looked at, but no more work is done in it; the modlist is then free for the next session.")) sessionCall("/api/session/finish", { id: x.id }, "Session finished.");
+      });
+      row.append(r, f);
+    }
+    return row;
+  });
+  const nw = el("button", { type: "button", class: "primary", text: "New session on this modlist", disabled: !cur });
+  nw.addEventListener("click", () => sessionCall("/api/session/new", {}, "A new session is open."));
+  panel.replaceChildren(el("h2", { text: "Sessions" }),
+    el("p", { class: "dim small", text: "A session is one piece of work on one modlist. It is saved as you go: quit ModTrap and you come back exactly where you were. Only one session at a time works on a modlist; another one on the same modlist waits, locked, until the first is finished. Opening a different modlist starts a session of its own." }),
+    ...rows, el("div", { class: "actions" }, nw));
+}
+
+async function quitModTrap() {
+  let force = false;
+  for (;;) {
+    try { await api("/api/quit", force ? { force: true } : {}); break; } catch (e) {
+      if (force || !window.confirm(e.message + "\n\nQuit anyway?")) return;
+      force = true;
+    }
+  }
+  state.quit = true;
+  const name = state.session ? state.session.name : "";
+  document.body.replaceChildren(el("div", { class: "farewell" }, el("div", {},
+    el("h1", { text: "ModTrap has closed" }),
+    el("p", { text: (name ? "Session “" + name + "” is saved. " : "") + "Start ModTrap again and you are back exactly where you were: the same modlist, the same ticks, the same tab, the last dry run." }),
+    el("p", { text: "You can close this tab." }))));
+  window.close();          // works only where the browser allows a page to close its own tab
 }
 
 // --- the Mods tab ----------------------------------------------------------------------------------------------------
@@ -294,6 +454,7 @@ function filterMods() {
         (ticked ? " · " + ticked + " ticked" : "");
     }
   }
+  saveUi();
   $("mods-shown").textContent = filtering || !state.grouped ? shown + " of " + total + " shown" : total + " entries in " + plural(state.groups.filter((g) => g.sep).length, "group");
   $("mods-empty").hidden = shown > 0;
 }
@@ -345,9 +506,10 @@ function togglePick(name, on) {
   }
   $("sel-count").textContent = state.picked.size;
   $("sel-count").classList.toggle("on", state.picked.size > 0);
-  $("dry-run").disabled = !state.picked.size;
+  updateDryButton();
   $("plan").hidden = true;
   if (state.groups) filterMods();
+  saveUi();
   updateTray();
   renderSteps();
   renderSelection();
@@ -390,6 +552,7 @@ function filterPlugins() {
   }
   $("plugins-shown").textContent = (q || pr || dp) ? shown + " of " + state.plugins.length + " shown" : state.plugins.length + " plugins";
   $("plugins-empty").hidden = shown > 0;
+  saveUi();
 }
 
 function clearPluginFilters() {
@@ -423,6 +586,8 @@ function modLink(name, text) {
 async function showPlugin(name, tr) {
   document.querySelectorAll("#plugins-table tr.picked").forEach((r) => r.classList.remove("picked"));
   if (tr) tr.classList.add("picked");
+  state.plugin = name;
+  saveUi();
   const box = $("plugin-detail");
   let p;
   try { p = await api("/api/plugin?name=" + encodeURIComponent(name)); } catch (e) { box.replaceChildren(el("p", { class: "dim", text: e.message })); return; }
@@ -556,7 +721,7 @@ function renderJob(job) {
   $("job-info").textContent = job.plan.trapped.join(", ") + " · " + plural(job.plan.dependants.length, "dependant") + " · " +
     (mins ? mins + " min " : "") + secs + " s" + (job.unchanged === true ? " · every dependant is unchanged on disk" : "");
   $("job-stop").hidden = !active;
-  $("dry-run").disabled = active || !state.picked.size;
+  updateDryButton();
   const key = job.id + "|" + job.state;
   if (key === state.jobSeen) return;
   state.jobSeen = key;
@@ -623,6 +788,7 @@ function showTab(name) {
   document.querySelectorAll(".tab").forEach((t) => { t.hidden = t.id !== "tab-" + name; });
   state.tab = name;
   updateTray();
+  saveUi();
 }
 
 async function pollLog() {
@@ -644,39 +810,46 @@ async function pollLog() {
   } catch (e) { /* the next round tries again */ }
 }
 
-async function loadLists(key) {
+async function loadLists(key, s) {
   const [m, p] = await Promise.all([api("/api/mods"), api("/api/plugins")]);
   state.mods = m.mods;
   state.plugins = p.plugins;
   state.details.clear();
-  const names = new Set(state.mods.filter((x) => x.kind === "mod" && x.plugins.length).map((x) => x.name));
-  for (const n of [...state.picked]) if (!names.has(n)) state.picked.delete(n);
   state.loaded = key;
+  const keep = currentUi();                       // a rescan of the same session keeps the page as it is
   renderMods();
   renderPlugins();
-  $("sel-count").textContent = state.picked.size;
-  $("sel-count").classList.toggle("on", state.picked.size > 0);
-  $("dry-run").disabled = !state.picked.size;
-  renderSelection();
-  renderSteps();
-  showTab(state.tab || "mods");
+  const sid = s.session ? s.session.id : "";
+  const fresh = sid !== state.sessionApplied;
+  state.sessionApplied = sid;
+  applyUi(fresh ? (s.session && s.session.ui) || {} : keep);
 }
 
 async function tick() {
+  if (state.quit) return;
   let s;
   try { s = await api("/api/state"); } catch (e) { showMessage("ModTrap is not answering: " + e.message, true); return; }
   const was = state.status;
   state.status = s.status;
   renderState(s);
-  const key = s.status === "ready" ? s.folder + "|" + s.profile + "|" + s.mods + "|" + s.plugins + "|" + s.issue_count + "|" + (state.gen || 0) : "";
-  if (s.status === "ready" && (key !== state.loaded || was !== "ready")) {
-    try { await loadLists(key); } catch (e) { showMessage(e.message, true); }
+  if (s.log_epoch !== state.logEpoch) {             // another session's log: read it from the start
+    state.logEpoch = s.log_epoch;
+    state.logAfter = 0;
+    state.jobSeen = "";
+    $("log").replaceChildren();
+    $("job-log").replaceChildren();
   }
+  const key = s.status === "ready" ? (s.session ? s.session.id : "") + "|" + s.folder + "|" + s.profile + "|" + s.mods + "|" + s.plugins + "|" + s.issue_count + "|" + (state.gen || 0) : "";
+  if (s.status === "ready" && (key !== state.loaded || was !== "ready")) {
+    try { await loadLists(key, s); } catch (e) { showMessage(e.message, true); }
+  }
+  updateDryButton();
   await pollJob();
   await pollLog();
 }
 
 function loop() {
+  if (state.quit) return;
   const busy = state.status === "reading" || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
@@ -766,6 +939,18 @@ $("job-stop").addEventListener("click", async () => {
   try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }
   tick();
 });
+$("quit").addEventListener("click", quitModTrap);
+$("session-btn").addEventListener("click", () => {
+  const panel = $("session-panel");
+  panel.hidden = !panel.hidden;
+  $("session-btn").setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+  state.sessionsKey = "";
+  tick();
+});
+document.addEventListener("click", (ev) => {
+  const panel = $("session-panel");
+  if (!panel.hidden && !ev.target.closest("#session-panel, #session-btn")) { panel.hidden = true; $("session-btn").setAttribute("aria-expanded", "false"); }
+});
 $("mods-order").addEventListener("change", layoutMods);
 $("collapse-all").addEventListener("click", () => { for (const g of state.groups) if (g.sep) state.collapsed.add(g.sep.name); filterMods(); });
 $("expand-all").addEventListener("click", () => { state.collapsed.clear(); filterMods(); });
@@ -782,6 +967,7 @@ document.addEventListener("keydown", (ev) => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   const box = state.tab === "plugins" ? $("plugins-search") : state.tab === "mods" ? $("mods-search") : null;
   if (ev.key === "/" && !typing && box && !$("tabs").hidden) { ev.preventDefault(); box.focus(); box.select(); }
+  if (ev.key === "Escape" && !$("session-panel").hidden) { $("session-panel").hidden = true; $("session-btn").setAttribute("aria-expanded", "false"); $("session-btn").focus(); }
   if (ev.key === "Escape" && document.activeElement === box && box.value) { box.value = ""; (state.tab === "plugins" ? filterPlugins : filterMods)(); }
 });
 let debounce;

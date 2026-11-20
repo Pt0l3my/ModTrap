@@ -55,6 +55,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 30 | 2026-11-20 | A dropped folder has no path: ModTrap finds it from its ModOrganizer.ini | METHOD | #page #mo2 #safety |
 | 31 | 2026-11-20 | The dry run is built; what its first run on the owner's PC has to show | METHOD | #xedit #mo2 #safety #process |
 | 32 | 2026-11-20 | A friendlier page: what was changed and why | METHOD | #page |
+| 33 | 2026-11-20 | Sessions and Quit: how the state is kept, and what "safe to finish" means for now | METHOD | #page #safety #process |
 
 ## Entries
 
@@ -512,3 +513,31 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   out once for each reading, not at every request. A test checks that every element the script asks for is on the
   page, and that the page loads nothing from outside and has nothing inline.
 - Not done: a folder picker with a Browse button and detection of a running MO2 (WHY§30); a light theme.
+
+### 33. Sessions and Quit: how the state is kept, and what "safe to finish" means for now
+
+`2026-11-20` · METHOD · `#page #safety #process` · refs: MT20, DESIGN§15, DESIGN§11, DESIGN§14, WHY§32
+
+- METHOD: a session is a folder under ModTrap's own work folder with a `session.json` (name, modlist, profile,
+  status, what the page looked like), its log, and its jobs. The page sends what it looks like half a second after
+  each change; the server writes it at once and atomically. So closing the console window loses at most that half
+  second, and Quit loses nothing.
+- METHOD: "the exact same state" is built from two halves. What ModTrap decides (the session, its last job and
+  result, its log) is read back from the session's folder. What comes from the modlist (the mods, plugins,
+  masters) is read again from the modlist itself at start, never from a copy: a copy could be stale, and every
+  later step must stand on what is on disk now. Plugin headers are cached by path, size and time, so a start reads
+  only plugins that changed.
+- METHOD: the lock is by modlist folder, not by profile: profiles of one MO2 share the mod folders that a
+  demaster's output goes to, so two sessions on two profiles of one modlist could still trip over each other.
+- METHOD: "verified finished and safe" is today one check (nothing of the session is still going), because
+  nothing ModTrap does yet changes a modlist. The place for the real check exists (`Api.session_finish`); the
+  steps of a demaster and the health check plug into it when they are built (DESIGN§14, DESIGN§15).
+- FACT: a page can close its own tab only if a script opened it; ModTrap's tab is opened by the operating system's
+  browser launch, so `window.close()` is refused. The page therefore says "ModTrap has closed, you can close this
+  tab", and tries to close itself all the same.
+- FACT: tested here: the store and the lock; through the API a quit and a fresh start that give back the same
+  session, page state, dry-run result and log without reading a single plugin again; and in a browser, where the
+  page's state before Quit and after the restart compared equal, and a second session on the same modlist was
+  locked until the first was finished. Not tested on Windows.
+- Not built: deleting a session (it will hold safe folders, so deleting needs the same care as Revert), and what a
+  demaster cut short by Quit should do.

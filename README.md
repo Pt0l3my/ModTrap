@@ -16,7 +16,7 @@ To try it (Windows, Python 3.10 or newer): download this repository, then double
 python -m modtrap
 ```
 
-in its folder. Give it your modlist's folder (the one MO2 itself is in) and press Open. The page is served on your
+in its folder. Drop your modlist's folder (the one MO2 itself is in) on the page, or paste its path and press Open. Your work is kept in a session: press Quit, start ModTrap again, and you are back where you were. The page is served on your
 own PC only (127.0.0.1), and nothing is sent anywhere. For a quick look without the page:
 
 ```

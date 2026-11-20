@@ -101,8 +101,28 @@ def lines_after(seq: int, limit: int = 1000) -> tuple[list[dict], int]:
 
 
 def clear() -> None:
-    """For tests."""
     global _seq
     with _lock:
         _ring.clear()
         _seq = 0
+
+
+def dump() -> list[dict]:
+    """The lines held now (already masked), for a session's log file."""
+    with _lock:
+        return [{"t": ln["t"], "level": ln["level"], "source": ln["source"], "text": ln["text"]} for ln in _ring]
+
+
+def load(lines: list) -> None:
+    """Replaces the lines held with a session's stored ones. They are numbered afresh, so a page must start
+    reading again from the beginning (the API's log epoch tells it to)."""
+    global _seq
+    with _lock:
+        _ring.clear()
+        _seq = 0
+        for ln in lines[-RING:]:
+            if not isinstance(ln, dict):
+                continue
+            _seq += 1
+            _ring.append({"seq": _seq, "t": str(ln.get("t", "")), "level": str(ln.get("level", "info")),
+                          "source": str(ln.get("source", "")), "text": str(ln.get("text", ""))})

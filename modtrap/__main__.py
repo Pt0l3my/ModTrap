@@ -100,9 +100,14 @@ def serve(a: argparse.Namespace) -> int:
     log = logbook.get("app")
     log.info("%s %s, Python %s on %s", NAME, VERSION, sys.version.split()[0], sys.platform)
     log.info("the page is at %s (this PC only)", url)
-    folder = a.folder or paths.load_settings().get("folder")
-    if isinstance(folder, str) and folder:
-        api.open(folder, a.profile or paths.load_settings().get("profile") or None)
+    # Quit (MT20): the answer is sent first, then the server stops and this program ends.
+    api.on_quit = lambda: threading.Thread(target=httpd.shutdown, name="quit", daemon=True).start()
+    if a.folder:
+        api.open(a.folder, a.profile or None)
+    elif not api.restore():                       # the session ModTrap was closed in comes back
+        folder = paths.load_settings().get("folder")
+        if isinstance(folder, str) and folder:
+            api.open(folder, paths.load_settings().get("profile") or None)
     if not a.no_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     print("%s is running. Leave this window open; press Ctrl+C here to stop it." % NAME, file=sys.stderr)
@@ -111,7 +116,10 @@ def serve(a: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        api.save_log()
         httpd.server_close()
+    print("%s has closed. Your session is saved; start %s again to carry on where you were." % (NAME, NAME),
+          file=sys.stderr)
     return 0
 
 

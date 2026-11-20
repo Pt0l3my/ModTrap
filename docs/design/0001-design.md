@@ -283,3 +283,25 @@ A typical job's steps:
 The job is **complete** only when every step is done and the health check passes (MT17). Until then it is shown as
 "in progress, waiting for you", and **Revert** stays one click away. The steps and their states are part of the
 history (§12).
+
+## 15. Sessions, and Quit
+
+- A **session** (MT20) is one piece of work on one modlist. It lives in a folder of its own under ModTrap's work
+  folder and holds: its name, the modlist's folder and profile, what the page looked like (the ticked mods, the
+  tab, the search and filters, the order, the folded groups, the plugin being looked at), its log, and its jobs
+  with their safe folders (§11) and results. It is written as the owner works, not only at the end.
+- Opening a modlist goes to the session that holds it; if none does, a new session is made and named after the
+  modlist's folder. The owner can rename a session, start another, and switch between them from the header.
+- **One session holds a modlist at a time.** A second session on the same modlist can be started, but it waits,
+  locked: it can look and tick, but cannot start a dry run or a demaster. Sessions on different modlists do not
+  hold each other up.
+- **Finish** hands the modlist to the session that has waited longest. Before it does, ModTrap checks that the
+  session is safe to leave: nothing of it is still going; and, once ModTrap can demaster, every step of its jobs is
+  done (§14) and the health check is clean (§3). A session that is not safe is not finished, and the page says what
+  is still open. A finished session stays, to be looked at; no more work is done in it.
+- **Quit** saves the session and stops ModTrap; the page then says so, since a browser lets a page close only a
+  tab the page itself opened. Starting ModTrap again reads the modlist afresh (plugin headers come from a cache, so
+  only changed plugins are read) and puts the page back as it was, the last dry run and the log included. If the
+  modlist changed in between (a mod no longer there), what cannot be restored is dropped, and the rest is.
+- Quitting while a job is going asks first. A dry run cut short this way is shown afterwards as not finished; the
+  rule for a demaster cut short belongs with Revert (§11) and is not yet designed.
