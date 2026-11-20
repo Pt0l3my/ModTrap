@@ -39,8 +39,11 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 - **FACT (same source).** `loadorder.txt` has every plugin, one a line, in load order, in UTF-8
   (`src/gamebryo/gamebryogameplugins.cpp:87-116`). MO2 reads the order from whichever of the two files is newer
   (`:39-61`; `creationgameplugins.cpp:22-37`).
-- **LIKELY.** When a mod is disabled, MO2 drops its plugins from both lists at its next refresh; when it is enabled
-  again, its plugins come back at the end unless `loadorder.txt` still places them. Not yet read.
+- **FACT.** At a refresh MO2 empties its plugin list and builds it again from the plugin files then present in the
+  virtual folder, so a disabled mod's plugins are no longer in it; a plugin it has not placed yet starts with no
+  place (`pluginlist.cpp:211-294`). The saved lists are then read for the order and the active marks.
+- **LIKELY.** So when a mod is enabled again, its plugins come back at the end unless `loadorder.txt` still places
+  them. Not read to the end; to be confirmed on the owner's PC before Re-enable is built.
 
 ## 3. Running a program in the virtual file system
 

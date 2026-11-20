@@ -8,7 +8,7 @@ body: it removes the mod as a master from every plugin that depends on it, so th
 that shows an MO2 modlist as MO2 has it: every mod with its priority, every plugin with its place in the load order,
 each plugin's masters and what needs it, and, for the mods you tick, everything that depends on them. A **dry run**
 then starts your own xEdit through MO2 with ModTrap's script, which only reads, and lists what a demaster would take
-out of each dependant plugin. The step that actually demasters ("Demaster Selected") is not built yet.
+out of each dependant plugin. A Steps tab lists everything the demaster takes, to do by hand for now. The step in which ModTrap does it for you ("Demaster Selected") is written but switched off until it has been proven on a real modlist.
 
 To try it (Windows, Python 3.10 or newer): download this repository, then double-click `ModTrap.cmd`, or run
 

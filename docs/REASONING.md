@@ -61,6 +61,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 36 | 2026-11-20 | Groundwork for the demaster, built ahead and switched off | METHOD | #safety #mo2 #process |
 | 37 | 2026-11-20 | Which tool made a plugin: read in the tools' own sources, kept as data | FACT | #tools |
 | 38 | 2026-11-20 | A Browse button: an in-page folder picker | METHOD | #page |
+| 39 | 2026-11-20 | The demaster built end to end against a stand-in, and kept switched off | METHOD | #xedit #mo2 #safety #process |
 
 ## Entries
 
@@ -663,3 +664,41 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   of drives on Windows comes from the same code as the drop's search and is untested until the owner's PC.
 - Not done from the same advice: detecting a running MO2 and offering its folder, and showing each tool's version;
   both need Windows calls that cannot be tried here, and are better written when the owner can run them.
+
+### 39. The demaster built end to end against a stand-in, and kept switched off
+
+`2026-11-20` · METHOD · `#xedit #mo2 #safety #process` · refs: MT4, MT5, MT9, MT14, MT15, MT17, WHY§4, WHY§31, WHY§34, WHY§36, DESIGN§6.3, DESIGN§6.4, DESIGN§6.5, DESIGN§8, DESIGN§9, DESIGN§11, DESIGN§12, XE01§7, MO01§2
+
+- The owner asked what could be finished before the first real dry run. The two missing parts could: the script
+  that changes plugins, and the code that drives a demaster. Both are written; neither is reachable from the page,
+  and a test checks that.
+- METHOD (`modtrap/xedit/ModTrapApply.pas`): a second script, in a file of its own so that an error in it cannot
+  stop the read-only script from loading. It takes out exactly what its job lists and nothing it cannot confirm: a
+  record only if it belongs to a trapped plugin; an element only if it is where the dry run found it, is called
+  what the dry run called it, and itself needs a trapped plugin. One refusal and that dependant is not written.
+  After Clean Masters it counts again what still needs a trapped plugin; only at zero does it write the plugin, to
+  a new file in ModTrap's own folder. Last, whatever happened, it takes the "changed" mark off every loaded plugin,
+  so that xEdit saves nothing over an original (WHY§4). Its names were checked against the script engine's like
+  the first script's (WHY§34); it has never run.
+- METHOD (`modtrap/demaster.py`): plan from the dry run; safe folder; xEdit; verify each new plugin with ModTrap's
+  own reader (the trapped plugins gone, no master missing or newly added, the script's own recount at zero) and
+  every original by checksum; install with MO2 closed (ModTrap's mod on top with the new plugins, the patch-only
+  plugins deactivated, the ticked mods disabled only if no dependant is left needing them); read the modlist again
+  and run the health check; Revert. An entry is reached by the route the dry run recorded, and entries of one list
+  are taken highest place first so that none moves. Every change goes into the history with priorities and
+  positions.
+- FACT: tested here end to end against a stand-in for xEdit that writes new plugins with ModTrap's own writer:
+  after a demaster the modlist reads as intended (ModTrap's mod on top providing the demastered plugins at their
+  old positions, the mod disabled, the patch inactive, the health check clean, every original byte for byte as it
+  was), and after Revert the whole modlist folder is file for file what it was before. Also tested: MO2 open, or
+  not known to be closed, refuses before anything is written; a new plugin that still lists the mod is not
+  installed and the mod stays enabled; a refused action keeps that dependant out; an original changed during the
+  run stops everything; an install that fails part way puts everything back.
+- A slip the tests caught: a write to the mod list was noted in the safe folder only at the end of the install, so
+  a failure in between left Revert seeing ModTrap's own change as someone else's. Each write is now noted at once.
+- What the stand-in cannot show, and the owner's PC must (in order): the read-only script runs (WHY§31); the
+  probe's invented plugins load in xEdit (WHY§36); the changing script runs, and taking the "changed" mark off
+  really keeps xEdit from saving (WHY§4); a file written through `FileWriteToStream` is a sound plugin; MO2 keeps
+  the load order after its lists were rewritten (WHY§26); and MO2 is reliably found open or closed.
+- Not built: the page for it, the probe's own run, Re-enable, and Revert on the page. They come when the first
+  real dry run has shown that the foundation holds.
