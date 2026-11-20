@@ -130,6 +130,20 @@ class ModelTests(unittest.TestCase):
             ("Tool Output", ["Generated.esp"], 0, ("Invented Patcher",), "output"),
         ])
 
+    def test_a_patch_hub_with_one_masterless_patch_reads_as_most_of_the_mod(self):
+        b = plugin.build
+        for name, masters in (("Hub A.esp", ("Skyrim.esm", "Bramble.esp")), ("Hub B.esp", ("Skyrim.esm", "Bramble.esp")),
+                              ("Hub C.esp", ("Skyrim.esm",))):
+            fx.write(self.root / "mods" / "Bramble - Lantern Patch" / name, b(masters))
+        g = next(g for g in model.groups(self.build(), self.build().instance.mod("Bramble"))
+                 if g.mod.name == "Bramble - Lantern Patch")
+        self.assertEqual((g.reading, g.others, g.leftover), ("most of the mod", 1, ("Hub C.esp",)))
+        # If something outside the mod needs the leftover plugin, the mod is not proposed whole.
+        fx.write(self.root / "mods" / "Quill" / "Quill.esp", b(("Skyrim.esm", "Hub C.esp")))
+        g = next(g for g in model.groups(self.build(), self.build().instance.mod("Bramble"))
+                 if g.mod.name == "Bramble - Lantern Patch")
+        self.assertEqual(g.reading, "some plugins")
+
     def test_disabling_the_mod_is_what_breaks_the_list(self):
         # The situation ModTrap exists for: with Bramble disabled, its dependants miss a master.
         p = self.root / "profiles" / "Default" / "modlist.txt"

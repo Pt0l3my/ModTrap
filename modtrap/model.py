@@ -74,7 +74,8 @@ class Group:
     dependants: list[PluginRow]
     others: int                     # the mod's plugins (that it wins) that do not depend on the trapped mod
     made_by: tuple[str, ...]        # tools MO2 sends new files of to this mod (MO01§2): a generated output
-    reading: str                    # "output", "whole mod", "some plugins"
+    reading: str                    # "output", "whole mod", "most of the mod", "some plugins"
+    leftover: tuple[str, ...] = ()  # for "most of the mod": its plugins that do not depend on the trapped mod
 
 
 def groups(model: Model, trapped: Mod) -> list[Group]:
@@ -93,8 +94,21 @@ def groups(model: Model, trapped: Mod) -> list[Group]:
             continue
         others = len(model.provided_by(mod)) - len(rows)
         made_by = tuple(sorted(tools.get(fold(name), [])))
-        reading = "output" if made_by else ("whole mod" if others == 0 else "some plugins")
-        out.append(Group(mod, rows, others, made_by, reading))
+        dep = {fold(r.name) for r in rows}
+        rest = [r for r in model.provided_by(mod) if fold(r.name) not in dep]
+        # "Most of the mod": more of its plugins depend on the trapped mod than not, and nothing outside the mod
+        # needs the ones that do not. Such a mod is probably all about the trapped mod (a patch hub with one patch
+        # that needs no master), and disabling it whole is proposed, for the owner to judge (WHY§28).
+        mostly = 0 < others < len(rows) and all(
+            all(model.plugins[fold(d)].source == mod.name for d in r.dependants) for r in rest)
+        if made_by:
+            reading = "output"
+        elif others == 0:
+            reading = "whole mod"
+        else:
+            reading = "most of the mod" if mostly else "some plugins"
+        out.append(Group(mod, rows, others, made_by, reading,
+                         tuple(r.name for r in rest) if reading == "most of the mod" else ()))
     return out
 
 

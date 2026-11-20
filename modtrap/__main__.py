@@ -47,12 +47,15 @@ def scan(a: argparse.Namespace) -> int:
                                                                   ", ".join(r.masters) or "none"))
         gs = model.groups(m, mod)
         print("  %d plugin(s) in %d other mod(s) depend on it:" % (sum(len(g.dependants) for g in gs), len(gs)))
-        words = {"output": "made by a tool: %s",
-                 "whole mod": "every plugin of this mod depends on it",
-                 "some plugins": "%d other plugin(s) of this mod do not depend on it"}
         for g in gs:
-            what = words[g.reading] % (", ".join(g.made_by) if g.reading == "output" else g.others) \
-                if g.reading != "whole mod" else words[g.reading]
+            if g.reading == "output":
+                what = "made by a tool: " + ", ".join(g.made_by)
+            elif g.reading == "whole mod":
+                what = "every plugin of this mod depends on it"
+            elif g.reading == "most of the mod":
+                what = "most of this mod depends on it; the rest (%s) is needed by nothing else" % ", ".join(g.leftover)
+            else:
+                what = "%d other plugin(s) of this mod do not depend on it" % g.others
             print("  in mod '%s' (priority %d): %s" % (g.mod.name, g.mod.priority, what))
             for r in g.dependants:
                 print("    %-58s position %-5s masters: %d" % (r.name, r.position, len(r.masters)))

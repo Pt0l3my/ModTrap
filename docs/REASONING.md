@@ -50,6 +50,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 25 | 2026-11-20 | The first scan of the owner's modlist agrees with MO2 | FACT | #mo2 #process |
 | 26 | 2026-11-20 | A patch is often one plugin in a collection: disable the plugin, not the mod | METHOD | #procedure #mo2 |
 | 27 | 2026-11-20 | The real list shows generated outputs and loose files, as the design assumed | FACT | #tools #procedure |
+| 28 | 2026-11-20 | The second scan: a patch with no master, MO2's output setting, and its limits | FACT | #tools #mo2 #procedure |
 
 ## Entries
 
@@ -341,6 +342,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   among the 17. Either it does not list the mod as a master or the reader missed it; the owner is asked to run
   `scan --plugin` on it.
 - FACT: the executable to start is titled as the 64-bit xEdit in this MO2, one of 24 configured.
+- **Later (2026-11-20):** the open point is closed. `scan --plugin` shows that plugin's masters are two of the
+  game's own and one Creation Club plugin: it does not list the trapped mod, and the reader was right (WHY§28).
 
 ### 26. A patch is often one plugin in a collection: disable the plugin, not the mod
 
@@ -371,3 +374,28 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - FACT: the guide also disables a mod that holds no plugin, a hotfix for the trapped mod. No master points to
   it. LIKELY: a mod whose files do nothing but replace the trapped mod's files can be found by comparing file
   names between the two folders; that is the file-conflict idea of WHY§21, now with a concrete case.
+
+### 28. The second scan: a patch with no master, MO2's output setting, and its limits
+
+`2026-11-20` · FACT (the scan's output, from the owner) · `#tools #mo2 #procedure` · refs: WHY§25, WHY§26, WHY§22, MO01§2, DESIGN§5, DESIGN§13
+
+- FACT: a patch hub for the trapped mod holds eight plugins; seven list the trapped mod as a master and one does
+  not, though it is a patch for it by its name and its place. The guide disables that mod whole. Masters alone
+  would leave the eighth plugin active.
+- METHOD: a new reading, "most of the mod": more of a mod's plugins depend on the trapped mod than not, and nothing
+  outside the mod needs the rest. ModTrap then proposes disabling the mod whole and names the leftover plugins, for
+  the owner to judge. A patch collection (one plugin in 167) never reads this way.
+- FACT: MO2's per-executable output setting works as evidence (WHY§22): the scan tied one output mod to the four
+  xEdit entries of this MO2, from the profile's settings alone.
+- FACT: it is not enough by itself. Another tool's output mod on the same list carries no such setting (that tool
+  chooses its own output folder), so the scan read it as an ordinary mod. Names and header marks, kept as data
+  (DESIGN§13), are needed beside it.
+- METHOD: "made by xEdit" does not mean "run the tool again": xEdit is an editor, and what it wrote there came
+  from a script or from hand edits that ModTrap cannot repeat. For an editor's output the proposed treatment is
+  demaster; "run the tool again" is for patchers and generators. The tool data file needs a field for this.
+- FACT: xEdit's new files go to that output mod on this list. ModTrap's script writes its results to a folder
+  outside the instance (DESIGN§6.3), so they do not land there; in the fallback route they would, and so would
+  xEdit's own backups unless `-B:` points elsewhere (XE01§5).
+- FACT: the dependants' master lists run from 4 to 200 plugins; the largest are the list's merged and generated
+  patches. Loading "the dependants and their masters" (XE01§3) is still far less than the whole load order for the
+  small patches, but close to all of it for the largest; the dry run's time will be set by those.

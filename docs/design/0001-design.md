@@ -83,7 +83,10 @@ For each dependant plugin, one treatment. ModTrap proposes it; the owner can cha
   plugin that mod provides is patch-only, and **deactivates the plugin alone** when it is one among others, as in a
   patch collection (WHY§26). The first reading comes from the headers (which of a mod's plugins depend on the
   trapped mod); the dry run settles it (nothing, or almost nothing, of the plugin would remain).
-- **Run the tool again**: the plugin is a tool's generated output (§13).
+  Where most of a mod's plugins depend on the trapped mod and nothing else needs the rest, ModTrap proposes
+  disabling the mod whole and names the leftover plugins for the owner to judge (WHY§28).
+- **Run the tool again**: the plugin is the generated output of a patcher or generator (§13). The output of an
+  editor such as xEdit cannot be made again by ModTrap, and is demastered (WHY§28).
 - **Skip**: the owner will deal with it another way; the job then cannot disable the trapped mod, and says so.
 
 Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4): A and B
