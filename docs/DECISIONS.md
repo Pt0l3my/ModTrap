@@ -14,9 +14,11 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   version), MT8 (ModTrap detects xEdit's version and the modlist's tools), MT9 (Auto: ModTrap disables mods,
   records them, and can re-enable them), MT10 (the repository exists), MT11 (installed and started as DataPiler),
   MT14 (the safe folder and Revert) and MT15 (the full modlist and load order, and a history).
-- **Open.** MT4 (which records and entries ModTrap may take out of a dependant by itself; put again), MT5 (how the
-  verified files are put in place). Followed meanwhile, for the owner to confirm: MT12 (no
-  session link in commits), MT13 (the reference system).
+  Later the same day: MT17 (the result that counts; the method is ModTrap's to choose), under which MT4 (cases A and
+  B automatic, the rest reported) and MT5 (a ModTrap mod above the originals) were settled; MT18 (generated
+  patches, their tools, and a Steps tab); MT16 settled by the facts.
+- **Open.** None. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
+  reference system).
 
 ## MT1
 
@@ -59,7 +61,7 @@ want with it." · "privsweep: yes".
 
 ## MT4
 
-**What is removed, and what is never forced** · *Open*
+**What is taken out of a dependant, and what is never forced** · *2026-11-20 · Left to ModTrap by the owner*
 
 **Question.** The guide leaves a judgement to the user: "remove the whole record … or make a more surgical edit". A
 tool needs rules. Which?
@@ -91,9 +93,17 @@ itself: (a) cases A to D of DESIGN§5; (b) only A (the dependant's copies of the
 (single entries in lists), anything else reported as "needs you"; (c) the whole record every time; (d) report only.
 Recommendation unchanged: (b). The safe folder and Revert (MT14) now stand behind every option.
 
+**Decision, 2026-11-20 (the owner left the method to ModTrap; MT17).** (b), growing into (a): ModTrap takes out by
+itself a dependant's copies of the trapped mod's own records (case A) and single entries in lists (case B). A
+single field that cannot be absent (case C) is first only reported; it becomes automatic once dry runs on real
+modlists show that restoring the value from the remaining masters is reliable. Anything else (case D) leaves that
+dependant untouched and becomes a step for the owner in the job's Steps tab (MT18), with the record and field
+named. Reason: MT17's "play the game without issues" is better served by an honest "this one needs you" than by a
+forced edit.
+
 ## MT5
 
-**Where the result goes** · *Open*
+**Where the result goes** · *2026-11-20 · Left to ModTrap by the owner*
 
 **Question.** The guide's procedure changes the dependant plugins in place, inside their own mod folders. Should
 ModTrap?
@@ -126,6 +136,10 @@ DESIGN§6.3 to DESIGN§6.5, with the originals copied to the safe folder first (
 
 **Recommendation.** (a), for that last reason (WHY§18). Both give the same result in the game, and both are
 revertible.
+
+**Decision, 2026-11-20 (the owner left the method to ModTrap; MT17).** (a): the verified files go into a ModTrap
+mod placed above the originals, which stay as installed (WHY§18). ModTrap places and enables that mod itself under
+Auto (MT9). The safe folder (MT14) is still taken, since the profile is changed.
 
 ## MT6
 
@@ -316,3 +330,35 @@ design branch is pushed, and becomes the default until a `main` exists.
 **Outcome, 2026-11-20.** The question fell away: the repository was not empty. Its `main` already held the owner's
 first commit (the licence), so the design branch was placed on top of it and pushed as `design/0001-design` at the
 owner's word ("I installed the GitHub App, try pushing now"). `main` is untouched.
+
+## MT17
+
+**The result that counts, and who chooses the method** · *2026-11-20 · Decided by the owner*
+
+**Decision.** A job is done when: the chosen mods are demastered cleanly; the modlist is clean (no missing master,
+no incompatibility and no bad patch or generated patch left behind by the demaster); and the game plays without
+issues that come from the demaster. How ModTrap gets there (how it handles files and the rest) is ModTrap's to
+choose; the owner is asked only when their input is really needed.
+
+**Owner's words.** "In the end there result I want: Demastered mods cleanly, modlist is clean (no missing master,
+incompatibilities, bad patches/bashes), and play the game without issues (coming from demaster). How you achieve is
+down to you, meaning how you want to handle files etc. I leave that to you what works best, unless you really need
+my input (I think you know better in most cases)."
+
+**What this binds.** Every job ends with checks against this result, not with "the script ran" (DESIGN§6.5,
+DESIGN§14). What ModTrap cannot check by itself (whether the game plays well) is said plainly and left as the
+owner's last step (WHY§21).
+
+## MT18
+
+**Generated patches, the tools that made them, and a Steps tab** · *2026-11-20 · The owner's request*
+
+**Decision.** ModTrap detects which tool made each of the modlist's generated patch files (a patcher's output, for
+example), and where such a file is affected by a demaster it tells the owner to run that tool again. Each job has a
+**Steps** tab that compiles every step the full demaster needs, ModTrap's and the owner's, worked out from the mods,
+the tools, the modlist's patches and what depends on what (DESIGN§13, DESIGN§14, WHY§22).
+
+**Owner's words.** "can you also make ModTrap detect what tools have been used for modlist patch files (e.g.
+synthesis) if required, and instruct the user to run the tool. Perhaps best way to do this would be to add a "Steps"
+tab for each Demaster job which tab compiles the steps required for the full demaster for the user (by detecting
+mods, tools, modlist patches and their dependencies, etc.)."

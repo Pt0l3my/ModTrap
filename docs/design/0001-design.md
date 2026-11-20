@@ -1,7 +1,7 @@
 # Design 0001: ModTrap
 
-*2026-11-20 · Proposed; revised the same day after the owner's answers (MT4 to MT11, MT14, MT15). Nothing here is
-built. Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
+*2026-11-20 · Adopted as the working design under MT17; revised the same day after the owner's answers (MT4 to
+MT11, MT14, MT15, MT17, MT18). Version 0.1's reader is being built; nothing else is. Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
 [REASONING.md](../REASONING.md), `MO01` and `XE01` are [the research notes](../research/README.md).*
 
 ## 1. What ModTrap does
@@ -69,6 +69,7 @@ is the same across them, and xEdit does the rest.
 - **Demaster Selected.** Opens the plan (§6.1). Nothing has run yet.
 - **Terminal.** A live, scrolling log of the job: ModTrap's own steps, and the lines our script writes as xEdit
   works (WHY§5). A copy is kept in ModTrap's work folder.
+- **Steps.** §14: the whole job as an ordered list, ModTrap's steps and the owner's.
 - **Result.** Per dependant: masters before and after, what was taken out of it, what was left alone and why.
 - **History.** §12. Every change ModTrap made, with **Re-enable** on each disabled mod and **Revert** on each job.
 
@@ -81,13 +82,14 @@ For each dependant, one of three treatments. ModTrap proposes one; the owner can
   mod's plugins would remain once the trapped mod's records are taken out, and no other enabled plugin needs them.
 - **Skip**: the owner will deal with it another way; the job then cannot disable the trapped mod, and says so.
 
-Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4, open):
+Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4): A and B
+are done automatically, C is reported at first and automatic later, D always becomes a step for the owner (§14):
 
 | Case | What needs the trapped plugin | What ModTrap does (proposed) |
 |---|---|---|
 | A | The record itself belongs to the trapped plugin (the dependant overrides it) | Take the dependant's copy of the record out of the dependant |
 | B | An entry in a list inside a record that belongs to someone else (a FormID list entry, a levelled list entry, a keyword in a keyword list) | Take that entry out, keep the record |
-| C | A single field that cannot simply be absent (for example the one race of an actor) | Put back the value the record has in the dependant's remaining masters, if they have the record; otherwise case D |
+| C | A single field that cannot simply be absent (for example the one race of an actor) | At first: as D. Later: put back the value the record has in the dependant's remaining masters, if they have the record |
 | D | Anything else, or anything xEdit refuses to change | Change nothing in this dependant; report it as "needs you", with the record and field |
 
 These are edits inside the dependant plugins only. The trapped mod's own files are never edited and never deleted.
@@ -135,9 +137,8 @@ A copy that fails is dropped and its dependant reported; the others can go on.
 
 ### 6.5 Put in place, then verify the instance
 
-1. **Insert.** The verified copies go into the modlist, under their original file names, in one of two ways (MT5,
-   open): replacing the originals in their mod folders, or as a ModTrap mod placed above them. Either way the
-   originals are in the safe folder first.
+1. **Insert.** The verified copies go into the modlist under their original file names, in a ModTrap mod placed
+   above the originals (MT5), which MO2 then uses in their place. The originals stay as installed.
 2. **Disable** (MT9, Auto on by default). With MO2 closed, ModTrap disables the trapped mods and the patch-only
    mods in the profile's `modlist.txt`; with Auto off, it lists them for the owner to disable in MO2.
 3. **Verify the instance.** ModTrap reads the instance again (§3) and runs the health check: no active plugin may
@@ -162,8 +163,7 @@ nothing is installed into either.
 ## 8. Safety rules (the guard)
 
 1. ModTrap writes only: inside its own work folder (the safe folders and the history are there); the files a
-   confirmed plan named, which are the dependant plugins (or ModTrap's own mod, MT5) and the profile's
-   `modlist.txt`. Every path is checked after resolving links, before the job starts and again before each write.
+   confirmed plan named, which are ModTrap's own mod in the instance (MT5) and the profile's `modlist.txt`. Every path is checked after resolving links, before the job starts and again before each write.
 2. It never writes in the game's folder, in a trapped mod's folder, in `overwrite`, or to any file the plan did
    not name. It never deletes a mod or a plugin.
 3. No file is changed before its copy in the safe folder exists and matches it by size and SHA-256.
@@ -223,15 +223,52 @@ Every disabled mod in the history has **Re-enable**: it enables the mod again at
 plugins back at the positions recorded, and warns if a demastered dependant would not need it any more or if the
 order around it has changed since.
 
-## 13. The tools of the modlist
+## 13. The tools of the modlist, and the patches they made
 
 - ModTrap finds tools in two places: the executables configured in MO2 (MO01§2), and a `tools` folder inside the
-  instance, where modlists commonly keep them.
+  instance, where modlists commonly keep them (WHY§14).
 - For each tool it shows the name, where it was found, and its version, read from the program file's own version
-  details and its date (WHY§14). For xEdit it also notes the 64-bit program beside the 32-bit one and prefers the
-  one MO2 is set up to start.
-- Only xEdit is ever run by ModTrap. The other tools are shown for two reasons: so that a report or a log says what
-  the modlist was built with, and so that after a job ModTrap can remind the owner which tools' output may depend on
-  the mods just disabled (for example a patcher's generated plugin that the dry run found among the dependants).
-- A generated plugin among the dependants (a patcher's output) is marked as such: its proposed treatment is "run
-  the tool again after the job", with demastering as the alternative.
+  details and its date. For xEdit it also notes the 64-bit program beside the 32-bit one and prefers the one MO2 is
+  set up to start. Only xEdit is ever run by ModTrap.
+- **Generated patches** (MT18). A plugin is marked as made by a tool on evidence, strongest first, and the page
+  shows which evidence it was:
+  1. it lives in the mod that MO2 sends that tool's new files to (the profile's per-executable output mod, MO01§2);
+  2. its header's author or description carries the tool's mark (XE02§4);
+  3. its file name is one the tool is known to use;
+  4. it lives under one of the modlist's separators for tool output.
+
+  The marks and names for 2 and 3 are in a data file ModTrap ships, one entry a tool, each with its source; they
+  are not in code (WHY§22). With only weak evidence the page says "probably made by", never more.
+- A generated patch among a job's dependants is not demastered by default: its treatment is **run the tool again**,
+  after the trapped mods are disabled, so that the tool rebuilds it without them. Demastering it is the
+  alternative the owner can pick, for a tool they no longer have.
+- **What masters cannot show.** Some tools' output is not a plugin and names no master: generated animations and
+  behaviours, LOD meshes and textures, texture atlases. ModTrap looks at what kinds of files the trapped mod itself
+  contains (by folder and file name only) and, where a kind matches what one of the instance's tools consumes, adds
+  a "may need a re-run" step that says why. These are hints, worded as such.
+
+## 14. The Steps tab
+
+Every job has a **Steps** tab: the whole demaster as one ordered list, compiled from the plan and refined by the
+dry run. Each step says who does it (ModTrap or the owner), why it is needed (the evidence: which plugin, which
+master, which tool), its state (to do, running, done, failed, waiting for you), and for the owner's steps exactly
+what to do and how ModTrap will know it is done.
+
+A typical job's steps:
+
+1. *ModTrap:* dry run through xEdit; the list of every change (§6.2).
+2. *ModTrap:* the safe folder (§11).
+3. *ModTrap:* demaster the dependants on copies; verify the copies (§6.3, §6.4).
+4. *You:* any dependant that "needs you" (case C or D): the record and field, and what the guide's manual fix
+   would be. Done when ModTrap's reader finds the trapped plugin gone from that dependant's masters.
+5. *You:* close MO2, if Auto is to write the profile (§7).
+6. *ModTrap:* put the ModTrap mod in place; disable the trapped mods and the patch-only mods (§6.5).
+7. *You:* run each tool whose generated patch depended on a trapped mod (§13), in the order the modlist runs
+   them. Done when ModTrap finds the rebuilt patch no longer lists a trapped plugin.
+8. *You:* the "may need a re-run" hints (§13); ticked off by the owner, since nothing in a file can prove them.
+9. *ModTrap:* verify the instance: the health check (§3), and the load order otherwise as it was.
+10. *You:* open MO2 and confirm it shows no missing-master warning; then play, and report anything odd.
+
+The job is **complete** only when every step is done and the health check passes (MT17). Until then it is shown as
+"in progress, waiting for you", and **Revert** stays one click away. The steps and their states are part of the
+history (§12).

@@ -22,12 +22,25 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 - **FACT.** MO2 writes the file itself from what it holds in memory, and writes pending changes before it re-reads
   (`profile.cpp:426`). So a change made to the file while MO2 is open can be lost.
 - **FACT.** The executables set up in MO2 are stored as the `customExecutables` array of `ModOrganizer.ini`
-  (`settings.cpp:369-401`). The keys of an entry were not read.
-- **LIKELY.** `plugins.txt` marks an active plugin with `*` before its name, and `loadorder.txt` lists every plugin
-  in order. Both are written by MO2's game plugin, which is in another repository (`pluginlist.cpp:802-806` hands
-  the work to it); not yet read.
-- **LIKELY.** When a mod is disabled, MO2 drops its plugins from the plugin lists at its next refresh; when it is
-  enabled again, its plugins come back at the end unless `loadorder.txt` still places them. Not yet read.
+  (`settings.cpp:369-401`); an entry has `title`, `binary`, `arguments`, `workingDirectory`, `steamAppID` and the
+  flags `toolbar`, `ownicon` and `hide` (`executableslist.cpp:79-125`).
+- **FACT.** For each executable, the profile can name a mod that receives the files the program creates, in place
+  of `overwrite`: the profile setting `custom_overwrites`, keyed by the executable's title
+  (`editexecutablesdialog.cpp:140-148`, `:210`). This ties a tool to the mod its output lands in.
+- **FACT (MO2's Bethesda game plugins, `github.com/ModOrganizer2/modorganizer-game_bethesda` at `a6a2340`,
+  2026-10-06; no licence file at its root, read only).** For Skyrim SE, `plugins.txt` starts with a `#` comment and
+  has one plugin a line, in load order, CRLF line ends, in the system's text encoding: `*Name` for an active plugin,
+  the bare name for an inactive one; the game's own primary plugins are not written
+  (`src/creation/creationgameplugins.cpp:39-104`). Reading skips `#` lines, and a plugin the file does not name
+  counts as inactive (`:106-175`).
+- **FACT (same source).** For Skyrim SE the game's primary plugins are `Skyrim.esm`, `Update.esm`, `Dawnguard.esm`,
+  `HearthFires.esm` and `Dragonborn.esm`, then every plugin named in `Skyrim.ccc` in the game's folder (the Creation
+  Club list) (`src/games/skyrimse/gameskyrimse.cpp:247-307`).
+- **FACT (same source).** `loadorder.txt` has every plugin, one a line, in load order, in UTF-8
+  (`src/gamebryo/gamebryogameplugins.cpp:87-116`). MO2 reads the order from whichever of the two files is newer
+  (`:39-61`; `creationgameplugins.cpp:22-37`).
+- **LIKELY.** When a mod is disabled, MO2 drops its plugins from both lists at its next refresh; when it is enabled
+  again, its plugins come back at the end unless `loadorder.txt` still places them. Not yet read.
 
 ## 3. Running a program in the virtual file system
 
@@ -56,6 +69,6 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 
 ## 6. Open points
 
-- **METHOD.** §2's LIKELY items: read MO2's game plugin for Skyrim SE (its own repository) for the two plugin
-  files, and `executableslist.cpp` for an executable's keys, before the reader and the writer are written.
+- **METHOD.** §2's last LIKELY item (what MO2 does with a re-enabled mod's plugins): read `pluginlist.cpp` before
+  Re-enable is built, and confirm on the owner's PC.
 - **METHOD.** §4 and §5: the probe on the owner's PC (DESIGN§9).
