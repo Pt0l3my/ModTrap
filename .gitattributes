@@ -1,0 +1,5 @@
+# LF in every checkout, Windows included.
+* text=auto eol=lf
+
+*.exe binary
+*.ico binary
