@@ -330,7 +330,7 @@ function renderDemaster(force) {
   if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
     el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone; the Log tab shows its lines. Nothing in your modlist is changed in this step." })));
   if (d && d.state === "failed") cards.push(el("div", { class: "card" }, el("h2", { text: "The demaster stopped" }),
-    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. The Log tab has the lines, to copy when asking for help." })));
+    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." })));
   if (d && d.state === "verified") {
     const closed = d.mo2_closed === true;
     const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: !closed });
@@ -406,7 +406,7 @@ function renderProbe() {
     pr && pr.message ? el("p", { class: "would-needs", text: pr.message }) : null,
     state.probeError ? el("p", { class: "would-needs", text: state.probeError }) : null,
     pr && pr.state === "passed" ? el("p", { class: "would-record", text: "Every step passed" + (pr.xedit ? " with xEdit version number " + pr.xedit : "") + ". “Add it for me” and “Demaster Selected” are now allowed on this modlist. If you change your xEdit, run the probe again." }) : null,
-    pr && pr.state === "failed" ? el("p", { text: "ModTrap will not change real mods on this modlist while a step fails. Press “Copy the log” on the Log tab and send the lines: they say what your xEdit or MO2 did differently." }) : null];
+    pr && pr.state === "failed" ? el("p", { text: "ModTrap will not change real mods on this modlist while a step fails. Press “Save this session” on the Log tab and send the file it downloads: it holds what your xEdit and MO2 did, with your folders taken out." }) : null];
   if (pr && pr.left_behind && pr.left_behind.length) {
     const rm = el("button", { type: "button", text: "Remove the test mods" });
     rm.addEventListener("click", async () => {
@@ -419,6 +419,49 @@ function renderProbe() {
   }
   kids.push(el("div", { class: "actions" }, go, working ? stop : null));
   box.replaceChildren(el("div", { class: "card" + (working ? " installer" : "") }, ...kids.filter(Boolean)));
+}
+
+// --- "Save this session" (WHY§48): the session's logs in one .7z, downloaded from the page ----------------------------
+
+async function saveSession() {
+  try { state.save = await api("/api/save/start", {}); state.saveWanted = true; }
+  catch (e) { toast(e.message); }
+  renderSave();
+  tick();
+}
+
+async function fetchSaved(name) {
+  // The download needs this page's token, which a plain link cannot send: the file is fetched, then handed to the
+  // browser's own "save" from memory.
+  const r = await fetch("/api/save/download", { headers: { "X-ModTrap-Token": TOKEN } });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "the download failed (" + r.status + ")");
+  const url = URL.createObjectURL(await r.blob());
+  const a = el("a", { href: url, download: name || "ModTrap-session.7z" });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function renderSave() {
+  const sv = state.save || { state: "idle" };
+  const b = $("save-session");
+  const packing = sv.state === "packing";
+  b.disabled = packing || state.status !== "ready";
+  b.textContent = packing ? "Packing… " + sv.done + " of " + (sv.total || "?") : "Save this session";
+  $("save-status").textContent = packing ? "" : sv.state === "failed" || sv.state === "nothing" ? sv.message : state.saveNote || "";
+  if (!state.saveWanted || packing) return;
+  if (sv.state === "ready") {
+    state.saveWanted = false;
+    fetchSaved(sv.name).then(() => {
+      state.saveNote = "Saved as " + sv.name + " (" + Math.max(1, Math.round(sv.size / 1024)) + " KB), in your browser's downloads.";
+      toast("This session is saved: " + sv.name);
+      renderSave();
+    }).catch((e) => { state.saveNote = "Not saved: " + e.message + "."; renderSave(); });
+  } else if (sv.state === "failed" || sv.state === "nothing") {
+    state.saveWanted = false;
+    toast(sv.message);
+  }
 }
 
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
@@ -1642,6 +1685,8 @@ async function tick() {
   state.changes = !!s.changes;
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
+  state.save = s.save || null;
+  renderSave();
   const toolText = JSON.stringify(s.tool || null);
   if (toolText !== state.toolText) { state.toolText = toolText; state.tool = s.tool || null; state.addText = ""; state.stepsText = ""; state.stepsKey = ""; state.addKeySeen = ""; }
   renderState(s);
@@ -1669,7 +1714,7 @@ async function tick() {
 
 function loop() {
   if (state.quit) return;
-  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.demaster && state.demaster.state === "working") || (state.probe && state.probe.state === "working") || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.save && state.save.state === "packing") || (state.demaster && state.demaster.state === "working") || (state.probe && state.probe.state === "working") || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 
@@ -1860,6 +1905,7 @@ $("s-health").addEventListener("click", () => showTab("health"));
 $("s-tools").addEventListener("click", () => showTab("tools"));
 for (const li of $("steps").children) li.addEventListener("click", () => { if (li.dataset.tab) showTab(li.dataset.tab); });
 $("log-copy").addEventListener("click", () => copyText($("log").textContent, "The log"));
+$("save-session").addEventListener("click", saveSession);
 $("job-copy").addEventListener("click", () => copyText($("job-log").textContent, "The dry run's lines"));
 document.addEventListener("keydown", (ev) => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);

@@ -106,14 +106,15 @@ class Demaster:
 
     def __init__(self, m: model.Model, dry_plan: dryrun.Plan, pl: Plan, job_dir: Path, session_dir: Path, *,
                  launcher: Callable = dryrun.launch, running: Callable = dryrun.image_running,
-                 closed: Callable[[], bool | None] | None = None, poll: float = 1.0):
+                 closed: Callable[[], bool | None] | None = None, poll: float = 1.0,
+                 closer: Callable[[str, bool], None] = dryrun.close_program):
         self.model, self.dry_plan, self.plan, self.dir = m, dry_plan, pl, job_dir
         self.inst = m.instance
         self.pdir = self.inst.profiles_dir / self.inst.profile
         self.safe = safe.Safe(job_dir / "safe")
         self.history = history.History(session_dir)
         self.out = job_dir / "out"
-        self._launcher, self._running, self._poll = launcher, running, poll
+        self._launcher, self._running, self._poll, self._closer = launcher, running, poll, closer
         self._closed = closed or (lambda: None if running(dryrun.MO2_EXE) is None else not running(dryrun.MO2_EXE))
         self.report: dict = {}
         self.written: list[str] = []
@@ -178,6 +179,9 @@ class Demaster:
             if time.time() - started > time_limit:
                 raise Refused("xEdit took too long; nothing was installed")
         self.report = parse_report(dryrun._read(report))
+        # The script has written its new files and taken the "changed" marks off. xEdit stays open after a script
+        # (XE01§11): it is asked to close, and ended if it does not, so that it cannot save anything (WHY§4).
+        dryrun.close_xedit(image, self._running, self._closer, self._poll, changed=True)
         self.stage = "changed"
 
     # --- 4. verify -------------------------------------------------------------------------------------------------

@@ -73,7 +73,7 @@ class Changes:
                 work, n = base / ("probe-%s-%d" % (time.strftime("%Y%m%d-%H%M%S"), n)), n + 1
             work.mkdir(parents=True)
             pr = probejob.Probe(m, work, api.store.dir(api.session.id), launcher=api.launcher, running=api.running,
-                                closed=self.closed, poll=api.poll, read=api._cache.read)
+                                closed=self.closed, poll=api.poll, read=api._cache.read, closer=api.closer)
 
             def ended() -> None:
                 api.save_log()
@@ -265,7 +265,7 @@ class Changes:
                 work, n = base / ("demaster-%s-%d" % (time.strftime("%Y%m%d-%H%M%S"), n)), n + 1
             work.mkdir(parents=True)
             dm = demaster.Demaster(m, job.plan, pl, work, api.store.dir(api.session.id), launcher=api.launcher,
-                                   running=api.running, closed=self.closed, poll=api.poll)
+                                   running=api.running, closed=self.closed, poll=api.poll, closer=api.closer)
             self.dm, self.dm_state, self.dm_message, self.dm_check = dm, "working", "", None
 
         def work_it() -> None:

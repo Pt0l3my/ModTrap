@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 import os
+import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +16,7 @@ from pathlib import Path
 from modtrap import plugin, unpack
 
 FAKE = Path(__file__).with_name("fake_7zip.py")
+REAL_7Z = shutil.which("7z") or shutil.which("7zz")
 
 
 def zipped(files: dict[str, bytes]) -> bytes:
@@ -127,6 +130,49 @@ class Unpacking(unittest.TestCase):
         text = "7-Zip\r\n\r\n--\r\nPath = x.7z\r\nType = 7z\r\n\r\n----------\r\nPath = a\\b.esp\r\nSize = 12\r\n\r\nPath = a\r\nFolder = +\r\n"
         got = unpack.parse_7z_listing(text)
         self.assertEqual([(e["Path"], e.get("Size")) for e in got], [("a\\b.esp", "12"), ("a", None)])
+
+
+@unittest.skipIf(REAL_7Z is None, "the 7-Zip program is not installed here")
+class WithTheReal7Zip(unittest.TestCase):
+    """The same unpacker against 7-Zip itself, where it is installed: archives made by 7-Zip from invented files."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        src = self.dir / "src" / "Wrapper"
+        (src / "textures" / "x").mkdir(parents=True)
+        (src / "Thistle.esp").write_bytes(plugin.build(("Skyrim.esm",)))
+        (src / "textures" / "x" / "b c.dds").write_bytes(b"invented")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def made(self, name: str, *switches: str) -> Path:
+        out = self.dir / name
+        subprocess.run([REAL_7Z, "a", "-bd", *switches, str(out), "Wrapper"], cwd=self.dir / "src", check=True,
+                       stdout=subprocess.DEVNULL)
+        return out
+
+    def test_a_7z_made_by_7zip_is_unpacked(self) -> None:
+        got = unpack.unpack(self.made("plain.7z"), self.dir / "out")
+        self.assertEqual(got, {"kind": "7z", "files": 2})
+        self.assertEqual((self.dir / "out" / "Wrapper" / "textures" / "x" / "b c.dds").read_bytes(), b"invented")
+        self.assertEqual(unpack.layout(self.dir / "out")["root"].name, "Wrapper")
+
+    def test_a_password_is_refused_in_words_and_nothing_is_left(self) -> None:
+        for name, switches in (("locked.7z", ("-pSecret",)), ("hidden.7z", ("-pSecret", "-mhe=on"))):
+            with self.assertRaises(unpack.Refused) as c:
+                unpack.unpack(self.made(name, *switches), self.dir / "out")
+            self.assertIn("password", str(c.exception))
+            self.assertFalse((self.dir / "out").exists())
+
+    @unittest.skipIf(os.name == "nt", "making a link needs rights Windows does not give by default")
+    def test_a_link_is_refused_from_the_listing(self) -> None:
+        os.symlink("/etc/hostname", self.dir / "src" / "Wrapper" / "link.txt")
+        with self.assertRaises(unpack.Refused) as c:
+            unpack.unpack(self.made("link.7z", "-snl"), self.dir / "out")
+        self.assertIn("link", str(c.exception))
+        self.assertFalse((self.dir / "out").exists())
 
 
 class Layout(unittest.TestCase):

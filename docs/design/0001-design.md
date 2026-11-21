@@ -156,11 +156,15 @@ A copy that fails is dropped and its dependant reported; the others can go on.
 
 ## 7. Starting xEdit through MO2
 
-`ModOrganizer.exe -p "<profile>" run -e -a "<arguments>" "<xEdit's name in MO2>"` (MO01§3), where the arguments are
-our script (`-script:`), our plugins file (`-P:`), `-autoload`, `-autoexit`, a backup folder (`-B:`) and a log
-file (`-R:`) (XE01§2 to XE01§6). An open MO2 takes the command over (MO01§4); ModTrap never starts a second MO2 on
+`ModOrganizer.exe -p "<profile>" run -e -a "<arguments>" "<xEdit's name in MO2>"` (MO01§3). MO2's `-a` replaces
+the executable's own arguments, so the arguments are: those the modlist set for its xEdit, less the ones ModTrap
+sets itself or that put xEdit into another mode; the game's Data folder as MO2 manages it (`-D:`), unless theirs
+names one; our script (`-script:`), our plugins file (`-P:`), a backup folder (`-B:`) and a log file (`-R:`)
+(XE01§2 to XE01§6, XE01§11). An open MO2 takes the command over (MO01§4); ModTrap never starts a second MO2 on
 the instance. ModTrap watches the script's progress file and xEdit's process for the end (WHY§7), with a time limit
-and a **Stop** button that asks first.
+and a **Stop** button that asks first. xEdit stays open after a script, so ModTrap closes the xEdit it started
+when the script's end line is written (XE01§11). A run in which xEdit did not load a plugin it was told to is a
+failure that names the folder xEdit read.
 
 MO2 must be closed only while ModTrap writes to the profile (§6.5 step 2, Re-enable and Revert): an open MO2 keeps
 the mod list in memory and writes it back (MO01§2). ModTrap checks, and asks the owner to close MO2 for that step.
@@ -323,6 +327,10 @@ history (§12).
   modlist changed in between (a mod no longer there), what cannot be restored is dropped, and the rest is.
 - Quitting while a job is going asks first. A dry run cut short this way is shown afterwards as not finished; the
   rule for a demaster cut short belongs with Revert (§11) and is not yet designed.
+- **Save this session** (WHY§48). A button on the Log tab packs the session's log and its jobs' text records,
+  with a description of the setup and the profile's three lists, into one `.7z` and downloads it, for the owner to
+  send when asking for help. The owner's folders and user name are taken out as it is packed; no plugin, archive
+  or other content of a mod goes in. The archive is written with Python alone.
 
 ## 16. Adding mods (MT21)
 
@@ -369,13 +377,19 @@ and §16.7, none of which changes a modlist (WHY§40, WHY§41). §16.8's changin
 
 ### 16.3 Where it goes
 
+- **A list with a heading for its outputs** (WHY§49). A curated modlist keeps what its tools made under a
+  separator of its own, named for it ("Outputs"), often with more sections after it (options, presets). Where
+  there is one, the new mod goes right before that heading, and every mod under the heading counts as an output,
+  whether or not ModTrap knows the tool; its plugins count as tool-made for the load order. What follows applies
+  to a list without such a heading.
 - **Among the mods:** after every ordinary mod, so that it wins each file it shares with them, as it does when the
   owner puts it last; but before the mods that hold what the modlist's tools made (§13), which stay last and are
   made again. A mod counts as a tool's output when MO2 sends a tool's new files to it, when every plugin in it was
   made by a tool, or, failing both, when its name says "output". A separator right before the outputs stays with
   them. With no output found, the mod goes last.
 - **In the load order:** after every master the plugin names, and before the run of tool-made plugins at the end
-  (§13; an editor's output does not count, TL01§6). A master-flagged plugin goes to the end of the masters' block
+  (§13; an editor's output does not count, TL01§6). One or two plugins of unknown making among them do not end
+  the run. A master-flagged plugin goes to the end of the masters' block
   instead, since the game loads those first. Several new plugins are ordered among themselves, masters first.
 - The place is a proposal with its reason. The report shows what the mod wins and loses there (§16.4), so the owner
   can judge it.

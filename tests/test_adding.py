@@ -77,8 +77,58 @@ class Adding(unittest.TestCase):
         rep = self.one("Thistle")
         self.assertEqual(rep["place"]["before"], "Outputs_separator")
         self.assertEqual([o["mod"] for o in rep["place"]["outputs"]], ["Tool Output"])
-        self.assertIn("Invented Patcher", rep["place"]["outputs"][0]["why"])
+        self.assertIn("“Outputs” heading", rep["place"]["outputs"][0]["why"])
+        self.assertEqual(rep["place"]["heading"], "Outputs_separator")
         self.assertEqual(rep["place"]["after"], "Needs Absent")       # disabled mods say nothing either way
+
+    def test_a_list_that_keeps_more_after_its_outputs(self) -> None:
+        """As a large curated list is laid out: an "Outputs" heading in the middle, with the tools' outputs and a
+        few things of unknown making under it, and sections of options after it. The new mod goes right before the
+        heading; its plugin before everything the list keeps among its outputs."""
+        with tempfile.TemporaryDirectory() as d:
+            root = make_instance(Path(d), [
+                ("-", "Not Yet Installed_separator", {}),
+                ("+", "A Shader Option", {"textures/shared/a.dds": b"option"}),
+                ("-", "Shader Options_separator", {}),
+                ("+", "List - Tool Output", {"Made One.esp": b((SKY, "Quill.esp")), "Made Two.esp": b((SKY,))}),
+                ("+", "Randomised Loot", {"Randomised Loot.esp": b((SKY,))}),          # no tool known for it
+                ("+", "List - Merge", {"List - Merge.esp": b((SKY, "Quill.esp"))}),
+                ("+", "Outputs_separator", {}),
+                ("+", "List - Late Loaders", {"List - Late Loaders.esp": b((SKY, "Quill.esp"))}),
+                ("-", "Patches_separator", {}),
+                ("-", "Thistle", {"Thistle.esp": b((SKY, "Quill.esp")), "textures/shared/a.dds": b"new"}),
+                ("+", "Quill", {"Quill.esp": b((SKY,)), "textures/shared/a.dds": b"old"}),
+            ], load_order=["Quill.esp", "List - Late Loaders.esp", "List - Merge.esp", "Made One.esp", "Randomised Loot.esp",
+                           "Made Two.esp"],
+                profile_settings="[custom_overwrites]\r\nInvented%20Patcher=List - Tool Output\r\n")
+            m = model.build(instance.load(root))
+            rep = adding.analyse(m, ["Thistle"])
+        place = rep["place"]
+        self.assertEqual((place["before"], place["after"], place["heading"]),
+                         ("Outputs_separator", "List - Late Loaders", "Outputs_separator"))
+        self.assertEqual(sorted(o["mod"] for o in place["outputs"]), ["List - Merge", "List - Tool Output", "Randomised Loot"])
+        p = rep["mods"][0]["plugins"][0]
+        self.assertEqual(p["proposed"]["before"], "List - Merge.esp")
+        self.assertEqual(p["proposed"]["stay_after"], ["List - Merge.esp", "Made One.esp", "Randomised Loot.esp", "Made Two.esp"])
+        x = rep["mods"][0]
+        self.assertEqual([c["mod"] for c in x["wins"]], ["Quill"])
+        self.assertEqual([c["mod"] for c in x["loses"]], ["A Shader Option"])          # what the list keeps after its outputs
+        self.assertIn("“Outputs”", next(s for s in rep["steps"] if s["key"] == "enable")["note"])
+        # Only the tool that is known is asked to run again.
+        self.assertEqual([t["tool"] for t in rep["tools"]], ["Invented Patcher"])
+
+    def test_a_few_plugins_of_unknown_making_among_the_outputs_do_not_end_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            root = make_instance(Path(d), [
+                ("+", "Tool Output", {"Made One.esp": b((SKY,)), "Made Two.esp": b((SKY,))}),
+                ("+", "Unknown", {"Unknown A.esp": b((SKY,)), "Unknown B.esp": b((SKY,)), "Unknown C.esp": b((SKY,)),
+                                  "Unknown D.esp": b((SKY,))}),
+                ("-", "Thistle", {"Thistle.esp": b((SKY,))}),
+            ], load_order=["Unknown A.esp", "Unknown B.esp", "Unknown C.esp", "Made One.esp", "Unknown D.esp", "Made Two.esp"],
+                profile_settings="[custom_overwrites]\r\nInvented%20Patcher=Tool Output\r\n")
+            rep = adding.analyse(model.build(instance.load(root)), ["Thistle"])
+        p = rep["mods"][0]["plugins"][0]["proposed"]
+        self.assertEqual((p["before"], p["stay_after"]), ("Made One.esp", ["Made One.esp", "Unknown D.esp", "Made Two.esp"]))
 
     def test_its_plugin_goes_after_its_masters_and_before_the_generated_plugins(self) -> None:
         p = self.one("Thistle")["mods"][0]["plugins"][0]

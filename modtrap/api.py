@@ -14,8 +14,10 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+import tempfile
+
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
-               sessions, steps, toolrun, tools, unpack)
+               savelog, sessions, steps, toolrun, tools, unpack)
 from .server import Bad
 
 log = logbook.get("app")
@@ -100,6 +102,8 @@ class Api:
         self.changes = None                    # the endpoints that change a modlist; None: switched off (WHY§44)
         self.tooljob: toolrun.ToolJob | None = None
         self.recjob: records.Job | None = None
+        self.saver = savelog.SaveJob()         # "Save this session" (WHY§48)
+        self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
 
@@ -453,7 +457,7 @@ class Api:
                 p = records.plan(m, mods)
                 base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
                 job = records.Job(m, p, records.new_job_dir(base), launcher=self.launcher, running=self.running,
-                                  poll=self.poll)
+                                  poll=self.poll, closer=self.closer)
             except (records.Refused, dryrun.Refused) as e:
                 raise Bad(str(e)) from None
             job.on_end = self.save_log
@@ -468,6 +472,63 @@ class Api:
             raise Bad("no record check is going")
         self.recjob.stop()
         return self.recjob.public()
+
+    # --- "Save this session" (WHY§48): the session's logs, cleaned, in one .7z to download -------------------------
+
+    def save_start(self) -> dict:
+        s = self.session
+        if s is None:
+            raise Bad("open a modlist first: there is no session to save yet")
+        self.save_log()
+        m = self.model
+        session_dir = self.store.dir(s.id)
+
+        def gather() -> tuple[list, savelog.Cleaner, str]:
+            folders: dict[str, str | None] = {"<modlist>": self.folder or None, "<modtrap>": str(paths.home()),
+                                              "<temp>": tempfile.gettempdir()}
+            about = savelog.describe()
+            about["session"] = {"name": s.name, "status": s.status, "created": s.created, "profile": s.profile}
+            about["changes_allowed"] = self.changes is not None
+            profile_dir = None
+            if m is not None:
+                inst = m.instance
+                folders.update({"<game>": str(inst.game_dir) if inst.game_dir else None, "<mods>": str(inst.mods_dir),
+                                "<overwrite>": str(inst.overwrite_dir), "<profiles>": str(inst.profiles_dir),
+                                "<downloads>": str(inst.downloads_dir) if inst.downloads_dir else None})
+                profile_dir = inst.profiles_dir / inst.profile
+                real = [x for x in inst.mods if x.kind == "mod"]
+                try:
+                    xe = dryrun.find_xedit_exe(inst)
+                except dryrun.Refused:
+                    xe = None
+                about["modlist"] = {
+                    "game": inst.game_name, "profile": inst.profile, "mods": len(real),
+                    "mods_enabled": sum(x.enabled for x in real),
+                    "plugins_active": sum(1 for r in m.plugins.values() if r.active),
+                    "problems": len(m.issues), "notes": list(inst.notes),
+                    "game_folder": (inst.game_dir.name if inst.game_dir else ""),
+                    "game_folder_inside_modlist": bool(inst.game_dir and str(inst.game_dir).lower().startswith(
+                        str(inst.root).lower())),
+                    "xedit": {"title": xe.title, "own_arguments": xe.arguments} if xe else None,
+                    "tools": [{"title": e.title, "program": Path(e.binary.replace("\\", "/")).name,
+                               "output_mod": inst.output_mods.get(e.title, "")} for e in inst.executables]}
+            if self.changes is not None:
+                try:
+                    pr = self.changes.probe_public()
+                    about["probe"] = {"state": pr.get("state", ""), "reason": pr.get("reason", ""),
+                                      "steps": [[x.get("key"), x.get("result", ""), x.get("detail", "")] for x in pr.get("steps", [])]}
+                except Exception:
+                    about["probe"] = {"state": "unknown"}
+            items = savelog.collect(session_dir, profile_dir, paths.home(), about)
+            return items, savelog.Cleaner(folders), savelog.archive_name(s.name)
+
+        if self.saver.start(gather):
+            log.info("packing this session's logs for download")
+        return self.saver.public()
+
+    def save_take(self) -> tuple[Path, str] | None:
+        """The packed archive, once, for the server to send and remove."""
+        return self.saver.take()
 
     def history_events(self) -> dict:
         """Everything ModTrap changed in this session's modlist (MT15, DESIGN§12), newest first. Read only: the
@@ -516,7 +577,7 @@ class Api:
                 p = dryrun.plan(m, self._mods(body))
                 base = self.store.dir(s.id) / "jobs" if s is not None else None
                 job = dryrun.Job(m, p, dryrun.new_job_dir(base), launcher=self.launcher, running=self.running,
-                                 poll=self.poll)
+                                 poll=self.poll, closer=self.closer)
             except dryrun.Refused as e:
                 raise Bad(str(e)) from None
             job.on_end = self.save_log
@@ -890,6 +951,7 @@ class Api:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "changes": self.changes is not None,
+                   "save": self.saver.public(),
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
@@ -1057,6 +1119,8 @@ class Api:
             return 200, self.add_installer(body), None
         if path == "/api/add/choose":
             return 200, self.add_choose(body), None
+        if path == "/api/save/start":
+            return 200, self.save_start(), None
         if path == "/api/records/start":
             return 200, self.records_start(body), None
         if path == "/api/records/stop":

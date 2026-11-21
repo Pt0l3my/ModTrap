@@ -40,6 +40,7 @@ STEPS = (
     ("revert", "Revert puts everything back, and the test mods are gone"),
 )
 CLOSE_WAIT = 30 * 60
+CLEAN_WAIT = 90                 # seconds the clean-up after a failed probe waits for MO2 to close
 
 
 class Failed(Exception):
@@ -66,10 +67,12 @@ def _lists(root: Path, profile: str) -> dict:
 
 class Probe:
     def __init__(self, m: model.Model, work: Path, session_dir: Path, *, launcher: Callable, running: Callable,
-                 closed: Callable[[], bool | None], poll: float = 1.0, read=plugin.read):
+                 closed: Callable[[], bool | None], poll: float = 1.0, read=plugin.read,
+                 closer: Callable[[str, bool], None] = dryrun.close_program):
         self.model, self.dir, self.session_dir = m, work, session_dir
         self.inst = m.instance
         self._launcher, self._running, self._closed, self._poll, self._read = launcher, running, closed, poll, read
+        self._closer = closer
         self.state = "new"              # new, working, passed, failed
         self.now = ""
         self.results: dict[str, dict] = {}
@@ -167,8 +170,13 @@ class Probe:
         """After a failure: put back whatever the probe changed, if MO2 is closed. What cannot be put back is
         named; the test mods are harmless and say so in their plugins' descriptions."""
         try:
+            end = time.time() + CLEAN_WAIT              # MO2 takes a moment to go once xEdit has closed
+            while self._closed() is False and time.time() < end and not self._stop.is_set():
+                time.sleep(max(self._poll, 0.05))
             if self._closed() is not True:
-                raise addjob.Refused("MO2 is not known to be closed")
+                raise addjob.Refused("MO2 is still open" if self._closed() is False else
+                                     "it cannot be told on this PC whether MO2 is open")
+            log.info("probe: MO2 is closed; putting back what the probe changed")
             if self._dm is not None and self._dm.stage == "installed":
                 self._dm.revert()
             if self._aj is not None and self._aj.stage == "added":
@@ -219,7 +227,8 @@ class Probe:
             dp = dryrun.plan(m2, [BAD_MOD])
         except dryrun.Refused as e:
             raise Failed("dry", str(e)) from None
-        job = dryrun.Job(m2, dp, self.dir / "dry", launcher=self._launcher, running=self._running, poll=self._poll)
+        job = dryrun.Job(m2, dp, self.dir / "dry", launcher=self._launcher, running=self._running, poll=self._poll,
+                         closer=self._closer)
         (self.dir / "dry").mkdir(parents=True, exist_ok=True)
         job.start()
         while job.state not in ("done", "failed", "stopped"):
@@ -275,7 +284,7 @@ class Probe:
         if sorted(dpl.demaster) != [probe.OVERRIDE] or dpl.switch_off != [probe.PATCH] or dpl.needs_you:
             raise Failed("apply", "the plan from the dry run is not the expected one")
         self._dm = demaster.Demaster(m2, dp, dpl, self.dir / "demaster", self.session_dir, launcher=self._launcher,
-                                     running=self._running, closed=self._closed, poll=self._poll)
+                                     running=self._running, closed=self._closed, poll=self._poll, closer=self._closer)
         (self.dir / "demaster").mkdir(parents=True, exist_ok=True)
         try:
             self._dm.make_safe()

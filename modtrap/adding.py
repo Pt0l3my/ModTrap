@@ -22,6 +22,7 @@ NEW_HEADER = 1.71              # XE02§6: the header version the newer game vers
 META_BYTES = 256 * 1024        # meta.ini is read no further than this
 CONFLICT_SECONDS = 25.0        # looking for shared files, over all the mods to add
 EXAMPLES = 4
+TAIL_GAP = 2                   # plugins of unknown making that may sit among the tools' output at the load order's end
 ARCHIVE = re.compile(r"\.(7z|zip|rar|fomod|exe|001)$", re.IGNORECASE)
 NEXUS_TAIL = re.compile(r"(-\d+)+$")          # the numbers a download site adds to a file's name
 OUTPUT_NAME = re.compile(r"\boutputs?\b", re.IGNORECASE)
@@ -179,14 +180,44 @@ def _makers(m: model.Model, r: model.PluginRow, memo: dict) -> list:
     return memo[f]
 
 
+def output_section(m: model.Model, memo: dict) -> tuple[str, set[str]]:
+    """A curated modlist keeps what its tools made under a separator of its own, named for it ("Outputs"). Returns
+    that separator's name and the (folded) names of the mods under it, or ("", empty) when there is none. A
+    separator heads the mods that follow it in priority, up to the next separator."""
+    if "section" not in memo:
+        inst = m.instance
+        listed = [x for x in inst.mods if x.kind in ("mod", "separator", "foreign")]
+        found: tuple[str, set[str]] = ("", set())
+        for i, x in enumerate(listed):
+            if x.kind == "separator" and OUTPUT_NAME.search(x.name[:-len("_separator")] if x.name.lower().endswith("_separator") else x.name):
+                mods: set[str] = set()
+                for y in listed[i + 1:]:
+                    if y.kind == "separator":
+                        break
+                    mods.add(fold(y.name))
+                if any(inst.mod(n) is not None and inst.mod(n).enabled for n in mods) and len(mods) > len(found[1]):
+                    found = (x.name, mods)
+        memo["section"] = found
+    return memo["section"]
+
+
 def generated(m: model.Model, r: model.PluginRow, memo: dict) -> list:
-    """The evidence that a tool made this plugin and can make it again (not an editor: TL01§6)."""
-    return [e for e in _makers(m, r, memo) if e.kind != "editor" and e.strong]
+    """The evidence that a tool made this plugin and can make it again (not an editor: TL01§6); or that the
+    modlist itself keeps it among its outputs (kind "section": which tool made it is then not known)."""
+    out = [e for e in _makers(m, r, memo) if e.kind != "editor" and e.strong]
+    if not out and r.source:
+        name, mods = output_section(m, memo)
+        if fold(r.source) in mods:
+            out = [tools.Evidence("", "section", "its mod is under the modlist's own “%s” heading" % name.replace("_separator", ""), True)]
+    return out
 
 
 def is_output_mod(m: model.Model, mod: Mod, memo: dict) -> str:
     """Why this mod is taken as a tool's output, or ""."""
     inst = m.instance
+    name, mods = output_section(m, memo)
+    if fold(mod.name) in mods:
+        return "it is under the modlist's own “%s” heading" % name.replace("_separator", "")
     for title, target in inst.output_mods.items():
         if fold(target) == fold(mod.name):
             return "MO2 sends the new files of “%s” to it" % title
@@ -204,6 +235,15 @@ def mod_place(m: model.Model, adding: set[str], memo: dict) -> dict:
     (folded) names of the mods being placed; they are left out of the reckoning."""
     inst = m.instance
     listed = [x for x in inst.mods if x.kind in ("mod", "separator", "foreign") and fold(x.name) not in adding]
+    heading, under = output_section(m, memo)
+    if heading:
+        # The modlist has a heading for its outputs: the new mod goes right before that heading, at the end of the
+        # section before it. Whatever the list keeps after its outputs (options, presets) stays after it too.
+        idx = next(i for i, x in enumerate(listed) if x.name == heading)
+        outputs = [{"mod": x.name, "why": "it is under the modlist's own “%s” heading" % heading.replace("_separator", "")}
+                   for x in listed if fold(x.name) in under and x.enabled]
+        return {"priority": listed[idx].priority, "before": listed[idx].name,
+                "after": listed[idx - 1].name if idx > 0 else "", "outputs": outputs, "heading": heading}
     idx = len(listed)                           # the new mod goes before listed[idx]
     outputs: list[dict] = []
     for i in range(len(listed) - 1, -1, -1):
@@ -234,12 +274,20 @@ def tail_start(m: model.Model, memo: dict, masters: bool) -> tuple[int, list[str
         end = next((i for i, r in enumerate(rows) if r.source is not None and not is_master(r.kind)), len(rows))
     start = end
     after: list[str] = []
+    odd: list[tuple[int, str]] = []             # plugins not known to be made by a tool, met on the way back
     for i in range(end - 1, -1, -1):
         r = rows[i]
         if r.source is None or not r.active:
             continue
         if not generated(m, r, memo):
-            break
+            odd.append((i, r.name))
+            if len(odd) > TAIL_GAP:
+                break                           # the run of outputs has ended
+            continue
+        # A tool-made plugin: it and the few unknown ones between it and the run so far all stay after.
+        for _j, name in reversed(odd):
+            after.insert(0, name)
+        odd = []
         after.insert(0, r.name)
         start = i
     pos = rows[start].position if start < len(rows) else (rows[-1].position + 1 if rows else 0)
@@ -445,6 +493,8 @@ def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dic
         if not r.active or r.source is None:
             continue
         for e in generated(m, r, memo):
+            if e.kind == "section":
+                continue                        # the list keeps it among its outputs, but which tool made it is not known
             t = data.get(e.tool, {})
             reads = t.get("reads", ["plugins"])            # a tool ModTrap does not know: taken to read plugins
             hit = [k for k in reads if k in brings]
@@ -538,8 +588,11 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
          "with the list sorted by priority: drag the mod %s, then tick it. “Add it for me”, above, does this for "
          "you when it is switched on." % where,
          "done" if not off else "waiting" if needs or unpacked else "to do", items,
-         note=("Taken as tools' output, staying after it: " + ", ".join("%s (%s)" % (o["mod"], o["why"])
-                                                                       for o in place["outputs"][:6])) if place["outputs"] else
+         note=("The modlist keeps its outputs under the heading “%s”: the mod goes right before that heading, and "
+               "the %d mod(s) under it, with whatever the list keeps after them, stay after it." % (
+                   place["heading"].replace("_separator", ""), len(place["outputs"]))) if place.get("heading") else
+         ("Taken as tools' output, staying after it: " + ", ".join("%s (%s)" % (o["mod"], o["why"])
+                                                                   for o in place["outputs"][:6])) if place["outputs"] else
          "No tool's output was recognised at the end of MO2's list, so the mod goes last.")
 
     # 3. Its plugins.
