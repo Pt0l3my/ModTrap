@@ -912,7 +912,7 @@ async function renderSelection() {
 // --- the dry run (DESIGN§6.1, DESIGN§6.2) ---------------------------------------------------------------------------
 
 const JOB_WORDS = {
-  preparing: "Preparing", starting: "Starting xEdit through MO2", loading: "xEdit is loading the plugins",
+  preparing: "Preparing", starting: "Starting xEdit through MO2", loading: "xEdit is loading the plugins (if its “Module Selection” window stays open, press OK: nothing needs choosing)",
   reading: "xEdit is reading the dependants", checking: "Checking the result", done: "Dry run done",
   failed: "The dry run failed", stopped: "Stopped",
 };

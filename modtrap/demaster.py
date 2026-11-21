@@ -107,7 +107,8 @@ class Demaster:
     def __init__(self, m: model.Model, dry_plan: dryrun.Plan, pl: Plan, job_dir: Path, session_dir: Path, *,
                  launcher: Callable = dryrun.launch, running: Callable = dryrun.image_running,
                  closed: Callable[[], bool | None] | None = None, poll: float = 1.0,
-                 closer: Callable[[str, bool], None] = dryrun.close_program):
+                 closer: Callable[[str, bool], None] = dryrun.close_program,
+                 presser: Callable[[str], bool] = dryrun.winauto.press_module_selection_ok):
         self.model, self.dry_plan, self.plan, self.dir = m, dry_plan, pl, job_dir
         self.inst = m.instance
         self.pdir = self.inst.profiles_dir / self.inst.profile
@@ -115,6 +116,7 @@ class Demaster:
         self.history = history.History(session_dir)
         self.out = job_dir / "out"
         self._launcher, self._running, self._poll, self._closer = launcher, running, poll, closer
+        self._presser = presser
         self._closed = closed or (lambda: None if running(dryrun.MO2_EXE) is None else not running(dryrun.MO2_EXE))
         self.report: dict = {}
         self.written: list[str] = []
@@ -167,8 +169,11 @@ class Demaster:
         mo2_was_running = self._running(dryrun.MO2_EXE)
         proc = self._launcher(cmd, str(Path(self.dry_plan.mo2).parent))
         started, seen, report = time.time(), 0, self.dir / "report.tsv"
+        ok = dryrun.OkPresser(image, self._presser)
         while True:
             time.sleep(self._poll)
+            if seen == 0:
+                ok.look()
             lines = dryrun._lines(self.dir / "progress.txt")
             for ln in lines[seen:]:
                 log.info("xEdit: %s", ln)

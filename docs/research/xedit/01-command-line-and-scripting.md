@@ -111,7 +111,8 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **FACT.** With `-script:` xEdit is in its script tool mode: the script's file ending decides it
   (`xEdit/xeInit.pas:612-631`). The window's title is then "SSEScript".
 - **FACT.** `-autoload` and `-autoexit` are read only in edit mode (`xEdit/xeInit.pas:1063-1079`). In script mode
-  the plugins of the plugins file are loaded without asking anyway, and after the script xEdit writes "You can
+  xEdit asks which plugins to load (§13; an earlier wording here, "loaded without asking anyway", was wrong), and
+  after the script xEdit writes "You can
   close this application now." and stays open (`xEdit/xeMainForm.pas:4923`): the timer that would close it runs
   only when `-autoexit` was read (`:17268-17281`), which in script mode it never is. Seen on the owner's PC with
   xEdit 4.1.5f: xEdit stayed open and MO2 waited for it.
@@ -146,3 +147,21 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   the plugin written through `FileWriteToStream` reads, by ModTrap's own reader, as a plugin with no master.
 - **FACT.** After the changing script had taken the "changed" marks off, xEdit closed when asked, without a
   question, and every original was byte for byte unchanged. §9's open point on `esUnsaved` holds for this case.
+
+## 13. The "Module Selection" window in script mode (source, and the owner's PC, 2026-11-21)
+
+- **FACT.** xEdit loads without asking only in its plugin modes (quick clean and the like) or when `-autoload` was
+  read; otherwise it opens its module selection window, preset to the active plugins, and loads what is ticked
+  when OK is pressed; closing the window any other way ends xEdit (`xEdit/xeMainForm.pas:5296-5330`). `-autoload`
+  is read only in edit mode (§11), and script mode is not a plugin mode, so a run with `-script:` always shows
+  the window. Seen on the owner's PC: the window appeared on every run, with the plugins of the plugins file
+  ModTrap had passed already ticked, and the owner pressed OK each time.
+- **FACT.** The window is a form of class `TfrmModuleSelect` with the caption "Module Selection"; its OK is a
+  `TButton` with the caption "OK" (`xEdit/xeModuleSelectForm.dfm:1-39`). xEdit opens the same form for other
+  things the user asks for in its window (adding masters, comparing), which no ModTrap run does.
+- **METHOD.** For a run ModTrap started, the ticked list is ModTrap's own list, so nothing is to be chosen.
+  ModTrap presses that OK itself (`modtrap/winauto.py`): a visible top window of that class and caption, owned by
+  the xEdit program the run started, and in it an enabled button named OK; it looks every few seconds only until
+  the script's first line arrives, and presses a limited number of times. LIKELY until seen on the owner's PC:
+  that the press, sent as a message from another program, is taken (it is not when xEdit runs with higher
+  rights than ModTrap). If it is not, the owner presses OK as before; the page and the log say so.

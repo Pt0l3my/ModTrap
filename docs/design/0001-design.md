@@ -163,7 +163,8 @@ names one; our script (`-script:`), our plugins file (`-P:`), a backup folder (`
 (XE01§2 to XE01§6, XE01§11). An open MO2 takes the command over (MO01§4); ModTrap never starts a second MO2 on
 the instance. ModTrap watches the script's progress file and xEdit's process for the end (WHY§7), with a time limit
 and a **Stop** button that asks first. xEdit stays open after a script, so ModTrap closes the xEdit it started
-when the script's end line is written (XE01§11). A run in which xEdit did not load a plugin it was told to is a
+when the script's end line is written (XE01§11). xEdit in script mode first asks which plugins to load, with
+the job's own list ticked; ModTrap presses that window's OK itself, and says so in the log (XE01§13). A run in which xEdit did not load a plugin it was told to is a
 failure that names the folder xEdit read.
 
 MO2 must be closed only while ModTrap writes to the profile (§6.5 step 2, Re-enable and Revert): an open MO2 keeps

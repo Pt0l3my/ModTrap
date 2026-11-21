@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import logbook, model, paths
+from . import logbook, model, paths, winauto
 from .instance import GAME, Executable, Instance, fold
 
 SCRIPT = Path(__file__).resolve().parent / "xedit" / "ModTrap.pas"
@@ -383,6 +383,34 @@ def close_program(image: str, force: bool = False) -> None:
 
 
 MO2_GRACE = 8.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
+PRESS_EVERY = 3.0              # seconds between looks for xEdit's "Module Selection" window
+PRESS_LIMIT = 8                # presses of its OK in one run, at most
+
+
+class OkPresser:
+    """xEdit in script mode always asks which plugins to load, with those of the plugins file already ticked
+    (XE01§13). For a run ModTrap started, that list is ModTrap's own, so ModTrap presses OK. Called from a job's
+    waiting loop while the script has not started."""
+
+    def __init__(self, image: str, press: Callable[[str], bool] = winauto.press_module_selection_ok):
+        self.image, self._press = image, press
+        self.pressed = 0
+        self._next = 0.0
+
+    def look(self) -> None:
+        now = time.time()
+        if now < self._next or self.pressed >= PRESS_LIMIT:
+            return
+        self._next = now + PRESS_EVERY
+        try:
+            hit = self._press(self.image)
+        except Exception:
+            hit = False
+        if hit:
+            self.pressed += 1
+            if self.pressed == 1:
+                log.info("xEdit asked which plugins to load. The ones ModTrap listed were already ticked: ModTrap "
+                         "pressed OK.")
 
 
 def close_xedit(image: str, running: Callable[[str], bool | None], closer: Callable[[str, bool], None],
@@ -430,10 +458,12 @@ class Job:
 
     def __init__(self, m: model.Model, p: Plan, job_dir: Path, *, launcher: Callable = launch,
                  running: Callable[[str], bool | None] = image_running, poll: float = 1.0,
-                 closer: Callable[[str, bool], None] = close_program):
+                 closer: Callable[[str, bool], None] = close_program,
+                 presser: Callable[[str], bool] = winauto.press_module_selection_ok):
         self.model, self.plan, self.dir = m, p, job_dir
         self.id = job_dir.name
         self._launcher, self._running, self._poll, self._closer = launcher, running, poll, closer
+        self._presser = presser
         self.state = "preparing"       # preparing, starting, loading, reading, checking, done, failed, stopped
         self.message = ""
         self.started = time.time()
@@ -520,13 +550,17 @@ class Job:
             raise Refused("MO2 could not be started: " + logbook.why(e)) from None
         progress, report = self.dir / "progress.txt", self.dir / "report.tsv"
         seen, seen_running, gone_since = 0, False, None
+        ok = OkPresser(image, self._presser)
         self.state = "loading"
-        log.info("xEdit is loading the plugins; its own window shows the progress. This can take some minutes.")
+        log.info("xEdit is loading the plugins; its own window shows the progress. This can take some minutes. If its "
+                 "“Module Selection” window stays open, press OK there: the right plugins are already ticked.")
         while True:
             if self._stop.wait(self._poll):
                 self.state, self.message, self.ended = "stopped", "stopped at your request", time.time()
                 log.warn("the dry run was stopped; xEdit is left for you to close (it has changed nothing)")
                 return
+            if seen == 0:
+                ok.look()
             lines = _lines(progress)
             for ln in lines[seen:]:
                 log.info("xEdit: %s", ln)

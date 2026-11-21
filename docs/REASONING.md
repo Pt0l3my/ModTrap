@@ -73,6 +73,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 48 | 2026-11-21 | "Save this session": the logs cleaned and packed into one .7z, written with Python alone | METHOD | #page #safety #licence #process |
 | 49 | 2026-11-21 | The first real run of the probe: what passed, what failed, and what was changed for it | FACT | #xedit #mo2 #adding #process |
 | 50 | 2026-11-21 | The probe passes on the owner's PC: what that proves, what it does not, and a message of MO2's | FACT | #xedit #mo2 #safety #process |
+| 51 | 2026-11-21 | xEdit's "Module Selection" window: always shown in script mode, nothing to choose, ModTrap presses OK | FACT | #xedit #page #process |
 
 ## Entries
 
@@ -1032,3 +1033,22 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   force, and a MO2 the owner had open before the run is never touched. LIKELY, to be seen on the owner's PC: that
   the request dismisses the message. Ruled out: ending MO2 by force (it may be writing its settings), and
   starting MO2's window first so that its plugins are set up (slow on a large list, and more to go wrong).
+
+### 51. xEdit's "Module Selection" window: always shown in script mode, nothing to choose, ModTrap presses OK
+
+`2026-11-21` · FACT · `#xedit #page #process` · refs: XE01§11, XE01§13, XE01§2, DESIGN§7, WHY§49, WHY§50
+
+- The owner, with a picture of the window: "it seems the user also has to click ok inside xedit for module
+  selection, can that be done by ModTrap as well? Is the user supposed to select specific mods here?"
+- FACT: WHY§49 took `-autoload` out on the reading that script mode loads without asking. That reading was wrong:
+  the source shows the window always opens in script mode (XE01§13), and the owner had been pressing OK on every
+  run. Taking `-autoload` out was still right (it is never read in script mode); the claim beside it was not, and
+  XE01§11 is corrected.
+- FACT: nothing is to be chosen. The window comes preset to the plugins of the plugins file, and for ModTrap's
+  runs that file is ModTrap's own list for the job.
+- METHOD: ModTrap presses OK itself, through Windows' own window calls from Python's standard library, with no
+  new dependency. It presses only xEdit's own window of that class and caption, only its OK, only while the
+  script has not started, and a failure there never stops a run. Unproven until the owner's next run; the log
+  and the page tell the owner to press OK if the window stays.
+- Ruled out: starting xEdit in edit mode with `-autoload` and running the script another way (edit mode has no
+  switch that runs a script); a plugin mode (they load one plugin and do their own work).

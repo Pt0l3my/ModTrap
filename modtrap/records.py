@@ -192,10 +192,12 @@ class Job:
 
     def __init__(self, m: model.Model, p: Plan, job_dir: Path, *, launcher: Callable = dryrun.launch,
                  running: Callable[[str], bool | None] = dryrun.image_running, poll: float = 1.0,
-                 closer: Callable[[str, bool], None] = dryrun.close_program):
+                 closer: Callable[[str, bool], None] = dryrun.close_program,
+                 presser: Callable[[str], bool] = dryrun.winauto.press_module_selection_ok):
         self.model, self.plan, self.dir = m, p, job_dir
         self.id = job_dir.name
         self._launcher, self._running, self._poll, self._closer = launcher, running, poll, closer
+        self._presser = presser
         self.state = "preparing"       # preparing, starting, loading, reading, checking, done, failed, stopped
         self.message = ""
         self.started = time.time()
@@ -260,6 +262,7 @@ class Job:
             raise Refused("MO2 could not be started: " + logbook.why(e)) from None
         progress, report = self.dir / "progress.txt", self.dir / "report.tsv"
         seen, seen_running, gone_since = 0, False, None
+        ok = dryrun.OkPresser(image, self._presser)
         self.state = "loading"
         log.info("xEdit is loading the whole load order; on a large modlist this takes many minutes")
         while True:
@@ -267,6 +270,8 @@ class Job:
                 self.state, self.message, self.ended = "stopped", "stopped at your request", time.time()
                 log.warn("the record check was stopped; xEdit is left for you to close (it has changed nothing)")
                 return
+            if seen == 0:
+                ok.look()
             lines = dryrun._lines(progress)
             for ln in lines[seen:]:
                 log.info("xEdit: %s", ln)
