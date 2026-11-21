@@ -130,3 +130,19 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   arguments name none. The script reports xEdit's data path and file count (`DataPath`,
   `xEdit/JvI/xejviScriptHost.pas:131-132`), and a run in which xEdit did not load a plugin it was told to is a
   failure that says where xEdit looked.
+
+## 12. What the first passing probe showed (2026-11-21, xEdit 4.1.5f on the owner's PC)
+
+- **FACT.** Started in script mode with `-P:` and `-D:`, xEdit loaded the game's own plugins and exactly the
+  plugins of the plugins file (84 files for 3 listed). §3's LIKELY item holds.
+- **FACT.** xEdit loaded ModTrap's invented plugins (XE02, `modtrap/probe.py`): a header, groups of global
+  variables and a form list, written from the format's description alone.
+- **FACT.** The reading script's chain for a form-list entry: the entry is `LNAM - FormID`, a sub-record whose
+  value is an integer; its list is `FormIDs`, of element kind `etSubRecordArray`, with no value kind given.
+  ModTrap's list of arrays that may be shortened names it rightly.
+- **FACT.** The owner's xEdit entry carries `-pseudoesl`: the invented plugins were numbered as light plugins, and
+  the form ids the reading script reported were the ones the changing script then found.
+- **FACT.** The changing script removed one entry and one record as told, `CleanMasters` took the master off, and
+  the plugin written through `FileWriteToStream` reads, by ModTrap's own reader, as a plugin with no master.
+- **FACT.** After the changing script had taken the "changed" marks off, xEdit closed when asked, without a
+  question, and every original was byte for byte unchanged. §9's open point on `esUnsaved` holds for this case.

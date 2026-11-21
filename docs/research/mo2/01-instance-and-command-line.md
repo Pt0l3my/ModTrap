@@ -94,3 +94,20 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
   There is no way to hand MO2 an archive file to install.
 - **METHOD.** So a dropped archive is unpacked by ModTrap (DESIGN§16.1). MO2 takes a folder that appears in its
   mods folder as a mod, disabled, at its next refresh (§2).
+
+## 9. What the first passing probe showed (2026-11-21), and the source behind it
+
+- **FACT (the owner's PC).** Twice in one probe MO2 was started by its `run` command on lists ModTrap had just
+  written (two new mods placed and enabled; three new plugins placed and activated in both plugin lists). After
+  MO2 had closed, the lists were byte for byte what ModTrap had written: the probe's comparison passed, and the
+  safe folder's Revert, which refuses a file changed by anything else, put the whole files back. So a MO2 started
+  by `run` did not rewrite its lists. Not shown: what a MO2 opened as a window by the owner writes.
+- **FACT (the owner's PC).** A folder ModTrap created in MO2's mods folder, with a `meta.ini` of one line, was
+  taken as a mod: its plugins were in the game's Data folder as xEdit saw it.
+- **FACT.** After the program ends, MO2 calls what its plugins registered for "a run has finished"
+  (`organizercore.cpp:2062`). The `run` command catches an error raised there and shows it in a message window
+  that begins "Failed to run", though the program ran, then ends with exit code 1 (`commandline.cpp:797-805`).
+- **FACT (the owner's PC).** One of the modlist's own MO2 plugins raised such an error after every run started
+  this way, so MO2 stopped at that message until it was dismissed. LIKELY: that plugin sets itself up when MO2's
+  window is ready (`organizercore.cpp:340-343`), which never happens in a `run` without a window. It is not
+  ModTrap's to fix; ModTrap asks a MO2 it started itself to close when it does not go by itself (XE01§11).

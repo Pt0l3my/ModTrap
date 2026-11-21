@@ -125,7 +125,8 @@ class Probe:
                 raise Failed(step, "ModTrap cannot tell whether MO2 is open on this PC, so it will not change its lists")
             if not said and time.time() - started > 5:
                 said = True
-                self.message = "MO2 is open. Close it, and the probe goes on by itself."
+                self.message = ("MO2 is still open. If it shows a message, press OK there; when MO2 has closed, the "
+                                "probe goes on by itself.")
                 log.warn("probe: waiting for MO2 to be closed")
             if self._stop.wait(max(self._poll, 0.05)) or time.time() - started > CLOSE_WAIT:
                 raise Failed(step, "MO2 stayed open, so the probe stopped")

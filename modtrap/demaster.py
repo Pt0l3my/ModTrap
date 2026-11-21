@@ -164,6 +164,7 @@ class Demaster:
             raise Refused("%s is already running: close it first" % image)
         log.info("starting xEdit through MO2 with ModTrap's script: %d dependant(s) to change, in memory only",
                  len(self.plan.demaster))
+        mo2_was_running = self._running(dryrun.MO2_EXE)
         proc = self._launcher(cmd, str(Path(self.dry_plan.mo2).parent))
         started, seen, report = time.time(), 0, self.dir / "report.tsv"
         while True:
@@ -181,7 +182,8 @@ class Demaster:
         self.report = parse_report(dryrun._read(report))
         # The script has written its new files and taken the "changed" marks off. xEdit stays open after a script
         # (XE01§11): it is asked to close, and ended if it does not, so that it cannot save anything (WHY§4).
-        dryrun.close_xedit(image, self._running, self._closer, self._poll, changed=True)
+        dryrun.close_xedit(image, self._running, self._closer, self._poll, changed=True,
+                           mo2_was_running=mo2_was_running)
         self.stage = "changed"
 
     # --- 4. verify -------------------------------------------------------------------------------------------------

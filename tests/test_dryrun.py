@@ -132,6 +132,30 @@ class DryRunTests(unittest.TestCase):
         dryrun.close_xedit("SSEEdit64.exe", lambda image: None, lambda image, force: calls.append((image, force)))
         self.assertEqual(calls, [("SSEEdit64.exe", False)])                 # cannot be watched: asked once
 
+    def test_a_mo2_started_for_the_run_that_stops_at_a_message_is_asked_to_close(self):
+        """A plugin of MO2 failing at the end of a command-line run leaves MO2 showing a message (MO01§9)."""
+        calls = []
+        state = {"xedit": True, "mo2": True}
+
+        def running(image):
+            return state["mo2"] if image == dryrun.MO2_EXE else state["xedit"]
+
+        def closer(image, force):
+            calls.append((image, force))
+            if image == "SSEEdit64.exe":
+                state["xedit"] = False
+
+        dryrun.close_xedit("SSEEdit64.exe", running, closer, poll=0.01, mo2_was_running=False, mo2_grace=0.1)
+        self.assertEqual(calls, [("SSEEdit64.exe", False), (dryrun.MO2_EXE, False)])       # asked; never ended
+        calls.clear()
+        state.update(xedit=True, mo2=True)
+        dryrun.close_xedit("SSEEdit64.exe", running, closer, poll=0.01, mo2_was_running=True, mo2_grace=0.1)
+        self.assertEqual(calls, [("SSEEdit64.exe", False)])                                # the owner's own MO2: left alone
+        calls.clear()
+        state.update(xedit=True, mo2=False)
+        dryrun.close_xedit("SSEEdit64.exe", running, closer, poll=0.01, mo2_was_running=False, mo2_grace=0.1)
+        self.assertEqual(calls, [("SSEEdit64.exe", False)])                                # it closed by itself
+
     def test_xedit_loading_none_of_the_plugins_is_a_failure_that_says_where_it_looked(self):
         job = self.run_job(tool="absent")
         self.assertEqual(job.state, "failed")

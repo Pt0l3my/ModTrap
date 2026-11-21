@@ -250,6 +250,7 @@ class Job:
         image = Path(p.tool_binary.replace("\\", "/")).name
         if self._running(image):
             raise Refused("%s is already running: close it first, so that ModTrap can tell its own run from yours" % image)
+        mo2_was_running = self._running(dryrun.MO2_EXE)
         log.info("starting %s through MO2 (profile '%s'), with ModTrap's script that reports overriding records",
                  p.tool, p.profile)
         self.state = "starting"
@@ -289,7 +290,7 @@ class Job:
                               % (dryrun.TIME_LIMIT * 2 // 60))
         self.state = "checking"
         self.result = parse_report(dryrun._read(report), self.model)
-        dryrun.close_xedit(image, self._running, self._closer, self._poll)
+        dryrun.close_xedit(image, self._running, self._closer, self._poll, mo2_was_running=mo2_was_running)
         changed = []
         for name, digest in manifest["sha256"].items():
             r = self.model.plugins[fold(name)]
