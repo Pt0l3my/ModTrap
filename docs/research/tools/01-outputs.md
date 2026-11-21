@@ -165,3 +165,9 @@ Read in Pandora Behaviour Engine+'s source (GPL-3.0; facts only, nothing copied)
   one was built with the mod in it, whatever the mod's files look like.
 - **Limit.** The search assumes that such names stand in the output as plain text. Not checked on real output.
   Packed archives are not looked into. Whether a patch folder was ticked in the tool cannot be told from files.
+- **Later, 2026-11-21 (the owner's list).** The mod has one animation list, and none of the 31 files read in
+  the behaviour tool's output names its animation folder. By the second FACT above a list alone is not enough
+  for this tool: it also wants `FNIS_<folder>_Behavior.hkx` in the game's behaviour folder, and passes the
+  folder over otherwise. ModTrap now looks for that file, in the mod and in every enabled mod, and counts a
+  list as read by this tool only where it is there. For the older engines, which make that file themselves,
+  the list alone counts (LIKELY, as above).

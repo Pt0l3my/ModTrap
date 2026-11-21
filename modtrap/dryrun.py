@@ -540,7 +540,7 @@ def close_program(image: str, force: bool = False) -> None:
 
 MO2_LEAVING = 12.0             # seconds MO2 gets to close once its message has been closed (the owner's PC: 4 to 8)
 MO2_GRACE = 4.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
-PRESS_EVERY = 3.0              # seconds between looks for xEdit's "Module Selection" window
+PRESS_EVERY = 1.5              # seconds between looks for xEdit's "Module Selection" window
 PRESS_LIMIT = 8                # presses of its OK in one run, at most
 
 

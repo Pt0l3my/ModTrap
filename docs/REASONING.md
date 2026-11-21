@@ -94,6 +94,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 69 | 2026-11-21 | The other tools checked: a change is not a stake (the patcher was asked for a value many plugins share), and a behaviour tool reads lists and patch folders, not animation files | DECIDED | #tools #steps #xedit #process |
 | 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
 | 71 | 2026-11-21 | The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes | DECIDED | #page #process #steps |
+| 72 | 2026-11-21 | The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list | FACT | #xedit #tools #steps #process |
 
 ## Entries
 
@@ -1635,3 +1636,26 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   driven from the boxes alone, the wait after the probe, Revert setting the boxes back. Tests for the stages
   after a Revert and with an earlier dry run.
 - Not checked: on the owner's PC.
+
+### 72. The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list
+
+`2026-11-21` · FACT · `#xedit #tools #steps #process` · refs: MT17, XE01§13, XE01§19, XE01§20, TL01§12, WHY§69, WHY§71
+
+- The owner, on version 0.3.4: "ended up with an error, seems memory related? And it doesn't need synthesis
+  anymore?"
+- FACT (the session file): the one go ran from the Process tab to the end. Dry run, plan, five plugins changed
+  and verified, put in place, the modlist clean. WHY§71's waiting worked.
+- FACT: the error box was xEdit's own, at its start, and the run went on after it (XE01§20). It is a fault
+  inside the program, not a lack of memory. LIKELY cause: ModTrap's press of OK arrived while the window was
+  still being set up. DECIDED: the press waits until the window has stood ready for two and a half seconds.
+- FACT: the stakes of XE01§19 worked on a real xEdit. Of 528 records the mod and its patches change, they have
+  a stake in 502. The worldspace's table of heights is no longer among them, as WHY§69 expected: other plugins
+  say the same. The patcher's three plugins hold two records with a stake and none of the mod's values. So the
+  patcher is cleared by evidence. The modlist's guide says to run it; ModTrap shows why it sees no need, and the
+  owner may run it all the same: a patcher run does no harm.
+- FACT: the behaviour tool is still asked, for one animation list; against it, no file of its output names the
+  mod's animation folder. By its source the tool takes a list in only with its graph file (TL01§12). DECIDED:
+  a list counts for this tool only where that file is in the modlist; otherwise the tool is cleared with both
+  findings shown.
+- Not checked: the new press on the owner's PC; whether the search of the behaviour output finds names in a
+  real output that has them (it has found none so far, in an output that may well have none).

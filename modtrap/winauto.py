@@ -11,12 +11,18 @@ It is written against an interface (`Windows`) so that the choosing can be teste
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 FORM_CLASS = "TfrmModuleSelect"            # xEdit's form: xeModuleSelectForm.pas:25
 FORM_TITLE = "Module Selection"            # its caption: xeModuleSelectForm.dfm:5
 OK_TEXTS = ("ok", "&ok")                   # its OK button's caption: xeModuleSelectForm.dfm:36
 BM_CLICK = 0x00F5
+# The window is pressed only once it has stood ready for this long. A press that arrives the moment the window
+# appears reaches xEdit while it is still setting the window up; on the owner's PC xEdit then showed an error of
+# its own, "Access violation", and went on (WHY§72).
+SETTLE_SECONDS = 2.5
+_first_ready: dict[int, float] = {}
 WM_CLOSE = 0x0010
 MO2_MESSAGE_TITLE = "Mod Organizer"        # the caption of MO2's own message boxes (the owner's PC, WHY§50)
 
@@ -187,10 +193,12 @@ def _windows() -> Windows | None:
     return _real
 
 
-def press_module_selection_ok(image: str, win: Windows | None = None) -> bool:
+def press_module_selection_ok(image: str, win: Windows | None = None, settle: float = SETTLE_SECONDS,
+                              clock=time.monotonic) -> bool:
     """Presses OK in the "Module Selection" window of a running program whose file is `image`. True when the
-    button was pressed; False when there is no such window, its OK is not ready, or the press was not allowed
-    (a program started with higher rights than ModTrap's does not take it)."""
+    button was pressed; False when there is no such window, its OK is not ready or has not stood ready for
+    `settle` seconds yet, or the press was not allowed (a program started with higher rights than ModTrap's does
+    not take it)."""
     win = win or _windows()
     if win is None:
         return False
@@ -203,10 +211,16 @@ def press_module_selection_ok(image: str, win: Windows | None = None) -> bool:
             for child in win.children(hwnd):
                 if win.text(child).strip().casefold() in OK_TEXTS and "button" in win.class_name(child).casefold():
                     if win.visible(child) and win.enabled(child):
+                        first = _first_ready.setdefault(hwnd, clock())
+                        if clock() - first < settle:
+                            return False                 # seen ready just now: it is pressed at a later look
+                        _first_ready.pop(hwnd, None)
                         return win.click(child)
+            _first_ready.pop(hwnd, None)                 # there, but not ready: the wait starts over
             return False
     except Exception:
         return False
+    _first_ready.clear()                                 # no such window: nothing is waited for
     return False
 
 
