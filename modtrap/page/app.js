@@ -920,6 +920,7 @@ const JOB_WORDS = {
 const WOULD = {
   "record": ["would be taken out", "would-record", "The dependant's own copy of one of the trapped mod's records."],
   "entry": ["entry would be taken out", "would-entry", "An entry of a list that can be shortened; the record stays."],
+  "part": ["part would be put back", "would-entry", "The plugin only carries this part on from the trapped mod. It would be put back as the plugin's remaining masters have it; the record stays."],
   "needs you": ["needs you", "would-needs", "ModTrap would not change this by itself."],
 };
 const FILE_READING = {
@@ -931,8 +932,13 @@ const FILE_READING = {
 
 // Where a part that needs the owner came from, as the dry run found it (reported only, for now: MT4).
 function cameFrom(e) {
-  if (e.came === "carried") return "  · carried on from " + e.same_as + "; without the mod this part is " + (e.without_state === "absent" ? "absent, as in " : "as in ") + e.without;
-  if (e.came === "added") return "  · added on top of what " + e.without + " has";
+  if (e.would === "part") return e.action === "take out"
+    ? "  · carried on from " + e.same_as + "; " + e.from + " has no such part: it would be taken out"
+    : "  · carried on from " + e.same_as + "; it would be put back as " + e.from + " has it";
+  if (e.would === "entry" && e.came === "added") return "  · an entry from the mod, not this plugin's own: it would be taken out";
+  if (e.would === "needs you" && e.same_as !== undefined) return e.same_as
+    ? "  · the same as in " + e.same_as + ", but ModTrap cannot tell what to put in its place"
+    : "  · this plugin's own doing, or not found in an earlier plugin";
   return "";
 }
 
@@ -1014,8 +1020,8 @@ function renderJob(job) {
           ? "A patch for the trapped mod, by its name and its few masters: without the mod it has no purpose, so it would be switched off, not changed."
           : "Every record in it belongs to the trapped mod: nothing of it would remain.") : hint }),
         el("p", { text: f.records + " records; " + f.needing + " need the trapped mod: " + f.own + " of its own records, " +
-          plural(f.entries, "list entry", "list entries") + ", " + f.needs_you + " that need you" +
-          (f.carried ? " (" + f.carried + " of them only carried on from the mod: see the records)." : ".") }));
+          plural(f.entries, "list entry", "list entries") + ", " + plural(f.parts || 0, "part") + " carried on from the mod, " +
+          f.needs_you + " that need you." }));
       const shown = f.items.slice(0, 400);
       const list = el("ul");
       for (const it of shown) {

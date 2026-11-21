@@ -77,6 +77,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 52 | 2026-11-21 | The first real dry run against the guide: the same plugins, a different split; what was changed for it | FACT | #procedure #xedit #safety #process |
 | 53 | 2026-11-21 | The second real dry run stopped at a file held by another program; the scripts now bear it, and a probe pass counts only for the scripts it ran | FACT | #xedit #mo2 #safety #process |
 | 54 | 2026-11-21 | The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows | FACT | #xedit #mo2 #process |
+| 55 | 2026-11-21 | What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first | DECIDED | #procedure #xedit #safety #process |
 
 ## Entries
 
@@ -1137,3 +1138,41 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   started whose caption is exactly MO2's message caption, and asks that window to close. MO2's main window has
   a longer caption and is never touched, nor is a MO2 the owner had open. The earlier request to MO2 as a whole
   stays as the fallback. Unproven until the owner's next run.
+
+### 55. What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first
+
+`2026-11-21` · DECIDED · `#procedure #xedit #safety #process` · refs: MT4, MT6, MT17, DESIGN§5, DESIGN§6.3, DESIGN§9, XE01§14, XE01§16, WHY§2, WHY§47, WHY§52, WHY§53, WHY§54
+
+- FACT (the dry run of WHY§54, with WHY§52's evidence lines): in the five big files, 32 records needed the owner, in 33 parts.
+  - In 17 of the parts, the part that needs the mod is the very same as in an earlier plugin that goes: the mod itself
+    (five script attachments in one generated file, three "previous line" fields in another) or a patch for the
+    mod that is switched off (nine condition lists). In each case the big file's last master without the mod
+    has the part, and nothing it points at is missing from the big file's masters.
+  - In 7 the part is the same as in another big file that loads earlier and is itself to be demastered.
+  - In 9 (seven of them those same records in that earlier file) the part is a list of conditions that no
+    earlier plugin has in that form: the big file merged it, and one entry of it needs the mod.
+- DECIDED (MT4 left "when C becomes automatic" to the evidence; MT17 leaves the method to ModTrap):
+  1. A part that is the same as a trapped plugin's, or as that of a patch that is switched off, is **put back**
+     as the dependant's last master without the mod has it, or **taken out** if that master has none.
+  2. A list in which each entry that needs the mod is also an entry of an earlier plugin's version of the list
+     (the dependant did not write it) loses **those entries**, except an entry of conditions whose removal would
+     join the conditions around it differently (XE01§16).
+  3. A part that is the same as an earlier dependant's which is itself demastered gets what that one gets, if
+     that is the same plugin's version; else rule 2 is tried on its own evidence.
+  4. Anything else still needs the owner: a part no earlier plugin has in that form and that is not such a list,
+     a source that would need a master the dependant lacks, an older report without the evidence.
+- Why not always "put back the last master's version": where the big file merged the list itself (the 9), the
+  last master's list is not what the big file would hold without the mod; taking out the mod's entry keeps the
+  rest of the merge. Why not always "take out the entry": a changed single field or a script attachment has no
+  entry to take out, and for a part that is wholly the mod's version, the master's version is the exact answer.
+- METHOD (safety): the changing script puts a part back only from a plugin that is not trapped, whose version
+  needs no trapped plugin, and then checks that the part reads exactly as that version; one refusal and the
+  dependant is not written (XE01§16). Entries go before parts and later lists before earlier ones, so that no
+  place found by the dry run has moved. ModTrap's own checks of every new plugin and every original stand as
+  before, and Revert undoes the lot.
+- METHOD (the probe): the probe has a fourth invented plugin, a base that stays, and the plugin that must go on
+  working now carries on the test mod's change to one of the base's records. The probe passes only if the dry run
+  reads that as "put back", and the new plugin holds the base's value and not the test mod's. The scripts
+  changed, so the probe must pass again before real work (WHY§53).
+- Unproven: the put-back of a script attachment and the removal of a condition, on real plugins. Both are
+  guarded by the checks above; the first real demaster shows them.

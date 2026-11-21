@@ -91,14 +91,14 @@ For each dependant plugin, one treatment. ModTrap proposes it; the owner can cha
   editor such as xEdit cannot be made again by ModTrap, and is demastered (WHY§28).
 - **Skip**: the owner will deal with it another way; the job then cannot disable the trapped mod, and says so.
 
-Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4): A and B
-are done automatically, C is reported at first and automatic later, D always becomes a step for the owner (§14):
+Within a dependant that is demastered, each thing that needs a trapped plugin is one of these cases (MT4): A, B
+and (since the first real dry runs, WHY§55) C are done automatically, D always becomes a step for the owner (§14):
 
 | Case | What needs the trapped plugin | What ModTrap does (proposed) |
 |---|---|---|
 | A | The record itself belongs to the trapped plugin (the dependant overrides it) | Take the dependant's copy of the record out of the dependant |
 | B | An entry in a list inside a record that belongs to someone else (a FormID list entry, a levelled list entry, a keyword in a keyword list) | Take that entry out, keep the record |
-| C | A part of a record that the dependant only carries on from the trapped mod (a condition, a script property, a single field) | At first: as D, with the dry run saying where the part comes from and what it is without the mod (XE01§14, WHY§52). Later: put the part back as the dependant's remaining masters have it |
+| C | A part of a record that the dependant only carries on from the trapped mod (a condition, a script attachment, a single field) | Put the part back as the dependant's last master without the mod has it (or take it out, if that master has none); in a list the dependant merged itself, take out the entries that are the mod's. Only where the dry run's evidence shows the part is not the dependant's own doing (XE01§14, XE01§16, WHY§55); else as D |
 | D | Anything else, or anything xEdit refuses to change | Change nothing in this dependant; report it as "needs you", with the record and field |
 
 These are edits inside the dependant plugins only. The trapped mod's own files are never edited and never deleted.

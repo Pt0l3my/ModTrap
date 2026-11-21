@@ -21,6 +21,10 @@
        part needs no trapped plugin ("" if none), how that version stands ("present", "absent", or "needs"
        and a plugin the dependant does not have as a master), how many entries of the part need a trapped
        plugin, and 1 if the part without those entries is what that master has, else 0
+    G  for a list among those parts, one line for each of its entries that needs a trapped plugin (see
+       ReportEntry): file, the record's form id, the list's name, the entry's place in it, the plugin loaded
+       before the dependant whose version of the list has the very same entry ("" if none), and 1 if taking
+       the entry out would join the conditions on either side of it differently, else 0
     D  a dependant is done: file, records, records needing a trapped plugin
     M  a dependant named in the job is not loaded: file
     U  a loaded plugin xEdit holds as changed although this script changed nothing: file
@@ -275,6 +279,68 @@ begin
     prevFile + #9 + prevState + #9 + IntToStr(tainted) + #9 + restSame);
 end;
 
+// 1 if this entry of a list of conditions is joined to the next by "or", else 0 (also for anything else).
+function JoinedByOr(en: IInterface): integer;
+var
+  typ: IInterface;
+begin
+  Result := 0;
+  typ := ElementByPath(en, 'CTDA\Type');
+  if Assigned(typ) then
+    if (GetNativeValue(typ) mod 2) = 1 then
+      Result := 1;
+end;
+
+// Where one entry of a list comes from. The entry needs a trapped plugin. This finds the last plugin loaded
+// before the dependant whose version of the same list holds the very same entry: the dependant then did not
+// write the entry itself. Conditions joined by "or" form a group that ends at the first one joined by "and";
+// taking out the entry that ends a group would join that group to what follows, so that case is told apart.
+procedure ReportEntry(fn, recForm: string; rec, top: IInterface; idx: integer);
+var
+  m, v, vt, en: IInterface;
+  i, k, myOrder, order, srcOrder, breaks: integer;
+  mine, srcFile: string;
+begin
+  en := ElementByIndex(top, idx);
+  mine := Shape(en);
+  m := MasterOrSelf(rec);
+  myOrder := GetLoadOrder(GetFile(rec));
+  srcFile := '';
+  srcOrder := -1;
+  for i := -1 to Pred(OverrideCount(m)) do begin
+    if i < 0 then
+      v := m
+    else
+      v := OverrideByIndex(m, i);
+    order := GetLoadOrder(GetFile(v));
+    if (order < myOrder) and (order > srcOrder) then begin
+      vt := ElementByName(v, Name(top));
+      if Assigned(vt) then
+        for k := 0 to Pred(ElementCount(vt)) do
+          if Shape(ElementByIndex(vt, k)) = mine then begin
+            srcOrder := order;
+            srcFile := GetFileName(GetFile(v));
+          end;
+    end;
+  end;
+  breaks := 0;
+  if idx > 0 then
+    if (JoinedByOr(ElementByIndex(top, idx - 1)) = 1) and (JoinedByOr(en) = 0) then
+      breaks := 1;
+  slOut.Add('G' + #9 + fn + #9 + recForm + #9 + Clean(Name(top)) + #9 + IntToStr(idx) + #9 + srcFile + #9 + IntToStr(breaks));
+end;
+
+procedure ReportEntries(fn, recForm: string; rec, top: IInterface);
+var
+  i: integer;
+begin
+  if (ElementTypeAsText(top) <> 'etSubRecordArray') and (ElementTypeAsText(top) <> 'etArray') then
+    Exit;
+  for i := 0 to Pred(ElementCount(top)) do
+    if NeedsTrapped(ElementByIndex(top, i)) then
+      ReportEntry(fn, recForm, rec, top, i);
+end;
+
 procedure ReportParts(fn, recForm: string; rec: IInterface);
 var
   i: integer;
@@ -283,8 +349,10 @@ begin
   for i := 0 to Pred(ElementCount(rec)) do begin
     top := ElementByIndex(rec, i);
     if CanContainFormIDs(top) then
-      if NeedsTrapped(top) then
+      if NeedsTrapped(top) then begin
         ReportCarried(fn, recForm, rec, top);
+        ReportEntries(fn, recForm, rec, top);
+      end;
   end;
 end;
 
@@ -367,7 +435,7 @@ var
   f: IInterface;
   depName: string;
 begin
-  slOut.Add('H' + #9 + 'modtrap-report/3' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
+  slOut.Add('H' + #9 + 'modtrap-report/4' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
   n := StrToInt(slJob.Values['trap.count']);
   for i := 0 to Pred(n) do
     slTrap.Add(slJob.Values['trap.' + IntToStr(i)]);

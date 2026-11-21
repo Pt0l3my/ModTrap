@@ -200,3 +200,21 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **METHOD.** In all three scripts a missed write of the progress file is let go (the next line writes the whole
   list again, and the end is told by the report), and the report's write is tried again for some seconds before
   it counts as a failure. ModTrap reads only the last bytes of the report when it looks for the end line.
+
+## 16. Putting a part back, and what the first evidence run showed (2026-11-21)
+
+- **FACT (the owner's PC).** The reading script of §14 ran on the real list: 74 `C` lines for 17 dependants, in
+  90 seconds, nothing changed. `MasterOrSelf`, `OverrideByIndex`, `GetLoadOrder` and `ElementByName` behave as
+  §14 reads them; the same part was found in an earlier plugin for most parts, and not for lists that a big
+  patch had merged itself.
+- **FACT.** xEdit's own shipped scripts copy a whole part from one version of a record to another with
+  `ElementAssign(target, LowInteger, source, False)`, lists included
+  (`Build/Edit Scripts/Worldspace copy landscape.pas:219-225`). **METHOD.** ModTrap's changing script uses the same
+  call to put a part back, then reads the part again: it must no longer need a trapped plugin and its text
+  (§14) must equal the source's, or the action is refused and that dependant is not written. LIKELY until the
+  probe has run it: that the call does this for a single link; unproven for a script attachment (`VMAD`) until
+  the first real run, where the same check guards it.
+- **METHOD.** For a list, the reading script also says, for each entry that needs a trapped plugin, which
+  earlier plugin's version of the list has the very same entry (`G`). For conditions it reads each entry's
+  type (`CTDA\Type`, whose lowest bit is "or") and marks an entry whose removal would join the conditions on
+  either side differently: one that ends a run of "or". Such an entry is never taken out automatically.

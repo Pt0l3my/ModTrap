@@ -1,8 +1,8 @@
 {
   ModTrap's second script for xEdit (ModTrap's design, section 6.3). Our own code; MIT licence.
 
-  NOT USED YET: ModTrap does not start xEdit with this script until its read-only script (ModTrap.pas) has been
-  proven on a real modlist and this one on ModTrap's own invented plugins (the probe).
+  ModTrap starts xEdit with this script only after the probe has passed with it on ModTrap's own invented
+  plugins, on the owner's PC.
 
   It changes the dependant plugins IN MEMORY ONLY, exactly as the job says, writes each finished plugin to a NEW
   file in ModTrap's own folder, and then takes the "changed" mark off every loaded plugin, so that xEdit saves
@@ -16,12 +16,17 @@
         <form id>|R                  the record itself (it belongs to a trapped plugin)
         <form id>|E|<i/j/k>|<name>   the element reached from the record by taking element i, then j of that,
                                      then k of that; <name> is what that element must be called
-  Nothing is taken out unless it is what the job says it is: a record must belong to a trapped plugin, an element
-  must have the expected name and must itself need a trapped plugin. One refusal and that dependant is not written.
+        <form id>|P|<part>|<plugin>  put the named part of the record (one of its direct elements) back as the
+                                     named plugin's version of the record has it
+        <form id>|X|<part>|<plugin>  take the named part out: the named plugin's version of the record has none
+  Nothing is done unless it is what the job says it is: a record must belong to a trapped plugin, an element
+  must have the expected name and must itself need a trapped plugin; a part is put back only from a plugin that
+  is not trapped, whose version needs no trapped plugin, and only if the part then reads exactly as that version.
+  One refusal and that dependant is not written.
 
   The report, tab-separated:
     H  format, mode, xEdit's version
-    A  an action: file, form id, R or E, "ok" or "refused", the reason
+    A  an action: file, form id, R, E, P or X, "ok" or "refused", the reason
     C  after the actions and Clean Masters: file, its masters now (comma separated), records still needing a
        trapped plugin, records now
     W  a finished plugin written: file, the new file's path
@@ -188,6 +193,102 @@ begin
   end;
 end;
 
+// An element with everything under it as text: names and values. Two elements with the same text hold the same.
+function Shape(e: IInterface): string;
+var
+  i: integer;
+  child: IInterface;
+  sub, all: string;
+begin
+  if ElementCount(e) = 0 then begin
+    Result := Clean(GetEditValue(e));
+    Exit;
+  end;
+  all := '(';
+  for i := 0 to Pred(ElementCount(e)) do begin
+    child := ElementByIndex(e, i);
+    sub := Shape(child);
+    all := all + Clean(Name(child)) + '=' + sub + ';';
+  end;
+  Result := all + ')';
+end;
+
+// The version of a record that the named plugin holds, or nothing.
+function VersionIn(rec: IInterface; plugName: string): IInterface;
+var
+  m, v: IInterface;
+  i: integer;
+begin
+  Result := nil;
+  m := MasterOrSelf(rec);
+  for i := -1 to Pred(OverrideCount(m)) do begin
+    if i < 0 then
+      v := m
+    else
+      v := OverrideByIndex(m, i);
+    if SameText(GetFileName(GetFile(v)), plugName) then
+      Result := v;
+  end;
+end;
+
+// Puts a part of a record back as another plugin's version of the record has it, or takes it out when that
+// version has none. Returns '' when done, else why it was refused.
+function PutBack(rec: IInterface; what, partName, source: string): string;
+var
+  target, v, src: IInterface;
+begin
+  Result := '';
+  target := ElementByName(rec, partName);
+  if not Assigned(target) then begin
+    Result := 'the record has no part called ' + partName;
+    Exit;
+  end;
+  if not NeedsTrapped(target) then begin
+    Result := 'the part ' + partName + ' does not need a trapped plugin';
+    Exit;
+  end;
+  if IsTrapped(source) then begin
+    Result := 'a part is never put back from a trapped plugin';
+    Exit;
+  end;
+  v := VersionIn(rec, source);
+  if not Assigned(v) then begin
+    Result := source + ' has no version of the record';
+    Exit;
+  end;
+  src := ElementByName(v, partName);
+  if what = 'X' then begin
+    if Assigned(src) then begin
+      Result := source + ' has the part ' + partName + ': it is not taken out';
+      Exit;
+    end;
+    Remove(target);
+    if Assigned(ElementByName(rec, partName)) then
+      Result := 'the part ' + partName + ' could not be taken out';
+    Exit;
+  end;
+  if not Assigned(src) then begin
+    Result := source + ' has no part called ' + partName;
+    Exit;
+  end;
+  if NeedsTrapped(src) then begin
+    Result := 'the part in ' + source + ' needs a trapped plugin itself';
+    Exit;
+  end;
+  ElementAssign(target, LowInteger, src, False);
+  target := ElementByName(rec, partName);
+  if not Assigned(target) then begin
+    Result := 'the part ' + partName + ' is gone after being put back';
+    Exit;
+  end;
+  if NeedsTrapped(target) then begin
+    Result := 'the part ' + partName + ' still needs a trapped plugin after being put back';
+    Exit;
+  end;
+  if Shape(target) <> Shape(src) then
+    Result := 'the part ' + partName + ' did not come out as ' + source + ' has it';
+end;
+
 // One action on one dependant. Returns '' when done, else why it was refused.
 function DoAction(f: IInterface; action: string): string;
 var
@@ -227,6 +328,10 @@ begin
       Exit;
     end;
     Remove(target);
+    Exit;
+  end;
+  if (what = 'P') or (what = 'X') then begin
+    Result := PutBack(rec, what, Part(action, '|', 2), Part(action, '|', 3));
     Exit;
   end;
   Result := 'an action this script does not know';
@@ -296,7 +401,7 @@ var
   f: IInterface;
   depName: string;
 begin
-  slOut.Add('H' + #9 + 'modtrap-apply/1' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
+  slOut.Add('H' + #9 + 'modtrap-apply/2' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
   n := StrToInt(slJob.Values['trap.count']);
   for i := 0 to Pred(n) do
     slTrap.Add(slJob.Values['trap.' + IntToStr(i)]);

@@ -297,31 +297,65 @@ class ReportTests(unittest.TestCase):
         # Without the trapped names (an old report read again) nothing is guessed.
         self.assertEqual(dryrun.parse_report(report("Inn - THA Patch.esp", few))["files"][0]["reading"], "needs you")
 
-    def test_where_a_part_that_needs_the_owner_came_from(self):
-        head = ["H\tmodtrap-report/3\treport\t1", "F\tBig Patch.esp\t9\tSkyrim.esm,Fixes.esp,Bad.esp,Other.esp"]
-        rec = lambda form: "R\tBig Patch.esp\tINFO\t%s\tSkyrim.esm\t0\t" % form        # noqa: E731
-        el = lambda form: "E\tBig Patch.esp\t%s\tINFO \\ Conditions \\ Condition \\ CTDA \\ Parameter #1\tBad.esp\t05000802\t%s" % (   # noqa: E731
-            form, fake_chain(("Parameter #1", "etValue", "dtInteger", 0, 3), ("CTDA", "etSubRecord", "dtStruct", 9, 0),
-                             ("Condition", "etSubRecordStruct", "dtStruct", 1, 2), ("Conditions", "etSubRecordArray", "dtSubRecordArray", 3, 4)))
-        part = lambda form, same, prev, state, rest: "C\tBig Patch.esp\t%s\tConditions\tetSubRecordArray\t%s\t%s\t%s\t1\t%s" % (   # noqa: E731
-            form, same, prev, state, rest)
-        lines = head + [
-            rec("00000A01"), el("00000A01"), part("00000A01", "Bad.esp", "Fixes.esp", "present", "0"),    # carried on
-            rec("00000A02"), el("00000A02"), part("00000A02", "", "Fixes.esp", "present", "1"),           # added on top
-            rec("00000A03"), el("00000A03"), part("00000A03", "", "Fixes.esp", "present", "0"),           # its own doing
-            rec("00000A04"), el("00000A04"), part("00000A04", "Bad.esp", "", "", "0"),                    # nothing to go back to
-            rec("00000A05"), el("00000A05"), part("00000A05", "Bad.esp", "Fixes.esp", "needs Elsewhere.esp", "0"),
-            rec("00000A06"), el("00000A06"), part("00000A06", "Fixes.esp", "Skyrim.esm", "absent", "0"),  # same as a plugin that stays
-            rec("00000A07"), el("00000A07"),                                                              # an older script: no C line
-            "D\tBig Patch.esp\t9\t7", "X\tok\t"]
-        f = dryrun.parse_report("\r\n".join(lines), ["Bad.esp"], ["Bad"], ["Skyrim.esm"])["files"][0]
-        came = {it["form"]: (it["elements"][0]["came"], it["carried"]) for it in f["items"]}
-        self.assertEqual(came, {"00000A01": ("carried", True), "00000A02": ("added", True), "00000A03": ("", False),
-                                "00000A04": ("", False), "00000A05": ("", False), "00000A06": ("", False),
-                                "00000A07": ("", False)})
-        self.assertEqual((f["reading"], f["needs_you"], f["carried"]), ("needs you", 7, 2))   # reported, not yet acted on
-        e = f["items"][0]["elements"][0]
-        self.assertEqual((e["part"], e["same_as"], e["without"], e["without_state"]), ("Conditions", "Bad.esp", "Fixes.esp", "present"))
+    def test_a_part_only_carried_on_from_the_mod_is_put_back(self):
+        """MT4's case C (WHY§55). Invented names. Big Patch and Late Patch are two of a list's big patch files;
+        "Inn - Bramble Patch" is a patch for the mod, and is switched off."""
+        cond = lambda f, form, i, n: "E\t%s\t%s\tINFO \\ Conditions \\ Condition \\ CTDA \\ Parameter #1\tBramble.esp\t05000802\t%s" % (   # noqa: E731
+            f, form, fake_chain(("Parameter #1", "etValue", "dtInteger", 0, 3), ("CTDA", "etSubRecord", "dtStruct", 9, 0),
+                                ("Condition", "etSubRecordStruct", "dtStruct", 1, i), ("Conditions", "etSubRecordArray", "dtSubRecordArray", n, 4)))
+        field = lambda f, form: "E\t%s\t%s\tINFO \\ PNAM - Previous INFO\tBramble.esp\t05000803\t%s" % (   # noqa: E731
+            f, form, fake_chain(("PNAM - Previous INFO", "etSubRecord", "dtFormID", 0, 6)))
+        rec = lambda f, form: "R\t%s\tINFO\t%s\tSkyrim.esm\t0\t" % (f, form)   # noqa: E731
+        conds = lambda f, form, same, prev, state: "C\t%s\t%s\tConditions\tetSubRecordArray\t%s\t%s\t%s\t1\t0" % (f, form, same, prev, state)   # noqa: E731
+        prev = lambda f, form, same, prev, state: "C\t%s\t%s\tPNAM - Previous INFO\tetSubRecord\t%s\t%s\t%s\t0\t0" % (f, form, same, prev, state)   # noqa: E731
+        entry = lambda f, form, i, src, breaks: "G\t%s\t%s\tConditions\t%d\t%s\t%s" % (f, form, i, src, breaks)   # noqa: E731
+        big, late, inn = "Big Patch.esp", "Late Patch.esp", "Inn - Bramble Patch.esp"
+        many = "Skyrim.esm,Fixes.esp,Bramble.esp,One.esp,Two.esp,Three.esp"
+        lines = ["H\tmodtrap-report/4\treport\t1",
+                 "F\t%s\t3\tSkyrim.esm,Inn.esp,Bramble.esp" % inn, "D\t%s\t3\t0" % inn,
+                 "F\t%s\t20\t%s" % (big, many),
+                 # 1. The same part as the mod's own version: put back as the last master without the mod has it.
+                 rec(big, "00000A01"), field(big, "00000A01"), prev(big, "00000A01", "Bramble.esp", "Fixes.esp", "present"),
+                 # 2. The same as a patch that is switched off, and that master has no such part: taken out.
+                 rec(big, "00000A02"), field(big, "00000A02"), prev(big, "00000A02", inn, "Skyrim.esm", "absent"),
+                 # 3. A list the patch merged itself; the one entry that needs the mod is the mod's: entry taken out.
+                 rec(big, "00000A03"), cond(big, "00000A03", 2, 3), conds(big, "00000A03", "", "Fixes.esp", "present"),
+                 entry(big, "00000A03", 2, "Bramble.esp", "0"),
+                 # 4. The same, but the entry is nobody else's: the patch wrote it. Needs the owner.
+                 rec(big, "00000A04"), cond(big, "00000A04", 1, 3), conds(big, "00000A04", "", "Fixes.esp", "present"),
+                 entry(big, "00000A04", 1, "", "0"),
+                 # 5. The same, but taking the entry out would join the conditions around it differently.
+                 rec(big, "00000A05"), cond(big, "00000A05", 1, 3), conds(big, "00000A05", "", "Fixes.esp", "present"),
+                 entry(big, "00000A05", 1, "Bramble.esp", "1"),
+                 # 6. The mod's own version, but the master's version would need a plugin the patch does not have.
+                 rec(big, "00000A06"), field(big, "00000A06"), prev(big, "00000A06", "Bramble.esp", "Fixes.esp", "needs Elsewhere.esp"),
+                 # 7. A single field that is the patch's own doing.
+                 rec(big, "00000A07"), field(big, "00000A07"), prev(big, "00000A07", "", "Fixes.esp", "present"),
+                 # 8. An older script: nothing said about where it comes from.
+                 rec(big, "00000A08"), field(big, "00000A08"),
+                 "D\t%s\t20\t8" % big,
+                 "F\t%s\t9\t%s,%s" % (late, many, big),
+                 # The later patch carries the earlier one's versions on, and gets what the earlier one gets.
+                 rec(late, "00000A01"), field(late, "00000A01"), prev(late, "00000A01", big, "Fixes.esp", "present"),
+                 rec(late, "00000A03"), cond(late, "00000A03", 2, 3), conds(late, "00000A03", big, "Fixes.esp", "present"),
+                 entry(late, "00000A03", 2, big, "0"),
+                 # ... but not where the earlier one goes back to another plugin's version than this one would.
+                 rec(late, "00000A02"), field(late, "00000A02"), prev(late, "00000A02", big, "Fixes.esp", "present"),
+                 "D\t%s\t9\t3" % late, "X\tok\t"]
+        r = dryrun.parse_report("\r\n".join(lines), ["Bramble.esp"], ["Bramble"], ["Skyrim.esm"])
+        files = {f["name"]: f for f in r["files"]}
+        self.assertEqual(files[inn]["reading"], "patch only")
+        got = {it["form"]: (it["would"], it["elements"][0]["would"], it["elements"][0].get("action", ""),
+                            it["elements"][0].get("from", "")) for it in files[big]["items"]}
+        self.assertEqual(got, {
+            "00000A01": ("part", "part", "put back", "Fixes.esp"), "00000A02": ("part", "part", "take out", "Skyrim.esm"),
+            "00000A03": ("entry", "entry", "", ""), "00000A04": ("needs you", "needs you", "", ""),
+            "00000A05": ("needs you", "needs you", "", ""), "00000A06": ("needs you", "needs you", "", ""),
+            "00000A07": ("needs you", "needs you", "", ""), "00000A08": ("needs you", "needs you", "", "")})
+        self.assertEqual((files[big]["parts"], files[big]["entries"], files[big]["needs_you"], files[big]["reading"]),
+                         (2, 1, 5, "needs you"))
+        got = {it["form"]: (it["would"], it["elements"][0].get("action", "")) for it in files[late]["items"]}
+        self.assertEqual(got, {"00000A01": ("part", "put back"), "00000A03": ("entry", ""), "00000A02": ("needs you", "")})
 
     def test_chains(self):
         ch = lambda *steps: "\x1e".join("\x1f".join(str(x) for x in st) for st in steps)   # noqa: E731

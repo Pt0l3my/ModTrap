@@ -104,6 +104,11 @@ dependant untouched and becomes a step for the owner in the job's Steps tab (MT1
 named. Reason: MT17's "play the game without issues" is better served by an honest "this one needs you" than by a
 forced edit.
 
+**Note, 2026-11-21.** The first real dry runs showed what case C is on a real list and that the dependant's
+remaining masters answer it: case C is automatic where the dry run's evidence shows the dependant only carries the
+part on from the mod, and still "needs you" otherwise (WHY§55). The owner's words that led there: "basically it's
+about finding what xedit find registered for the big patch files the modlist features".
+
 ## MT5
 
 **Where the result goes** · *2026-11-20 · Left to ModTrap by the owner*

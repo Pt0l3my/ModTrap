@@ -194,25 +194,35 @@ class ProbeTests(unittest.TestCase):
     def test_the_probe_plugins_are_well_formed_and_say_what_they_should(self):
         files = probe.probe_set()
         probe.check_headers(files)
-        self.assertEqual(sorted(files), sorted([probe.BAD, probe.OVERRIDE, probe.PATCH]))
-        bad = read_records(files[probe.BAD])
-        self.assertEqual([(s, f) for s, f, _ in bad], [("GLOB", 0x800), ("GLOB", 0x801)])
-        over = read_records(files[probe.OVERRIDE])
-        self.assertEqual([(s, f) for s, f, _ in over], [("GLOB", 0x800), ("GLOB", 0x01000800), ("FLST", 0x01000801)])
+        self.assertEqual(sorted(files), sorted([probe.BASE, probe.BAD, probe.OVERRIDE, probe.PATCH]))
+        base = read_records(files[probe.BASE])
+        self.assertEqual([(s, f) for s, f, _ in base], [("MATT", 0x800), ("MATT", 0x801)])
+        bad = read_records(files[probe.BAD])                           # Base is 00 in Bad; Bad's own are 01
+        self.assertEqual([(s, f) for s, f, _ in bad],
+                         [("GLOB", 0x01000800), ("GLOB", 0x01000801), ("MATT", 0x801), ("MATT", 0x01000802)])
+        over = read_records(files[probe.OVERRIDE])                     # Base 00, Bad 01, its own 02
+        self.assertEqual([(s, f) for s, f, _ in over],
+                         [("GLOB", 0x01000800), ("GLOB", 0x02000800), ("FLST", 0x02000801), ("MATT", 0x801)])
         entries = [struct.unpack("<I", b)[0] for t, b in over[2][2] if t == "LNAM"]
-        self.assertEqual(entries, [0x01000800, 0x00000801])            # its own global, and one of Bad's
+        self.assertEqual(entries, [0x02000800, 0x01000801])            # its own global, and one of Bad's
+        # Base's brick: its parent is Base's stone; Bad makes it Bad's own material, and Override carries that on.
+        parent = lambda recs: [struct.unpack("<I", b)[0] for s, f, fs in recs if (s, f) == ("MATT", 0x801) for t, b in fs if t == "PNAM"]   # noqa: E731
+        self.assertEqual((parent(base), parent(bad), parent(over)), ([0x800], [0x01000802], [0x01000802]))
+        self.assertIn(probe.PARENT_BAD, files[probe.OVERRIDE])
+        self.assertNotIn(probe.PARENT_BACK, files[probe.OVERRIDE])
         patch = read_records(files[probe.PATCH])
         self.assertTrue(all(f >> 24 == 0 for _, f, _ in patch))        # nothing of its own: a patch only
-        self.assertEqual(probe.EXPECTED[probe.OVERRIDE]["own"], sum(1 for _, f, _ in over if f >> 24 == 0))
+        self.assertEqual(probe.EXPECTED[probe.OVERRIDE]["own"], sum(1 for s, f, _ in over if s == "GLOB" and f >> 24 == 1))
 
     def test_the_probe_plugins_read_as_a_modlist(self):
         with tempfile.TemporaryDirectory() as d:
             files = probe.probe_set()
             root = fx.make_instance(Path(d) / "List", [("+", "ModTrap Probe", files)],
-                                    load_order=[probe.BAD, probe.OVERRIDE, probe.PATCH])
+                                    load_order=[probe.BASE, probe.BAD, probe.OVERRIDE, probe.PATCH])
             m = model.build(instance.load(root))
             self.assertEqual(m.issues, [])
             self.assertEqual(m.row(probe.BAD).dependants, [probe.OVERRIDE, probe.PATCH])
+            self.assertEqual(m.row(probe.BASE).dependants, [probe.BAD, probe.OVERRIDE])
 
 
 class NotReachableTests(unittest.TestCase):

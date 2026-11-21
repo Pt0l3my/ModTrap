@@ -313,16 +313,50 @@ def named_for(dependant: str, trapped: Iterable[str], trapped_mods: Iterable[str
     return False
 
 
-def carried(part: dict, sources: set[str]) -> str:
-    """How a part of a record that needs a trapped plugin came to do so, from the script's C line (XE01§14):
-    "carried" (the dependant's version of the part is that of a trapped plugin, or of another dependant: it only
-    carries it on), "added" (the entries that need the trapped plugin sit on top of what the dependant's remaining
-    masters have), or "" (the dependant's own doing, or nothing to put in its place)."""
-    if not part or not part["prev"] or part["state"] not in ("present", "absent"):
-        return ""
-    if fold(part["same"]) in sources:
-        return "carried"
-    return "added" if part["rest_same"] else ""
+LISTS = ("etSubRecordArray", "etArray")
+
+
+def resolve_part(key: tuple[str, str, str], hard: list[dict], parts: dict, entries: dict, gone: set[str],
+                 sources: set[str], settled: dict) -> tuple:
+    """What ModTrap does about one part of a record (one of the record's direct elements) that needs a trapped
+    plugin and is not simply a list that may be shortened (MT4's case C; XE01§14, WHY§55). `hard` are the
+    elements of that part that need the owner so far. The answer is kept in `settled` for the dependants that
+    load later and carry the same part on.
+
+    ("put back", plugin)  the dependant's version of the part is that of a plugin that goes (a trapped plugin, or
+                          a patch that is switched off): the part is put back as the dependant's last master
+                          that does not need the mod has it
+    ("take out", plugin)  the same, where that master has no such part
+    ("entries",)          the part is a list, and each entry that needs the mod is also in an earlier plugin's
+                          version of the list (the dependant did not write it): those entries are taken out
+    ()                    none of these: it needs the owner"""
+    if key in settled:
+        return settled[key]
+    settled[key] = ()                                   # until known; also ends a chain that comes back on itself
+    file, form, name = key
+    part = parts.get(key)
+    answer: tuple = ()
+    if part:
+        same = fold(part["same"])
+        back = ("put back" if part["state"] == "present" else "take out", part["prev"]) \
+            if part["prev"] and part["state"] in ("present", "absent") else ()
+        if same in gone and back:
+            answer = back
+        elif same in sources and same not in gone:      # the same as an earlier dependant that is itself demastered
+            theirs = settled.get((part["same"], form, name), ())
+            if theirs and theirs[0] in ("put back", "take out") and theirs == back:
+                answer = back                           # both go back to the same plugin's version
+        if not answer and part["element"] in LISTS and hard:
+            ok = True
+            for e in hard:
+                g = entries.get((file, form, name, e["route"][-1])) if len(e.get("route") or []) == 2 else None
+                if e["kind"] != "entry" or e["array"] != name or not g or fold(g["src"]) not in sources or g["breaks"]:
+                    ok = False
+                    break
+            if ok:
+                answer = ("entries",)
+    settled[key] = answer
+    return answer
 
 
 def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[str] = (),
@@ -341,6 +375,7 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
     parts: dict[tuple[str, str, str], dict] = {}
+    entries: dict[tuple[str, str, str, int], dict] = {}
     for line in text.split("\n"):              # not splitlines(): the chain's separators would count as line ends
         f = line.rstrip("\r").split("\t")
         kind = f[0]
@@ -368,6 +403,8 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
         elif kind == "C" and len(f) >= 10:
             parts[(f[1], f[2], f[3])] = {"part": f[3], "element": f[4], "same": f[5], "prev": f[6], "state": f[7],
                                          "tainted": int(f[8] or 0), "rest_same": f[9] == "1"}
+        elif kind == "G" and len(f) >= 7 and f[4].isdigit():
+            entries[(f[1], f[2], f[3], int(f[4]))] = {"src": f[5], "breaks": f[6] == "1"}
         elif kind == "D" and len(f) >= 4 and f[1] in files:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:
@@ -383,27 +420,46 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
             out["end"], out["reason"] = f[1], f[2] if len(f) > 2 else ""
     sources = {fold(x) for x in trapped} | {fold(n) for n in files}
     for fd in files.values():
-        fd["carried"] = 0
+        partners = [x for x in fd["masters"] if fold(x) not in game]
+        fd["made_for"] = bool(trapped) and len(partners) <= PARTNERS and named_for(fd["name"], trapped, trapped_mods)
+    gone = {fold(x) for x in trapped} | {fold(n) for n, fd in files.items() if fd["made_for"]}
+    settled: dict = {}
+    for fd in out["files"]:                             # in load order: a later dependant may carry an earlier one on
+        fd["parts"] = 0
         for rec in fd["items"]:
             if rec["own"]:
                 rec["would"] = "record"
                 fd["own"] += 1
-            elif rec["elements"] and all(e["would"] == "entry" for e in rec["elements"]):
-                rec["would"] = "entry"
-                fd["entries"] += len(rec["elements"])
-            else:
-                rec["would"] = "needs you"
-                fd["needs_you"] += 1
-                hard = [e for e in rec["elements"] if e["would"] == "needs you"]
+                continue
+            by_part: dict[str, list[dict]] = {}
+            for e in rec["elements"]:
+                if e["would"] == "needs you":
+                    by_part.setdefault(e["part"], []).append(e)
+            for name, hard in by_part.items():
+                key = (fd["name"], rec["form"], name)
+                answer = resolve_part(key, hard, parts, entries, gone, sources, settled)
+                part = parts.get(key)
                 for e in hard:
-                    part = parts.get((fd["name"], rec["form"], e["part"]))
-                    e["came"] = carried(part, sources)
                     if part:
                         e["same_as"], e["without"], e["without_state"] = part["same"], part["prev"], part["state"]
-                rec["carried"] = bool(hard) and all(e["came"] for e in hard)
-                fd["carried"] += rec["carried"]
-        partners = [x for x in fd["masters"] if fold(x) not in game]
-        fd["made_for"] = bool(trapped) and len(partners) <= PARTNERS and named_for(fd["name"], trapped, trapped_mods)
+                    if answer and answer[0] == "entries":
+                        e["would"], e["came"] = "entry", "added"
+                    elif answer:
+                        e["would"], e["came"], e["action"], e["from"] = "part", "carried", answer[0], answer[1]
+                    else:
+                        e["came"] = ""
+                if answer and answer[0] != "entries":
+                    fd["parts"] += 1
+            kinds = {e["would"] for e in rec["elements"]}
+            if not rec["elements"] or "needs you" in kinds:
+                rec["would"] = "needs you"
+                fd["needs_you"] += 1
+            elif "part" in kinds:
+                rec["would"] = "part"
+                fd["entries"] += sum(e["would"] == "entry" for e in rec["elements"])
+            else:
+                rec["would"] = "entry"
+                fd["entries"] += len(rec["elements"])
         fd["why"] = ""
         if not fd["done"]:
             fd["reading"] = "not finished"
@@ -707,10 +763,9 @@ class Job:
         log.info("the dry run is done in %d s: %d dependant(s) read, every one unchanged on disk",
                  int(self.ended - self.started), len(fs))
         for fd in fs:
-            log.info("  %s: %d record(s) of the trapped mod's own, %d list entr(ies), %d that need you%s -> %s%s",
-                     fd["name"], fd["own"], fd["entries"], fd["needs_you"],
-                     " (%d of them only carried on from the mod)" % fd["carried"] if fd.get("carried") else "",
-                     fd["reading"], " (%s)" % fd["why"] if fd.get("why") else "")
+            log.info("  %s: %d record(s) of the trapped mod's own, %d list entr(ies), %d part(s) carried on from the "
+                     "mod, %d that need you -> %s%s", fd["name"], fd["own"], fd["entries"], fd.get("parts", 0),
+                     fd["needs_you"], fd["reading"], " (%s)" % fd["why"] if fd.get("why") else "")
 
 
 def _read(path: Path) -> str:
