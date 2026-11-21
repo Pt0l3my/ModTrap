@@ -92,6 +92,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 67 | 2026-11-21 | "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared | DECIDED | #process #page #mo2 #history |
 | 68 | 2026-11-21 | A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running | DECIDED | #process #version #server #page |
 | 69 | 2026-11-21 | The other tools checked: a change is not a stake (the patcher was asked for a value many plugins share), and a behaviour tool reads lists and patch folders, not animation files | DECIDED | #tools #steps #xedit #process |
+| 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
 
 ## Entries
 
@@ -1579,3 +1580,27 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   evidence and shows it; where it differs from the guide, the evidence is there to judge.
 - Checked: tests on invented plugins and folders. Not checked: the new lines on a real xEdit (the probe runs
   them first), and the search of a real behaviour output.
+
+### 70. A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves
+
+`2026-11-21` · DECIDED · `#page #process #steps` · refs: MT17, DESIGN§4, DESIGN§14, DESIGN§18, WHY§60, WHY§61
+
+- The owner: "can you add job process tab that would show the steps as smaller boxes interlinked and within each
+  step box show list of tasks to complete to finish. This new page will show the process in real time (also add
+  text colors, white normally, amber ongoing, green complete, red error, etc.)."
+- FACT: until now the page knew a job only as a word (working, verified, installed) and the log's lines. What a
+  job was doing at a given moment was in the log alone.
+- DECIDED: each job tells a board what its tasks are when it starts, and marks each as it goes: waiting, going,
+  done, failed, skipped, or waiting for the owner. For the part xEdit does, the marks come from the lines
+  ModTrap's own scripts write while they work (which dependant is read, which plugin is written), so the page
+  follows xEdit without asking it anything. The board decides nothing; a job that never marks it works as before.
+- DECIDED: the stages are the ones the one go runs (WHY§60): probe, dry run, plan, demaster on copies, put in
+  place; and one more box made from the Steps tab for what follows (tools, the owner's checks). Colours as the
+  owner asked, with purple for what waits for the owner and grey for what is not needed.
+- DECIDED: the probe's inner dry run and change write to a board of their own: on the page the probe is one box
+  with its seven steps, and the real dry run's box is not painted by a test on invented plugins.
+- REJECTED: working the stages out on the page from the log's text. The log's wording is for reading and
+  changes; a mark is a contract.
+- Checked: tests for the board and for the stages through a whole demaster on the stand-in; in a browser, the
+  one go from probe to in place, the box going amber while xEdit runs, and all green at the end.
+- Not checked: on the owner's PC; a failed run's red box was checked by test only, not by eye.

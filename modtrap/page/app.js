@@ -506,7 +506,8 @@ function renderDemaster(force) {
   }
   if (state.dmError) cards.push(el("div", { class: "card" }, el("p", { class: "would-needs", text: state.dmError })));
   if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
-    el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone; the Log tab shows its lines. When every new plugin is checked, ModTrap puts them in place." })));
+    el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone. When every new plugin is checked, ModTrap puts them in place." }),
+    el("div", { class: "actions" }, (() => { const b = el("button", { type: "button", text: "Watch it on the Process tab" }); b.addEventListener("click", () => showTab("process")); return b; })())));
   if (d && d.state === "failed") cards.push(el("div", { class: "card" }, el("h2", { text: "The demaster stopped" }),
     el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." }),
     el("div", { class: "actions" }, (() => {
@@ -1052,7 +1053,7 @@ function gotoMod(name) {
 function updateTray() {
   const n = state.picked.size;
   const tab = state.tab || "mods";
-  $("tray").hidden = !n || tab === "selection" || tab === "job" || tab === "steps";
+  $("tray").hidden = !n || tab === "selection" || tab === "job" || tab === "steps" || tab === "process";
   const names = [...state.picked];
   $("tray-review").textContent = n === 1 ? "See what depends on it" : "See what depends on them";
   $("tray-text").textContent = plural(n, "mod") + " ticked: " + names.slice(0, 3).join(", ") + (n > 3 ? " and " + (n - 3) + " more" : "");
@@ -1491,6 +1492,76 @@ function renderSteps2(d) {
   box.replaceChildren(...[toolCard(), intro, ...cards].filter(Boolean));
 }
 
+// --- the Process tab (DESIGN§18): the demaster as it goes, stage by stage ---------------------------------------------
+
+const STAGE_TAB = { probe: "tools", dry: "job", plan: "selection", change: "selection", install: "selection", after: "steps" };
+const TASK_ICON = { waiting: "○", going: "◐", done: "✓", failed: "✕", yours: "➜", skipped: "–" };
+const STAGE_WORD = { waiting: ["to come", ""], going: ["going on", "warn"], done: ["done", "good"], failed: ["stopped", "bad"], yours: ["waits for you", ""], skipped: ["not needed", ""] };
+
+function stageState(tasks) {
+  const st = tasks.map((t) => t.state);
+  if (!st.length) return "waiting";
+  if (st.includes("failed")) return "failed";
+  if (st.includes("going")) return "going";
+  if (st.every((x) => x === "done" || x === "skipped")) return "done";
+  if (st.includes("yours")) return "yours";
+  return st.includes("done") ? "going" : "waiting";
+}
+
+// What comes after ModTrap's own part: the tools to run again and what only the owner can judge, from the steps.
+function afterStage() {
+  const d = state.stepsData;
+  if (!d || !d.steps) return null;
+  const ticks = state.stepsDone || {};
+  const tasks = [];
+  for (const st of d.steps) {
+    if (!(st.key.startsWith("tool:") || ["regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key))) continue;
+    const ticked = st.manual && !!ticks[stepKey(st.key)];
+    const done = ticked || st.state === "done";
+    tasks.push({ key: st.key, text: st.title, note: done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? "" : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
+      state: done ? "done" : st.state === "not needed" ? "skipped" : st.state.startsWith("waiting") ? "waiting" : st.who === "ModTrap" ? "waiting" : "yours" });
+  }
+  if (!tasks.length) return null;
+  // Until the demaster is in place these are to come, not yet the owner's turn.
+  const placed = (state.process || []).some((s) => s.key === "install" && s.state === "done") || !state.changes;
+  if (!placed) for (const t of tasks) if (t.state === "yours") t.state = "waiting";
+  return { key: "after", title: "After the demaster", who: "you", tasks: tasks, state: stageState(tasks), note: "The tools to run again, and what only you can judge. The Steps tab has the reasons and the evidence." };
+}
+
+function renderProcess() {
+  const stages = (state.process || []).slice();
+  const after = afterStage();
+  if (after) stages.push(after);
+  const text = JSON.stringify(stages);
+  const going = stages.find((s) => s.state === "going"), failed = stages.find((s) => s.state === "failed");
+  const yours = !going && !failed && stages.find((s) => s.state === "yours" && s.key !== "after");
+  const dot = $("process-dot");
+  dot.hidden = !(going || failed || yours);
+  dot.className = "live-dot" + (failed && !going ? " bad" : yours ? " yours" : "");
+  if (text === state.processText) return;
+  state.processText = text;
+  const flow = $("process-flow");
+  $("process-summary").textContent = !stages.length ? "Process" : going ? "Now: " + going.title : failed ? "Stopped at: " + failed.title
+    : yours ? "Waits for you: " + yours.title : stages.every((s) => s.state === "done") ? "Everything is done"
+    : after && after.state === "yours" && stages.every((s) => s === after || s.state === "done") ? "ModTrap's part is done. Yours now: " + after.title : "Process";
+  $("process-intro").hidden = !stages.length;
+  if (!stages.length) { flow.replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "Open a modlist and tick a mod: its demaster shows here as it goes." }))); return; }
+  flow.replaceChildren(...stages.map((s, i) => {
+    const word = STAGE_WORD[s.state] || STAGE_WORD.waiting;
+    const title = el("button", { type: "button", text: s.title, title: "Go to where this stage is worked" });
+    title.addEventListener("click", () => showTab(STAGE_TAB[s.key] || "selection"));
+    const done = s.tasks.filter((t) => t.state === "done" || t.state === "skipped").length;
+    return el("div", { class: "stage s-" + s.state },
+      el("div", { class: "stage-head" }, el("span", { class: "n", text: String(i + 1) }), title,
+        el("span", { class: "tag " + word[1] + (s.state === "yours" ? " t-yours" : ""), text: word[0] + " · " + done + "/" + s.tasks.length })),
+      s.note ? el("p", { class: "stage-note", text: s.note }) : null,
+      el("ul", { class: "tasks" }, ...s.tasks.map((t) => el("li", { class: "t-" + t.state },
+        el("span", { class: "ico", "aria-hidden": "true", text: TASK_ICON[t.state] || "○" }),
+        el("span", { text: t.text + (t.state === "going" ? " …" : "") }),
+        t.note ? el("span", { class: "note", text: t.note }) : null))));
+  }));
+}
+
 async function pollSteps(force) {
   if (state.status !== "ready") return;
   const mods = [...state.picked];
@@ -1502,7 +1573,7 @@ async function pollSteps(force) {
     state.stepsKey = key;
     state.stepsLooking = d.looking;
     const text = JSON.stringify(d);
-    if (text !== state.stepsText) { state.stepsText = text; renderSteps2(d); }
+    if (text !== state.stepsText) { state.stepsText = text; state.stepsData = d; renderSteps2(d); renderProcess(); }
   } catch (e) { /* the next round tries again */ }
 }
 
@@ -2040,6 +2111,8 @@ async function tick() {
   state.changes = !!s.changes;
   state.mo2 = s.mo2 || null;
   renderMo2();
+  state.process = s.process || [];
+  renderProcess();
   const up = $("updated");
   up.hidden = !s.updated_on_disk;
   const onDisk = s.updated_on_disk ? (s.updated_on_disk.version || "?") : "";

@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import dryrun, history, instance, logbook, model, paths, plugin, profile, safe
+from . import dryrun, history, instance, logbook, model, paths, plugin, process, profile, safe
 from .instance import fold
 
 SCRIPT = Path(__file__).resolve().parent / "xedit" / "ModTrapApply.pas"
@@ -151,10 +151,13 @@ class Demaster:
         self.report: dict = {}
         self.written: list[str] = []
         self.stage = "new"            # new, safe, changed, verified, installed, reverted
+        self.board = process.BOARD     # what the Process tab shows of this job (WHY§70)
 
     # --- 2. safe ---------------------------------------------------------------------------------------------------
 
     def make_safe(self) -> None:
+        self.board.begin("change", process.CHANGE, drop=("install",))
+        self.board.mark("change", "safe", process.GOING)
         for name in list(self.plan.demaster) + self.plan.switch_off:
             self.safe.take(self.model.row(name).path)
         for fname in ("modlist.txt", "plugins.txt", "loadorder.txt"):
@@ -162,6 +165,7 @@ class Demaster:
                 self.safe.take(self.pdir / fname)
         self.stage = "safe"
         log.info("the safe folder holds %d file(s)", len(self.safe.items))
+        self.board.mark("change", "safe", process.DONE, "%d file(s)" % len(self.safe.items))
 
     # --- 3. xEdit --------------------------------------------------------------------------------------------------
 
@@ -197,9 +201,14 @@ class Demaster:
         log.info("starting xEdit through MO2 with ModTrap's script: %d dependant(s) to change, in memory only",
                  len(self.plan.demaster))
         mo2_was_running = self._running(dryrun.MO2_EXE)
+        board = self.board
+        board.mark("change", "start", process.GOING)
         proc = self._launcher(cmd, str(Path(self.dry_plan.mo2).parent))
         started, seen, report = time.time(), 0, self.dir / "report.tsv"
-        ok = dryrun.OkPresser(image, self._presser)
+        ok = dryrun.OkPresser(image, self._presser, board, "change")
+        told = process.Lines("change", len(self.plan.demaster), 0, board)
+        board.mark("change", "start", process.DONE)
+        board.mark("change", "ok", process.GOING, "waiting for xEdit's window")
         while True:
             time.sleep(self._poll)
             if seen == 0:
@@ -207,6 +216,7 @@ class Demaster:
             lines = dryrun._lines(self.dir / "progress.txt")
             for ln in lines[seen:]:
                 log.info("xEdit: %s", ln)
+                told.take(ln)
             seen = len(lines)
             if dryrun._ended(report):
                 break
@@ -217,8 +227,11 @@ class Demaster:
         self.report = parse_report(dryrun._read(report))
         # The script has written its new files and taken the "changed" marks off. xEdit stays open after a script
         # (XE01§11): it is asked to close, and ended if it does not, so that it cannot save anything (WHY§4).
+        board.settle("change", "close")
+        board.mark("change", "close", process.GOING)
         dryrun.close_xedit(image, self._running, self._closer, self._poll, changed=True,
                            mo2_was_running=mo2_was_running)
+        board.mark("change", "close", process.DONE)
         self.stage = "changed"
 
     # --- 4. verify -------------------------------------------------------------------------------------------------
@@ -237,6 +250,7 @@ class Demaster:
                               "the safe folder." % p.name)
         tf = {fold(t) for t in self.plan.trapped}
         good = []
+        self.board.mark("change", "verify", process.GOING, "0 of %d" % len(self.plan.demaster))
         for name in self.plan.demaster:
             why = ""
             info = self.report["files"].get(fold(name), {})
@@ -265,8 +279,12 @@ class Demaster:
                 log.warn("%s is not installed: %s", name, why)
                 self.plan.needs_you.append(name)
                 self.plan.notes.append("%s: %s" % (name, why))
+                self.board.mark("change", "v:" + name, process.YOURS, "not put in place: " + why, text=name)
             else:
                 good.append(name)
+                self.board.mark("change", "v:" + name, process.DONE, "verified", text=name)
+            self.board.mark("change", "verify", process.GOING, "%d of %d verified" % (len(good), len(self.plan.demaster)))
+        self.board.mark("change", "verify", process.DONE, "%d of %d verified" % (len(good), len(self.plan.demaster)))
         self.written = good
         self.stage = "verified"
         return good
@@ -283,7 +301,11 @@ class Demaster:
         if mod_dir.exists():
             raise Refused("a mod called '%s' already exists; ModTrap never overwrites one" % self.plan.mod_name)
         done: dict = {"mod": self.plan.mod_name, "plugins": [], "disabled": [], "deactivated": []}
+        board = self.board
+        board.mark("install", "mo2", process.DONE)
         try:
+            board.mark("install", "mod", process.GOING if self.written else process.SKIPPED,
+                       "“%s”" % self.plan.mod_name if self.written else "no new plugin this time")
             if self.written:
                 mod_dir.mkdir()
                 for name in self.written:
@@ -301,7 +323,10 @@ class Demaster:
                 self.safe.wrote(self.pdir / "modlist.txt")       # noted at once: a later failure must be able to undo it
                 self.history.add("mod added", mod=self.plan.mod_name, priority=ch.lines[0]["priority"],
                                  plugins=[{"name": n} for n in self.written])
+            if self.written:
+                board.mark("install", "mod", process.DONE, "“%s”, %d plugin(s)" % (self.plan.mod_name, len(self.written)))
             off = [x for x in self.plan.switch_off]
+            board.mark("install", "off", process.GOING if off else process.SKIPPED, "%d patch(es)" % len(off) if off else "none")
             if off:
                 self.safe.may_change(self.pdir / "plugins.txt")
                 profile.set_plugins(self.pdir, {n: False for n in off})
@@ -311,6 +336,9 @@ class Demaster:
                     done["deactivated"].append(n)
                     self.history.add("plugin deactivated", plugin=n, position=r.position, plugin_kind=r.kind,
                                      mod=r.source, mod_priority=r.source_priority, why="a patch made only for the mod")
+            if off:
+                board.mark("install", "off", process.DONE, "%d patch(es)" % len(off))
+            board.mark("install", "disable", process.GOING)
             if self.plan.disable_mods:
                 self.safe.may_change(self.pdir / "modlist.txt")
                 profile.set_mods(self.pdir, {n: False for n in self.plan.disable_mods})
@@ -332,11 +360,15 @@ class Demaster:
                         {"name": r.name, "position": r.position, "kind": r.kind} for r in self.model.provided_by(mod)])
         except (Refused, profile.Refused, safe.Refused, OSError) as e:
             log.error("installing stopped: %s; putting everything back", e if not isinstance(e, OSError) else logbook.why(e))
+            board.stop("install", "stopped, and everything was put back: %s" % (e if not isinstance(e, OSError) else logbook.why(e)))
             self.safe.revert(overwrite_foreign=False)
             self.history.add("reverted", why="installing stopped part way")
             self.stage = "reverted"
             raise Refused("installing stopped and everything was put back: %s" % (
                 e if not isinstance(e, OSError) else logbook.why(e))) from None
+        board.mark("install", "disable", process.DONE if done["disabled"] else process.SKIPPED,
+                   ", ".join(done["disabled"][:6]) if done["disabled"] else
+                   "the mod stays enabled: something still needs it")
         self.stage = "installed"
         paths.write_atomic(self.dir / "installed.json", (json.dumps(done, indent=1) + "\n").encode("utf-8"))
         return done

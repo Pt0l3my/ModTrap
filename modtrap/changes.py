@@ -17,6 +17,7 @@ from pathlib import Path
 import json
 
 from . import addjob, demaster, dryrun, history, logbook, paths, probejob, safe
+from . import process
 from .instance import fold
 from .server import Bad
 
@@ -311,9 +312,11 @@ class Changes:
             except (demaster.Refused, safe.Refused) as e:
                 self.dm_state, self.dm_message = "failed", logbook.mask(str(e))
                 log.error("the demaster stopped: %s. Nothing in the modlist was changed.", e)
+                process.BOARD.stop("change", self.dm_message)
             except Exception as e:
                 self.dm_state, self.dm_message = "failed", "an error inside ModTrap: " + logbook.why(e)
                 log.error("the demaster stopped: %s", logbook.why(e))
+                process.BOARD.stop("change", self.dm_message)
             api.save_log()
         self._dm_thread = threading.Thread(target=work_it, name="demaster", daemon=True)
         self._dm_thread.start()
@@ -327,14 +330,25 @@ class Changes:
                 raise Bad("there is no verified demaster to put in place")
             # The MO2 of the xEdit run may still be leaving; and in the one go, the plan the owner confirmed said
             # MO2 would be closed for this step (WHY§67).
+            board = process.BOARD
+            board.begin("install", process.INSTALL)
+            board.mark("install", "mo2", process.GOING, "waiting for MO2 to close")
             api.wait_mo2_gone(owners_too=body.get("close_mo2") is True)
             try:
                 done = dm.install()
+                board.mark("install", "reread", process.GOING)
                 self.dm_check = dm.check()
             except demaster.Refused as e:
                 if dm.stage == "reverted":
                     self.dm_state, self.dm_message = "failed", logbook.mask(str(e))
+                else:
+                    board.begin("install", process.INSTALL)        # refused before anything was changed: as before
+                    board.mark("install", "mo2", process.YOURS, logbook.mask(str(e)))
                 raise Bad(str(e)) from None
+            ok = bool(self.dm_check and self.dm_check.get("ok"))
+            board.mark("install", "reread", process.DONE)
+            board.mark("install", "health", process.DONE if ok else process.FAILED,
+                       "clean" if ok else "the check found something: see the Selection tab")
             self.dm_state = "installed"
             paths.write_atomic(dm.dir / "plan.json", (json.dumps(dict(self._plan_public(dm.plan), when=time.strftime(
                 "%Y-%m-%dT%H:%M:%S"), written=dm.written), indent=1, ensure_ascii=False) + "\n").encode("utf-8"))

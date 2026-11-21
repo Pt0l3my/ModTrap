@@ -73,6 +73,8 @@ is the same across them, and xEdit does the rest.
   works (WHY§5). A copy is kept in ModTrap's work folder.
 - **Steps.** §14: the whole job as an ordered list, ModTrap's steps and the owner's.
 - **Result.** Per dependant: masters before and after, what was taken out of it, what was left alone and why.
+- **Process.** §18. The demaster as it goes: each stage a box linked to the next, its tasks inside, coloured by
+  state.
 - **History.** §12. Every change ModTrap made, with **Re-enable** on each disabled mod and **Revert** on each job.
 
 ## 5. What happens to each dependant
@@ -495,3 +497,20 @@ rules for known incompatibilities (its licence is to be read first); proposing a
    only a program on this PC can read, and it does nothing but this.
 5. **A page of the one that closed** is refused by the new one and loads itself again.
 6. ModTrap does not fetch updates. The owner replaces the folder; the steps above make sure the new one is what runs.
+
+## 18. The Process tab
+
+The demaster from start to finish, shown as it happens (WHY§70). It adds nothing to what ModTrap does: it shows it.
+
+1. **Stages**, each a box linked to the next by an arrow, in order: the probe (where it is required), the dry run,
+   the plan, the demaster on copies, putting it in place, and what comes after the demaster. A box's title leads to
+   the tab where that stage is worked.
+2. **Tasks** inside each box: what finishes the stage, in order, each with a short note of how far it is (how many
+   dependants read, which plugin is being changed, how many files in the safe folder, why it stopped).
+3. **Colours**, for a task and for its box: white, to come; amber, going on now; green, done; red, stopped with an
+   error; purple, waits for the owner; grey, not needed this time.
+4. **Where it comes from.** Each job tells its tasks when it starts and marks them as it goes; for xEdit's part,
+   from the lines ModTrap's scripts write as they work. The page reads this with the state, every second. The
+   last box is made of the steps of §14 that follow the demaster: the tools to run again and what only the owner
+   can judge; until the demaster is in place they are to come, then they wait for the owner.
+5. The probe's own dry run and change are shown as the probe's steps, not as the real ones.
