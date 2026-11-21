@@ -83,6 +83,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 58 | 2026-11-21 | ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it | METHOD | #mo2 #page #steps #safety #process |
 | 59 | 2026-11-21 | The first real demaster: four big files done, one left; "Demaster Selected" now goes in one go; a row click shows a mod and what is tied to it | FACT | #xedit #page #safety #process |
 | 60 | 2026-11-21 | A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go | METHOD | #page #safety #process |
+| 61 | 2026-11-21 | Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date | FACT | #xedit #page #steps #safety #process |
+| 62 | 2026-11-21 | New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed | METHOD | #page #safety #process |
+| 63 | 2026-11-21 | The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds | FACT | #xedit #tools #steps #process |
+| 64 | 2026-11-21 | Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold | METHOD | #tools #steps #page #process |
 
 ## Entries
 
@@ -1284,6 +1288,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   box ticks. The mod list the server sends names, for each mod, the mods that need it and the mods it needs.
 - Shown in a browser on the invented list: the row click, the marks, the box, and a demaster from a bare tick to
   "in place" with one "Go ahead".
+- Later, 2026-11-21: the session file showed the LIKELY above to be wrong. No action was refused; the topics'
+  empty groups kept the master in use (XE01§17, WHY§61). The change made here stays, and is needed by the fix.
 
 ### 60. A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go
 
@@ -1303,3 +1309,106 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   modlist, this xEdit and these scripts.
 - Shown in a browser on the invented list with the gate on: one press, one question, the probe's seven steps,
   the dry run, the plan, "Go ahead", in place.
+
+### 61. Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date
+
+`2026-11-21` · FACT · `#xedit #page #steps #safety #process` · refs: MT5, MT17, MT18, DESIGN§6.3, DESIGN§6.5, DESIGN§14, XE01§17, WHY§53, WHY§56, WHY§59, WHY§60
+
+- FACT (the owner's session file): the whole chain of WHY§60 ran on the real list: the probe passed, the dry run
+  ran by itself, four big files were demastered and put in place, the patches switched off. The fifth file was
+  kept back again, and a second go on it alone ended with "0 plugins" and an offer to put nothing in place.
+- FACT: the cause is in xEdit, not in a refusal (XE01§17): a dialogue topic's group of lines stays when the topic
+  is taken out, and its label keeps the trapped plugin in use. WHY§59's reading was wrong and is marked so.
+- METHOD: the changing script takes a record's group of children out before the record (XE01§17). The scripts
+  changed, so the probe runs again first (WHY§53, WHY§60); the probe's own plugins hold no record with such a
+  group, so this is first run on the real file, under the same checks as before: the plugin is written only if
+  the master is gone, and ModTrap checks the new file itself.
+- METHOD: a second demaster of the same mod no longer stumbles over the first one's mod: its own mod gets the
+  next free name ("… (2)"); no mod is ever overwritten (MT5). A run in which nothing could be demastered and
+  nothing is to be switched off stops with the reason, and offers nothing to put in place.
+- The owner: "the pop up messages are just standard browser style, can you make them look same as the ModTrap
+  UI?" METHOD: every question the page asks (closing MO2, running the probe, Revert, finishing or renaming a
+  session, quitting, stopping) is ModTrap's own box in the page's look, with Yes and No, Enter and Escape.
+- The owner: "double check the the steps and dry run get updated as the process completes its tasks". FACT, as
+  found by driving the page: (1) once a demaster had disabled the mod, the page unticked it, because a disabled
+  mod provides no plugin, and the Steps tab went blank just when its last steps mattered; (2) while a demaster
+  ran, its steps still read "to do"; (3) after it, the Dry run tab showed the earlier dry run as if current;
+  (4) the Dry run tab's pane of lines held every dry run of the day, the oldest on top.
+  METHOD: (1) a ticked mod stays ticked when it is disabled; (2) the steps a demaster carries out read "going"
+  while it runs, and "done" when the modlist has been read again; (3) a dry run made before the modlist was last
+  read says so, and "Demaster Selected" makes a fresh one by itself; (4) the pane holds the lines of the latest
+  run and opens at their end.
+- Shown in a browser on the invented list: the question box, the steps going and then done with the mod still
+  ticked, and the out-of-date note.
+
+### 62. New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed
+
+`2026-11-21` · METHOD · `#page #safety #process` · refs: DESIGN§6.5, DESIGN§8, MT14, WHY§46, WHY§59, WHY§61
+
+- The owner, with a picture: "when I press revert for a demaster, the ModTrap won't update right away, it will
+  keep showing the next step to 'put them in place'."
+- FACT: the card belonged to a later demaster that was still waiting to be put in place (the one with nothing to
+  put, WHY§61). Revert took back the earlier one and cleared only that one's card; the waiting one stayed, and
+  offered plugins made for a modlist that no longer was.
+- METHOD: new plugins that wait were made for the modlist as it was read then. They are dropped, with a line in
+  the log, when the modlist is read again for any reason (a Revert, an add, a Rescan, a change in MO2), and on
+  "Not now", which the waiting card now has. Nothing of them was ever in the modlist; their files stay in the
+  job's folder. A stopped demaster's card can be closed. In the one go of WHY§59 nothing waits: it is put in
+  place at once.
+- Shown in a browser on the invented list: after Revert the page shows "reverted" and nothing else within a
+  quarter of a second.
+
+### 63. The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds
+
+`2026-11-21` · FACT · `#xedit #tools #steps #process` · refs: MT17, MT18, DESIGN§13, DESIGN§14, TL01§7, TL01§8, XE01§17, WHY§2, WHY§52, WHY§55, WHY§61
+
+- FACT (the owner's session file): one press, the probe, the dry run, the plan, "Go ahead": all five big files
+  were demastered and verified, among them the one kept back before (its six topics' groups went with them,
+  XE01§17, and sixteen lines had gone with their topics), the twelve patches deactivated, the patch mod and the
+  mod itself disabled, the load order clean. MT17's first part holds for this mod; whether the game plays well
+  is the owner's to see.
+- The owner: "is it now supposed to suggest to run synthesis as well? what logic determines that? can you check
+  if all tools are considered (is pandora run suggestion just a placeholder to run it regerdless of good
+  practice?)".
+- FACT: the behaviour tool was listed for a reason the step states: the mod carries four animation and
+  behaviour files, which that tool builds from. The patcher was not listed, although the guide runs it (WHY§2),
+  because its three plugins do not name the mod as a master and ModTrap looked no further. That was a gap.
+- METHOD (TL01§8): tools are now judged by evidence, in three ways: the records a tool's plugin shares with the
+  mod and its patches; the files a tool's output mod holds at the mod's own paths; the kinds of file the mod
+  carries that a tool feeds on. A tool that must run is a step with the reason and the counts; the tools that
+  need no run are named in a step of their own with why. Nothing is suggested from habit, and nothing is left
+  out in silence.
+- Ruled out: suggesting every patcher after every demaster (true to the guide's habit, but it costs the owner
+  long runs that the evidence can spare); loading the tools' plugins into the dry run's xEdit to compare records
+  there (their masters would pull most of a large list in; reading record headers with ModTrap's own reader
+  takes about half a second for a million records).
+- Unproven: the counts on the owner's list; they show at the owner's next look at the Steps tab.
+- Later, 2026-11-21: counting shared records proved too coarse on the owner's list, and showing two verdicts for
+  one tool was wrong. Both are replaced in WHY§64 (TL01§9).
+
+### 64. Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold
+
+`2026-11-21` · METHOD · `#tools #steps #page #process` · refs: MT17, MT18, DESIGN§13, DESIGN§14, TL01§8, TL01§9, WHY§52, WHY§63
+
+- The owner, with a picture of WHY§63's steps on the real list: three tools told to run again and the same three
+  named as needing no run; "So which one is it? also, what is the logic for suggesting those tools in the first
+  place? Does ModTrap know what each tool actually is for and what they need to do? How does it know they are
+  really needed for demastering a mod? when evidence is shown, I would like to see details (could be a
+  fold/unfold type field within each step)".
+- FACT: both faults were ModTrap's. The two lists came from judging a tool by records and by files apart and
+  showing both. And the record count of WHY§63 took "holds the same record" for "was built from the mod", which
+  on a dialogue mod sent the owner towards running the distant-view generator.
+- METHOD (TL01§9): a record counts only if the mod changes it, by comparing its fields with what the mod's
+  author had before them; a tool's plugin counts only if it holds one of those changed fields. Each tool gets
+  one verdict from all the evidence, with a sentence on what the tool is for, the reasons for, the reasons
+  against, and the records and files themselves in a fold.
+- Ruled out: knowing each tool by a list of record types it "cares about" (the tools change, and a list is a
+  guess the owner cannot check); comparing in xEdit, which knows what every field means (its load of the tools'
+  plugins and all their masters would turn a three-minute dry run into a long one); always advising a run "to be
+  safe" (it costs the owner hours and teaches them to ignore the step).
+- The limit is said where it applies: the comparison is of bytes, and can miss a change in a field that points
+  at another record when the two plugins' master lists differ (TL01§9). A tool whose plugin could not be read to
+  the end is still advised, and says that this is why.
+- Shown in a browser on invented plugins: a tool whose plugin carries the mod's value is to run, one that holds
+  the record with another value is named beside it as speaking against, one that holds only what the mod does
+  not change is cleared; the folds open to the records. The owner's list shows what it gives there.

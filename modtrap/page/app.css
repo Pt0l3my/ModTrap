@@ -261,3 +261,15 @@ body.dragging .welcome-box { outline: none; }
 .probe-steps { list-style: none; padding-left: 0; margin: 8px 0; }
 .probe-steps li { padding: 2px 0; }
 .probe-steps .tag { margin-left: 0; margin-right: 4px; min-width: 16px; text-align: center; }
+.modal-back { position: fixed; inset: 0; background: rgba(10, 11, 16, .62); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 18px 20px 14px; max-width: 560px; width: calc(100% - 48px);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .55); }
+.modal p { margin: 0 0 10px; line-height: 1.45; }
+.modal input[type=text] { width: 100%; margin: 2px 0 10px; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+details.evidence { margin: 4px 0 6px; }
+details.evidence summary { cursor: pointer; color: var(--dim); }
+details.evidence summary:hover { color: var(--text); }
+details.evidence ul { margin: 4px 0 2px 18px; padding: 0; }
+details.evidence li { list-style: none; overflow-wrap: anywhere; }
+.step li.plain { list-style: none; margin-left: -18px; }

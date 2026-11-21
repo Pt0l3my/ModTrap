@@ -7,7 +7,10 @@ reported as unreadable, never guessed at.
 
 from __future__ import annotations
 
+import mmap
 import struct
+import time
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -146,6 +149,107 @@ def read(path: Path) -> Header:
     except OSError as e:
         raise Unreadable("the file could not be opened (%s)" % type(e).__name__) from None
     return parse(head + body)
+
+
+COMPRESSED = 0x00040000        # a record whose fields are stored compressed
+
+
+class Records:
+    """The records of one plugin, found by whom they belong to and their id there, with their fields as stored.
+    Read with ModTrap's own reader, nothing of xEdit: record headers to find them, and the fields of the few
+    records that are asked for (WHY§64). A record's key is (the name, lower case, of the plugin it belongs to;
+    its id in that plugin): a record's first id byte counts into the plugin's masters, and past them means the
+    plugin's own (XE02).
+
+    Fields are compared as bytes. A field that points at another record is written with that record's place
+    among the plugin's own masters, so the same field can be written differently in two plugins whose master
+    lists differ: equal bytes are taken as the same value, unequal bytes are not proof of a different one."""
+
+    def __init__(self, path: Path, seconds: float = 8.0) -> None:
+        self.path, self.name = path, path.name
+        h = read(path)
+        masters = [m.casefold() for m in h.masters]
+        own = path.name.casefold()
+        self.own = own
+        self.index: dict[tuple[str, int], tuple[int, int, int, str]] = {}      # key -> offset, length, flags, type
+        self.cut = False
+        self._file = open(path, "rb")
+        try:
+            self._data = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
+        except (ValueError, OSError) as e:
+            self._file.close()
+            raise Unreadable("the file could not be read: %s" % e) from None
+        data, until = self._data, time.monotonic() + seconds
+        size = len(data)
+        if size < 24 or data[:4] != b"TES4":
+            self.close()
+            raise Unreadable("not a plugin")
+        pos = 24 + struct.unpack_from("<I", data, 4)[0]
+        n = 0
+        while pos + 24 <= size:
+            length, flags, form = struct.unpack_from("<III", data, pos + 4)
+            kind = data[pos:pos + 4]
+            if kind == b"GRUP":
+                if length < 24:
+                    break
+                pos += 24                                       # into the group: its records follow
+                continue
+            at = form >> 24
+            self.index[(masters[at] if at < len(masters) else own, form & 0xFFFFFF)] = (
+                pos, length, flags, kind.decode("ascii", "replace"))
+            pos += 24 + length
+            n += 1
+            if n % 8192 == 0 and time.monotonic() > until:
+                self.cut = True
+                break
+
+    def fields(self, key: tuple[str, int]) -> list[tuple[str, bytes]] | None:
+        """The record's fields in their order, each (type, bytes); None when the plugin does not hold the record."""
+        hit = self.index.get(key)
+        if hit is None:
+            return None
+        pos, length, flags, _kind = hit
+        body = bytes(self._data[pos + 24:pos + 24 + length])
+        if flags & COMPRESSED:
+            try:
+                body = zlib.decompress(body[4:])
+            except zlib.error:
+                return [("?", body)]
+        out, i, big = [], 0, 0
+        while i + 6 <= len(body):
+            kind = body[i:i + 4].decode("ascii", "replace")
+            size = struct.unpack_from("<H", body, i + 4)[0]
+            if kind == "XXXX" and size == 4 and i + 10 <= len(body):        # the next field's real size
+                big = struct.unpack_from("<I", body, i + 6)[0]
+                i += 10
+                continue
+            size, big = (big or size), 0
+            out.append((kind, body[i + 6:i + 6 + size]))
+            i += 6 + size
+        return out
+
+    def kind_of(self, key: tuple[str, int]) -> str:
+        hit = self.index.get(key)
+        return hit[3] if hit else ""
+
+    def close(self) -> None:
+        try:
+            self._data.close()
+        except (AttributeError, ValueError):
+            pass
+        self._file.close()
+
+    def __enter__(self) -> "Records":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+
+def record_ids(path: Path, seconds: float = 8.0) -> tuple[set[tuple[str, int]], bool]:
+    """The records a plugin holds, by their keys (see Records), and whether the reading was cut short."""
+    with Records(path, seconds) as r:
+        return set(r.index), r.cut
 
 
 def build(masters: tuple[str, ...] | list[str] = (), *, flags: int = 0, author: str = "",

@@ -218,3 +218,22 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   earlier plugin's version of the list has the very same entry (`G`). For conditions it reads each entry's
   type (`CTDA\Type`, whose lowest bit is "or") and marks an entry whose removal would join the conditions on
   either side differently: one that ends a run of "or". Such an entry is never taken out automatically.
+
+## 17. A record's group of children keeps its master in use (the owner's PC and the source, 2026-11-21)
+
+- **FACT (the owner's PC).** In the first real demasters one plugin was kept back twice: all 49 of its actions were
+  done, no record in it needed the trapped plugin any more, and yet after Clean Masters the trapped plugin was
+  still among its masters. The plugin held copies of six of the trapped mod's dialogue topics with their lines.
+- **FACT.** Clean Masters keeps every master that anything in the file uses, and a group counts: for a group of
+  type 1 or 6 to 10 (the children of a world, a cell or a topic), the plugin its label's id belongs to is marked
+  as used (`Core/wbImplementation.pas:16645-16683`). A topic's lines lie in such a group, labelled with the
+  topic's id.
+- **FACT.** Taking a record out does not take its group of children out (`TwbMainRecord.Remove`,
+  `Core/wbImplementation.pas:12512-12545`): with the topic gone, its group stayed, empty, still labelled with the
+  trapped plugin's id. Taking a group out takes everything in it out first and then unhooks it from its record
+  (`TwbGroupRecord.Remove`, `:17087-17100`).
+- **FACT.** A script reaches that group with `ChildGroup` (`xEdit/JvI/xejviScriptAdapter.pas:2188`).
+- **METHOD.** When the changing script takes out a whole record, it first takes out the record's group of
+  children, if it has one. What was in the group cannot live without its record. A record of the job that went
+  with such a group counts as done. If a master is still in use although no record needs it, the report now says
+  that, in those words.

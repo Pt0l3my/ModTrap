@@ -23,6 +23,7 @@ from .server import Bad
 log = logbook.get("add")
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
+         "/api/demaster/drop",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
 
 
@@ -276,6 +277,9 @@ class Changes:
                 dm.make_safe()
                 dm.run_xedit()
                 good = dm.verify()
+                if not good and not dm.plan.switch_off and not dm.plan.disable_mods:
+                    # Nothing to put in place: say why, and stop here. The modlist is as it was.
+                    raise demaster.Refused("nothing could be demastered this time. " + " ".join(dm.plan.notes[:6]))
                 self.dm_state = "verified"
                 log.info("the demaster's new plugins are verified: %s", ", ".join(good) or "none")
             except (demaster.Refused, safe.Refused) as e:
@@ -394,16 +398,40 @@ class Changes:
             history.History(api.store.dir(api.session.id)).add(
                 "reverted", why="the owner asked", job=name, restored=[Path(p).name for p in what["restore"]],
                 removed=[Path(p).name for p in what["remove"]])
-            if self.dm is not None and self.dm.dir.name == name:
-                self.dm, self.dm_state, self.dm_check = None, "", None
+            # Whatever the page still shows of a demaster describes the modlist as it was before this Revert: the
+            # one that was reverted, or one still waiting to be put in place (WHY§62). It goes.
+            if self.dm is not None and (self.dm.dir.name == name or self.dm_state in ("verified", "failed")):
+                self._drop("the modlist was put back by Revert")
             log.info("the demaster %s was put back: %d file(s) restored, %d of ModTrap's removed", name,
                      len(what["restore"]), len(what["remove"]))
         api.open(api.folder, api.profile or None, session=api.session)
         return {"job": name, "restored": len(what["restore"]), "removed": len(what["remove"]),
                 "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])]}
 
+    def _drop(self, why: str) -> None:
+        """Forgets the demaster in hand that was not put in place. Its files stay in its job folder; nothing in
+        the modlist was changed by it."""
+        if self.dm is not None and self.dm_state == "verified":
+            log.info("the demaster that was waiting to be put in place is dropped: %s. Nothing of it was in the "
+                     "modlist; run “Demaster Selected” again when you want it.", why)
+        self.dm, self.dm_state, self.dm_check, self.dm_message = None, "", None, ""
+
+    def demaster_drop(self, body: dict) -> dict:
+        with self._lock:
+            if self.dm_state == "working":
+                raise Bad("the demaster is still running; wait for it to end")
+            if self.dm_state in ("verified", "failed"):
+                self._drop("you said not now")
+        return self.demaster_public()
+
     def demaster_public(self) -> dict:
         dm = self.dm
+        # New plugins that wait to be put in place were made for the modlist as it was read then. Once it has
+        # been read again (a Rescan, an add, a Revert, a change in MO2) they are no longer offered (WHY§62).
+        if dm is not None and self.dm_state == "verified" and self.api.status == "ready" \
+                and self.api.model is not None and dm.model is not self.api.model:
+            self._drop("the modlist has been read again since")
+            dm = None
         out: dict = {"state": self.dm_state, "message": self.dm_message, "jobs": self.demaster_jobs()}
         if dm is not None:
             out.update({"job": dm.dir.name, "plan": self._plan_public(dm.plan), "written": list(dm.written),
@@ -427,6 +455,8 @@ class Changes:
             return self.demaster_install(body)
         if path == "/api/demaster/revert":
             return self.demaster_revert(body)
+        if path == "/api/demaster/drop":
+            return self.demaster_drop(body)
         if path == "/api/add/plan":
             return self.plan(body)
         if path == "/api/add/run":

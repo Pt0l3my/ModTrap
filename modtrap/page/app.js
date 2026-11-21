@@ -32,7 +32,7 @@ async function mo2Closed() {
   let m = state.mo2;
   try { m = (await call("/api/state")).mo2 || m; } catch (e) { /* use what is known */ }
   if (!m || m.state !== "open") return true;         // closed; or it cannot be told, and the server then decides
-  if (!window.confirm("MO2 is open on this modlist. This step changes MO2's lists, and MO2 must be closed for it.\n\nClose MO2 now?")) return false;
+  if (!await confirmBox("MO2 is open on this modlist. This step changes MO2's lists, and MO2 must be closed for it.\n\nClose MO2 now?")) return false;
   try { await call("/api/mo2/close", {}); } catch (e) { toast(e.message); return false; }
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 500));
@@ -59,7 +59,7 @@ async function toggleMo2() {
   if (!m || m.state === "unknown") return;
   try {
     if (m.state === "open") {
-      if (!window.confirm("Close MO2 now? It is asked to close as a click on its X does.")) return;
+      if (!await confirmBox("Close MO2 now? It is asked to close as a click on its X does.")) return;
       await call("/api/mo2/close", {});
       toast("MO2 was asked to close.");
     } else {
@@ -75,6 +75,45 @@ function whoTag(who) {
     title: who === "both" ? "ModTrap starts the tool through MO2 with the button below; what is done inside the tool is yours" : "",
     text: who === "you" ? "You" : who === "both" ? "ModTrap starts it · you run it" : "ModTrap" });
 }
+
+// ModTrap's own question box, in the page's own look (WHY§61): a Promise of yes or no, or of the text typed.
+function modalBox(text, opts) {
+  return new Promise((resolve) => {
+    const o = opts || {};
+    const paras = String(text).split(/\n\s*\n/).map((t) => el("p", { text: t }));
+    const input = o.input !== undefined ? el("input", { type: "text", value: o.input, spellcheck: "false" }) : null;
+    const yes = el("button", { type: "button", class: "primary", text: o.yes || "Yes" });
+    const no = el("button", { type: "button", text: o.no || "No" });
+    const box = el("div", { class: "modal", role: "dialog", "aria-modal": "true" }, ...paras, input, el("div", { class: "actions" }, yes, no));
+    const back = el("div", { class: "modal-back" }, box);
+    const before = document.activeElement;
+    const done = (answer) => {
+      document.removeEventListener("keydown", key, true);
+      back.remove();
+      if (before && before.focus) before.focus();
+      resolve(answer);
+    };
+    const key = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); done(input ? null : false); }
+      else if (ev.key === "Enter" && (input || document.activeElement !== no)) { ev.preventDefault(); ev.stopPropagation(); done(input ? input.value : true); }
+      else if (ev.key === "Tab") {                       // the question keeps the keyboard until it is answered
+        const stops = [input, yes, no].filter(Boolean);
+        const i = stops.indexOf(document.activeElement);
+        ev.preventDefault();
+        stops[(i + (ev.shiftKey ? stops.length - 1 : 1)) % stops.length].focus();
+      }
+    };
+    yes.addEventListener("click", () => done(input ? input.value : true));
+    no.addEventListener("click", () => done(input ? null : false));
+    back.addEventListener("mousedown", (ev) => { if (ev.target === back) done(input ? null : false); });
+    document.addEventListener("keydown", key, true);
+    document.body.append(back);
+    (input || yes).focus();
+    if (input) input.select();
+  });
+}
+const confirmBox = (text, yes, no) => modalBox(text, { yes: yes, no: no });
+const promptBox = (text, value) => modalBox(text, { input: value || "", yes: "OK", no: "Cancel" });
 
 function el(tag, attrs, ...kids) {
   const e = document.createElement(tag);
@@ -290,7 +329,9 @@ function applyUi(ui) {
     state.picked = new Set();
     for (const n of Array.isArray(ui.picked) ? ui.picked : []) {
       const m = findMod(n);
-      if (m && m.kind === "mod" && m.plugins.length) state.picked.add(n);
+      // A ticked mod stays ticked once it is disabled (its plugins no longer count as provided): the demaster
+      // disables it, and the steps that are left are still its steps (WHY§61).
+      if (m && m.kind === "mod" && (m.plugins.length || m.files)) state.picked.add(n);
     }
     for (const g of state.groups) for (const m of g.mods) {
       const on = state.picked.has(m.name);
@@ -335,7 +376,7 @@ function updateDemasterButton() {
   const b = $("demaster");
   const d = state.demaster;
   const job = state.job;
-  const dryDone = job && job.state === "done" && !job.past && sameMods(job.plan.trapped_mods, state.picked);
+  const dryDone = job && job.state === "done" && !job.past && !job.stale && sameMods(job.plan.trapped_mods, state.picked);
   const locked = state.session && state.session.locked;
   const going = d && (d.state === "working" || d.state === "verified");
   const dryBusy = job && !["done", "failed", "stopped"].includes(job.state);
@@ -362,7 +403,7 @@ async function demasterGo() {
   if (!state.changes || !state.picked.size) { showTab("selection"); return; }
   if (state.probe && state.probe.state === "working") { showTab("tools"); return; }
   if (probeReason()) {
-    if (!window.confirm("Before ModTrap changes real plugins it proves its scripts on invented test plugins, in your own MO2 and xEdit (the probe).\n\n" +
+    if (!await confirmBox("Before ModTrap changes real plugins it proves its scripts on invented test plugins, in your own MO2 and xEdit (the probe).\n\n" +
         probeReason() + ".\n\nRun the probe now? It takes a few minutes and undoes itself. The demaster then goes on by itself.")) return;
     try {
       state.probe = await api("/api/probe/start", {});
@@ -374,7 +415,7 @@ async function demasterGo() {
     return;
   }
   const job = state.job;
-  const dryDone = job && job.state === "done" && !job.past && sameMods(job.plan.trapped_mods, state.picked);
+  const dryDone = job && job.state === "done" && !job.past && !job.stale && sameMods(job.plan.trapped_mods, state.picked);
   showTab("selection");
   if (dryDone) {
     await askDemasterPlan();
@@ -454,12 +495,17 @@ function renderDemaster(force) {
   if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
     el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone; the Log tab shows its lines. When every new plugin is checked, ModTrap puts them in place." })));
   if (d && d.state === "failed") cards.push(el("div", { class: "card" }, el("h2", { text: "The demaster stopped" }),
-    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." })));
+    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." }),
+    el("div", { class: "actions" }, (() => {
+      const ok = el("button", { type: "button", text: "Close this" });
+      ok.addEventListener("click", () => demasterCall("/api/demaster/drop", {}));
+      return ok;
+    })())));
   if (d && d.state === "verified") {
     const closed = d.mo2_closed === true;
     const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: d.mo2_closed == null });
-    put.addEventListener("click", () => {
-      if (!window.confirm("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
+    put.addEventListener("click", async () => {
+      if (!await confirmBox("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
       put.disabled = true;
       demasterCall("/api/demaster/install", {}, "In place. ModTrap is reading the modlist again.");
     });
@@ -468,7 +514,12 @@ function renderDemaster(force) {
       d.plan.needs_you.length ? el("p", { class: "would-needs", text: "Left to you: " + d.plan.needs_you.join(", ") + ". " + d.plan.notes.join(" ") }) : null,
       el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
         d.mo2_closed === false ? "MO2 is open. An open MO2 writes its own lists back over ModTrap's, so it must be closed for this: press the button and ModTrap asks whether to close it for you." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
-      el("div", { class: "actions" }, put)));
+      el("div", { class: "actions" }, put, (() => {
+        const not = el("button", { type: "button", text: "Not now" });
+        not.title = "Drops these new plugins. Nothing of them is in your modlist; “Demaster Selected” makes them again.";
+        not.addEventListener("click", () => demasterCall("/api/demaster/drop", {}));
+        return not;
+      })())));
   }
   if (d && d.state === "installed" && d.check) cards.push(el("div", { class: "card" }, el("h2", { text: d.check.ok ? "The demaster is in place, and the load order is clean" : "The demaster is in place, with something to look at" }),
     d.check.new_problems.length ? el("ul", {}, ...d.check.new_problems.map((x) => el("li", { class: "would-needs", text: x[0] + " needs " + x[1] + ", which is " + (x[2] === "inactive" ? "not active" : "missing") }))) : null,
@@ -483,8 +534,8 @@ function renderDemaster(force) {
     el("p", { class: "dim", text: "Open MO2 and look: the new mod is at the end of the list, the patches are unticked" + (d.check.disabled ? ", and the mod is disabled" : "") + ". The Steps tab shows what is left, such as tools to run again." })));
   for (const j of ((d && d.jobs) || []).slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Revert" });
-    undo.addEventListener("click", () => {
-      if (!window.confirm("Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed? MO2 must be closed.")) return;
+    undo.addEventListener("click", async () => {
+      if (!await confirmBox("Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed? MO2 must be closed.")) return;
       demasterCall("/api/demaster/revert", { job: j.job }, "Put back as it was.");
     });
     cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
@@ -697,13 +748,13 @@ function renderSessions(s) {
     }
     if (x.status !== "finished") {
       const r = el("button", { type: "button", text: "Rename" });
-      r.addEventListener("click", () => {
-        const name = window.prompt("A name for this session:", x.name);
+      r.addEventListener("click", async () => {
+        const name = await promptBox("A name for this session:", x.name);
         if (name != null && name.trim() && name.trim() !== x.name) sessionCall("/api/session/rename", { id: x.id, name: name }, "Renamed.");
       });
       const f = el("button", { type: "button", text: "Finish", title: "Mark this session finished. ModTrap first checks that nothing of it is still going; the modlist is then free for the session that waits for it." });
-      f.addEventListener("click", () => {
-        if (window.confirm("Finish session “" + x.name + "”?\n\nModTrap checks that nothing of it is still going. A finished session stays to be looked at, but no more work is done in it; the modlist is then free for the next session.")) sessionCall("/api/session/finish", { id: x.id }, "Session finished.");
+      f.addEventListener("click", async () => {
+        if (await confirmBox("Finish session “" + x.name + "”?\n\nModTrap checks that nothing of it is still going. A finished session stays to be looked at, but no more work is done in it; the modlist is then free for the next session.")) sessionCall("/api/session/finish", { id: x.id }, "Session finished.");
       });
       row.append(r, f);
     }
@@ -720,7 +771,7 @@ async function quitModTrap() {
   let force = false;
   for (;;) {
     try { await api("/api/quit", force ? { force: true } : {}); break; } catch (e) {
-      if (force || !window.confirm(e.message + "\n\nQuit anyway?")) return;
+      if (force || !await confirmBox(e.message + "\n\nQuit anyway?")) return;
       force = true;
     }
   }
@@ -747,7 +798,7 @@ function buildGroups() {
 }
 
 function modRow(m) {
-  const can = m.kind === "mod" && m.plugins.length > 0;
+  const can = m.kind === "mod" && (m.plugins.length > 0 || state.picked.has(m.name));
   const tick = el("input", { type: "checkbox", disabled: !can, checked: state.picked.has(m.name),
     "aria-label": "Tick " + m.name,
     title: can ? "Tick to choose this mod for demastering (a click on the row only shows it)" : "Nothing to demaster: this mod provides no plugin" });
@@ -1190,12 +1241,13 @@ function renderJob(job) {
     (mins ? mins + " min " : "") + secs + " s" + (job.unchanged === true ? " · every dependant is unchanged on disk" : "");
   $("job-stop").hidden = !active;
   updateDryButton();
-  const key = job.id + "|" + job.state;
+  const key = job.id + "|" + job.state + "|" + (job.stale ? "stale" : "");
   if (key === state.jobSeen) return;
   state.jobSeen = key;
   const box = $("job-result");
   const parts = [];
   if (job.message) parts.push(el("p", { class: "message " + (job.state === "failed" ? "bad" : ""), text: job.message }));
+  if (job.stale) parts.push(el("p", { class: "message", text: "The modlist has been read again since this dry run (after a demaster, a Rescan or a change in MO2), so this is how things stood before. “Demaster Selected” runs a fresh dry run by itself; “Dry run through xEdit” on the Selection tab does one without changing anything." }));
   if (!active) parts.push(el("p", { class: "dim" }, "This run's files (the report, xEdit's own log, the copies of the dependants): ", el("span", { class: "mono", text: job.folder })));
   if (active) parts.push(el("p", { class: "dim", text: "Watch xEdit's own window and the lines on the right. Nothing is being changed." }));
   const r = job.result;
@@ -1295,7 +1347,15 @@ function toolCard() {
     going ? el("div", { class: "actions" }, stop) : null);
 }
 
+// The evidence behind a step, folded away until asked for (WHY§64).
+function evidenceFold(d) {
+  return el("details", { class: "evidence" }, el("summary", { text: "Evidence: " + d.summary }),
+    el("ul", {}, ...d.lines.map((l) => el("li", { class: "mono dim", text: l }))));
+}
+
 function stepItem(it) {
+  if (it.details) return el("li", { class: "plain" }, evidenceFold(it.details));
+  if (it.text) return el("li", {}, it.text, ...(it.evidence || []).map(evidenceFold));
   if (it.tool) return el("li", {}, "“" + it.tool + "” in MO2's list of tools  ", toolButton(it.tool));
   if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
@@ -1375,7 +1435,8 @@ function renderSteps2(d) {
 async function pollSteps(force) {
   if (state.status !== "ready") return;
   const mods = [...state.picked];
-  const key = mods.slice().sort().join("|") + "#" + state.loaded + "#" + (state.job ? state.job.id + state.job.state : "");
+  const key = mods.slice().sort().join("|") + "#" + state.loaded + "#" + (state.job ? state.job.id + state.job.state : "") +
+    "#" + (state.demaster ? state.demaster.state : "");
   if (!force && key === state.stepsKey && !state.stepsLooking && state.tab !== "steps") return;
   try {
     const d = await api("/api/steps", { mods: mods });
@@ -1688,7 +1749,7 @@ function addActionCard(d) {
   for (const j of (d.added || []).slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Take it out again" });
     undo.addEventListener("click", async () => {
-      if (!window.confirm("Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder? MO2 must be closed.")) return;
+      if (!await confirmBox("Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder? MO2 must be closed.")) return;
       try {
         const r = await api("/api/add/revert", { job: j.job });
         for (const x of r.restored || []) {                // a dropped mod is back in ModTrap's folder only
@@ -1871,6 +1932,7 @@ function showTab(name) {
   updateTray();
   saveUi();
   if (name === "history") { state.historyText = ""; pollHistory(); }
+  if (name === "job") { const jl = $("job-log"); jl.scrollTop = jl.scrollHeight; }       // the latest lines, not the first
 }
 
 async function pollLog() {
@@ -1883,7 +1945,10 @@ async function pollLog() {
       const jAtEnd = jl.scrollTop + jl.clientHeight >= jl.scrollHeight - 30;
       for (const ln of d.lines) {
         log.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
-        if (ln.source === "dryrun") jl.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
+        if (ln.source === "dryrun") {
+          if (/^dry run \S+: \d+ trapped plugin/.test(ln.text)) jl.replaceChildren();     // a new run: its own lines only
+          jl.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
+        }
         state.logAfter = ln.seq;
       }
       if (atEnd) log.scrollTop = log.scrollHeight;
@@ -2102,7 +2167,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("cli
 $("dry-run").addEventListener("click", showPlan);
 $("demaster").addEventListener("click", demasterGo);
 $("job-stop").addEventListener("click", async () => {
-  if (!window.confirm("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
+  if (!await confirmBox("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
   try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }
   tick();
 });

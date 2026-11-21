@@ -248,6 +248,25 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(started, [([here, "-p", self.api.model.instance.profile], str(self.root))])
         self.assertEqual(snapshot(self.root), self.before)
 
+    def test_new_plugins_that_wait_are_dropped_when_the_modlist_moves_on(self) -> None:
+        """WHY§62: what waits to be put in place was made for the modlist as it was read then."""
+        self.dry_run()
+        self.api.post("/api/demaster/plan", {})
+        self.api.post("/api/demaster/start", {})
+        self.assertEqual(self.worked()["state"], "verified")
+        self.assertEqual(self.api.post("/api/demaster/drop", {})[1]["state"], "")       # "Not now" on the page
+        self.assertEqual(snapshot(self.root), self.before)
+        self.dry_run()
+        self.api.post("/api/demaster/plan", {})
+        self.api.post("/api/demaster/start", {})
+        self.assertEqual(self.worked()["state"], "verified")
+        self.api.post("/api/rescan", {})                                                # the modlist is read again
+        self.ready()
+        self.assertEqual(self.api.state()["demaster"]["state"], "")
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/install", {})                                  # nothing waits any more
+        self.assertEqual(snapshot(self.root), self.before)
+
     def test_plan_run_put_in_place_and_revert(self) -> None:
         self.dry_run()
         p = self.api.post("/api/demaster/plan", {})[1]
@@ -267,9 +286,11 @@ class DemasterThroughThePage(unittest.TestCase):
             self.api.post("/api/demaster/install", {})                         # MO2 is open
         self.assertEqual(snapshot(self.root), self.before)
         self.mo2_running = False
+        self.assertFalse(self.api.job_state()["job"]["stale"])                 # the dry run is of the modlist as it is
         d = self.api.post("/api/demaster/install", {})[1]
         self.ready()
         self.assertEqual((d["state"], d["check"]["ok"]), ("installed", True))
+        self.assertTrue(self.api.job_state()["job"]["stale"])                  # the modlist was read again: said so
         m = model.build(instance.load(self.root))
         self.assertEqual(m.issues, [])
         self.assertFalse(m.instance.mod("Bramble").enabled)

@@ -84,6 +84,15 @@ class DemasterTests(unittest.TestCase):
         job = (d.dir / "script" / "modtrap-job.txt").read_text(encoding="utf-8")
         self.assertIn("|P|RNAM - Race|Skyrim.esm", job)
 
+    def test_a_second_demaster_of_the_same_mod_gets_a_mod_of_its_own(self):
+        """An earlier demaster's mod is never overwritten: what is left gets the next free name (WHY§61)."""
+        _, dry = self.dry("clean")
+        self.assertEqual(demaster.plan(self.m, dry).mod_name, "ModTrap - Bramble")
+        (self.root / "mods" / "ModTrap - Bramble").mkdir()
+        self.assertEqual(demaster.plan(self.m, dry).mod_name, "ModTrap - Bramble (2)")
+        (self.root / "mods" / "ModTrap - Bramble (2)").mkdir()
+        self.assertEqual(demaster.plan(self.m, dry).mod_name, "ModTrap - Bramble (3)")
+
     def test_entries_of_one_list_go_highest_first(self):
         el = lambda route: {"route": route, "entry": "LNAM - FormID", "would": "entry"}   # noqa: E731
         f = {"items": [{"form": "0001", "would": "entry", "elements": [el([1, 0]), el([1, 3]), el([1, 2])]},
