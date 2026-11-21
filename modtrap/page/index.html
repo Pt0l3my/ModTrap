@@ -105,6 +105,7 @@
       <button id="expand-all" type="button" title="Unfold every group">Unfold all</button>
       <span id="mods-shown" class="dim"></span>
     </div>
+    <div id="mod-info" class="card modinfo" hidden></div>
     <div class="scroll"><table id="mods-table">
       <thead><tr><th class="c-tick"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
         <th title="The plugins this mod provides, as MO2 would use them">Plugins</th>
@@ -140,7 +141,7 @@
     <div class="tools">
       <button id="dry-run" class="primary" disabled>Dry run through xEdit</button>
       <button id="demaster" disabled>Demaster Selected</button>
-      <span class="dim">The dry run starts your xEdit through MO2 and lists what would be taken out of each dependant. It changes nothing.</span>
+      <span class="dim" id="demaster-hint">The dry run starts your xEdit through MO2 and lists what would be taken out of each dependant. It changes nothing.</span>
     </div>
     <div id="demaster-box" class="pad" hidden></div>
     <div id="plan" class="pad" hidden></div>

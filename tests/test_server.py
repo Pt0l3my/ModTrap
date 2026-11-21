@@ -88,6 +88,11 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(s["tools"], [{"title": "xEdit", "file": "SSEEdit64.exe", "output_mod": "", "xedit": True}])
         self.assertEqual(s["recent"], [str(self.root)])
         mods = json.loads(self.call("GET", "/api/mods")[1])["mods"]
+        # Each mod names the mods tied to it as a demaster sees it (WHY§59): who needs it, and whom it needs.
+        tied = {x["name"]: (x["needed_by"], x["needs"]) for x in mods}
+        self.assertEqual(tied["Bramble"], (["Bramble - Lantern Patch", "Lantern", "Patch Collection", "Tool Output"], []))
+        self.assertEqual(tied["Lantern"], (["Bramble - Lantern Patch"], ["Bramble"]))
+        self.assertEqual(tied["Tool Output"], ([], ["Bramble", "Quill"]))
         self.assertEqual(mods[0]["name"], "Tool Output")                  # highest priority first
         bramble = next(m for m in mods if m["name"] == "Bramble")
         self.assertEqual((bramble["priority"], bramble["dependants"], bramble["plugins"]), (1, 4, ["Bramble.esp"]))
