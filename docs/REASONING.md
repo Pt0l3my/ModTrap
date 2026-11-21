@@ -81,6 +81,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 56 | 2026-11-21 | The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out | FACT | #xedit #mo2 #tools #safety #process |
 | 57 | 2026-11-21 | The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button | METHOD | #page #steps #process |
 | 58 | 2026-11-21 | ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it | METHOD | #mo2 #page #steps #safety #process |
+| 59 | 2026-11-21 | The first real demaster: four big files done, one left; "Demaster Selected" now goes in one go; a row click shows a mod and what is tied to it | FACT | #xedit #page #safety #process |
 
 ## Entries
 
@@ -1248,3 +1249,37 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Shown in a browser on the invented list: the labels, the indicator turning to "open", and a demaster put in
   place through the question, with MO2 "closed" by it. On the owner's PC the listing of programs and the
   request to close are unproven until the next session.
+
+### 59. The first real demaster: four big files done, one left; "Demaster Selected" now goes in one go; a row click shows a mod and what is tied to it
+
+`2026-11-21` · FACT · `#xedit #page #safety #process` · refs: MT4, MT17, MT18, DESIGN§6.3, DESIGN§6.5, DESIGN§8, XE01§16, WHY§46, WHY§53, WHY§55, WHY§56, WHY§58
+
+- FACT (the owner's pictures; no session file came with them): the first demaster of real plugins went through.
+  Four of the five big files were demastered into ModTrap's own mod, among them the generated file with its five
+  script attachments put back and the two files with conditions taken out; the twelve patches were deactivated,
+  the patch mod disabled, the load order clean, MO2 closed by ModTrap's question. XE01§16's open points (a script
+  attachment, a condition) held on real plugins, as far as ModTrap's own checks of the new files tell.
+- FACT: the fifth file was left as it was, so the mod stayed enabled; the page said only "still to do by you",
+  with no reason, and the next step offered a second demaster that led to "a dry run is needed first".
+- LIKELY (to be confirmed by the session file): that file holds 44 copies of the mod's own records, dialogue
+  topics and their lines. Taking a topic out takes its lines with it; the action for a line that had already
+  gone was then refused as "the record is not in this plugin", and one refusal keeps a dependant out (DESIGN§6.3).
+  The other file with such a copy had a single one.
+- METHOD: an action to take a whole record out, where the record is no longer there, now counts as done: the
+  wanted end is reached. A record that was never there is still caught, by the check after the actions that no
+  record needs a trapped plugin and by ModTrap's own check of the new file's masters. The scripts changed, so
+  the probe must pass again (WHY§53).
+- The owner: "Why doesn't ModTrap just completes the whole demaster process? why not just do it all in one go
+  until the user needs to do something?" DECIDED (the method is ModTrap's, MT17): "Demaster Selected" now runs
+  the dry run itself when there is none of the modlist as it is now, shows the plan, and after the one "Go
+  ahead" does everything: the xEdit run, the checks, and putting the plugins in place (asking only if MO2 is
+  open). The separate "Put them in place" stays for a run that was not carried through. MT4's "a dry run that
+  lists every change, then a confirmation" stands: the plan is that confirmation. What is left afterwards says
+  why, and has a button that takes it up again the same way.
+- The owner: "allow mods to be clicked on for information without being selected … make only the tick square
+  … select a mod for demaster. When clicking on a mod's row … highlight other mods that are related to it in
+  demaster sense". METHOD: a click on a row shows the mod above the list (its plugins, how many plugins in which
+  other mods need it, which mods it needs) and marks those mods' rows, with a switch to show only them; only the
+  box ticks. The mod list the server sends names, for each mod, the mods that need it and the mods it needs.
+- Shown in a browser on the invented list: the row click, the marks, the box, and a demaster from a bare tick to
+  "in place" with one "Go ahead".

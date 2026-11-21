@@ -39,7 +39,7 @@ unit ModTrapApply;
 var
   slJob, slOut, slProg, slTrap, slNeed: TStringList;
   sOut, sProg, sOutDir: string;
-  gMissed: integer;
+  gMissed, gGone: integer;
 
 function Clean(s: string): string;
 begin
@@ -300,6 +300,13 @@ begin
   what := Part(action, '|', 1);
   rec := FindRecord(f, form);
   if not Assigned(rec) then begin
+    // A record to take out that is no longer there went with the record above it: taking out a dialogue topic
+    // takes its lines with it. That is the wanted end. The check after all actions (no record may still need a
+    // trapped plugin) stands guard over a record that was never there.
+    if what = 'R' then begin
+      gGone := gGone + 1;
+      Exit;
+    end;
     Result := 'the record is not in this plugin';
     Exit;
   end;
@@ -364,6 +371,9 @@ begin
     Say('kept as it was: ' + fn + ' (' + refused + ')');
     Exit;
   end;
+  if gGone > 0 then
+    Say(fn + ': ' + IntToStr(gGone) + ' record(s) had already gone with the record above them');
+  gGone := 0;
   CleanMasters(f);
   masters := '';
   stillHas := False;
@@ -434,6 +444,7 @@ function Initialize: integer;
 begin
   Result := 0;
   gMissed := 0;
+  gGone := 0;
   slJob := TStringList.Create;
   slOut := TStringList.Create;
   slProg := TStringList.Create;

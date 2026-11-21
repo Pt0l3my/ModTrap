@@ -1082,9 +1082,20 @@ class Api:
             if mod.kind in ("game", "overwrite") and not mod.plugins:
                 continue
             won = m.provided_by(mod)
+            deps = m.dependants_of_mod(mod) if won else []
+            # The mods tied to this one as a demaster sees it (WHY§59): those holding plugins that need one of
+            # its plugins, and those whose plugins its own need.
+            needed_by = sorted({r.source for r in deps if r.source and r.source != mod.name})
+            needs = set()
+            for r in won:
+                for master in r.masters:
+                    mr = m.plugins.get(instance.fold(master))
+                    if mr is not None and mr.source and mr.source != mod.name and mr.source != instance.GAME:
+                        needs.add(mr.source)
             rows.append({"name": mod.name, "priority": mod.priority, "enabled": mod.enabled, "kind": mod.kind,
                          "listed": mod.listed, "plugins": [r.name for r in won],
-                         "files": len(mod.plugins), "dependants": len(m.dependants_of_mod(mod)) if won else 0})
+                         "files": len(mod.plugins), "dependants": len(deps),
+                         "needed_by": needed_by, "needs": sorted(needs)})
         out = {"mods": rows}
         self._lists["mods"] = (m, out)                  # the lists are worked out once for each reading
         return out
