@@ -63,8 +63,31 @@ def desk(**changes) -> FakeWindows:
 class Pressing(unittest.TestCase):
     def test_only_the_ok_of_xedits_own_module_selection_window_is_pressed(self) -> None:
         w = desk()
-        self.assertTrue(winauto.press_module_selection_ok("sseedit64.exe", w))
+        self.assertTrue(winauto.press_module_selection_ok("sseedit64.exe", w, settle=0))
         self.assertEqual(w.clicked, [23])
+
+    def test_the_window_is_pressed_only_once_it_has_stood_ready_a_moment(self) -> None:
+        """WHY§72: a press the moment the window appears reaches xEdit while it still sets the window up."""
+        w, now = desk(), [100.0]
+        look = lambda: winauto.press_module_selection_ok("SSEEdit64.exe", w, settle=2.5, clock=lambda: now[0])
+        self.assertFalse(look())                                  # seen ready for the first time: not yet
+        now[0] += 1.5
+        self.assertFalse(look())
+        self.assertEqual(w.clicked, [])
+        now[0] += 1.5
+        self.assertTrue(look())                                   # ready for three seconds: pressed
+        self.assertEqual(w.clicked, [23])
+        # A window that was ready, then was not (still filling), starts the wait over.
+        w2 = desk()
+        look2 = lambda: winauto.press_module_selection_ok("SSEEdit64.exe", w2, settle=2.5, clock=lambda: now[0])
+        self.assertFalse(look2())
+        w2.table[23]["enabled"] = False
+        now[0] += 3
+        self.assertFalse(look2())
+        w2.table[23]["enabled"] = True
+        self.assertFalse(look2())
+        now[0] += 3
+        self.assertTrue(look2())
 
     def test_no_such_window_or_not_ready_presses_nothing(self) -> None:
         for change in ({"h2": {"visible": False}}, {"h2": {"text": "Something Else"}}, {"h2": {"program": "Other.exe"}},

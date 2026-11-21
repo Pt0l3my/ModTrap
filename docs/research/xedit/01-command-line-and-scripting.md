@@ -278,3 +278,23 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **Limit.** A part the plugin removes, where the next in line has it, is not told. A tool's plugin ModTrap
   does not know as such counts as an ordinary plugin: where it wins a record, the mod has no stake there.
 - **Not checked** on a real xEdit yet: the lines are exercised by the probe's dry run, on invented plugins.
+
+## 20. An OK pressed the moment Module Selection appears can make xEdit show an error (the owner's PC, 2026-11-21)
+
+- **FACT (the owner's PC, xEdit 4.1.5f).** In one run xEdit showed a message of its own right after start:
+  "Access violation at address … in module 'SSEEdit64.exe'. Execution of address …". ModTrap's log has the
+  press of OK in Module Selection four seconds after xEdit's session began, as its last line before the
+  message. In that run MO2 was already open, so xEdit came up sooner than in the runs before it.
+- **FACT.** xEdit's own log of that run has no error. It loaded the 445 plugins of ModTrap's list, ran the
+  script to its end, and the five new plugins passed every check.
+- **FACT (xEdit's source, `xEdit/xeModuleSelectForm.pas:466-489` at commit `f5c00f3`).** When the window shows,
+  it still works: it walks the list as a load would, sets the focus, picks a row. Its OK handler is at
+  `:621-627`.
+- **LIKELY.** ModTrap looked for the window every three seconds and pressed OK at the first look that found the
+  button enabled. This time that look fell while the window was still being set up. Not proven: the source at
+  hand is not 4.1.5f's, and the message names no place.
+- **METHOD.** OK is pressed only once the window has stood ready, button enabled, for two and a half seconds:
+  the first look that finds it only notes the time (`winauto.press_module_selection_ok`). A window that stops
+  being ready starts the wait over. ModTrap looks every second and a half.
+- **Not done.** ModTrap does not answer xEdit's error message: it cannot know what it says. The owner sees it
+  and presses its OK; the run then goes on, or fails with its reason as any run can.

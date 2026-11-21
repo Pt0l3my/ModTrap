@@ -30,7 +30,7 @@ button { background: var(--panel2); color: var(--text); border: 1px solid var(--
   padding: 6px 12px; font: inherit; cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: .55; cursor: not-allowed; }
-button[type=submit], #demaster { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button[type=submit], #demaster, #process-go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 .summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
 .chip.good { border-color: var(--good); color: var(--good); }
@@ -315,3 +315,10 @@ h2.pad-top { margin-top: 18px; }
 .live-dot.bad { background: var(--bad); animation: none; }
 .live-dot.yours { background: var(--accent); animation: none; }
 @media (prefers-reduced-motion: reduce) { .t-going .ico, .live-dot { animation: none; } }
+.tasks .acts { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 4px 0 4px; color: var(--text); }
+.tasks .acts button { padding: 3px 10px; font-size: 13px; }
+.tasks .acts button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.tasks .acts .act-note { flex-basis: 100%; font-size: 12.5px; color: var(--dim); }
+.tasks .acts .tickoff { font-size: 13px; color: var(--text); }
+button.nav-link { border: 0; background: none; padding: 2px 2px; color: var(--accent); font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; }
+button.nav-link:hover { color: var(--text); }

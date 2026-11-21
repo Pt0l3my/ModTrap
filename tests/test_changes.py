@@ -342,7 +342,9 @@ class DemasterThroughThePage(unittest.TestCase):
         d = self.api.post("/api/demaster/install", {})[1]
         self.ready()
         self.assertEqual((d["state"], d["check"]["ok"]), ("installed", True))
-        placed = {x["key"]: x for x in self.api.state()["process"]}["install"]
+        self.assertEqual({x["key"]: x["state"] for x in self.api.state()["process"]},
+                         {"dry": "done", "plan": "done", "change": "done", "install": "done"})   # the modlist was read again:
+        placed = {x["key"]: x for x in self.api.state()["process"]}["install"]                    # the run stays shown
         self.assertEqual((placed["state"], {t["key"]: t["state"] for t in placed["tasks"]}),
                          ("done", {"mo2": "done", "mod": "done", "off": "done", "disable": "done", "reread": "done", "health": "done"}))
         self.assertTrue(self.api.job_state()["job"]["stale"])                  # the modlist was read again: said so
@@ -375,6 +377,11 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["state"], "reverted")
         self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "reverted")
+        # Put back: the Process tab shows a demaster still to come, and the dry run of the modlist as it was no
+        # longer counts as this one's (WHY§71).
+        stages = {x["key"]: x for x in self.api.state()["process"]}
+        self.assertEqual([v["state"] for v in stages.values()], ["waiting"] * 4)
+        self.assertIn("a new one is made", stages["dry"]["note"])
         # A reverted job is only kept for looking at: the owner can clear it. Its folder and the history stay.
         self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 1})
         self.assertEqual(self.api.state()["demaster"]["jobs"], [])

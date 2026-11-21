@@ -106,6 +106,26 @@ def contents(folder: Path) -> dict:
     return {"files": len(files), "cut": cut, "kinds": kinds, "paths": {f.lower() for f in files}}
 
 
+def _has_file(folder: Path, rel_low: str) -> bool:
+    """Is there a file at this path under `folder`, letter case aside (as the game sees it)?"""
+    if os.name == "nt":
+        return (folder / rel_low).is_file()             # Windows' own file names ignore case
+    here = folder
+    parts = rel_low.split("/")
+    for i, part in enumerate(parts):
+        try:
+            with os.scandir(here) as it:
+                hit = next((e for e in it if e.name.lower() == part), None)
+        except OSError:
+            return False
+        if hit is None:
+            return False
+        if i == len(parts) - 1:
+            return hit.is_file()
+        here = Path(hit.path)
+    return False
+
+
 def animation_feed(inst: Instance, paths_low: set[str], skip_mods: set[str]) -> dict:
     """What the mods' loose files give a behaviour tool to read (TL01§12), and whether the files such a tool made
     name one of the mods' own animation folders. Names and a search for those names only."""
@@ -169,7 +189,26 @@ def animation_feed(inst: Instance, paths_low: set[str], skip_mods: set[str]) -> 
                 hits.append({"file": rel, "names": found[:4]})
         searched.append({"tool": tool, "mod": target, "files": read, "hits": hits[:DETAILS], "hit_count": len(hits),
                          "cut": cut})
-    return {"lists": lists, "graphs": graphs, "nemesis_engine": sorted(patches["nemesis_engine"]),
+    # Pandora takes a list in only where the graph file that goes with it is in the game's behaviour folder too
+    # (TL01§12): in the mod itself, or in any other enabled mod. A list without it is passed over.
+    with_graph, without_graph = [], []
+    for p in lists:
+        got = ANIM_LIST.search(p)
+        graph = "%s/behaviors/fnis_%s_behavior.hkx" % (p[:p.rindex("/animations/")], got.group(2))
+        alt = graph.replace("/behaviors/", "/behaviours/")
+        there = graph in paths_low or alt in paths_low
+        if not there:
+            for x in inst.mods:
+                try:
+                    if x.kind == "mod" and x.enabled and x.folder is not None and fold(x.name) not in skip_mods \
+                            and (_has_file(x.folder, graph) or _has_file(x.folder, alt)):
+                        there = True
+                        break
+                except OSError:
+                    continue
+        (with_graph if there else without_graph).append(p)
+    return {"lists": lists, "lists_with_graph": with_graph, "lists_without_graph": without_graph,
+            "graphs": graphs, "nemesis_engine": sorted(patches["nemesis_engine"]),
             "pandora_engine": sorted(patches["pandora_engine"]), "folders": sorted(folders), "plain": plain,
             "searched": searched}
 
@@ -422,17 +461,27 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                 tool = tools.of_executable(title, binaries.get(title, ""))[0]
                 e = entry(tool)
                 reads = ANIM_READS.get(tool, ("lists", "nemesis_engine", "pandora_engine"))
-                inputs = (feed["lists"] if "lists" in reads else []) + [
+                # Pandora wants the graph file beside the list; the older engines make that file themselves.
+                wants_graph = tool == "Pandora Behaviour Engine" and "lists_with_graph" in feed
+                lists_read = feed["lists_with_graph"] if wants_graph else feed["lists"]
+                passed_over = feed["lists_without_graph"] if wants_graph else []
+                inputs = (lists_read if "lists" in reads else []) + [
                     "%s/mod/%s" % (eng, code) for eng in ("nemesis_engine", "pandora_engine") if eng in reads
                     for code in feed[eng]]
                 named_in = [x for x in feed["searched"] if x["tool"] == tool]
+                if passed_over and "lists" in reads:
+                    e["clear"].append("the mod's %d animation list(s) have no graph file with them "
+                                      "(FNIS_…_Behavior.hkx in the behaviour folder, in this mod or any enabled "
+                                      "one), and this tool passes such a list over" % len(passed_over))
+                    e["details"].append({"summary": "Animation list(s) without their graph file: %d" % len(passed_over),
+                                         "lines": passed_over[:DETAILS]})
                 if inputs:
                     e["run"].append("the mod carries %d animation list(s) or behaviour patch folder(s), which this "
                                     "tool reads and builds into its output; they stay in it until the tool runs "
                                     "again" % len(inputs))
                     e["details"].append({"summary": "What this tool reads of the mod: %d list(s) or patch folder(s)"
                                          % len(inputs), "lines": inputs[:DETAILS] + feed["graphs"][:4]})
-                else:
+                elif not passed_over:
                     e["clear"].append("the mod's %d animation file(s) are plain files: it has no animation list "
                                       "(FNIS_…_List.txt) and no behaviour patch folder (Nemesis_Engine or "
                                       "Pandora_Engine), which is all this tool reads of a mod" % info["count"])

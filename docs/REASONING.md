@@ -93,6 +93,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 68 | 2026-11-21 | A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running | DECIDED | #process #version #server #page |
 | 69 | 2026-11-21 | The other tools checked: a change is not a stake (the patcher was asked for a value many plugins share), and a behaviour tool reads lists and patch folders, not animation files | DECIDED | #tools #steps #xedit #process |
 | 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
+| 71 | 2026-11-21 | The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes | DECIDED | #page #process #steps |
+| 72 | 2026-11-21 | The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list | FACT | #xedit #tools #steps #process |
 
 ## Entries
 
@@ -1604,3 +1606,56 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests for the board and for the stages through a whole demaster on the stand-in; in a browser, the
   one go from probe to in place, the box going amber while xEdit runs, and all green at the end.
 - Not checked: on the owner's PC; a failed run's red box was checked by test only, not by eye.
+
+### 71. The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes
+
+`2026-11-21` · DECIDED · `#page #process #steps` · refs: MT17, DESIGN§18, WHY§60, WHY§61, WHY§70
+
+- The owner, on version 0.3.3: "it gut stuck at this point, there is no go ahead button anywhere. Can you also
+  add pop up buttons to process boxes? when something needs to be pressed by user, make it appear on the step box
+  at the right task (and also add navigation button to the button's origin page so the user can check)."
+- FACT (the session file's log): the probe passed; ModTrap began reading the modlist again, as it does after
+  every probe; one second later the page asked for the dry run and was told "the modlist is being read; try
+  again in a moment". The one go took that as a failure and ended. No dry run was made, so no plan and no
+  "Go ahead". On an invented list the reading takes no time, which is why the stand-in never showed it; on
+  3,751 plugins it takes long enough.
+- FACT: the Process tab showed the dry run as done and the plan as waiting for the owner, from a dry run kept
+  from before the modlist was read again. That dry run does not count for a demaster (WHY§61); the box said
+  what was not so, and pointed at a button that could not come.
+- DECIDED: the one go waits. After the probe, and wherever the server says the modlist is being read, it holds
+  its place and goes on by itself once the modlist is read. It gives up only on a real refusal.
+- DECIDED: a dry run of the modlist as it was is shown as to come, with a line saying that an earlier one is
+  kept and a new one is made. A demaster in hand or in place keeps its own dry run shown as done; Revert and
+  "Not now" set the later boxes back.
+- DECIDED: what the owner can press appears in the box, at its task: start, the plan's "Go ahead" with what the
+  plan amounts to, "Put them in place", a tool's start, the tick for what only the owner can judge. Each has a
+  way to its own tab beside it. The buttons call the same functions as the ones on those tabs: one behaviour,
+  two places. "Demaster Selected" is also at the top of the tab. Started from here, the one go no longer jumps
+  to other tabs.
+- Checked: in a browser on the stand-in with reading slowed to two and a half seconds: the whole demaster
+  driven from the boxes alone, the wait after the probe, Revert setting the boxes back. Tests for the stages
+  after a Revert and with an earlier dry run.
+- Not checked: on the owner's PC.
+
+### 72. The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list
+
+`2026-11-21` · FACT · `#xedit #tools #steps #process` · refs: MT17, XE01§13, XE01§19, XE01§20, TL01§12, WHY§69, WHY§71
+
+- The owner, on version 0.3.4: "ended up with an error, seems memory related? And it doesn't need synthesis
+  anymore?"
+- FACT (the session file): the one go ran from the Process tab to the end. Dry run, plan, five plugins changed
+  and verified, put in place, the modlist clean. WHY§71's waiting worked.
+- FACT: the error box was xEdit's own, at its start, and the run went on after it (XE01§20). It is a fault
+  inside the program, not a lack of memory. LIKELY cause: ModTrap's press of OK arrived while the window was
+  still being set up. DECIDED: the press waits until the window has stood ready for two and a half seconds.
+- FACT: the stakes of XE01§19 worked on a real xEdit. Of 528 records the mod and its patches change, they have
+  a stake in 502. The worldspace's table of heights is no longer among them, as WHY§69 expected: other plugins
+  say the same. The patcher's three plugins hold two records with a stake and none of the mod's values. So the
+  patcher is cleared by evidence. The modlist's guide says to run it; ModTrap shows why it sees no need, and the
+  owner may run it all the same: a patcher run does no harm.
+- FACT: the behaviour tool is still asked, for one animation list; against it, no file of its output names the
+  mod's animation folder. By its source the tool takes a list in only with its graph file (TL01§12). DECIDED:
+  a list counts for this tool only where that file is in the modlist; otherwise the tool is cleared with both
+  findings shown.
+- Not checked: the new press on the owner's PC; whether the search of the behaviour output finds names in a
+  real output that has them (it has found none so far, in an output that may well have none).

@@ -17,7 +17,8 @@ class StepsTests(unittest.TestCase):
         mods = self.root / "mods"
         # What Bramble carries beside its plugin, and two mods that exist only because of it.
         for rel in ("meshes/actors/character/animations/BrambleAnim/wave.hkx",
-                    "meshes/actors/character/animations/BrambleAnim/FNIS_BrambleAnim_List.txt", "meshes/bramble/leaf.nif",
+                    "meshes/actors/character/animations/BrambleAnim/FNIS_BrambleAnim_List.txt",
+                    "meshes/actors/character/behaviors/FNIS_BrambleAnim_Behavior.hkx", "meshes/bramble/leaf.nif",
                     "textures/bramble/leaf.dds", "scripts/bramblequest.pex", "SKSE/Plugins/Bramble.ini"):
             fx.write(mods / "Bramble" / rel, b"invented")
         for rel in ("meshes/bramble/leaf.nif", "textures/bramble/leaf.dds"):
@@ -41,7 +42,7 @@ class StepsTests(unittest.TestCase):
     def test_contents_and_what_they_feed(self):
         c = steps.contents(self.root / "mods" / "Bramble")
         self.assertEqual({k: v["count"] for k, v in c["kinds"].items()},
-                         {"animations": 2, "meshes": 1, "textures": 1, "scripts": 1,
+                         {"animations": 3, "meshes": 1, "textures": 1, "scripts": 1,
                           "settings for a script extender plugin": 1, "other files": 1})
         self.assertEqual(steps.tools_for(self.build().instance, "animations"), ["Invented Behaviour Engine"])
 
@@ -66,6 +67,25 @@ class StepsTests(unittest.TestCase):
         by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
         self.assertIn("the mod carries 1 animation list(s) or behaviour patch folder(s)", by["tool:Pandora Behaviour Engine"]["why"])
 
+    def test_pandora_passes_over_a_list_that_has_no_graph_file(self):
+        """TL01§12, WHY§72: Pandora takes an animation list in only where FNIS_<folder>_Behavior.hkx is in the
+        behaviour folder too, in the mod or in any enabled mod."""
+        (self.root / "mods" / "Bramble" / "meshes/actors/character/behaviors/FNIS_BrambleAnim_Behavior.hkx").unlink()
+        m = self.build()
+        deep = steps.look_deeper(m, ["Bramble"])
+        self.assertEqual((len(deep["animation"]["lists_with_graph"]), len(deep["animation"]["lists_without_graph"])), (0, 1))
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        self.assertNotIn("tool:Pandora Behaviour Engine", by)
+        cleared = [i["text"] for i in by["tools-clear"]["items"] if i["text"].startswith("Pandora")]
+        self.assertIn("have no graph file with them", cleared[0])
+        # With the graph file in another enabled mod, the list is read.
+        fx.write(self.root / "mods" / "Quill" / "meshes/actors/character/behaviors/FNIS_BrambleAnim_Behavior.hkx", b"invented")
+        m = self.build()
+        deep = steps.look_deeper(m, ["Bramble"])
+        self.assertEqual(len(deep["animation"]["lists_with_graph"]), 1)
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        self.assertIn("the mod carries 1 animation list(s) or behaviour patch folder(s)", by["tool:Pandora Behaviour Engine"]["why"])
+
     def test_a_behaviour_tools_output_that_names_the_mods_animation_folder(self):
         mods = self.root / "mods"
         (mods / "Bramble" / "meshes/actors/character/animations/BrambleAnim/FNIS_BrambleAnim_List.txt").unlink()
@@ -85,7 +105,7 @@ class StepsTests(unittest.TestCase):
         by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
         why = by["tool:Pandora Behaviour Engine"]["why"]
         self.assertIn("1 file(s) of its output in “Engine Output” name a folder of the mod's animations", why)
-        self.assertIn("What speaks against it: the mod's 1 animation file(s) are plain files", why)
+        self.assertIn("What speaks against it: the mod's 2 animation file(s) are plain files", why)
 
     def test_a_mod_that_only_replaces_the_ticked_mods_files_is_found(self):
         m = self.build()
@@ -177,7 +197,7 @@ class StepsTests(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertTrue(first["steps"])
-        self.assertEqual(out["contents"]["animations"], 2)
+        self.assertEqual(out["contents"]["animations"], 3)
         self.assertIn("mentions", [x["key"] for x in out["steps"]])
         self.assertEqual(a.steps({"mods": []})["steps"], [])
 
