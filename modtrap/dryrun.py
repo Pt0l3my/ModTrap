@@ -448,7 +448,7 @@ def close_program(image: str, force: bool = False) -> None:
         pass
 
 
-MO2_GRACE = 8.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
+MO2_GRACE = 4.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
 PRESS_EVERY = 3.0              # seconds between looks for xEdit's "Module Selection" window
 PRESS_LIMIT = 8                # presses of its OK in one run, at most
 
@@ -511,6 +511,13 @@ def close_xedit(image: str, running: Callable[[str], bool | None], closer: Calla
     log.warn("MO2, started only for this run, did not close by itself: it is probably showing a message (a plugin of "
              "MO2 failing after a command-line run does that). ModTrap asks it to close; if it stays, close it yourself.")
     closer(MO2_EXE, False)
+    end = time.time() + mo2_grace
+    while time.time() < end:
+        if running(MO2_EXE) is not True:
+            log.info("MO2 closed when asked.")
+            return
+        time.sleep(wait)
+    log.warn("MO2 is still open: press OK on its message, or close it.")
 
 
 def launch(cmd: list[str], cwd: str) -> subprocess.Popen:
@@ -712,8 +719,16 @@ def _lines(path: Path) -> list[str]:
 
 
 def _ended(report: Path) -> bool:
-    text = _read(report)
-    return any(ln.startswith("X\t") for ln in text.split("\n")[-3:])
+    """Has the script written its end line? Only the file's last bytes are read, and the file is held open as
+    briefly as can be: xEdit's script cannot write a file that another program has open (XE01§15)."""
+    try:
+        with open(report, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 4096))
+            tail = f.read()
+    except OSError:
+        return False
+    return any(ln.startswith("X\t") for ln in tail.decode("utf-8", "replace").split("\n")[-3:])
 
 
 class PastJob:

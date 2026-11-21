@@ -75,6 +75,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 50 | 2026-11-21 | The probe passes on the owner's PC: what that proves, what it does not, and a message of MO2's | FACT | #xedit #mo2 #safety #process |
 | 51 | 2026-11-21 | xEdit's "Module Selection" window: always shown in script mode, nothing to choose, ModTrap presses OK | FACT | #xedit #page #process |
 | 52 | 2026-11-21 | The first real dry run against the guide: the same plugins, a different split; what was changed for it | FACT | #procedure #xedit #safety #process |
+| 53 | 2026-11-21 | The second real dry run stopped at a file held by another program; the scripts now bear it, and a probe pass counts only for the scripts it ran | FACT | #xedit #mo2 #safety #process |
 
 ## Entries
 
@@ -1097,3 +1098,23 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   the owner's next dry run shows what share of the parts it covers.
 - The guide and the list are named here only in the owner's own words; no plugin name, record or id of the real
   list is in the repository.
+
+### 53. The second real dry run stopped at a file held by another program; the scripts now bear it, and a probe pass counts only for the scripts it ran
+
+`2026-11-21` · FACT · `#xedit #mo2 #safety #process` · refs: XE01§13, XE01§15, DESIGN§7, DESIGN§9, MO01§9, WHY§47, WHY§50, WHY§51, WHY§52
+
+- The owner: "the dry run couldn't complete this time, MO2 came up with the same error at one point", with the
+  saved session.
+- FACT: ModTrap's press of OK in xEdit's module selection worked on the owner's PC (the log line of WHY§51, 24
+  seconds after the start, and the script began without the owner). XE01§13's LIKELY holds.
+- FACT: the run then stopped in the script, at the write of the progress file, which another program held open
+  at that instant (XE01§15). It is not MO2's message: that message comes after every run that MO2 starts from
+  the command line (WHY§50) and is unrelated. Every dependant was unchanged.
+- METHOD: the scripts let a missed progress write go and try the report's write again (XE01§15). Not provable
+  here: the stand-in for xEdit does not run the scripts; the owner's next run shows it.
+- METHOD: a passed probe is now remembered together with a mark of ModTrap's three scripts, and counts only while
+  they are the same. The scripts changed twice today after the probe had passed; a real demaster must not rest on
+  a pass earned by other code. The dry run itself needs no probe (it only reads).
+- METHOD: after asking a MO2 that stopped at a message to close, ModTrap now waits and says in the log whether it
+  closed, so the next session file answers whether the request dismisses the message (WHY§50's open point). The
+  wait before asking is four seconds, not eight.

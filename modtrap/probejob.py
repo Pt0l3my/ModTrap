@@ -18,6 +18,7 @@ Each step answers one thing that could not be shown without the owner's PC:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -153,6 +154,7 @@ class Probe:
         try:
             paths.write_atomic(self.session_dir / "probe.json", (json.dumps(
                 {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "ok": self.state == "passed", "xedit": self.xedit,
+                 "scripts": scripts_mark(),
                  "tool": self._tool_binary(), "result": self.public()}, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
         except (OSError, TypeError, ValueError) as e:
             log.warn("the probe's outcome could not be kept: %s", logbook.why(e))
@@ -332,8 +334,18 @@ class Probe:
         self._ok("revert")
 
 
+def scripts_mark() -> str:
+    """A mark of ModTrap's own xEdit scripts as they are now. The probe proves these scripts on the owner's xEdit,
+    so a pass counts only for the scripts it ran (WHY§53)."""
+    h = hashlib.sha256()
+    for f in sorted((Path(__file__).parent / "xedit").glob("*.pas")):
+        h.update(f.name.encode("utf-8") + b"\0" + f.read_bytes().replace(b"\r\n", b"\n") + b"\0")
+    return h.hexdigest()[:16]
+
+
 def passed(session_dir: Path, inst: instance.Instance) -> str:
-    """Why real work is not allowed yet, or "" when the probe has passed for this modlist with this xEdit."""
+    """Why real work is not allowed yet, or "" when the probe has passed for this modlist with this xEdit and
+    these scripts."""
     try:
         with open(session_dir / "probe.json", "rb") as f:
             data = json.loads(f.read(4 * 1024 * 1024).decode("utf-8"))
@@ -347,6 +359,8 @@ def passed(session_dir: Path, inst: instance.Instance) -> str:
         tool = ""
     if data.get("tool") != tool:
         return "the xEdit set up in MO2 is not the one the probe passed with: run the probe again"
+    if data.get("scripts") != scripts_mark():
+        return "ModTrap's xEdit scripts have changed since the probe passed: run the probe again (Tools tab)"
     return ""
 
 

@@ -184,3 +184,19 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   trapped plugin, and whether that version is present, absent, or would need a master the dependant lacks; and,
   for a list, whether the list without the entries that need a trapped plugin is exactly that master's list.
   The script only reads.
+
+## 15. A script's file writes fail while another program has the file open (the owner's PC, 2026-11-21)
+
+- **FACT (the owner's PC).** The second real dry run stopped part-way: the script's write of its progress file
+  failed with "Cannot create file … The process cannot access the file because it is being used by another
+  process", raised at the line that saves the list. Nothing had been changed; the run was read-only.
+- **LIKELY.** A string list saved to a file creates the file anew and asks for it alone, so the write fails
+  while any other program holds the file open, however that program opened it. The script wrote the file twice
+  within the same second; the other holder was ModTrap reading it, or a virus scanner looking at a file just
+  written. The first real run did the same writes and was lucky.
+- **FACT.** The script engine has no `Sleep`; `Now` is there (the engine's own SysUtils unit is registered,
+  `xEdit/JvI/xejviScriptAdapter.pas:2289`), and `try … except` catches the failure (the run's own handler caught
+  it and reported it).
+- **METHOD.** In all three scripts a missed write of the progress file is let go (the next line writes the whole
+  list again, and the end is told by the report), and the report's write is tried again for some seconds before
+  it counts as a failure. ModTrap reads only the last bytes of the report when it looks for the end line.

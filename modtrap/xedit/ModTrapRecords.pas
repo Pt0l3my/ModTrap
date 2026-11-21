@@ -23,6 +23,7 @@ unit ModTrapRecords;
 var
   slJob, slOut, slProg: TStringList;
   sOut, sProg: string;
+  gMissed: integer;
 
 function Clean(s: string): string;
 begin
@@ -31,17 +32,52 @@ begin
   Result := StringReplace(Result, #10, ' ', [rfReplaceAll]);
 end;
 
+// A short wait. The script engine has no Sleep, so this watches the clock.
+procedure Pause(ms: integer);
+var
+  until_, spins: double;
+begin
+  until_ := Now + ms / 86400000.0;
+  spins := 0;
+  while Now < until_ do
+    spins := spins + 1;
+end;
+
+// The progress file is written whole each time. Windows refuses the write while any other program has the file
+// open, even for an instant (ModTrap reading it, a virus scanner looking at what was just written). A missed
+// write loses nothing: the next line writes the whole list again, and the report says when the script has ended.
 procedure Say(s: string);
 begin
   slProg.Add(s);
-  slProg.SaveToFile(sProg);
+  try
+    slProg.SaveToFile(sProg);
+  except
+    gMissed := gMissed + 1;
+  end;
   AddMessage('ModTrap: ' + s);
 end;
 
+// The report must be written: it is tried again for some seconds before the failure counts as the script's.
 procedure SaveReport;
+var
+  tries: integer;
+  saved: boolean;
 begin
-  slOut.SaveToFile(sOut);
+  saved := False;
+  tries := 0;
+  while (not saved) and (tries < 40) do begin
+    try
+      slOut.SaveToFile(sOut);
+      saved := True;
+    except
+      tries := tries + 1;
+      Pause(250);
+    end;
+  end;
+  if not saved then
+    slOut.SaveToFile(sOut);
 end;
+
 
 function LevelAll(e: IInterface): string;
 begin
@@ -149,6 +185,7 @@ end;
 function Initialize: integer;
 begin
   Result := 0;
+  gMissed := 0;
   slJob := TStringList.Create;
   slOut := TStringList.Create;
   slProg := TStringList.Create;
