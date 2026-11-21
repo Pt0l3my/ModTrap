@@ -11,6 +11,7 @@ import re
 import secrets
 import shutil
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -94,6 +95,9 @@ class Api:
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
+        self.program_paths = dryrun.winauto.running_paths     # which MO2 is running (WHY§58); replaced in tests
+        self.ask_close = dryrun.winauto.ask_to_close          # asks this modlist's MO2 to close; replaced in tests
+        self._mo2_seen: tuple[float, dict] = (0.0, {})
         self.poll = 1.0
         self.store = sessions.Store()
         self.session: sessions.Session | None = None
@@ -921,7 +925,7 @@ class Api:
 
             def work() -> None:
                 try:
-                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra)
+                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None)
                     log.info("add: analysed %d mod(s): %s", len(found["mods"]), found["summary"])
                 except Exception as e:
                     log.warn("analysing the mods to add failed: %s", logbook.why(e))
@@ -948,6 +952,66 @@ class Api:
             raise Bad("no modlist is open")
         return m
 
+    # --- MO2: open or closed, for this modlist (WHY§58) ---------------------------------------------------------------
+
+    def mo2(self) -> dict:
+        """Is MO2 open on this modlist? "open", "closed", or "unknown" (it cannot be told: then nothing that needs
+        it closed is done). A MO2 of another modlist does not count: it has its own lists. Where it cannot be told
+        which MO2 is running, a running MO2 counts as this one."""
+        m = self.model
+        mine = str(m.instance.root / dryrun.MO2_EXE) if m is not None else ""
+        try:
+            paths_now = self.program_paths(dryrun.MO2_EXE)
+        except Exception:
+            paths_now = None
+        if paths_now is None:
+            r = self.running(dryrun.MO2_EXE)
+            return {"state": "unknown" if r is None else "open" if r else "closed", "other": False}
+        if not paths_now:
+            return {"state": "closed", "other": False}
+        if not mine or any(dryrun.winauto.same_file(p, mine) for p in paths_now):
+            return {"state": "open", "other": False}
+        return {"state": "closed", "other": True}          # only the MO2 of another modlist is running
+
+    def mo2_closed(self) -> bool | None:
+        st = self.mo2()["state"]
+        return None if st == "unknown" else st == "closed"
+
+    def mo2_close(self) -> dict:
+        """Asks this modlist's MO2 to close, as a click on its X does: on the owner's word, and never by force."""
+        m = self._need()
+        if self._busy() or (self.changes is not None and self.changes.busy()) or \
+                (self.tooljob is not None and self.tooljob.public().get("state") in ("starting", "running")):
+            raise Bad("ModTrap is running something through MO2 right now; wait until it has ended")
+        if self.mo2()["state"] != "open":
+            return {"asked": False, "mo2": self.mo2()}
+        asked = False
+        try:
+            asked = bool(self.ask_close(str(m.instance.root / dryrun.MO2_EXE)))
+        except Exception:
+            asked = False
+        if not asked:
+            raise Bad("MO2 could not be asked to close: close it yourself")
+        log.info("MO2 was asked to close, on your word (as a click on its X does)")
+        self._mo2_seen = (0.0, {})
+        return {"asked": True, "mo2": self.mo2()}
+
+    def mo2_open(self) -> dict:
+        """Starts this modlist's MO2, as a double click on it does."""
+        m = self._need()
+        exe = m.instance.root / dryrun.MO2_EXE
+        if not exe.is_file():
+            raise Bad("ModOrganizer.exe was not found in the modlist's folder")
+        if self.mo2()["state"] == "open":
+            return {"started": False, "mo2": self.mo2()}
+        try:
+            self.launcher([str(exe), "-p", m.instance.profile], str(m.instance.root))
+        except OSError as e:
+            raise Bad("MO2 could not be started: %s" % logbook.why(e)) from None
+        log.info("MO2 was started for you (profile '%s')", m.instance.profile)
+        self._mo2_seen = (0.0, {})
+        return {"started": True, "mo2": self.mo2()}
+
     def state(self) -> dict:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
@@ -956,6 +1020,14 @@ class Api:
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
+        if m is not None:
+            when, seen = self._mo2_seen
+            if time.time() - when > 1.5:
+                seen = self.mo2()
+                self._mo2_seen = (time.time(), seen)
+            out["mo2"] = seen
+        else:
+            out["mo2"] = None
         out["demaster"] = self.changes.demaster_public() if self.changes is not None else None
         out["probe"] = self.changes.probe_public() if self.changes is not None else None
         settings = paths.load_settings()
@@ -1130,6 +1202,10 @@ class Api:
             return 200, self.tool_start(body), None
         if path == "/api/tool/stop":
             return 200, self.tool_stop(), None
+        if path == "/api/mo2/close":
+            return 200, self.mo2_close(), None
+        if path == "/api/mo2/open":
+            return 200, self.mo2_open(), None
         if path == "/api/job/stop":
             if self.job is None:
                 raise Bad("no dry run is going")

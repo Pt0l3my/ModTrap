@@ -122,8 +122,7 @@ class Changes:
 
     def closed(self) -> bool | None:
         """Is MO2 closed? None when it cannot be told; then nothing is changed."""
-        r = self.api.running(dryrun.MO2_EXE)
-        return None if r is None else not r
+        return self.api.mo2_closed()            # this modlist's MO2; another modlist's does not count (WHY§58)
 
     def _jobs_dir(self) -> Path:
         s = self.api.session

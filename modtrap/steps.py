@@ -224,6 +224,7 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         return {"plugin": r.name, "mod": r.source, "position": r.position, "active": r.active,
                 "verdict": v["reading"] if v else "", "own": v["own"] if v else None,
                 "entries": v["entries"] if v else None, "needs_you": v["needs_you"] if v else None,
+                "tool_title": next((t for t, mod in inst.output_mods.items() if mod == r.source and t in binaries), ""),
                 "made_by": [e.tool + ("" if e.strong else " (probably)") for e in makers(r)],
                 "how": "; ".join(e.how for e in makers(r))}
 
@@ -279,10 +280,12 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                "no longer list it as a master. The Dry run tab shows what in them." % len(by_hand)) if by_hand else
          "Done when the plugin no longer lists the mod as a master (press Rescan to check).", action=press)
     if regen:
-        step("regenerate", "you", "Run again the tools whose output depends on the mod",
+        items = [brief(r) for r in regen]
+        step("regenerate", "both" if any(i["tool_title"] for i in items) else "you",
+             "Run again the tools whose output depends on the mod",
              "These plugins were made by a tool, from the load order as it was. Once the mod and its patches are "
              "switched off, running the tool again rebuilds them without it. Do this after the steps above.",
-             "to do", [brief(r) for r in regen],
+             "to do", items,
              note="Done when the rebuilt plugin no longer lists the mod as a master.")
 
     # 5. The mods themselves, and what exists only for them.
@@ -310,7 +313,7 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
     for kind, info in sorted(deep.get("kinds", {}).items()):
         names = tools_for(inst, kind)
         if kind in TOOLS_FOR:
-            step("tool:" + kind, "you",
+            step("tool:" + kind, "both" if names else "you",
                  "Run %s again" % (" or ".join("“%s”" % n for n in names) if names else "the tool that handles " + kind),
                  "The mod carries %d file(s) of %s (for example %s). A tool built its output from them, and that "
                  "output still has them in it until the tool runs again. No plugin's master list shows this." % (

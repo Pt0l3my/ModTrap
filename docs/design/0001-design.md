@@ -170,7 +170,9 @@ the job's own list ticked; ModTrap presses that window's OK itself, and says so 
 failure that names the folder xEdit read.
 
 MO2 must be closed only while ModTrap writes to the profile (§6.5 step 2, Re-enable and Revert): an open MO2 keeps
-the mod list in memory and writes it back (MO01§2). ModTrap checks, and asks the owner to close MO2 for that step.
+the mod list in memory and writes it back (MO01§2). ModTrap checks whether this modlist's own MO2 is running,
+shows it on the page, and before such a step asks whether to close MO2; on yes it asks MO2 to close as a click on
+its X does, and waits. It never ends MO2 (WHY§58).
 
 Our script and the job file live in ModTrap's work folder, outside the instance's mods and outside xEdit's folder:
 nothing is installed into either.

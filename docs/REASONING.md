@@ -80,6 +80,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 55 | 2026-11-21 | What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first | DECIDED | #procedure #xedit #safety #process |
 | 56 | 2026-11-21 | The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out | FACT | #xedit #mo2 #tools #safety #process |
 | 57 | 2026-11-21 | The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button | METHOD | #page #steps #process |
+| 58 | 2026-11-21 | ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it | METHOD | #mo2 #page #steps #safety #process |
 
 ## Entries
 
@@ -1215,3 +1216,35 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - METHOD: the tab now sorts the dependants as the demaster itself does, by the dry run's reading first: a tool's
   output that the dry run found demasterable is listed under demastering, not under "run the tool again", and
   the demaster step says how many of its plugins need the owner.
+
+### 58. ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it
+
+`2026-11-21` · METHOD · `#mo2 #page #steps #safety #process` · refs: MT18, DESIGN§7, DESIGN§14, DESIGN§16.7, MO01§2, WHY§50, WHY§54, WHY§57
+
+- The owner: "make sure ModTrap knows if MO2 is open for the modlist, so it geyes out functions that require it
+  closed (same vice versa, grey out features the need MO2 open if not already open, or perhaps it could auto start
+  or close MO2 with prompt 'Close/open MO2?' with Yes or No)", and "most of these steps indicate 'You', including
+  the one you said ModTrap can do, can you double check which steps can be done by ModTrap".
+- FACT: ModTrap knew only whether any program called ModOrganizer.exe ran, by asking Windows' task list each
+  time; the buttons that need MO2 closed were greyed out with a line of text, and the owner had to close MO2 and
+  press "Check again".
+- METHOD: ModTrap now lists the running programs of that name with their full paths, through Windows' own calls,
+  and counts MO2 as open only if one of them is this modlist's own ModOrganizer.exe (the same file, however the
+  path is written). A MO2 of another modlist has its own lists and does not count. Where the list cannot be had,
+  the old answer stands; where nothing can be told, nothing that needs MO2 closed is done.
+- METHOD: the page shows "MO2 is open" or "MO2 is closed" beside the modlist's other facts. A step that changes
+  MO2's lists (adding and taking out again, putting a demaster in place, Revert, the probe) asks, when MO2 is
+  open, "Close MO2 now?"; on yes ModTrap asks that MO2's windows to close, as a click on the X does, waits until
+  it has gone, and goes on. It never ends MO2 and never closes it unasked (WHY§50's rule stands: the yes is the
+  owner's). The same place starts MO2 when it is closed, to look at a result.
+- FACT: nothing ModTrap does needs MO2 open beforehand: for xEdit and the tools it starts MO2's command itself,
+  and a MO2 that is open takes the command over (MO01§4). So nothing is greyed out for a closed MO2.
+- METHOD (the labels): each step now says who does it, for demastering and for adding mods alike. "ModTrap":
+  the dry run, switching off, demastering, disabling, enabling and activating an added mod, the record check,
+  the health check. "ModTrap starts it, you run it": a tool that is in MO2's list, with its start button, also
+  for a generated plugin whose tool MO2 names. "You": getting what a mod needs, judging shared files, settings
+  files of other mods that name the plugin, a tool that is not in MO2's list, and playing. Without the switch
+  the steps ModTrap would carry out stay the owner's, and say so.
+- Shown in a browser on the invented list: the labels, the indicator turning to "open", and a demaster put in
+  place through the question, with MO2 "closed" by it. On the owner's PC the listing of programs and the
+  request to close are unproven until the next session.

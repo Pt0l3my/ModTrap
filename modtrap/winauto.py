@@ -53,6 +53,14 @@ class Windows:
         """Asks a window to close, as a click on its X does."""
         return False
 
+    def path_of(self, hwnd: int) -> str:
+        """The full path of the program the window belongs to, or ""."""
+        return ""
+
+    def programs(self, image: str) -> list[str] | None:
+        """The full paths of the running programs whose file is called `image`; None when that cannot be told."""
+        return None
+
 
 class _Real(Windows):
     def __init__(self) -> None:
@@ -79,6 +87,9 @@ class _Real(Windows):
                                                  ctypes.POINTER(wintypes.DWORD)]
         k.QueryFullProcessImageNameW.restype = wintypes.BOOL
         k.CloseHandle.argtypes = [wintypes.HANDLE]
+        self.psapi = ctypes.WinDLL("psapi", use_last_error=True)
+        self.psapi.EnumProcesses.argtypes = [ctypes.POINTER(wintypes.DWORD), wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+        self.psapi.EnumProcesses.restype = wintypes.BOOL
 
     def _enum(self, call) -> list[int]:
         found: list[int] = []
@@ -113,12 +124,8 @@ class _Real(Windows):
     def enabled(self, hwnd: int) -> bool:
         return bool(self.user32.IsWindowEnabled(hwnd))
 
-    def program_of(self, hwnd: int) -> str:
-        pid = self.wt.DWORD(0)
-        self.user32.GetWindowThreadProcessId(hwnd, self.ct.byref(pid))
-        if not pid.value:
-            return ""
-        handle = self.kernel32.OpenProcess(0x1000, False, pid.value)       # PROCESS_QUERY_LIMITED_INFORMATION
+    def _path_of_pid(self, pid: int) -> str:
+        handle = self.kernel32.OpenProcess(0x1000, False, pid)             # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
             return ""
         try:
@@ -126,9 +133,37 @@ class _Real(Windows):
             size = self.wt.DWORD(32768)
             if not self.kernel32.QueryFullProcessImageNameW(handle, 0, buf, self.ct.byref(size)):
                 return ""
-            return Path(buf.value.replace("\\", "/")).name
+            return buf.value
         finally:
             self.kernel32.CloseHandle(handle)
+
+    def path_of(self, hwnd: int) -> str:
+        pid = self.wt.DWORD(0)
+        self.user32.GetWindowThreadProcessId(hwnd, self.ct.byref(pid))
+        return self._path_of_pid(pid.value) if pid.value else ""
+
+    def program_of(self, hwnd: int) -> str:
+        return Path(self.path_of(hwnd).replace("\\", "/")).name
+
+    def programs(self, image: str) -> list[str] | None:
+        size = 4096
+        while True:
+            pids = (self.wt.DWORD * size)()
+            got = self.wt.DWORD(0)
+            if not self.psapi.EnumProcesses(pids, self.ct.sizeof(pids), self.ct.byref(got)):
+                return None
+            n = got.value // self.ct.sizeof(self.wt.DWORD)
+            if n < size:
+                break
+            size *= 2
+        out = []
+        for pid in pids[:n]:
+            if not pid:
+                continue
+            path = self._path_of_pid(int(pid))
+            if path and Path(path.replace("\\", "/")).name.casefold() == image.casefold():
+                out.append(path)
+        return out
 
     def click(self, hwnd: int) -> bool:
         return bool(self.user32.PostMessageW(hwnd, BM_CLICK, 0, 0))
@@ -196,4 +231,44 @@ def close_message(image: str, title: str = MO2_MESSAGE_TITLE, win: Windows | Non
     return asked
 
 
-__all__ = ["Windows", "press_module_selection_ok", "close_message", "FORM_CLASS", "FORM_TITLE"]
+def same_file(a: str, b: str) -> bool:
+    """Are two paths the same file? By the file itself where both can be looked at (a drive letter standing for a
+    folder, or a link, gives one file two paths), else by the paths as written."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+
+
+def running_paths(image: str, win: Windows | None = None) -> list[str] | None:
+    """The full paths of the running programs called `image`, or None when that cannot be told (not Windows)."""
+    win = win or _windows()
+    if win is None:
+        return None
+    try:
+        return win.programs(image)
+    except Exception:
+        return None
+
+
+def ask_to_close(program: str, win: Windows | None = None) -> bool:
+    """Asks the program at this path to close: each of its visible top windows is asked, as a click on its X does.
+    Never ends it. For the MO2 of this modlist, when the owner has said yes (WHY§58). True when a window was asked."""
+    win = win or _windows()
+    if win is None:
+        return False
+    asked = False
+    try:
+        for hwnd in win.top_windows():
+            if not win.visible(hwnd) or not win.text(hwnd).strip():
+                continue
+            path = win.path_of(hwnd)
+            if path and same_file(path, program):
+                asked = win.close(hwnd) or asked
+    except Exception:
+        return asked
+    return asked
+
+
+__all__ = ["Windows", "press_module_selection_ok", "close_message", "running_paths", "ask_to_close", "same_file",
+           "FORM_CLASS", "FORM_TITLE"]
