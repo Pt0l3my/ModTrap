@@ -61,6 +61,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 36 | 2026-11-20 | Groundwork for the demaster, built ahead and switched off | METHOD | #safety #mo2 #process |
 | 37 | 2026-11-20 | Which tool made a plugin: read in the tools' own sources, kept as data | FACT | #tools |
 | 38 | 2026-11-20 | A Browse button: an in-page folder picker | METHOD | #page |
+| 39 | 2026-11-20 | The demaster built end to end against a stand-in, and kept switched off | METHOD | #xedit #mo2 #safety #process |
+| 40 | 2026-11-21 | Adding mods: what is built, the placing rule, and what was ruled out | METHOD | #adding #mo2 #page #tools |
+| 41 | 2026-11-21 | A dropped archive is unpacked by ModTrap itself, in its own folder | METHOD | #adding #mo2 #safety #licence |
 
 ## Entries
 
@@ -663,3 +666,102 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   of drives on Windows comes from the same code as the drop's search and is untested until the owner's PC.
 - Not done from the same advice: detecting a running MO2 and offering its folder, and showing each tool's version;
   both need Windows calls that cannot be tried here, and are better written when the owner can run them.
+
+### 39. The demaster built end to end against a stand-in, and kept switched off
+
+`2026-11-20` · METHOD · `#xedit #mo2 #safety #process` · refs: MT4, MT5, MT9, MT14, MT15, MT17, WHY§4, WHY§31, WHY§34, WHY§36, DESIGN§6.3, DESIGN§6.4, DESIGN§6.5, DESIGN§8, DESIGN§9, DESIGN§11, DESIGN§12, XE01§7, MO01§2
+
+- The owner asked what could be finished before the first real dry run. The two missing parts could: the script
+  that changes plugins, and the code that drives a demaster. Both are written; neither is reachable from the page,
+  and a test checks that.
+- METHOD (`modtrap/xedit/ModTrapApply.pas`): a second script, in a file of its own so that an error in it cannot
+  stop the read-only script from loading. It takes out exactly what its job lists and nothing it cannot confirm: a
+  record only if it belongs to a trapped plugin; an element only if it is where the dry run found it, is called
+  what the dry run called it, and itself needs a trapped plugin. One refusal and that dependant is not written.
+  After Clean Masters it counts again what still needs a trapped plugin; only at zero does it write the plugin, to
+  a new file in ModTrap's own folder. Last, whatever happened, it takes the "changed" mark off every loaded plugin,
+  so that xEdit saves nothing over an original (WHY§4). Its names were checked against the script engine's like
+  the first script's (WHY§34); it has never run.
+- METHOD (`modtrap/demaster.py`): plan from the dry run; safe folder; xEdit; verify each new plugin with ModTrap's
+  own reader (the trapped plugins gone, no master missing or newly added, the script's own recount at zero) and
+  every original by checksum; install with MO2 closed (ModTrap's mod on top with the new plugins, the patch-only
+  plugins deactivated, the ticked mods disabled only if no dependant is left needing them); read the modlist again
+  and run the health check; Revert. An entry is reached by the route the dry run recorded, and entries of one list
+  are taken highest place first so that none moves. Every change goes into the history with priorities and
+  positions.
+- FACT: tested here end to end against a stand-in for xEdit that writes new plugins with ModTrap's own writer:
+  after a demaster the modlist reads as intended (ModTrap's mod on top providing the demastered plugins at their
+  old positions, the mod disabled, the patch inactive, the health check clean, every original byte for byte as it
+  was), and after Revert the whole modlist folder is file for file what it was before. Also tested: MO2 open, or
+  not known to be closed, refuses before anything is written; a new plugin that still lists the mod is not
+  installed and the mod stays enabled; a refused action keeps that dependant out; an original changed during the
+  run stops everything; an install that fails part way puts everything back.
+- A slip the tests caught: a write to the mod list was noted in the safe folder only at the end of the install, so
+  a failure in between left Revert seeing ModTrap's own change as someone else's. Each write is now noted at once.
+- What the stand-in cannot show, and the owner's PC must (in order): the read-only script runs (WHY§31); the
+  probe's invented plugins load in xEdit (WHY§36); the changing script runs, and taking the "changed" mark off
+  really keeps xEdit from saving (WHY§4); a file written through `FileWriteToStream` is a sound plugin; MO2 keeps
+  the load order after its lists were rewritten (WHY§26); and MO2 is reliably found open or closed.
+- Not built: the page for it, the probe's own run, Re-enable, and Revert on the page. They come when the first
+  real dry run has shown that the foundation holds.
+
+### 40. Adding mods: what is built, the placing rule, and what was ruled out
+
+`2026-11-21` · METHOD · `#adding #mo2 #page #tools` · refs: MT21, MT9, MT17, DESIGN§16, DESIGN§13, DESIGN§14, MO01§7, XE02§6, XE01§10, TL01§6, WHY§27, WHY§30, WHY§36, WHY§39
+
+- The owner asked for a way to add extra mods safely, in place of "add it last, and its plugin last" (MT21), and
+  left the how open. Built now, read-only: `modtrap/adding.py`, an Add mods tab, and `python -m modtrap add`.
+- DECIDED (under MT21's freedom): **MO2 installs.** Ruled out: ModTrap unpacking archives itself. Most archives are
+  7z or rar, which Python cannot read without third-party code; many mods come with an installer that asks which
+  options to take; and MO2 already does both. So ModTrap starts from a mod that is installed and disabled, and a
+  dropped archive is only a name to find that mod by (as WHY§30 found for folders: a page gets no path).
+- METHOD: **the placing rule.** "Last" is right for what the owner wants (the new mod wins) and wrong only where
+  something was meant to stay last: what the tools made. So the proposal is: after everything made by hand, before
+  the tools' output. For plugins that is the run of tool-made plugins at the end of the load order, found by the
+  same marks as DESIGN§13; for mods, the output mods at the end of the list. An editor's output does not count as
+  tool-made (TL01§6): it is the modlist's hand-made patches, and the new plugin goes after them, as it does today.
+- LIKELY, and the limit of that rule: going after the hand-made patches means the new plugin takes back every
+  record it shares with them. That is what happens today too, unseen. Seeing it needs xEdit (DESIGN§16.5); until
+  that is built, a step says how to look by hand. ModTrap does not pretend to settle record conflicts from headers.
+- SPECULATION: an output mod with no plugin and no entry in MO2's settings (a behaviour or texture generator's
+  folder) is recognised only by "output" in its name. On a list that names such mods otherwise, the new mod would
+  be proposed after them; the report lists what it takes as outputs, so the owner can see when that is wrong.
+- METHOD: shared files are found by entering, in each other mod, only the folders the new mod also has. Listing
+  every file of a few thousand mods would take minutes; this takes one folder listing for a mod that shares
+  nothing. It has a time limit and says when it was cut short. Not yet run on a real list.
+- Not compared, and said on the page: files inside archives. Not known: the game's version (so the newer header
+  format is only pointed out, XE02§6).
+- FACT: tested on an invented list only (21 tests): the place among mods and plugins, masters in each state, the
+  room in the load order, files won and lost, the tool to run again, the steps in order, and that nothing is
+  written. The page was driven in a browser on that list.
+- Next, on the owner's PC: `python -m modtrap add` on a real mod, to see the timing of the shared-files search and
+  whether the outputs it recognises are the real ones.
+
+### 41. A dropped archive is unpacked by ModTrap itself, in its own folder
+
+`2026-11-21` · METHOD · `#adding #mo2 #safety #licence` · refs: MT21, MT9, MT14, DESIGN§16.1, DESIGN§16.8, DESIGN§8, MO01§8, MO01§7, WHY§30, WHY§36, WHY§40
+
+- The owner corrected WHY§40's first choice the same day: the mod is to be dropped on ModTrap, which then does the
+  rest (MT21's note). WHY§40 had "MO2 installs"; that entry stands as written, and this one replaces that point.
+- FACT: MO2 cannot be asked from outside to install an archive (MO01§8). So "drop it and ModTrap does the rest"
+  means ModTrap unpacks.
+- METHOD: a page does get a dropped file's bytes, though not its path (WHY§30). They are sent to ModTrap's own
+  server on this PC and written straight to the session's folder, never held in memory; an archive that already
+  lies in MO2's Downloads is read there instead, without a copy.
+- METHOD: `.zip` with Python's own reader. `.7z` and `.rar`, which most mods come as, through the owner's installed
+  7-Zip: called, not contained, as MO2 and xEdit are. Ruled out for now: taking third-party unpacking code into
+  ModTrap (a dependency to vet and list, and it would still not read `.rar`). SPECULATION: Windows' own `tar` may
+  serve where 7-Zip is not installed; not tried.
+- METHOD (safety): an archive is untrusted. Its kind is read from its first bytes; every name is checked before
+  anything is written (no absolute path, no drive, no step upwards, no name Windows cannot hold); links and
+  password-protected archives are refused; the unpacked size and file count are capped and the disk's free room
+  is checked; after 7-Zip has run, the result is walked again for links. A refusal leaves nothing behind.
+- METHOD: nothing of this touches the modlist. The unpacked mod lies in the session's folder and is analysed
+  there, as a mod MO2 does not have yet. Copying it into MO2's mods folder is a write to the instance and belongs
+  to the part that is switched off (WHY§36, DESIGN§16.8), even though it only adds.
+- An installer that asks questions (a `fomod` folder, or several folders to choose from) is recognised and handed
+  to MO2 for now. LIKELY: the installer's description file is plain XML naming the choices and the files each
+  installs, so ModTrap can ask them on its own page; that is the next piece, and needs reading that format first.
+- FACT: tested here with zips for real and with a stand-in for 7-Zip; the page was driven in a browser with a real
+  upload. Not proven: the call to the real 7-Zip (its switches and the shape of its listing are from memory of its
+  documentation, not from a run), and large archives on the owner's PC.

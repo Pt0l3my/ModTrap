@@ -180,18 +180,18 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
     return manifest
 
 
-def arguments(job_dir: Path) -> str:
+def arguments(job_dir: Path, script: str = SCRIPT.name) -> str:
     """xEdit's arguments (XE01§2 to XE01§6): our script, our plugin list, no questions, close at the end; backups
     and a log in the job's folder; no reference building, which the report does not need."""
     q = lambda p: '"%s"' % p                                   # noqa: E731
-    return " ".join(["-sse", "-script:" + q(job_dir / "script" / SCRIPT.name), "-P:" + q(job_dir / "plugins.txt"),
+    return " ".join(["-sse", "-script:" + q(job_dir / "script" / script), "-P:" + q(job_dir / "plugins.txt"),
                      "-autoload", "-autoexit", "-nobuildrefs", "-B:" + q(job_dir / "xedit-backups"),
                      "-R:" + q(job_dir / "xedit-log.txt")])
 
 
-def command(p: Plan, job_dir: Path) -> list[str]:
+def command(p: Plan, job_dir: Path, script: str = SCRIPT.name) -> list[str]:
     """MO2's command to run a configured executable in its virtual file system with our arguments (MO01§3)."""
-    return [p.mo2, "-p", p.profile, "run", "-e", "-a", arguments(job_dir), p.tool]
+    return [p.mo2, "-p", p.profile, "run", "-e", "-a", arguments(job_dir, script), p.tool]
 
 
 # --- the report ---------------------------------------------------------------------------------------------------
@@ -218,9 +218,11 @@ def read_chain(text: str) -> dict:
     for i in range(len(steps) - 1):
         above = steps[i + 1]
         if above["element"] in ARRAY_ELEMENTS or above["value"] in ARRAY_VALUES:
+            # How to reach the entry from its record: the place of each step in the one above it, top down.
+            route = [st["index"] for st in reversed(steps[i:])]
             return {"kind": "entry", "entry": steps[i]["name"], "index": steps[i]["index"], "array": above["name"],
-                    "array_length": above["count"], "steps": steps}
-    return {"kind": "field", "entry": "", "index": -1, "array": "", "array_length": 0, "steps": steps}
+                    "array_length": above["count"], "steps": steps, "route": route if min(route) >= 0 else []}
+    return {"kind": "field", "entry": "", "index": -1, "array": "", "array_length": 0, "steps": steps, "route": []}
 
 
 def parse_report(text: str) -> dict:
@@ -251,6 +253,7 @@ def parse_report(text: str) -> dict:
             rec["elements"].append({"kind": c["kind"], "entry": c["entry"], "index": c["index"], "array": c["array"],
                                     "array_length": c["array_length"], "path": f[3], "target_file": f[4],
                                     "target_form": f[5], "would": "entry" if safe else "needs you",
+                                    "route": c["route"],
                                     "chain": [[st["name"], st["element"], st["value"], st["count"]]
                                               for st in c["steps"]]})
         elif kind == "D" and len(f) >= 4 and f[1] in files:

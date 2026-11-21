@@ -217,3 +217,24 @@ body.dragging .welcome-box { outline: none; }
 .prow.is-modlist { color: var(--good); font-weight: 600; }
 .prow .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions button { white-space: nowrap; }
+
+/* --- the Add mods tab (DESIGN§16) --------------------------------------------------------------------------------- */
+.combo { position: relative; flex: 0 1 380px; }
+.combo input { width: 100%; }
+.matches { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; max-height: 320px; overflow: auto; background: var(--panel);
+  border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); margin-top: 2px; }
+.matches button { display: flex; width: 100%; gap: 8px; align-items: baseline; padding: 5px 10px; border: 0; border-radius: 0; background: none; text-align: left; }
+.matches button:hover, .matches button:focus-visible { background: #20232c; }
+.matches .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.matches p { margin: 0; padding: 8px 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; align-items: center; }
+.chips .pick { display: inline-flex; gap: 6px; align-items: center; padding: 2px 4px 2px 10px; border: 1px solid var(--accent); border-radius: 14px; }
+.chips .pick button { border: 0; background: none; padding: 0 6px; font-size: 15px; line-height: 1; color: var(--dim); }
+.chips .pick button:hover { color: var(--text); }
+.add-notes { border-color: var(--warn); }
+.add-notes li { margin: 3px 0; }
+.share { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+.share td { padding: 2px 10px 2px 0; border: 0; vertical-align: top; }
+.share td.c-num { width: 70px; }
+.plug { margin: 6px 0; padding-left: 12px; border-left: 2px solid var(--line); }
+.plug p { margin: 2px 0; }

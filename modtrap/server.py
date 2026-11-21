@@ -29,6 +29,8 @@ PAGE_JS = ("app.js",)
 PAGE_CSS = ("app.css",)
 TOKEN_HEADER = "X-ModTrap-Token"
 LOCATE_PATH = "/api/locate"
+UPLOAD_PATH = "/api/add/upload"   # a dropped mod archive, as its bytes (DESIGN§16.1)
+UPLOAD_MAX = 64 * 1024 ** 3
 LOCATE_MAX = 3 * 1024 * 1024      # a dropped folder's ModOrganizer.ini in base64, and the folder's name
 POST_MAX = 64 * 1024
 # A request refused before its body is read: the answer is sent, then whatever of the body is still arriving is read
@@ -267,13 +269,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             n = -1
-        cap = LOCATE_MAX if path == LOCATE_PATH else POST_MAX
+        cap = LOCATE_MAX if path == LOCATE_PATH else UPLOAD_MAX if path == UPLOAD_PATH else POST_MAX
         if n < 0:
             self._will_not_read()
             return self.send(400, {"error": "no length"})
         if n > cap:
             self._will_not_read()
             return self.send(413, {"error": "too large"})
+        if path == UPLOAD_PATH:
+            # The body is the file itself, written to ModTrap's work folder as it arrives; never held in memory.
+            upload = getattr(self.app.api, "upload", None)
+            if upload is None:
+                self._will_not_read()
+                return self.send(404, {"error": "not found"})
+            try:
+                query = urllib.parse.parse_qs(self.path.partition("?")[2], keep_blank_values=True)
+                return self.send(200, upload(query.get("name", [""])[0], n, self.rfile))
+            except Exception as e:
+                self.close_connection = True          # what is left of the body is not read
+                return self._error(e)
         try:
             raw = self.rfile.read(n) if n else b""
             try:

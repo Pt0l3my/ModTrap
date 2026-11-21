@@ -188,6 +188,7 @@ class Instance:
     primary: tuple[str, ...]                   # the game's own plugins, always active
     output_mods: dict[str, str] = field(default_factory=dict)   # an executable's title -> the mod its new files go to
     notes: list[str] = field(default_factory=list)   # what was found that the owner should know, in words
+    downloads_dir: Path | None = None          # where MO2 keeps downloaded archives (MO01§7)
 
     def mod(self, name: str) -> Mod | None:
         f = fold(name)
@@ -226,6 +227,7 @@ def load(root: Path | str, profile: str | None = None) -> Instance:
     mods_dir = _path(settings.get("mod_directory", "") or "mods", base)
     profiles_dir = _path(settings.get("profiles_directory", "") or "profiles", base)
     overwrite_dir = _path(settings.get("overwrite_directory", "") or "overwrite", base)
+    downloads_dir = _path(settings.get("download_directory", "") or "downloads", base)
     game_dir = _path(general["gamePath"], root) if general.get("gamePath") else None
     game_name = general.get("gameName", "")
 
@@ -333,4 +335,5 @@ def load(root: Path | str, profile: str | None = None) -> Instance:
     return Instance(root=root, mods_dir=mods_dir, profiles_dir=profiles_dir, overwrite_dir=overwrite_dir,
                     game_dir=game_dir, game_name=game_name, profile=chosen, profiles=profiles,
                     executables=_executables(ini.get("customExecutables", {})), mods=mods, load_order=order,
-                    primary=tuple(primary), output_mods=output_mods, notes=notes)
+                    primary=tuple(primary), output_mods=output_mods, notes=notes,
+                    downloads_dir=downloads_dir)

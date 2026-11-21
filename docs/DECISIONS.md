@@ -18,6 +18,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   B automatic, the rest reported) and MT5 (a ModTrap mod above the originals) were settled; MT18 (generated
   patches, their tools, and a Steps tab); MT16 settled by the facts; MT19 (a drop box for the modlist folder); MT20 (Quit, and sessions: one
   active session per modlist).
+- **2026-11-21.** MT21 (adding mods safely: analysis, steps, and carrying out what ModTrap can; the how is
+  ModTrap's to choose).
 - **Open.** None. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -407,3 +409,37 @@ so after Quit the page says ModTrap has closed and that the tab can be closed. "
 means that nothing of the session is still going, since nothing ModTrap does yet changes a modlist; when it can
 demaster, the check also requires every step of the session's jobs to be done and the modlist's health check to be
 clean (DESIGN§14, DESIGN§15).
+
+## MT21
+
+**Adding mods safely** · *2026-11-21 · The owner's request; the how is left to ModTrap (as MT17)*
+
+**Decision.** ModTrap gets a second set of features, beside taking mods out: adding extra mods to a modlist
+safely. The owner drops the wanted mods (or picks them); ModTrap analyses each against the whole modlist and tells
+what it conflicts with, what is affected and in what order, compiles the steps to add it safely, and carries out
+the steps it can. Anything else that serves this may be built; the owner gave full freedom.
+
+**Owner's words.** "I wonder if we could also add feature set to safely add extra mods to the modlist. Basically,
+what I normally do is when I want more mods added to the modlist, I just add them last, and ensure the esp is also
+overwriting at the bottom of the plugin list (so at bottom both mod and plugin list). But I suppose that's rather
+crude. Do you think we could add a feature set that would allow the user to just drop wanted extra mods and ModTrap
+could analyze and tell any conflicts, what is affected and in what chain or order, a step list to install safely,
+and to carry out steps that it can (and anything else that you think could be implemented, you are given full
+freedom)."
+
+**Settled under that freedom** (DESIGN§16, WHY§40; the owner may overrule any of it):
+
+- **MO2 installs, ModTrap takes over from there.** The mod is installed in MO2 as always and left disabled; ModTrap
+  does not unpack archives or run installers.
+- **The place:** after every ordinary mod and before what the modlist's tools made, among the mods and in the load
+  order alike; not below everything.
+- **Nothing is written yet.** The analysis and the steps only read. Putting a mod in its place joins the part that
+  is switched off (WHY§36, WHY§39), with the same safe folder, history and Revert, and a mod added by ModTrap is
+  taken out again by disabling it, never by deleting it (MT9).
+
+**Later, 2026-11-21: the owner on "MO2 installs".** "Well, what I wanted was that the user jusf drops a mod in
+ModTrap, then ModTrap does the evaluation, compiles steps, and does most of the work on its own except for some
+tools like synthesis that is not shipped with ModTrap. Can that be done?" So the first point above is replaced:
+**the owner drops the mod's archive on ModTrap, and ModTrap takes it from there**: it unpacks the archive, analyses
+it, compiles the steps and carries out all it can; left to the owner are the tools ModTrap does not contain, an
+installer's questions, and playing (DESIGN§16.1, DESIGN§16.8, WHY§41). The other two points stand.

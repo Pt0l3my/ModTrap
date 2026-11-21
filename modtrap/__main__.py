@@ -2,7 +2,8 @@
 
 `python -m modtrap` starts ModTrap: a page in your browser, served on this PC only (127.0.0.1).
 `python -m modtrap scan FOLDER [--profile NAME] [--mod NAME] [--plugin NAME]` prints what ModTrap sees in an MO2
-instance. Both only read the instance: its text files and each plugin's header."""
+instance. `python -m modtrap add FOLDER --mod NAME` prints what it takes to add a mod MO2 has installed. All three
+only read the instance: its text files, each plugin's header, and file names in mod folders."""
 
 from __future__ import annotations
 
@@ -78,6 +79,67 @@ def scan(a: argparse.Namespace) -> int:
     return 1 if m.issues else 0
 
 
+def add(a: argparse.Namespace) -> int:
+    """What it takes to add mods that MO2 has installed (MT21, DESIGN§16). Reads only."""
+    from . import adding
+
+    try:
+        inst = instance.load(a.folder, a.profile)
+    except instance.Unusable as e:
+        print("%s cannot read this folder: %s" % (NAME, e))
+        return 2
+    m = model.build(inst)
+    rep = adding.analyse(m, a.mod)
+    print("%s %s (read-only: adding mods)" % (NAME, VERSION))
+    for n in rep["unknown"]:
+        print("No mod named '%s' in this profile." % n)
+    if not rep["mods"]:
+        return 1
+    s = rep["slots"]
+    print("Room in the load order: full plugins %d -> %d of %d, light plugins %d -> %d of %d" % (
+        s["full"]["now"], s["full"]["after"], s["full"]["limit"],
+        s["light"]["now"], s["light"]["after"], s["light"]["limit"]))
+    place = rep["place"]
+    print("Place for a mod still to enable: %s" % (("directly before '%s'" % place["before"]) if place["before"]
+                                                  else "last in MO2's list"))
+    for o in place["outputs"][:12]:
+        print("  stays after it: %s (%s)" % (o["mod"], o["why"]))
+    for x in rep["mods"]:
+        print("\n%s: %s, %d file(s)%s" % (x["name"], "enabled at priority %d" % x["priority"] if x["enabled"] else
+                                         "disabled", x["files"], ", listing cut short" if x["cut"] else ""))
+        print("  carries: %s" % (", ".join("%d %s" % (n, k) for k, n in sorted(x["kinds"].items())) or "nothing"))
+        for p in x["plugins"]:
+            if p["unreadable"]:
+                print("  plugin %s could not be read: %s" % (p["name"], p["unreadable"]))
+                continue
+            pr = p["proposed"]
+            print("  plugin %s [%s]: %s" % (p["name"], p["kind"], ("active at position %s" % p["position"])
+                                            if p["active"] else "to go %s (%s)" % (
+                ("directly before " + pr["before"]) if pr["before"] else "at the end", pr["why"])))
+            for mm in p["masters"]:
+                if mm["state"] != "active":
+                    print("    master %s: %s" % (mm["name"], mm["state"]))
+            for n in p["notes"]:
+                print("    note: " + n)
+        for word, lst in (("would replace files of", x["wins"]), ("would lose files to", x["loses"])):
+            for c in lst[:15]:
+                print("  %s '%s': %d (%s)%s" % (word, c["mod"], c["files"],
+                                               ", ".join("%d %s" % (n, k) for k, n in sorted(c["kinds"].items())),
+                                               "  [a tool's output]" if c["output"] else ""))
+            if len(lst) > 15:
+                print("  ... and %d more mod(s)" % (len(lst) - 15))
+    if rep["cut"]:
+        print("\nThe search for shared files was cut short: there may be more.")
+    print("\nSteps:")
+    for st in rep["steps"]:
+        print("  %d. [%s] %s  (%s)" % (st["n"], st["state"], st["title"], "you" if st["who"] == "you" else NAME))
+        for it in st["items"][:12]:
+            print("       - " + it["text"])
+        if len(st["items"]) > 12:
+            print("       ... and %d more" % (len(st["items"]) - 12))
+    return 0
+
+
 DEFAULT_PORT = 8737
 
 
@@ -137,8 +199,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
     s.add_argument("--mod", help="also list this mod's plugins and what depends on them")
     s.add_argument("--plugin", help="also list this plugin's masters and what needs it")
+    d = sub.add_parser("add", help="what it takes to add mods MO2 has installed; writes nothing")
+    d.add_argument("folder", help="the modlist's folder (the one holding ModOrganizer.ini)")
+    d.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
+    d.add_argument("--mod", action="append", required=True, help="a mod to add, by its name in MO2 (repeat for more)")
     a = ap.parse_args(argv)
-    return scan(a) if a.cmd == "scan" else serve(a)
+    return scan(a) if a.cmd == "scan" else add(a) if a.cmd == "add" else serve(a)
 
 
 if __name__ == "__main__":

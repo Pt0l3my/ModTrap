@@ -7,11 +7,15 @@ import base64
 import binascii
 import hashlib
 import json
+import re
+import secrets
+import shutil
 import threading
 from pathlib import Path
 from typing import Callable
 
-from . import NAME, VERSION, browse, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps
+from . import (NAME, VERSION, adding, browse, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps,
+               unpack)
 from .server import Bad
 
 log = logbook.get("app")
@@ -81,6 +85,10 @@ class Api:
         self._run = 0
         self._lists: dict[str, tuple[object, dict]] = {}
         self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
+        self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
+        self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
+        self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
+        self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
@@ -121,6 +129,7 @@ class Api:
         logbook.load(lines if isinstance(lines, list) else [])
         self.log_epoch += 1
         self.session = s
+        self._load_staged()
         self.job = None
         if s.last_job:
             d = self.store.dir(s.id) / "jobs" / s.last_job
@@ -444,6 +453,241 @@ class Api:
         out["looking"] = bool(mods) and deep is None
         return out
 
+    # --- adding mods (MT21, DESIGN§16): read-only ------------------------------------------------------------------
+
+    def add_resolve(self, body: dict) -> dict:
+        """What the dropped files and folders are in this MO2, by their names (DESIGN§16.1)."""
+        m = self._need()
+        items = body.get("items")
+        if (not isinstance(items, list) or not items or len(items) > 50 or not all(
+                isinstance(x, dict) and isinstance(x.get("name"), str) and 0 < len(x["name"]) <= 300 for x in items)):
+            raise Bad("what was dropped could not be used")
+        inst = m.instance
+        names = {instance.fold(x.name) for x in inst.mods if x.kind == "mod"}
+        index: dict | None = {}
+        if any(instance.fold(x["name"].strip()) not in names for x in items):
+            hit = self._installed
+            if hit is None or hit[0] is not m:
+                hit = (m, adding.installed_from(inst))        # one small read of each mod's meta.ini
+                self._installed = hit
+            index = hit[1]
+        got = adding.resolve(inst, [{"name": x["name"]} for x in items], index)
+        log.info("add: %d dropped, %d found in MO2", len(got), sum(1 for g in got if g["mods"]))
+        return {"items": got}
+
+    # Archives taken in (DESIGN§16.1): kept and unpacked in the session's own folder, never in the modlist.
+
+    def _incoming(self) -> Path:
+        if self.session is None:
+            raise Bad("open a modlist first: a dropped mod is kept with the session of its modlist")
+        return self.store.dir(self.session.id) / "incoming"
+
+    def _save_staged(self, rec: dict) -> None:
+        try:
+            paths.write_atomic(Path(rec["dir"]) / "staged.json", json.dumps(
+                {k: rec[k] for k in ("id", "archive", "name", "state", "note", "root", "files", "kind", "source")},
+                ensure_ascii=False).encode("utf-8"))
+        except OSError:
+            pass
+
+    def _load_staged(self) -> None:
+        """The archives this session took in before, as they were left; one that was still being unpacked when
+        ModTrap closed is marked so."""
+        self._staged = {}
+        try:
+            base = self._incoming()
+            folders = sorted(p for p in base.iterdir() if p.is_dir())
+        except (OSError, Bad, sessions.Refused):
+            return
+        for d in folders:
+            try:
+                with open(d / "staged.json", "rb") as f:
+                    rec = json.loads(f.read(1024 * 1024).decode("utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(rec, dict) or rec.get("id") != d.name:
+                continue
+            rec["dir"] = str(d)
+            if rec.get("state") in ("copying", "unpacking"):
+                rec["state"], rec["note"] = "failed", "ModTrap was closed while this was being unpacked. Drop it again."
+            self._staged[d.name] = rec
+
+    def _new_staged(self, archive: str, source: str) -> dict:
+        base = self._incoming()
+        sid = secrets.token_hex(5)
+        d = base / sid
+        d.mkdir(parents=True, exist_ok=False)
+        m = self.model
+        taken = {instance.fold(x.name) for x in m.instance.mods} if m is not None else set()
+        taken |= {instance.fold(r["name"]) for r in self._staged.values()}
+        stem = adding.NEXUS_TAIL.sub("", adding.ARCHIVE.sub("", archive)).strip(" .") or "New mod"
+        stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", stem).strip(" .")[:120] or "New mod"
+        name, n = stem, 2
+        while instance.fold(name) in taken:
+            name, n = "%s (%d)" % (stem, n), n + 1
+        rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
+               "kind": "", "source": source, "dir": str(d)}
+        self._staged[sid] = rec
+        self._save_staged(rec)
+        return rec
+
+    def _unpack(self, rec: dict, src: Path) -> None:
+        """Off the request: unpack, then find the mod inside (DESIGN§16.1)."""
+        d = Path(rec["dir"])
+        try:
+            got = unpack.unpack(src, d / "files", self.seven_zip)
+            lay = unpack.layout(d / "files")
+            rec.update(kind=got["kind"], files=got["files"], root=str(lay["root"]))
+            if lay["installer"] == "fomod":
+                rec.update(state="installer", note="This mod comes with an installer that asks which parts to install. "
+                           "ModTrap cannot ask those questions yet: install it in MO2 (drag the same file onto MO2's "
+                           "Downloads tab and double-click it), leave it disabled, press Rescan here, and find it in "
+                           "the box above.")
+            elif lay["installer"] == "options":
+                rec.update(state="installer", note="This archive holds several folders to choose from (%s). ModTrap "
+                           "cannot choose for you: install it in MO2, leave it disabled, press Rescan here, and find "
+                           "it in the box above." % ", ".join(lay.get("options", [])[:6]))
+            else:
+                rec.update(state="ready", note="" if lay["sure"] else
+                           "ModTrap did not find the usual game folders in this archive and took it as it is. If it "
+                           "is not a mod for the game's Data folder, it does not belong in MO2's mod list.")
+            log.info("add: unpacked “%s” (%s, %d files): %s", rec["archive"], got["kind"], got["files"], rec["state"])
+        except unpack.Refused as e:
+            rec.update(state="failed", note=str(e))
+            log.warn("add: “%s” was not taken in: %s", rec["archive"], e)
+        except Exception as e:
+            rec.update(state="failed", note="Unpacking failed: %s" % logbook.why(e))
+            log.warn("add: unpacking “%s” failed: %s", rec["archive"], logbook.why(e))
+        finally:
+            self._save_staged(rec)
+
+    @staticmethod
+    def _archive_name(name: object) -> str:
+        if not isinstance(name, str):
+            raise Bad("the dropped file has no usable name")
+        name = name.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        if not name or len(name) > 255 or name in (".", "..") or re.search(r'[<>:"|?*\x00-\x1f]', name):
+            raise Bad("the dropped file has no usable name")
+        return name
+
+    def upload(self, name: str, length: int, stream) -> dict:
+        """A dropped archive, as its bytes: written into the session's folder as it arrives, then unpacked."""
+        self._need()
+        name = self._archive_name(name)
+        if length <= 0:
+            raise Bad("the dropped file is empty")
+        base = self._incoming()
+        base.mkdir(parents=True, exist_ok=True)
+        try:
+            free = shutil.disk_usage(base).free
+        except OSError:
+            free = None
+        if free is not None and free < length * 2 + unpack.SPARE_BYTES:
+            raise Bad("there is not enough room on the disk of ModTrap's work folder to take this file in and unpack "
+                      "it (%s free)" % unpack.size_words(free))
+        rec = self._new_staged(name, "upload")
+        target = Path(rec["dir"]) / "archive"
+        left = length
+        try:
+            with open(target, "wb") as f:
+                while left:
+                    block = stream.read(min(left, 1024 * 1024))
+                    if not block:
+                        break
+                    f.write(block)
+                    left -= len(block)
+        except OSError as e:
+            left = -1
+            log.warn("add: “%s” could not be written: %s", name, logbook.why(e))
+        if left:
+            shutil.rmtree(rec["dir"], ignore_errors=True)
+            self._staged.pop(rec["id"], None)
+            raise Bad("the file did not arrive whole; drop it again")
+        rec["state"] = "unpacking"
+        self._save_staged(rec)
+        log.info("add: took in “%s” (%s)", name, unpack.size_words(length))
+        threading.Thread(target=self._unpack, args=(rec, target), name="unpack", daemon=True).start()
+        return self._staged_public(rec)
+
+    def add_take(self, body: dict) -> dict:
+        """A dropped archive that is already in MO2's Downloads: read where it lies, no copy."""
+        m = self._need()
+        name = self._archive_name(body.get("name"))
+        size = body.get("size")
+        base = m.instance.downloads_dir
+        src = base / name if base is not None else None
+        try:
+            ok = src is not None and src.is_file() and (not isinstance(size, int) or src.stat().st_size == size)
+        except OSError:
+            ok = False
+        if not ok:
+            raise Bad("that file is not in MO2's Downloads as it was dropped")
+        rec = self._new_staged(name, "downloads")
+        rec["state"] = "unpacking"
+        self._save_staged(rec)
+        threading.Thread(target=self._unpack, args=(rec, src), name="unpack", daemon=True).start()
+        return self._staged_public(rec)
+
+    def add_forget(self, body: dict) -> dict:
+        """Takes an archive off the list and removes ModTrap's own copy of it. Nothing of the modlist is touched."""
+        sid = body.get("id")
+        rec = self._staged.get(sid) if isinstance(sid, str) else None
+        if rec is None:
+            raise Bad("that is not on the list")
+        if rec["state"] in ("copying", "unpacking"):
+            raise Bad("it is still being unpacked; take it off the list when that has ended")
+        d = Path(rec["dir"])
+        if d.parent == self._incoming() and re.fullmatch(r"[0-9a-f]{10}", d.name):
+            shutil.rmtree(d, ignore_errors=True)
+        self._staged.pop(sid, None)
+        return {"forgotten": sid}
+
+    @staticmethod
+    def _staged_public(rec: dict) -> dict:
+        return {k: rec[k] for k in ("id", "archive", "name", "state", "note", "files", "kind")}
+
+    def add(self, body: dict) -> dict:
+        """The analysis for the mods to add (DESIGN§16). It lists file names in many folders, which takes
+        seconds on a large list: it runs once, off the request, and the answer says while it is still going."""
+        m = self._need()
+        mods = body.get("mods")
+        if not isinstance(mods, list) or len(mods) > 20 or not all(isinstance(x, str) and 0 < len(x) <= 300 for x in mods):
+            raise Bad("the mods to add did not arrive")
+        ids = body.get("staged", [])
+        if not isinstance(ids, list) or len(ids) > 20 or not all(isinstance(x, str) for x in ids):
+            raise Bad("the mods to add did not arrive")
+        recs = [self._staged[i] for i in ids if i in self._staged]
+        status = [self._staged_public(r) for r in recs]
+        gone = [i for i in ids if i not in self._staged]
+        ready = [r for r in recs if r["state"] == "ready" and r["root"]]
+        busy = any(r["state"] in ("copying", "unpacking") for r in recs)
+        if not mods and not ready:
+            return {"looking": False, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
+                    "summary": "Nothing to analyse yet."}
+        key = (id(m), tuple(mods), tuple(r["id"] for r in ready))
+        with self._lock:
+            started = key in self._adding
+            if not started:
+                self._adding = {k: v for k, v in self._adding.items() if k[0] == id(m)}
+                self._adding[key] = None
+        if not started:
+            extra = [adding.staged_mod(r["name"], Path(r["root"])) for r in ready]
+
+            def work() -> None:
+                try:
+                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra)
+                    log.info("add: analysed %d mod(s): %s", len(found["mods"]), found["summary"])
+                except Exception as e:
+                    log.warn("analysing the mods to add failed: %s", logbook.why(e))
+                    found = {"failed": "The analysis failed: %s" % logbook.why(e), "mods": [], "steps": []}
+                with self._lock:
+                    self._adding[key] = found
+            threading.Thread(target=work, name="adding", daemon=True).start()
+        got = self._adding.get(key)
+        if got is None:
+            return {"looking": True, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone}
+        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone)
+
     def job_state(self) -> dict:
         return {"job": self.job.public() if self.job else None}
 
@@ -608,6 +852,14 @@ class Api:
                 raise Bad(str(e)) from None
         if path == "/api/steps":
             return 200, self.steps(body), None
+        if path == "/api/add":
+            return 200, self.add(body), None
+        if path == "/api/add/resolve":
+            return 200, self.add_resolve(body), None
+        if path == "/api/add/take":
+            return 200, self.add_take(body), None
+        if path == "/api/add/forget":
+            return 200, self.add_forget(body), None
         if path == "/api/job/stop":
             if self.job is None:
                 raise Bad("no dry run is going")

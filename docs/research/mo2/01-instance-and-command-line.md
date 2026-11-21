@@ -39,8 +39,11 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 - **FACT (same source).** `loadorder.txt` has every plugin, one a line, in load order, in UTF-8
   (`src/gamebryo/gamebryogameplugins.cpp:87-116`). MO2 reads the order from whichever of the two files is newer
   (`:39-61`; `creationgameplugins.cpp:22-37`).
-- **LIKELY.** When a mod is disabled, MO2 drops its plugins from both lists at its next refresh; when it is enabled
-  again, its plugins come back at the end unless `loadorder.txt` still places them. Not yet read.
+- **FACT.** At a refresh MO2 empties its plugin list and builds it again from the plugin files then present in the
+  virtual folder, so a disabled mod's plugins are no longer in it; a plugin it has not placed yet starts with no
+  place (`pluginlist.cpp:211-294`). The saved lists are then read for the order and the active marks.
+- **LIKELY.** So when a mod is enabled again, its plugins come back at the end unless `loadorder.txt` still places
+  them. Not read to the end; to be confirmed on the owner's PC before Re-enable is built.
 
 ## 3. Running a program in the virtual file system
 
@@ -72,3 +75,22 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 - **METHOD.** §2's last LIKELY item (what MO2 does with a re-enabled mod's plugins): read `pluginlist.cpp` before
   Re-enable is built, and confirm on the owner's PC.
 - **METHOD.** §4 and §5: the probe on the owner's PC (DESIGN§9).
+
+## 7. A mod's meta.ini, and the downloads folder
+
+- **FACT.** When MO2 installs a mod from an archive it writes `installationFile` into the mod's `meta.ini`, in the
+  first, unnamed group, which Qt writes as `[General]` (`installationmanager.cpp:526, 550`). The value is the
+  archive's file name alone when the archive is in MO2's downloads folder, and its full path otherwise
+  (`installationmanager.cpp:719-721`).
+- **FACT.** The downloads folder is the `download_directory` setting, `downloads` under the base folder by default
+  (`settings.cpp:1711`, `shared/appconfig.inc:5`).
+- **METHOD.** ModTrap reads that one line of each mod's `meta.ini`, and takes the file name after the last slash, to
+  tell which mod a dropped archive was installed as (DESIGN§16.1).
+
+## 8. No command to install an archive
+
+- **FACT.** What MO2's command line takes beside its options is a shortcut, a download link of the Nexus site
+  (`nxm:`), or a program to run (`commandline.cpp:163-174`, `277-281`); the `run` and `refresh` commands are §3's.
+  There is no way to hand MO2 an archive file to install.
+- **METHOD.** So a dropped archive is unpacked by ModTrap (DESIGN§16.1). MO2 takes a folder that appears in its
+  mods folder as a mod, disabled, at its next refresh (§2).
