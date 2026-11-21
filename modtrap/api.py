@@ -1166,14 +1166,24 @@ class Api:
             stage("probe", "Probe", "ModTrap", tasks, note or (pr.get("reason") or ""))
         # 2. The dry run.
         tasks = P.BOARD.tasks("dry")
-        job = self.job.public() if self.job is not None else None
+        job = self.job_state()["job"]
+        dm = dm if dm is not None else ch.demaster_public() if ch is not None else {}
+        in_hand = dm.get("state") in ("working", "verified", "installed") or bool(P.BOARD.tasks("change"))
+        # A dry run of the modlist as it was (kept from an earlier start, or made before the modlist was read
+        # again) is not this demaster's dry run: a new one is made (WHY§61, WHY§71).
+        # Once a demaster is in hand or in place its dry run stays shown as done: it is that demaster's own.
+        old = bool(not in_hand and job and job.get("state") == "done" and (job.get("past") or job.get("stale")))
+        if old:
+            job_note = "An earlier dry run is kept on the Dry run tab; the modlist has been read again since, so a new one is made."
+            tasks = [dict(t, state=P.WAITING, note="") for t in tasks]
+            job = None
+        else:
+            job_note = "" if not job else "For %s." % ", ".join(job.get("plan", {}).get("trapped_mods", [])[:4])
         if not tasks:
             tasks = [{"key": k, "text": t, "state": P.DONE if job and job.get("state") == "done" else P.WAITING, "note": ""}
                      for k, t in P.DRY]
-        stage("dry", "Dry run", "ModTrap", tasks,
-              "" if not job else "For %s." % ", ".join(job.get("plan", {}).get("trapped_mods", [])[:4]))
+        stage("dry", "Dry run", "ModTrap", tasks, job_note)
         # 3. The plan: what the dry run sorted, and the owner's word.
-        dm = dm if dm is not None else ch.demaster_public() if ch is not None else {}
         files = (job or {}).get("result", {}).get("files", []) if job and job.get("state") == "done" else []
         sorted_task = {"key": "sort", "text": "Sort the dependants by what they take from the mod", "state": P.WAITING, "note": ""}
         if files:
@@ -1181,7 +1191,7 @@ class Api:
             for fd in files:
                 kinds[fd.get("reading", "?")] = kinds.get(fd.get("reading", "?"), 0) + 1
             sorted_task.update(state=P.DONE, note="; ".join("%d %s" % (n, k) for k, n in sorted(kinds.items())))
-        going = dm.get("state") in ("working", "verified", "installed") or bool(P.BOARD.tasks("change"))
+        going = in_hand
         confirm = {"key": "confirm", "text": "You read the plan and press “Go ahead”",
                    "state": P.DONE if going else P.YOURS if files and ch is not None else P.WAITING, "note": ""}
         stage("plan", "Plan", "you", [sorted_task, confirm])

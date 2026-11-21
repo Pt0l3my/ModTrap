@@ -451,6 +451,7 @@ class Changes:
                 self._drop("the modlist was put back by Revert")
             log.info("the demaster %s was put back: %d file(s) restored, %d of ModTrap's removed", name,
                      len(what["restore"]), len(what["remove"]))
+        process.BOARD.drop("dry", "change", "install")     # put back: the Process tab shows a demaster still to come
         api.open(api.folder, api.profile or None, session=api.session)
         return {"job": name, "restored": len(what["restore"]), "removed": len(what["remove"]),
                 "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])]}
@@ -462,6 +463,7 @@ class Changes:
             log.info("the demaster that was waiting to be put in place is dropped: %s. Nothing of it was in the "
                      "modlist; run “Demaster Selected” again when you want it.", why)
         self.dm, self.dm_state, self.dm_check, self.dm_message = None, "", None, ""
+        process.BOARD.drop("change", "install")           # the Process tab starts these over (WHY§71)
 
     def demaster_drop(self, body: dict) -> dict:
         with self._lock:

@@ -400,6 +400,8 @@ function updateDemasterButton() {
     dryBusy ? "The dry run is going" : going ? "A demaster is already in hand: see below" :
     probe ? "First runs the probe (" + probe + "), then goes on by itself" :
     !dryDone ? "Runs the dry run first, then shows what ModTrap would do and asks before doing it" : "Shows what ModTrap would do, and asks before doing it";
+  const pg = $("process-go");                       // the same button on the Process tab
+  pg.disabled = b.disabled; pg.title = b.title;
   // What the button will do first is said in plain sight, not only when the mouse rests on it (WHY§60).
   const hint = $("demaster-hint");
   hint.className = probe && state.picked.size ? "would-needs" : "dim";
@@ -411,26 +413,34 @@ function updateDemasterButton() {
 
 // "Demaster Selected" in one go (WHY§59): the dry run first if there is none of the modlist as it is now, then
 // the plan and one question, then everything ModTrap can do by itself.
+// A step of the one go started from the Process tab stays there: that tab shows it, with its buttons (WHY§71).
+function goTab(name) { if (state.tab !== "process") showTab(name); }
+const BEING_READ = /being read/;
+
 async function demasterGo() {
   if (!state.changes || !state.picked.size) { showTab("selection"); return; }
-  if (state.probe && state.probe.state === "working") { showTab("tools"); return; }
+  if (state.probe && state.probe.state === "working") { goTab("tools"); return; }
   if (probeReason()) {
     if (!await confirmBox("Before ModTrap changes real plugins it proves its scripts on invented test plugins, in your own MO2 and xEdit (the probe).\n\n" +
         probeReason() + ".\n\nRun the probe now? It takes a few minutes and undoes itself. The demaster then goes on by itself.")) return;
     try {
       state.probe = await api("/api/probe/start", {});
       state.probeError = ""; state.probeText = ""; state.dmChain = "probe";
-      showTab("tools");
+      goTab("tools");
       toast("The probe has started. The demaster follows when it has passed.");
       tick();
-    } catch (e) { state.dmChain = ""; state.dmError = e.message; showTab("selection"); renderDemaster(true); }
+    } catch (e) { state.dmChain = ""; state.dmError = e.message; goTab("selection"); renderDemaster(true); }
     return;
   }
+  // ModTrap reads the modlist again after a probe, a Revert or a Rescan. Until it has, nothing can start: the one
+  // go waits for it instead of giving up (WHY§71).
+  if (state.status !== "ready") { waitForModlist(); return; }
   const job = state.job;
   const dryDone = job && job.state === "done" && !job.past && !job.stale && sameMods(job.plan.trapped_mods, state.picked);
-  showTab("selection");
+  goTab("selection");
   if (dryDone) {
     await askDemasterPlan();
+    if (state.dmChain === "ready") return;                             // the modlist is being read: it goes on by itself
     if (!state.dmError || !/dry run/.test(state.dmError)) return;      // the plan is shown, or something else is wrong
   }
   try {
@@ -439,21 +449,36 @@ async function demasterGo() {
     await api("/api/dryrun/start", { mods: [...state.picked] });
     state.dmChain = "dry";
     state.jobSeen = "";
-    showTab("job");
+    goTab("job");
     toast("First the dry run: xEdit reads what depends on the mod. The plan follows by itself.");
     tick();
-  } catch (e) { state.dmChain = ""; state.dmError = e.message; renderDemaster(true); }
+  } catch (e) {
+    if (BEING_READ.test(e.message)) { waitForModlist(); return; }
+    state.dmChain = ""; state.dmError = e.message; renderDemaster(true);
+  }
+}
+
+function waitForModlist() {
+  state.dmChain = "ready";
+  state.dmError = "";
+  toast("ModTrap is reading the modlist again; the demaster goes on by itself when it has.");
+  renderDemaster(true);
 }
 
 // What follows by itself: the plan after the dry run, and putting the plugins in place once they are verified.
 function demasterChain() {
   const job = state.job, d = state.demaster;
+  if (state.dmChain === "ready" && state.status === "ready" && !state.dmGoing) {
+    state.dmChain = ""; state.dmGoing = true;
+    demasterGo().finally(() => { state.dmGoing = false; });
+    return;
+  }
   if (state.dmChain === "probe" && state.probe) {
-    if (state.probe.state === "passed" && !probeReason()) { state.dmChain = ""; demasterGo(); return; }
+    if (state.probe.state === "passed" && !probeReason()) state.dmChain = "ready";       // then the modlist is read again
     if (state.probe.state === "failed") { state.dmChain = ""; toast("The probe did not pass: the Tools tab says where. Nothing real was changed."); }
   }
   if (state.dmChain === "dry" && job && job.id !== state.dmChainFrom) {
-    if (job.state === "done") { state.dmChain = ""; showTab("selection"); askDemasterPlan(); }
+    if (job.state === "done") { state.dmChain = ""; goTab("selection"); askDemasterPlan(); }
     else if (["failed", "stopped"].includes(job.state)) state.dmChain = "";
   }
   if (state.dmChain === "install" && d) {
@@ -462,10 +487,23 @@ function demasterChain() {
   }
 }
 
+function planGoAhead() { state.dmChain = "install"; return demasterCall("/api/demaster/start", {}, "The demaster has started: xEdit opens through MO2."); }
+function planNotNow() { state.dmPlan = null; renderDemaster(true); state.processText = ""; renderProcess(); }
+async function putInPlace() {
+  const d = state.demaster;
+  if (!d || d.state !== "verified") return;
+  if (!await confirmBox("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
+  await demasterCall("/api/demaster/install", {}, "In place. ModTrap is reading the modlist again.");
+}
+
 async function askDemasterPlan() {
   try { state.dmPlan = await api("/api/demaster/plan", {}); state.dmError = ""; }
-  catch (e) { state.dmPlan = null; state.dmError = e.message; }
+  catch (e) {
+    state.dmPlan = null; state.dmError = e.message;
+    if (BEING_READ.test(e.message)) { waitForModlist(); return; }
+  }
   renderDemaster(true);
+  state.processText = ""; renderProcess();
 }
 
 async function demasterCall(path, body, done, noAsk) {
@@ -495,9 +533,9 @@ function renderDemaster(force) {
   if (state.dmPlan) {
     const p = state.dmPlan;
     const go = el("button", { type: "button", class: "primary", text: "Go ahead" });
-    go.addEventListener("click", () => { go.disabled = true; state.dmChain = "install"; demasterCall("/api/demaster/start", {}, "The demaster has started: xEdit opens through MO2."); });
+    go.addEventListener("click", () => { go.disabled = true; planGoAhead(); });
     const cancel = el("button", { type: "button", text: "Not now" });
-    cancel.addEventListener("click", () => { state.dmPlan = null; renderDemaster(true); });
+    cancel.addEventListener("click", planNotNow);
     cards.push(el("div", { class: "card installer" }, el("h2", { text: "What the demaster is about to do" }), planList(p),
       el("p", { text: "First: copies of every plugin above and of the profile's three lists go into the job's safe folder. Then xEdit opens through MO2 with ModTrap's script, takes out of each plugin exactly what the dry run listed, in memory only, and writes each finished plugin as a new file in ModTrap's own folder. ModTrap checks every new file, and only then puts them in place: its own mod with the new plugins is added, the patches are switched off and the mod is disabled. This is the whole demaster, in one go. MO2 must be closed for the last part: if it is open, ModTrap closes it then, as a click on its X does (never by force). Revert undoes all of it." }),
       p.blocked ? el("p", { class: "would-needs", text: "Some plugins are left to you, so the mod itself will stay enabled until those no longer need it." }) : null,
@@ -518,11 +556,7 @@ function renderDemaster(force) {
   if (d && d.state === "verified") {
     const closed = d.mo2_closed === true;
     const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: d.mo2_closed == null });
-    put.addEventListener("click", async () => {
-      if (!await confirmBox("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
-      put.disabled = true;
-      demasterCall("/api/demaster/install", {}, "In place. ModTrap is reading the modlist again.");
-    });
+    put.addEventListener("click", putInPlace);
     cards.push(el("div", { class: "card installer" }, el("h2", { text: "The new plugins are ready and verified" }),
       el("p", {}, plural(d.written.length, "plugin") + " no longer need the mod: ", el("span", { class: "mono", text: d.written.join(", ") })),
       d.plan.needs_you.length ? el("p", { class: "would-needs", text: "Left to you: " + d.plan.needs_you.join(", ") + ". " + d.plan.notes.join(" ") }) : null,
@@ -1525,14 +1559,88 @@ function afterStage() {
   // Until the demaster is in place these are to come, not yet the owner's turn.
   const placed = (state.process || []).some((s) => s.key === "install" && s.state === "done") || !state.changes;
   if (!placed) for (const t of tasks) if (t.state === "yours") t.state = "waiting";
-  return { key: "after", title: "After the demaster", who: "you", tasks: tasks, state: stageState(tasks), note: "The tools to run again, and what only you can judge. The Steps tab has the reasons and the evidence." };
+  const all = stageState(tasks);
+  return { key: "after", title: "After the demaster", who: "you", tasks: tasks, state: !placed && all !== "done" ? "waiting" : all, note: "The tools to run again, and what only you can judge. The Steps tab has the reasons and the evidence." };
+}
+
+// What the owner can press, at the task it belongs to (WHY§71): the same actions as on the tabs they come from,
+// and beside them a way to that tab, to look before pressing.
+function navButton(tab, label) {
+  const b = el("button", { type: "button", class: "nav-link", text: label + " ↗", title: "Opens that tab, where this comes from" });
+  b.addEventListener("click", () => showTab(tab));
+  return b;
+}
+function actButton(label, run, primary) {
+  const b = el("button", { type: "button", class: primary ? "primary" : "", text: label });
+  b.addEventListener("click", async () => { b.disabled = true; try { await run(); } finally { state.processText = ""; renderProcess(); } });
+  return b;
+}
+function tickBox(key) {
+  const box = el("input", { type: "checkbox", checked: !!(state.stepsDone || {})[stepKey(key)] });
+  box.addEventListener("change", () => {
+    state.stepsDone = state.stepsDone || {};
+    if (box.checked) state.stepsDone[stepKey(key)] = true; else delete state.stepsDone[stepKey(key)];
+    saveUi();
+    state.stepsText = ""; pollSteps(true);
+    state.processText = ""; renderProcess();
+  });
+  return el("label", { class: "tickoff" }, box, "I have done this");
+}
+
+function processIdle() {
+  const d = state.demaster, job = state.job;
+  return state.status === "ready" && !state.dmChain && !(state.session && state.session.locked) &&
+    !(d && (d.state === "working" || d.state === "verified")) && !(job && !["done", "failed", "stopped"].includes(job.state)) &&
+    !(state.probe && state.probe.state === "working");
+}
+
+function taskActions(stage, task, first, firstOpen) {
+  const d = state.demaster, out = [];
+  const can = state.changes && state.picked.size;
+  if (stage.key === "plan" && task.key === "confirm" && task.state === "yours" && can) {
+    const p = state.dmPlan;
+    if (p) {
+      out.push(el("span", { class: "act-note", text: plural(p.demaster.length, "plugin") + " to demaster, " + plural(p.switch_off.length, "patch", "patches") + " to switch off, " +
+        plural((p.disable_mods || []).length + (p.blocked ? 0 : p.mods.length), "mod") + " to disable" + (p.needs_you.length ? ", " + p.needs_you.length + " left to you" : "") + "." }));
+      out.push(actButton("Go ahead", planGoAhead, true), actButton("Not now", async () => planNotNow()), navButton("selection", "The whole plan, on Selection"));
+    } else if (processIdle()) {
+      out.push(actButton("Show the plan", askDemasterPlan, true), navButton("selection", "Selection"));
+    }
+  }
+  if (first && firstOpen && can && processIdle() && ["probe", "dry"].includes(stage.key) && ["waiting", "failed"].includes(stage.state) && !state.dmPlan) {
+    const probe = probeReason();
+    out.push(actButton(stage.state === "failed" ? "Try again: Demaster Selected" : "Demaster Selected", demasterGo, true),
+      el("span", { class: "act-note", text: probe ? "Runs the probe first, then the dry run, then asks you with the plan." : "Runs the dry run, then asks you with the plan." }),
+      navButton(stage.key === "probe" ? "tools" : "selection", stage.key === "probe" ? "The probe, on Tools" : "Selection"));
+  }
+  if (task.state === "failed") {
+    if (stage.key === "change" && d && d.state === "failed") out.push(actButton("Close this", () => demasterCall("/api/demaster/drop", {})));
+    out.push(navButton(stage.key === "probe" ? "tools" : stage.key === "dry" ? "job" : "selection", stage.key === "probe" ? "Tools" : stage.key === "dry" ? "Dry run" : "Selection"),
+      navButton("log", "Log"));
+  }
+  if (stage.key === "install" && first && d && d.state === "verified" && state.dmChain !== "install") {
+    out.push(actButton("Put them in place", putInPlace, true), actButton("Not now", () => demasterCall("/api/demaster/drop", {})),
+      navButton("selection", "What is ready, on Selection"));
+  }
+  if (stage.key === "after" && (task.state === "yours" || task.state === "done")) {
+    const st = ((state.stepsData || {}).steps || []).find((x) => x.key === task.key);
+    if (st) {
+      if (task.state === "yours") for (const it of (st.items || [])) if (it.tool) out.push(toolButton(it.tool));
+      if (st.manual) out.push(tickBox(st.key));
+      out.push(navButton("steps", "Why, with the evidence, on Steps"));
+    }
+  }
+  return out;
 }
 
 function renderProcess() {
   const stages = (state.process || []).slice();
   const after = afterStage();
   if (after) stages.push(after);
-  const text = JSON.stringify(stages);
+  const tool = state.tool;
+  const text = JSON.stringify(stages) + "#" + [state.status, state.dmChain || "", state.dmPlan ? 1 : 0, state.picked.size, state.changes ? 1 : 0,
+    state.changes ? probeReason() : "", state.demaster ? state.demaster.state : "", tool ? tool.state + tool.title : "",
+    state.session && state.session.locked ? 1 : 0].join("|");
   const going = stages.find((s) => s.state === "going"), failed = stages.find((s) => s.state === "failed");
   const yours = !going && !failed && stages.find((s) => s.state === "yours" && s.key !== "after");
   const dot = $("process-dot");
@@ -1555,10 +1663,14 @@ function renderProcess() {
       el("div", { class: "stage-head" }, el("span", { class: "n", text: String(i + 1) }), title,
         el("span", { class: "tag " + word[1] + (s.state === "yours" ? " t-yours" : ""), text: word[0] + " · " + done + "/" + s.tasks.length })),
       s.note ? el("p", { class: "stage-note", text: s.note }) : null,
-      el("ul", { class: "tasks" }, ...s.tasks.map((t) => el("li", { class: "t-" + t.state },
-        el("span", { class: "ico", "aria-hidden": "true", text: TASK_ICON[t.state] || "○" }),
-        el("span", { text: t.text + (t.state === "going" ? " …" : "") }),
-        t.note ? el("span", { class: "note", text: t.note }) : null))));
+      el("ul", { class: "tasks" }, ...s.tasks.map((t, k) => {
+        const acts = taskActions(s, t, k === s.tasks.findIndex((x) => !["done", "skipped"].includes(x.state)), i === stages.findIndex((x) => x.state !== "done"));
+        return el("li", { class: "t-" + t.state },
+          el("span", { class: "ico", "aria-hidden": "true", text: TASK_ICON[t.state] || "○" }),
+          el("span", { text: t.text + (t.state === "going" ? " …" : "") }),
+          t.note ? el("span", { class: "note", text: t.note }) : null,
+          acts.length ? el("span", { class: "acts" }, ...acts) : null);
+      })));
   }));
 }
 
@@ -2307,6 +2419,7 @@ $("rescan").addEventListener("click", async () => {
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("dry-run").addEventListener("click", showPlan);
 $("demaster").addEventListener("click", demasterGo);
+$("process-go").addEventListener("click", demasterGo);
 $("job-stop").addEventListener("click", async () => {
   if (!await confirmBox("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
   try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }

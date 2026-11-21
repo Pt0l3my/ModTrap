@@ -514,3 +514,10 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    last box is made of the steps of §14 that follow the demaster: the tools to run again and what only the owner
    can judge; until the demaster is in place they are to come, then they wait for the owner.
 5. The probe's own dry run and change are shown as the probe's steps, not as the real ones.
+6. **What the owner presses is in the box** (WHY§71), at the task it belongs to: “Demaster Selected” at the first
+   stage still to come, “Go ahead” and “Not now” at the plan with what the plan amounts to, “Put them in place”
+   where new plugins wait, a tool's start button and “I have done this” in the last box. Beside each is a way to
+   the tab the button comes from, to look before pressing. They are the same actions as on those tabs. A demaster
+   started from this tab stays on it.
+7. A demaster that is in place stays shown as done until Revert, or until a new one starts. A dry run of the modlist
+   as it was before it was read again is not shown as this demaster's.

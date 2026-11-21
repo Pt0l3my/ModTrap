@@ -93,6 +93,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 68 | 2026-11-21 | A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running | DECIDED | #process #version #server #page |
 | 69 | 2026-11-21 | The other tools checked: a change is not a stake (the patcher was asked for a value many plugins share), and a behaviour tool reads lists and patch folders, not animation files | DECIDED | #tools #steps #xedit #process |
 | 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
+| 71 | 2026-11-21 | The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes | DECIDED | #page #process #steps |
 
 ## Entries
 
@@ -1604,3 +1605,33 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests for the board and for the stages through a whole demaster on the stand-in; in a browser, the
   one go from probe to in place, the box going amber while xEdit runs, and all green at the end.
 - Not checked: on the owner's PC; a failed run's red box was checked by test only, not by eye.
+
+### 71. The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes
+
+`2026-11-21` · DECIDED · `#page #process #steps` · refs: MT17, DESIGN§18, WHY§60, WHY§61, WHY§70
+
+- The owner, on version 0.3.3: "it gut stuck at this point, there is no go ahead button anywhere. Can you also
+  add pop up buttons to process boxes? when something needs to be pressed by user, make it appear on the step box
+  at the right task (and also add navigation button to the button's origin page so the user can check)."
+- FACT (the session file's log): the probe passed; ModTrap began reading the modlist again, as it does after
+  every probe; one second later the page asked for the dry run and was told "the modlist is being read; try
+  again in a moment". The one go took that as a failure and ended. No dry run was made, so no plan and no
+  "Go ahead". On an invented list the reading takes no time, which is why the stand-in never showed it; on
+  3,751 plugins it takes long enough.
+- FACT: the Process tab showed the dry run as done and the plan as waiting for the owner, from a dry run kept
+  from before the modlist was read again. That dry run does not count for a demaster (WHY§61); the box said
+  what was not so, and pointed at a button that could not come.
+- DECIDED: the one go waits. After the probe, and wherever the server says the modlist is being read, it holds
+  its place and goes on by itself once the modlist is read. It gives up only on a real refusal.
+- DECIDED: a dry run of the modlist as it was is shown as to come, with a line saying that an earlier one is
+  kept and a new one is made. A demaster in hand or in place keeps its own dry run shown as done; Revert and
+  "Not now" set the later boxes back.
+- DECIDED: what the owner can press appears in the box, at its task: start, the plan's "Go ahead" with what the
+  plan amounts to, "Put them in place", a tool's start, the tick for what only the owner can judge. Each has a
+  way to its own tab beside it. The buttons call the same functions as the ones on those tabs: one behaviour,
+  two places. "Demaster Selected" is also at the top of the tab. Started from here, the one go no longer jumps
+  to other tabs.
+- Checked: in a browser on the stand-in with reading slowed to two and a half seconds: the whole demaster
+  driven from the boxes alone, the wait after the probe, Revert setting the boxes back. Tests for the stages
+  after a Revert and with an earlier dry run.
+- Not checked: on the owner's PC.
