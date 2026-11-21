@@ -14,8 +14,8 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, sessions,
-               steps, unpack)
+from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
+               sessions, steps, toolrun, tools, unpack)
 from .server import Bad
 
 log = logbook.get("app")
@@ -98,6 +98,8 @@ class Api:
         self.log_epoch = 0                     # goes up when the log is replaced: the page then reads it afresh
         self.on_quit: Callable[[], None] | None = None
         self.changes = None                    # the endpoints that change a modlist; None: switched off (WHY§44)
+        self.tooljob: toolrun.ToolJob | None = None
+        self.recjob: records.Job | None = None
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
 
@@ -388,7 +390,88 @@ class Api:
         return mods
 
     def _busy(self) -> bool:
+        if self.tooljob is not None and self.tooljob.state in ("starting", "running"):
+            return True
+        if self.recjob is not None and self.recjob.state not in ("done", "failed", "stopped"):
+            return True
         return self.job is not None and self.job.state not in ("done", "failed", "stopped")
+
+    # --- starting one of the modlist's tools through MO2 (DESIGN§16.8 step 5) ----------------------------------------
+
+    def tool_start(self, body: dict) -> dict:
+        m = self._need()
+        title = body.get("title")
+        if not isinstance(title, str) or not title or len(title) > 300:
+            raise Bad("which tool to start did not arrive")
+        with self._lock:
+            if self._busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            if self._locked():
+                raise Bad(self._locked())
+            inst = m.instance
+            exe = next((e for e in inst.executables if e.title == title), None)
+            if exe is None:
+                raise Bad("“%s” is not in this MO2's list of tools" % title)
+            name, _kind = tools.of_executable(exe.title, exe.binary)
+            memo: dict = {}
+            made = [r.path for r in m.plugins.values() if r.path is not None
+                    and any(e.tool == name for e in adding.generated(m, r, memo))]
+            try:
+                job = toolrun.ToolJob(inst, title, made, launcher=self.launcher, running=self.running, poll=self.poll)
+            except toolrun.Refused as e:
+                raise Bad(str(e)) from None
+
+            def ended() -> None:
+                self.save_log()
+                if job.state == "done" and self.folder and self.status == "ready":
+                    self.open(self.folder, self.profile or None, session=self.session)   # its output, read again
+            job.on_end = ended
+            self.tooljob = job
+        job.start()
+        return job.public()
+
+    # --- the record check (DESIGN§16.5): xEdit, read-only ----------------------------------------------------------
+
+    def records_start(self, body: dict) -> dict:
+        m = self._need()
+        mods = body.get("mods")
+        if not isinstance(mods, list) or not mods or len(mods) > 20 or not all(isinstance(x, str) and x for x in mods):
+            raise Bad("which mods to check did not arrive")
+        with self._lock:
+            if self._busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            if self._locked():
+                raise Bad(self._locked())
+            s = self.session
+            try:
+                p = records.plan(m, mods)
+                base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
+                job = records.Job(m, p, records.new_job_dir(base), launcher=self.launcher, running=self.running,
+                                  poll=self.poll)
+            except (records.Refused, dryrun.Refused) as e:
+                raise Bad(str(e)) from None
+            job.on_end = self.save_log
+            self.recjob = job
+        logbook.set_masks({"<modlist>": self.folder, "<game>": str(m.instance.game_dir) if m.instance.game_dir else None,
+                           "<mods>": str(m.instance.mods_dir), "<job>": str(job.dir), "<modtrap>": str(paths.home())})
+        job.start()
+        return job.public()
+
+    def records_stop(self) -> dict:
+        if self.recjob is None:
+            raise Bad("no record check is going")
+        self.recjob.stop()
+        return self.recjob.public()
+
+    def tool_stop(self) -> dict:
+        if self.tooljob is None:
+            raise Bad("no tool was started from here")
+        self.tooljob.stop()
+        return self.tooljob.public()
 
     def dry_plan(self, body: dict) -> dict:
         if self._locked():
@@ -765,10 +848,11 @@ class Api:
             threading.Thread(target=work, name="adding", daemon=True).start()
         got = self._adding.get(key)
         added = self.changes.jobs() if self.changes is not None else []
+        rec = self.recjob.public() if self.recjob is not None else None
         if got is None:
             return {"looking": True, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
-                    "added": added}
-        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone, added=added)
+                    "added": added, "records": rec}
+        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone, added=added, records=rec)
 
     def job_state(self) -> dict:
         return {"job": self.job.public() if self.job else None}
@@ -785,6 +869,7 @@ class Api:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "changes": self.changes is not None,
+                   "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
         settings = paths.load_settings()
@@ -947,6 +1032,14 @@ class Api:
             return 200, self.add_installer(body), None
         if path == "/api/add/choose":
             return 200, self.add_choose(body), None
+        if path == "/api/records/start":
+            return 200, self.records_start(body), None
+        if path == "/api/records/stop":
+            return 200, self.records_stop(), None
+        if path == "/api/tool/start":
+            return 200, self.tool_start(body), None
+        if path == "/api/tool/stop":
+            return 200, self.tool_stop(), None
         if path == "/api/job/stop":
             if self.job is None:
                 raise Bad("no dry run is going")

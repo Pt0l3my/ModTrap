@@ -803,8 +803,42 @@ const STEP_STATE = {
 
 function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
 
+// Starting one of the modlist's tools through MO2 (DESIGN§16.8): the button, and what came of it.
+function toolButton(title) {
+  const t = state.tool;
+  const going = t && (t.state === "starting" || t.state === "running");
+  const b = el("button", { type: "button", text: going && t.title === title ? "Running…" : "Start it through MO2", disabled: !!going || !!(state.session && state.session.locked),
+    title: "Starts “" + title + "” the way MO2's own Run button does. It is yours to work; ModTrap waits for it to close and then says which of its output files changed." });
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { state.tool = await api("/api/tool/start", { title: title }); toast("Starting “" + title + "” through MO2…"); }
+    catch (e) { toast(e.message); }
+    state.addText = ""; state.stepsText = "";
+    tick();
+  });
+  return b;
+}
+
+function toolCard() {
+  const t = state.tool;
+  if (!t) return null;
+  const going = t.state === "starting" || t.state === "running";
+  const stop = el("button", { type: "button", text: "Stop waiting" });
+  stop.addEventListener("click", async () => { try { state.tool = await api("/api/tool/stop", {}); } catch (e) { toast(e.message); } tick(); });
+  const mins = Math.floor(t.seconds / 60), secs = t.seconds % 60;
+  return el("div", { class: "card" + (going ? " installer" : "") },
+    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? " “" + t.title + "” is open: work it, then close it" :
+      t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
+    going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago. ModTrap is waiting, and changes nothing meanwhile." }) : null,
+    t.state === "done" ? el("p", { class: t.changed_count ? "would-record" : "would-needs", text: t.changed_count ?
+      plural(t.changed_count, "file") + " of its output " + (t.changed_count === 1 ? "was" : "were") + " written" + (t.output_mod ? " (its output goes to “" + t.output_mod + "”)" : "") + ". ModTrap has read the modlist again." :
+      "None of its output files changed. If you meant it to build its output, it may not have been run to the end." }) : null,
+    t.changed_count ? el("details", {}, el("summary", { text: "The files" }), el("ul", {}, ...t.changed.map((c) => el("li", { class: "mono", text: c })))) : null,
+    going ? el("div", { class: "actions" }, stop) : null);
+}
+
 function stepItem(it) {
-  if (it.tool) return el("li", { text: "“" + it.tool + "” in MO2's list of tools" });
+  if (it.tool) return el("li", {}, "“" + it.tool + "” in MO2's list of tools  ", toolButton(it.tool));
   if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
     el("span", { class: "tag " + (it.what === "missing" ? "bad" : "warn"), text: it.what === "missing" ? "missing" : "not active" }));
@@ -868,7 +902,7 @@ function renderSteps2(d) {
   const intro = el("div", { class: "card" },
     el("p", { text: "Everything it takes to get " + (d.mods.length === 1 ? "this mod" : "these mods") + " out of the modlist, in order. ModTrap cannot change your modlist yet, so the steps marked “You” are done by hand in MO2 and xEdit for now; ModTrap checks them against the modlist's files each time it is read." }),
     el("p", { class: "dim", text: "Plugins to take out: " + d.trapped.join(", ") }));
-  box.replaceChildren(intro, ...cards);
+  box.replaceChildren(...[toolCard(), intro, ...cards].filter(Boolean));
 }
 
 async function pollSteps(force) {
@@ -1210,6 +1244,46 @@ function addActionCard(d) {
   return el("div", { class: "card" }, ...kids.filter(Boolean));
 }
 
+// The record check (DESIGN§16.5): start it from its step, and show what xEdit reported.
+const REC_WORDS = { preparing: "preparing…", starting: "starting xEdit through MO2…", loading: "xEdit is loading the whole load order…", reading: "xEdit is reading the records…", checking: "checking…" };
+
+function recordsBlock(d) {
+  const r = d.records;
+  const active = (d.mods || []).filter((x) => x.enabled && x.plugins.some((p) => p.active)).map((x) => x.name);
+  const going = r && !["done", "failed", "stopped"].includes(r.state);
+  const start = el("button", { type: "button", class: "primary", text: r && r.state === "done" ? "Check again through xEdit" : "Check through xEdit", disabled: !active.length || going || !!(state.session && state.session.locked),
+    title: active.length ? "Starts your xEdit through MO2 with ModTrap's script, which only reads. The whole load order is loaded, so on a large modlist it takes many minutes." : "The plugin must be active first: xEdit can only read what is in the load order." });
+  start.addEventListener("click", async () => {
+    start.disabled = true;
+    try { await api("/api/records/start", { mods: active }); toast("Starting xEdit through MO2…"); } catch (e) { toast(e.message); }
+    state.addText = "";
+    pollAdd(true);
+  });
+  const kids = [el("div", { class: "actions" }, start, going ? (() => {
+    const b = el("button", { type: "button", text: "Stop waiting" });
+    b.addEventListener("click", async () => { try { await api("/api/records/stop", {}); } catch (e) { toast(e.message); } pollAdd(true); });
+    return b;
+  })() : null, going ? el("span", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " " + (REC_WORDS[r.state] || r.state) + " The Log tab shows its lines.") : null)];
+  if (r && (r.state === "failed" || r.state === "stopped")) kids.push(el("p", { class: "would-needs", text: "The check did not finish: " + (r.message || r.state) + "." }));
+  if (r && r.state === "done" && r.result) {
+    for (const f of r.result.files) {
+      const names = (list) => list.slice(0, 8).map(([n, c, tool]) => n + " (" + c + (tool ? ", made by a tool" : "") + ")").join(", ") + (list.length > 8 ? " and " + (list.length - 8) + " more" : "");
+      const recList = (list, how) => el("details", {}, el("summary", { text: "The records" + (list.length >= 400 ? " (the first 400)" : "") }),
+        el("ul", {}, ...list.map((x) => el("li", { class: "mono", text: x.sig + " " + x.form + " " + x.edid + "   " + how(x) }))));
+      kids.push(el("div", { class: "plug" },
+        el("p", {}, pluginLink(f.name), el("span", { class: "tag " + (f.reading === "clean" ? "good" : "warn"), text: f.reading === "clean" ? "nothing that needs a patch" : "needs a look" })),
+        el("p", { class: "dim", text: plural(f.own, "record") + " of its own, " + f.overrides + " that override another plugin's: " + f.alone + " that only it changes or that agree, " + f.same + " identical to what they override." }),
+        f.takes_count ? el("p", { class: f.needs_patch ? "would-needs" : "" }, f.takes_count + " record(s) it wins that other plugins also change: their change to those records is lost. From: " + names(f.from) + ".") : null,
+        f.takes_count ? recList(f.takes, (x) => "also changed by " + x.from.join(", ")) : null,
+        f.loses_count ? el("p", { class: f.lost_to_hand ? "would-needs" : "" }, f.loses_count + " record(s) a later plugin wins, so its own change to them does not show. To: " + names(f.to) + ".") : null,
+        f.loses_count ? recList(f.loses, (x) => "won by " + x.to) : null,
+        f.needs_patch || f.lost_to_hand ? el("p", { text: "Where both changes matter, a small patch that carries both is the fix: in xEdit, copy the record as override into a new plugin loaded after both and merge the fields. What a tool made is settled by running the tool again." }) : null));
+    }
+    for (const n of r.result.missing) kids.push(el("p", { class: "would-needs", text: n + " was not loaded by xEdit." }));
+  }
+  return el("div", {}, ...kids.filter(Boolean));
+}
+
 function addStepCard(st, d) {
   const done = state.stepsDone || {};
   const ticked = st.manual && !!done[addKey(st.key)];
@@ -1223,11 +1297,13 @@ function addStepCard(st, d) {
     st.note ? el("p", { text: st.note }) : null,
     st.items.length ? el("ul", {}, ...st.items.map((it) => el("li", {}, it.text,
       it.tag ? el("span", { class: "tag " + (it.cls || ""), text: it.tag }) : null,
+      it.start ? el("span", {}, "  ", toolButton(it.start)) : null,
       it.add && findMod(it.add) ? (() => {
         const b = el("button", { type: "button", class: "linkish", text: "  add it too" });
         b.addEventListener("click", () => addCandidate(it.add));
         return b;
       })() : null))) : null);
+  if (st.key === "records") body.append(recordsBlock(d));
   if (st.manual) {
     const box = el("input", { type: "checkbox", checked: ticked });
     box.addEventListener("change", () => {
@@ -1282,10 +1358,10 @@ function renderAdd(d) {
     text: "Room in the load order: full plugins " + s.full.now + (s.full.after !== s.full.now ? " → " + s.full.after : "") + " of " + s.full.limit +
       ", light plugins " + s.light.now + (s.light.after !== s.light.now ? " → " + s.light.after : "") + " of " + s.light.limit + "." });
   box.replaceChildren(...[noteCard,
-    el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files, without xEdit. Nothing in MO2 has been changed: the steps marked “You” are done by hand in MO2 for now, and ModTrap checks them each time the modlist is read." }), room,
+    el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files; what is inside the plugins' records is read through xEdit in its own step. ModTrap checks every step against the modlist's files each time the modlist is read." }), room,
       d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
       d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
-    addActionCard(d),
+    toolCard(), addActionCard(d),
     ...askCards,
     ...d.mods.map((x) => addModCard(x, d.place, (d.staged || []).find((r) => r.installer && r.state === "ready" && r.name === x.name))),
     el("h2", { text: "The steps, in order" }), ...cards].filter(Boolean));
@@ -1296,11 +1372,12 @@ async function pollAdd(force) {
   const mods = (state.adding || []).slice();
   const staged = (state.staged || []).slice();
   const key = mods.join("|") + "#" + staged.join("|") + "#" + state.loaded;
-  if (!force && key === state.addKeySeen && !state.addLooking) return;
+  if (!force && key === state.addKeySeen && !state.addLooking && !state.recGoing) return;
   try {
     const d = mods.length || staged.length ? await api("/api/add", { mods: mods, staged: staged }) : { looking: false, mods: [], steps: [] };
     state.addKeySeen = key;
     state.addLooking = d.looking || d.unpacking;
+    state.recGoing = !!(d.records && !["done", "failed", "stopped"].includes(d.records.state));
     const info = {};
     for (const r of d.staged || []) info[r.id] = r;
     const infoText = JSON.stringify(info);
@@ -1369,6 +1446,8 @@ async function tick() {
   const was = state.status;
   state.status = s.status;
   state.changes = !!s.changes;
+  const toolText = JSON.stringify(s.tool || null);
+  if (toolText !== state.toolText) { state.toolText = toolText; state.tool = s.tool || null; state.addText = ""; state.stepsText = ""; state.stepsKey = ""; state.addKeySeen = ""; }
   renderState(s);
   if (s.log_epoch !== state.logEpoch) {             // another session's log: read it from the start
     state.logEpoch = s.log_epoch;
@@ -1390,7 +1469,7 @@ async function tick() {
 
 function loop() {
   if (state.quit) return;
-  const busy = state.status === "reading" || state.addLooking || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 

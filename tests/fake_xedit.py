@@ -48,6 +48,45 @@ def apply(argv, job, loaded, trap, deps, say, mode):
     return 0
 
 
+def records(job, loaded, mode):
+    """The stand-in for ModTrapRecords.pas. For each plugin to look at it invents: two records of its own; one
+    that only it overrides; one it takes from Quill.esp (a conflict it wins); one it loses to Generated.esp; and
+    one identical to what it overrides."""
+    progress, said = Path(job["progress"]), []
+
+    def say(s):
+        said.append(s)
+        progress.write_text("\r\n".join(said) + "\r\n")
+
+    time.sleep(0.05)
+    say("started")
+    say("xEdit has loaded %d files" % (len(loaded) + 5))
+    if mode == "crash":
+        return 3
+    out = ["H\tmodtrap-records/1\trecords\t67175680"]
+    for i in range(int(job["new.count"])):
+        n = job["new.%d" % i]
+        if n not in loaded:
+            out.append("M\t" + n)
+            continue
+        out.append("F\t%s\t6\tSkyrim.esm,Quill.esp" % n)
+        say("reading %s (6 records)" % n)
+        out.append("O\t%s\tWEAP\t00012EB7\tInventedSword\t4\t8\t%s" % (n, "\x1f".join(["Skyrim.esm", n])))
+        out.append("O\t%s\tNPC_\t00013BBF\tInventedPerson\t5\t10\t%s" % (n, "\x1f".join(["Skyrim.esm", "Quill.esp", n])))
+        out.append("O\t%s\tCELL\t00016204\tInventedCell\t5\t11\t%s" % (n, "\x1f".join(["Skyrim.esm", n, "Generated.esp"])))
+        out.append("O\t%s\tMISC\t0001F6D4\tInventedThing\t2\t3\t%s" % (n, "\x1f".join(["Skyrim.esm", n])))
+        out.append("D\t%s\t6\t2\t4" % n)
+        say("done %s: 4 of 6 records override another plugin's" % n)
+    if mode == "touch":
+        import sys as _s
+        target = next(Path(p) for p in _s.argv if p.endswith(".esp") and Path(p).exists())
+        target.write_bytes(target.read_bytes() + b"x")
+    out.append("X\tok\t")
+    Path(job["out"]).write_text("\r\n".join(out) + "\r\n")
+    say("finished")
+    return 0
+
+
 def main(argv):
     args = argv[argv.index("-a") + 1]
     mode = argv[argv.index("-a") + 2]   # the tool's title; the tests use it to choose a behaviour
@@ -55,6 +94,8 @@ def main(argv):
     plugins = Path(re.search(r'-P:"([^"]+)"', args).group(1))
     job = dict(ln.split("=", 1) for ln in (script.parent / "modtrap-job.txt").read_text(encoding="utf-8-sig").splitlines() if "=" in ln)
     loaded = [ln[1:] for ln in plugins.read_text(encoding="cp1252").splitlines() if ln.startswith("*")]
+    if job.get("mode") == "records":
+        return records(job, loaded, mode)
     trap = [job["trap.%d" % i] for i in range(int(job["trap.count"]))]
     deps = [job["dep.%d" % i] for i in range(int(job["dep.count"]))]
     progress, out = Path(job["progress"]), []

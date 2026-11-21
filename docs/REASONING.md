@@ -67,6 +67,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 42 | 2026-11-21 | Carrying out an add: written and tested against invented lists, switched off | METHOD | #adding #mo2 #safety #process |
 | 43 | 2026-11-21 | An installer's questions are asked on ModTrap's own page | METHOD | #adding #page #safety #licence |
 | 44 | 2026-11-21 | "Add it for me" and Revert on the page, behind a switch that is off | DECIDED | #adding #safety #process #page |
+| 45 | 2026-11-21 | The record check and starting the tools: built, and not behind the switch | METHOD | #adding #xedit #tools #process |
 
 ## Entries
 
@@ -842,3 +843,29 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   to the added mods and back: after Revert the modlist's folder is as before. Tests also check that without the
   flag a fresh start loads none of the writing modules.
 - Not proven: all of WHY§42's open points, and telling whether MO2 is open on a real PC.
+
+### 45. The record check and starting the tools: built, and not behind the switch
+
+`2026-11-21` · METHOD · `#adding #xedit #tools #process` · refs: MT18, MT21, DESIGN§16.5, DESIGN§16.6, DESIGN§16.8, DESIGN§7, XE01§10, MO01§3, WHY§31, WHY§34, WHY§40, WHY§44
+
+- The last two pieces of DESIGN§16.8. Neither changes a modlist by ModTrap's own hand, so neither is behind
+  WHY§44's switch: the record check is a read-only xEdit run like the dry run (WHY§31), and starting a tool is
+  what MO2's own Run button does.
+- METHOD (record check): a third script in its own file, `ModTrapRecords.pas`, report-only, with the same job
+  file, progress file and end line as the first. For each record of the new plugin that is not its own it writes
+  xEdit's two conflict levels and the plugins that hold the record. Its names were checked against the script
+  engine's (WHY§34). ModTrap loads the whole active load order for it, not a cut-down list: who else changes a
+  record cannot be known from the new plugin's masters. On a large list that is a long load, and the page says so.
+- METHOD (reading it): "takes" needs both another overriding plugin before it and xEdit's level "conflict" or
+  higher; where plugins override the same record without a conflict, nothing is lost. Whether the plugin taken
+  from or lost to was made by a tool is told by the same marks as DESIGN§13. ModTrap lists and explains; it does
+  not write a patch. Ruled out for now: merging records automatically, which is what the patchers exist for and
+  goes wrong quietly when done blindly.
+- METHOD (tools): before the start ModTrap notes size and time of the files in the tool's output mod, in
+  `overwrite`, and of the plugins that tool made; after the tool has closed it says which were written, and reads
+  the modlist again. "None changed" is said plainly: the tool may have been closed without running.
+- LIKELY: MO2's command waits for the tool (MO01§3), and where ModTrap can see running programs it also waits for
+  the tool's own program to be gone. Not proven on a real PC, like every start through MO2 so far.
+- FACT: tested with the stand-ins (the record report read and sorted; a run through the stand-in xEdit with the
+  plugin unchanged; a tool that writes, one that does not, one at a time, stopping), and the whole flow driven in
+  a browser on an invented list: drop, add, record check, start the tool.
