@@ -84,6 +84,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 59 | 2026-11-21 | The first real demaster: four big files done, one left; "Demaster Selected" now goes in one go; a row click shows a mod and what is tied to it | FACT | #xedit #page #safety #process |
 | 60 | 2026-11-21 | A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go | METHOD | #page #safety #process |
 | 61 | 2026-11-21 | Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date | FACT | #xedit #page #steps #safety #process |
+| 62 | 2026-11-21 | New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed | METHOD | #page #safety #process |
 
 ## Entries
 
@@ -1337,3 +1338,20 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   run and opens at their end.
 - Shown in a browser on the invented list: the question box, the steps going and then done with the mod still
   ticked, and the out-of-date note.
+
+### 62. New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed
+
+`2026-11-21` · METHOD · `#page #safety #process` · refs: DESIGN§6.5, DESIGN§8, MT14, WHY§46, WHY§59, WHY§61
+
+- The owner, with a picture: "when I press revert for a demaster, the ModTrap won't update right away, it will
+  keep showing the next step to 'put them in place'."
+- FACT: the card belonged to a later demaster that was still waiting to be put in place (the one with nothing to
+  put, WHY§61). Revert took back the earlier one and cleared only that one's card; the waiting one stayed, and
+  offered plugins made for a modlist that no longer was.
+- METHOD: new plugins that wait were made for the modlist as it was read then. They are dropped, with a line in
+  the log, when the modlist is read again for any reason (a Revert, an add, a Rescan, a change in MO2), and on
+  "Not now", which the waiting card now has. Nothing of them was ever in the modlist; their files stay in the
+  job's folder. A stopped demaster's card can be closed. In the one go of WHY§59 nothing waits: it is put in
+  place at once.
+- Shown in a browser on the invented list: after Revert the page shows "reverted" and nothing else within a
+  quarter of a second.

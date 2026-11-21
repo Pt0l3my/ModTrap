@@ -495,7 +495,12 @@ function renderDemaster(force) {
   if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
     el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone; the Log tab shows its lines. When every new plugin is checked, ModTrap puts them in place." })));
   if (d && d.state === "failed") cards.push(el("div", { class: "card" }, el("h2", { text: "The demaster stopped" }),
-    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." })));
+    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." }),
+    el("div", { class: "actions" }, (() => {
+      const ok = el("button", { type: "button", text: "Close this" });
+      ok.addEventListener("click", () => demasterCall("/api/demaster/drop", {}));
+      return ok;
+    })())));
   if (d && d.state === "verified") {
     const closed = d.mo2_closed === true;
     const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: d.mo2_closed == null });
@@ -509,7 +514,12 @@ function renderDemaster(force) {
       d.plan.needs_you.length ? el("p", { class: "would-needs", text: "Left to you: " + d.plan.needs_you.join(", ") + ". " + d.plan.notes.join(" ") }) : null,
       el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
         d.mo2_closed === false ? "MO2 is open. An open MO2 writes its own lists back over ModTrap's, so it must be closed for this: press the button and ModTrap asks whether to close it for you." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
-      el("div", { class: "actions" }, put)));
+      el("div", { class: "actions" }, put, (() => {
+        const not = el("button", { type: "button", text: "Not now" });
+        not.title = "Drops these new plugins. Nothing of them is in your modlist; “Demaster Selected” makes them again.";
+        not.addEventListener("click", () => demasterCall("/api/demaster/drop", {}));
+        return not;
+      })())));
   }
   if (d && d.state === "installed" && d.check) cards.push(el("div", { class: "card" }, el("h2", { text: d.check.ok ? "The demaster is in place, and the load order is clean" : "The demaster is in place, with something to look at" }),
     d.check.new_problems.length ? el("ul", {}, ...d.check.new_problems.map((x) => el("li", { class: "would-needs", text: x[0] + " needs " + x[1] + ", which is " + (x[2] === "inactive" ? "not active" : "missing") }))) : null,
