@@ -193,7 +193,7 @@ function currentUi() {
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
-    adding: [...(state.adding || [])],
+    adding: [...(state.adding || [])], staged: [...(state.staged || [])],
   };
 }
 
@@ -223,6 +223,9 @@ function applyUi(ui) {
     state.stepsDone = ui.stepsDone && typeof ui.stepsDone === "object" ? ui.stepsDone : {};
     state.stepsText = "";
     state.adding = (Array.isArray(ui.adding) ? ui.adding : []).filter((n) => { const m = findMod(n); return m && m.kind === "mod"; });
+    state.staged = (Array.isArray(ui.staged) ? ui.staged : []).filter((x) => typeof x === "string").slice(0, 20);
+    state.stagedInfo = {};
+    state.uploads = [];
     state.addNotes = [];
     state.addText = "";
     renderAddPicked();
@@ -897,18 +900,35 @@ function addCandidate(name) {
   return true;
 }
 
+const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"],
+  installer: ["has an installer", "warn"], failed: ["not taken in", "bad"] };
+
 function renderAddPicked() {
   const box = $("add-picked");
   const list = state.adding || [];
-  box.hidden = !list.length;
+  const staged = state.staged || [];
+  const ups = state.uploads || [];
+  const n = list.length + staged.length + ups.length;
+  box.hidden = !n;
   const badge = $("add-count");
-  badge.hidden = !list.length;
-  badge.textContent = list.length;
-  box.replaceChildren(el("span", { class: "dim", text: "To add:" }), ...list.map((n) => {
-    const x = el("button", { type: "button", title: "Take “" + n + "” off this list. Nothing in MO2 changes.", "aria-label": "Take " + n + " off the list", text: "×" });
-    x.addEventListener("click", () => { state.adding = state.adding.filter((y) => y !== n); renderAddPicked(); saveUi(); pollAdd(true); });
-    return el("span", { class: "pick" }, modLink(n), x);
-  }));
+  badge.hidden = !n;
+  badge.textContent = n;
+  box.replaceChildren(el("span", { class: "dim", text: "To add:" }), ...list.map((name) => {
+    const x = el("button", { type: "button", title: "Take “" + name + "” off this list. Nothing in MO2 changes.", "aria-label": "Take " + name + " off the list", text: "×" });
+    x.addEventListener("click", () => { state.adding = state.adding.filter((y) => y !== name); renderAddPicked(); saveUi(); pollAdd(true); });
+    return el("span", { class: "pick" }, modLink(name), x);
+  }), ...staged.map((id) => {
+    const info = (state.stagedInfo || {})[id] || { name: "…", state: "unpacking", archive: "" };
+    const [word, cls] = STAGED_WORDS[info.state] || [info.state, ""];
+    const x = el("button", { type: "button", title: "Take it off this list. ModTrap removes its own unpacked copy; nothing in MO2 changes.", "aria-label": "Take " + info.name + " off the list", text: "×" });
+    x.addEventListener("click", async () => {
+      try { await api("/api/add/forget", { id: id }); } catch (e) { toast(e.message); return; }
+      state.staged = state.staged.filter((y) => y !== id);
+      renderAddPicked(); saveUi(); pollAdd(true);
+    });
+    return el("span", { class: "pick", title: info.archive ? "From " + info.archive : "" }, el("span", { text: info.name }), el("span", { class: "tag " + cls, text: word }), x);
+  }), ...ups.map((u) => el("span", { class: "pick" }, el("span", { text: u.name }),
+    el("span", { class: "tag warn", text: u.pct == null ? "copying…" : "copying " + u.pct + "%" }))));
 }
 
 function addMatches() {
@@ -930,18 +950,62 @@ function addMatches() {
   box.hidden = false;
 }
 
-// Dropped files and folders, by their names: the mods MO2 installed from them (DESIGN§16.1).
-async function dropMods(names) {
+// Dropped files and folders (DESIGN§16.1). What MO2 has installed is found by name; an archive MO2 does not have
+// is taken in: read in MO2's Downloads if it lies there, or else sent to ModTrap, which unpacks it in its own folder.
+const ARCHIVE_NAME = /\.(7z|zip|rar)$/i;
+
+function sendArchive(file) {
+  const up = { name: file.name, pct: 0 };
+  state.uploads = (state.uploads || []).concat(up);
+  renderAddPicked();
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "/api/add/upload?name=" + encodeURIComponent(file.name));
+    x.setRequestHeader("X-ModTrap-Token", TOKEN);
+    x.setRequestHeader("Content-Type", "application/octet-stream");
+    x.upload.onprogress = (ev) => { if (ev.lengthComputable) { up.pct = Math.floor(100 * ev.loaded / ev.total); renderAddPicked(); } };
+    const done = () => { state.uploads = state.uploads.filter((u) => u !== up); renderAddPicked(); };
+    x.onload = () => {
+      done();
+      let data = {};
+      try { data = JSON.parse(x.responseText); } catch (e) { /* no answer to read */ }
+      if (x.status === 200) resolve(data); else reject(new Error(data.error || (x.status === 413 ? "that file is larger than ModTrap takes in" : "the file was not accepted (" + x.status + ")")));
+    };
+    x.onerror = () => { done(); reject(new Error("the file did not reach ModTrap")); };
+    x.send(file);
+  });
+}
+
+async function dropMods(drops) {
   showTab("add");
+  drops = drops.slice(0, 50);
   try {
-    const d = await api("/api/add/resolve", { items: names.slice(0, 50).map((n) => ({ name: n })) });
+    const d = await api("/api/add/resolve", { items: drops.map((x) => ({ name: x.name })) });
     const notes = [];
     let added = 0;
-    for (const it of d.items) {
-      if (!it.mods.length) { notes.push({ name: it.name, text: it.how, bad: true }); continue; }
-      for (const m of it.mods) if (addCandidate(m)) added++;
-      if (!it.sure) notes.push({ name: it.name, text: "Taken to be the mod “" + it.mods[0] + "”, because " + it.how + ". Take it off the list if that is not the one." });
-      else if (it.mods.length > 1) notes.push({ name: it.name, text: "MO2 installed " + it.mods.length + " mods from this file: all of them are on the list. Take off the ones you do not mean." });
+    for (let i = 0; i < d.items.length; i++) {
+      const it = d.items[i];
+      const file = drops[i] && drops[i].file;
+      if (it.mods.length) {
+        for (const m of it.mods) if (addCandidate(m)) added++;
+        if (!it.sure) notes.push({ name: it.name, text: "Taken to be the mod “" + it.mods[0] + "”, because " + it.how + ". Take it off the list if that is not the one." });
+        else if (it.mods.length > 1) notes.push({ name: it.name, text: "MO2 installed " + it.mods.length + " mods from this file: all of them are on the list. Take off the ones you do not mean." });
+        continue;
+      }
+      if (!file || !ARCHIVE_NAME.test(it.name)) {
+        notes.push({ name: it.name, bad: true, text: file ? "ModTrap takes in .zip, .7z and .rar archives, and mods MO2 has installed. This is neither." :
+          "MO2 has no mod of this name. Drop the mod's archive (.zip, .7z or .rar) instead of a folder." });
+        continue;
+      }
+      if ((state.staged || []).length + (state.adding || []).length >= 20) { notes.push({ name: it.name, bad: true, text: "Twenty mods at a time is the most ModTrap analyses." }); continue; }
+      try {
+        const rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
+        state.staged = (state.staged || []).concat(rec.id);
+        state.stagedInfo = Object.assign({}, state.stagedInfo, { [rec.id]: rec });
+        added++;
+        renderAddPicked();
+        saveUi();
+      } catch (e) { notes.push({ name: it.name, bad: true, text: "Not taken in: " + e.message + "." }); }
     }
     state.addNotes = notes;
     state.addText = "";
@@ -992,7 +1056,7 @@ function addModCard(x, place) {
   const carries = Object.keys(x.kinds).length ? kindsText(x.kinds) : "no files";
   return el("div", { class: "card" },
     el("div", { class: "card-head" }, el("h2", {}, modLink(x.name),
-      el("span", { class: "tag " + (x.enabled ? "good" : ""), text: x.enabled ? "enabled, priority " + x.priority : "installed, not enabled" }))),
+      el("span", { class: "tag " + (x.enabled ? "good" : x.staged ? "warn" : ""), text: x.enabled ? "enabled, priority " + x.priority : x.staged ? "unpacked by ModTrap, not in MO2 yet" : "installed, not enabled" }))),
     el("p", { class: "dim", text: "Brings " + carries + (x.cut ? " (the listing was cut short: it is a very large mod)" : "") + "." }),
     x.enabled ? null : el("p", {}, "Its place among the mods: " + where + "."),
     ...plugs,
@@ -1035,19 +1099,26 @@ function addStepCard(st, d) {
 
 function renderAdd(d) {
   const box = $("add-report");
-  const notes = state.addNotes || [];
+  const notes = (state.addNotes || []).concat((d.staged || []).filter((r) => r.note).map((r) => ({ name: r.archive, text: r.note, bad: r.state !== "ready" })));
   const noteCard = notes.length ? el("div", { class: "card add-notes" }, el("h2", { text: "About what you dropped" }),
     el("ul", {}, ...notes.map((n) => el("li", {}, el("span", { class: "mono", text: n.name }), ": " + n.text)))) : null;
-  if (!(state.adding || []).length) {
+  if (!(state.adding || []).length && !(state.staged || []).length && !(state.uploads || []).length) {
     $("add-summary").textContent = "";
     box.replaceChildren(...[noteCard, el("div", { class: "card" }, el("h2", { text: "Add a mod to this modlist, safely" }),
-      el("p", { text: "Install the mod in MO2 as you always do, and leave it disabled. Then find it in the box above, or drop its archive or its folder on this page. ModTrap reads it against the whole modlist and tells you:" }),
+      el("p", { text: "Drop the mod's archive (.zip, .7z or .rar) anywhere on this page. ModTrap unpacks it in its own work folder, not in your modlist, reads it against the whole modlist and tells you:" }),
       el("ul", {},
         el("li", { text: "what it needs: masters that are missing, switched off or in a disabled mod, and whether the load order has room;" }),
         el("li", { text: "where it should go, among the mods and in the load order, and why: after everything made by hand, before what the modlist's tools made;" }),
         el("li", { text: "which files of which mods it would replace there, and which it would lose, with the kinds that go wrong quietly pointed out;" }),
         el("li", { text: "which of the modlist's tools must run again, and every step in order." })),
-      el("p", { class: "dim", text: "ModTrap only reads here: nothing in MO2 changes. Putting the mod in its place for you, with a safe folder and Revert, comes with the part that is still switched off." }))].filter(Boolean));
+      el("p", { class: "dim", text: "A mod MO2 has already installed can be found by name in the box above instead. A mod whose installer asks which parts you want is installed in MO2 first, for now." }),
+      el("p", { class: "dim", text: "Nothing in MO2 changes yet. Putting the mod into MO2 and in its place for you, with a safe folder and Revert, is the part that is still switched off." }))].filter(Boolean));
+    return;
+  }
+  if (!d.looking && !(d.mods || []).length && !d.failed) {
+    $("add-summary").textContent = d.unpacking || (state.uploads || []).length ? "Unpacking…" : "";
+    box.replaceChildren(...[noteCard, d.unpacking || (state.uploads || []).length ? el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Taking the archive in…"),
+      el("p", { class: "dim", text: "It is copied into ModTrap's own work folder and unpacked there. A large mod takes a while; nothing in your modlist is being changed." })) : null].filter(Boolean));
     return;
   }
   if (d.looking) {
@@ -1075,13 +1146,19 @@ function renderAdd(d) {
 async function pollAdd(force) {
   if (state.status !== "ready") return;
   const mods = (state.adding || []).slice();
-  const key = mods.join("|") + "#" + state.loaded;
+  const staged = (state.staged || []).slice();
+  const key = mods.join("|") + "#" + staged.join("|") + "#" + state.loaded;
   if (!force && key === state.addKeySeen && !state.addLooking) return;
   try {
-    const d = mods.length ? await api("/api/add", { mods: mods }) : { looking: false, mods: [], steps: [] };
+    const d = mods.length || staged.length ? await api("/api/add", { mods: mods, staged: staged }) : { looking: false, mods: [], steps: [] };
     state.addKeySeen = key;
-    state.addLooking = d.looking;
-    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []);
+    state.addLooking = d.looking || d.unpacking;
+    const info = {};
+    for (const r of d.staged || []) info[r.id] = r;
+    const infoText = JSON.stringify(info);
+    if (d.gone && d.gone.length) { state.staged = state.staged.filter((id) => !d.gone.includes(id)); saveUi(); }
+    if (infoText !== JSON.stringify(state.stagedInfo || {}) || (d.gone && d.gone.length)) { state.stagedInfo = info; renderAddPicked(); }
+    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length;
     if (text !== state.addText) { state.addText = text; renderAdd(d); }
   } catch (e) { /* the next round tries again */ }
 }
@@ -1271,7 +1348,9 @@ function dropped(ev) {
   // The entries must be taken while the drop event is still being handled.
   const items = dt.items ? Array.from(dt.items).filter((i) => i.kind === "file") : [];
   const entries = items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)).filter(Boolean);
-  const names = entries.length ? entries.map((e) => e.name) : Array.from(dt.files || []).map((f) => f.name);
+  const files = Array.from(dt.files || []);
+  const names = entries.length ? entries.map((e, i) => ({ name: e.name, file: e.isDirectory ? null : files[i] || null }))
+    : files.map((f) => ({ name: f.name, file: f }));
   const ready = state.status === "ready";             // a modlist is open: what is dropped may be a mod to add
   const entry = entries.length === 1 ? entries[0] : null;
   if (entry && entry.isDirectory) {
@@ -1293,7 +1372,7 @@ function dropped(ev) {
 let dragDepth = 0;
 const dragOn = (yes) => {
   document.body.classList.toggle("dragging", yes);
-  $("drop-words").textContent = state.status === "ready" ? "Drop a mod's archive or folder here to add it, or another modlist's folder to open that" : "Drop your modlist folder here";
+  $("drop-words").textContent = state.status === "ready" ? "Drop a mod's archive here to add it, or another modlist's folder to open that" : "Drop your modlist folder here";
 };
 document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dragOn(true); });
 document.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; });

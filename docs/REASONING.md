@@ -63,6 +63,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 38 | 2026-11-20 | A Browse button: an in-page folder picker | METHOD | #page |
 | 39 | 2026-11-20 | The demaster built end to end against a stand-in, and kept switched off | METHOD | #xedit #mo2 #safety #process |
 | 40 | 2026-11-21 | Adding mods: what is built, the placing rule, and what was ruled out | METHOD | #adding #mo2 #page #tools |
+| 41 | 2026-11-21 | A dropped archive is unpacked by ModTrap itself, in its own folder | METHOD | #adding #mo2 #safety #licence |
 
 ## Entries
 
@@ -735,3 +736,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   written. The page was driven in a browser on that list.
 - Next, on the owner's PC: `python -m modtrap add` on a real mod, to see the timing of the shared-files search and
   whether the outputs it recognises are the real ones.
+
+### 41. A dropped archive is unpacked by ModTrap itself, in its own folder
+
+`2026-11-21` · METHOD · `#adding #mo2 #safety #licence` · refs: MT21, MT9, MT14, DESIGN§16.1, DESIGN§16.8, DESIGN§8, MO01§8, MO01§7, WHY§30, WHY§36, WHY§40
+
+- The owner corrected WHY§40's first choice the same day: the mod is to be dropped on ModTrap, which then does the
+  rest (MT21's note). WHY§40 had "MO2 installs"; that entry stands as written, and this one replaces that point.
+- FACT: MO2 cannot be asked from outside to install an archive (MO01§8). So "drop it and ModTrap does the rest"
+  means ModTrap unpacks.
+- METHOD: a page does get a dropped file's bytes, though not its path (WHY§30). They are sent to ModTrap's own
+  server on this PC and written straight to the session's folder, never held in memory; an archive that already
+  lies in MO2's Downloads is read there instead, without a copy.
+- METHOD: `.zip` with Python's own reader. `.7z` and `.rar`, which most mods come as, through the owner's installed
+  7-Zip: called, not contained, as MO2 and xEdit are. Ruled out for now: taking third-party unpacking code into
+  ModTrap (a dependency to vet and list, and it would still not read `.rar`). SPECULATION: Windows' own `tar` may
+  serve where 7-Zip is not installed; not tried.
+- METHOD (safety): an archive is untrusted. Its kind is read from its first bytes; every name is checked before
+  anything is written (no absolute path, no drive, no step upwards, no name Windows cannot hold); links and
+  password-protected archives are refused; the unpacked size and file count are capped and the disk's free room
+  is checked; after 7-Zip has run, the result is walked again for links. A refusal leaves nothing behind.
+- METHOD: nothing of this touches the modlist. The unpacked mod lies in the session's folder and is analysed
+  there, as a mod MO2 does not have yet. Copying it into MO2's mods folder is a write to the instance and belongs
+  to the part that is switched off (WHY§36, DESIGN§16.8), even though it only adds.
+- An installer that asks questions (a `fomod` folder, or several folders to choose from) is recognised and handed
+  to MO2 for now. LIKELY: the installer's description file is plain XML naming the choices and the files each
+  installs, so ModTrap can ask them on its own page; that is the next piece, and needs reading that format first.
+- FACT: tested here with zips for real and with a stand-in for 7-Zip; the page was driven in a browser with a real
+  upload. Not proven: the call to the real 7-Zip (its switches and the shape of its listing are from memory of its
+  documentation, not from a run), and large archives on the owner's PC.

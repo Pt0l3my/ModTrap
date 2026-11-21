@@ -436,3 +436,10 @@ freedom)."
 - **Nothing is written yet.** The analysis and the steps only read. Putting a mod in its place joins the part that
   is switched off (WHY§36, WHY§39), with the same safe folder, history and Revert, and a mod added by ModTrap is
   taken out again by disabling it, never by deleting it (MT9).
+
+**Later, 2026-11-21: the owner on "MO2 installs".** "Well, what I wanted was that the user jusf drops a mod in
+ModTrap, then ModTrap does the evaluation, compiles steps, and does most of the work on its own except for some
+tools like synthesis that is not shipped with ModTrap. Can that be done?" So the first point above is replaced:
+**the owner drops the mod's archive on ModTrap, and ModTrap takes it from there**: it unpacks the archive, analyses
+it, compiles the steps and carries out all it can; left to the owner are the tools ModTrap does not contain, an
+installer's questions, and playing (DESIGN§16.1, DESIGN§16.8, WHY§41). The other two points stand.

@@ -10,9 +10,10 @@ each plugin's masters and what needs it, and, for the mods you tick, everything 
 then starts your own xEdit through MO2 with ModTrap's script, which only reads, and lists what a demaster would take
 out of each dependant plugin. A Steps tab lists everything the demaster takes, to do by hand for now. The step in which ModTrap does it for you ("Demaster Selected") is written but switched off until it has been proven on a real modlist.
 
-ModTrap also helps to **add** a mod: install it in MO2 and leave it disabled, then find it on the Add mods tab or
-drop its archive there. ModTrap tells what it needs, where it should go among the mods and in the load order, which
-files of which mods it would replace, which tools must run again, and the steps in order. This too only reads.
+ModTrap also helps to **add** a mod: drop the mod's archive on the page. ModTrap unpacks it in its own work folder
+(a .7z or .rar needs 7-Zip installed), and tells what the mod needs, where it should go among the mods and in the
+load order, which files of which mods it would replace, which tools must run again, and the steps in order. Putting
+the mod into MO2 for you is written into the design but not built: for now nothing in your modlist changes.
 
 To try it (Windows, Python 3.10 or newer): download this repository, then double-click `ModTrap.cmd`, or run
 

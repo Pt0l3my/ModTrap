@@ -86,3 +86,11 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
   (`settings.cpp:1711`, `shared/appconfig.inc:5`).
 - **METHOD.** ModTrap reads that one line of each mod's `meta.ini`, and takes the file name after the last slash, to
   tell which mod a dropped archive was installed as (DESIGN§16.1).
+
+## 8. No command to install an archive
+
+- **FACT.** What MO2's command line takes beside its options is a shortcut, a download link of the Nexus site
+  (`nxm:`), or a program to run (`commandline.cpp:163-174`, `277-281`); the `run` and `refresh` commands are §3's.
+  There is no way to hand MO2 an archive file to install.
+- **METHOD.** So a dropped archive is unpacked by ModTrap (DESIGN§16.1). MO2 takes a folder that appears in its
+  mods folder as a mod, disabled, at its next refresh (§2).

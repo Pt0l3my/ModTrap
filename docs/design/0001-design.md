@@ -311,17 +311,29 @@ history (§12).
 Beside taking mods out, ModTrap helps to put extra mods in. The owner's own way is to add a mod last and its plugin
 last; that works until the new files or records land after something that was meant to stay last, or the plugin
 needs something that is not there. This section is what ModTrap does about it. Built so far: §16.1 to §16.4, §16.6
-and §16.7, all read-only (WHY§40). Not built: §16.5 and §16.8.
+and §16.7, none of which changes a modlist (WHY§40, WHY§41). Not built: §16.5 and §16.8.
 
 ### 16.1 What is dropped
 
-- MO2 installs the mod, as always, and it is left disabled. ModTrap does not unpack archives or run a mod's
-  installer: MO2 does both well, and an installer asks questions only the owner can answer (WHY§40).
-- On the Add mods tab the owner finds the mod by name, or drops its archive or its folder on the page. A page learns
-  only the name of what was dropped, so the name is matched: a folder against the mods' names, an archive against
-  the file each mod was installed from (MO01§7). A file MO2 has downloaded but not installed, or does not know, is
-  said so, with what to do.
-- Up to twenty mods are analysed together; the list is kept in the session (§15).
+- **The owner drops the mod's archive on the page, and ModTrap takes it from there** (MT21's note of 2026-11-21,
+  WHY§41). MO2 cannot be told from outside to install an archive (MO01§8), so ModTrap unpacks it itself: in the
+  session's own folder (§15), never in the modlist. If the archive lies in MO2's Downloads it is read there;
+  otherwise its bytes are copied to the session's folder as they arrive.
+- A `.zip` is unpacked by ModTrap's own code; `.7z` and `.rar` by the owner's installed 7-Zip, which ModTrap calls
+  and does not contain. An archive is someone else's file: before anything is written, every name in it is checked
+  (none may leave its folder; no links), and its file count and unpacked size are capped; the kind of archive is
+  read from the file, not from its name.
+- ModTrap then finds the folder in it that would become the mod: through wrapping folders and a `Data` folder, to
+  the one that holds plugins or the game's usual folders. The mod's name is the archive's, without the numbers a
+  download site adds.
+- **An installer that asks questions.** An archive with a `fomod` installer, or with several folders to choose
+  from, is said so and handed to MO2 for now: the owner installs it there, and ModTrap carries on from the
+  installed mod. ModTrap asking those questions on its own page is the next piece (§16.8).
+- The unpacked mod is analysed where it lies (§16.2 to §16.7), exactly as it would be once in MO2.
+- A mod MO2 has already installed is found by name, or by dropping its folder or the archive it was installed from
+  (MO01§7): a page learns only the name of what was dropped, so the name is matched.
+- Up to twenty mods are analysed together. The list, and what was taken in, are kept in the session (§15); taking
+  an archive off the list removes ModTrap's own copy of it and nothing else.
 
 ### 16.2 What the mod needs
 
@@ -382,8 +394,20 @@ NAME` prints the same report.
 
 ### 16.8 Carrying the steps out (not built)
 
-- With MO2 closed (§8), and through the same safe folder, history and Revert as a demaster (§11, §12): move the mod
-  to its place and enable it, put its plugins in their place and activate them. "Take it out again" disables the
-  mod and deactivates its plugins; nothing is deleted (MT9).
-- Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting
-  tool's rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.
+What "Add it" is to do on its own, in order, each step in the history (§12) and undone by Revert (§11):
+
+1. With MO2 closed (§8): copy the unpacked mod into MO2's mods folder under its name, with a `meta.ini` naming the
+   archive (MO01§7), so that MO2 knows it as an installed mod.
+2. Put it in its place in the mod list and enable it; put its plugins in their place and activate them (§16.3).
+3. The health check (§3).
+4. Start xEdit through MO2 for the read-only record check (§16.5), and list what it finds.
+5. For each tool that must run again (§16.6): start it through MO2 for the owner, who works it; ModTrap waits and
+   checks the tool's output afterwards.
+
+Left to the owner: an installer's questions (asked on ModTrap's own page, once that is built: the installer's
+description file names the choices and what each installs), the tools themselves, a patch where the record check
+shows one is needed, and playing. "Take it out again" disables the mod and deactivates its plugins; nothing is
+deleted (MT9).
+
+Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting tool's
+rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.

@@ -248,11 +248,25 @@ def tail_start(m: model.Model, memo: dict, masters: bool) -> tuple[int, list[str
 
 # --- the analysis ---------------------------------------------------------------------------------------------------
 
-def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float = CONFLICT_SECONDS) -> dict:
-    """Everything ModTrap can tell about adding these mods without xEdit."""
+def staged_mod(name: str, folder: Path) -> Mod:
+    """A mod ModTrap has unpacked in its own work folder and MO2 does not have yet (DESIGN§16.1)."""
+    try:
+        plugs = tuple(sorted((e.name for e in os.scandir(folder) if plugin.is_plugin_name(e.name) and e.is_file()),
+                             key=fold))
+    except OSError:
+        plugs = ()
+    return Mod(name, -1, False, "mod", folder, plugs, listed=False)
+
+
+def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float = CONFLICT_SECONDS,
+            staged: list[Mod] | tuple[Mod, ...] = ()) -> dict:
+    """Everything ModTrap can tell about adding these mods without xEdit. `staged` are mods unpacked in
+    ModTrap's work folder, not yet in MO2: they are read where they lie."""
     inst = m.instance
     memo: dict = {}
     cands = [x for x in (inst.mod(n) for n in names) if x is not None and x.kind == "mod" and x.folder is not None]
+    waiting = {id(x) for x in staged}
+    cands += list(staged)
     adding = {fold(x.name) for x in cands}
     place = mod_place(m, {fold(x.name) for x in cands if not x.enabled}, memo)
     turn = {x.name: i for i, x in enumerate(cands)}
@@ -386,6 +400,7 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
         wins.sort(key=lambda e: -e["files"])
         loses.sort(key=lambda e: -e["files"])
         out_mods.append({"name": x.name, "priority": x.priority, "enabled": x.enabled, "listed": x.listed,
+                         "staged": id(x) in waiting,
                          "files": len(files), "cut": cut, "kinds": kinds, "plugins": plugs,
                          "wins": wins, "loses": loses})
 
@@ -469,6 +484,16 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
     place = rep["place"]
     several = len(mods) > 1
 
+    # 0. Mods ModTrap has unpacked, which MO2 does not have yet.
+    unpacked = [x for x in mods if x.get("staged")]
+    if unpacked:
+        step("install", "ModTrap", "Put the unpacked mod%s into MO2" % ("s" if len(unpacked) > 1 else ""),
+             "ModTrap has unpacked %s in its own work folder and read %s there; MO2 does not have %s yet. Putting "
+             "a mod into MO2's mods folder, disabled, is the first thing ModTrap does once its part that changes a "
+             "modlist is switched on. Until then: install the same archive in MO2 yourself and leave it disabled; "
+             "everything below already holds for it." % (("them", "them", "them") if len(unpacked) > 1 else ("it", "it", "it")),
+             "to do", [{"text": "%s: unpacked, %d file(s)" % (x["name"], x["files"]), "tag": "not in MO2 yet"} for x in unpacked])
+
     # 1. What the mods need.
     needs: list[dict] = []
     for x in mods:
@@ -512,7 +537,7 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
          "shares with them), and before what the modlist's tools made, which is made again afterwards. In MO2, "
          "with the list sorted by priority: drag the mod %s, then tick it. ModTrap will do this itself once that "
          "part is switched on." % where,
-         "done" if not off else "waiting" if needs else "to do", items,
+         "done" if not off else "waiting" if needs or unpacked else "to do", items,
          note=("Taken as tools' output, staying after it: " + ", ".join("%s (%s)" % (o["mod"], o["why"])
                                                                        for o in place["outputs"][:6])) if place["outputs"] else
          "No tool's output was recognised at the end of MO2's list, so the mod goes last.")
