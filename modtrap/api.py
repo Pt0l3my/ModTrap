@@ -76,6 +76,27 @@ class HeaderCache:
         return got  # type: ignore[return-value]
 
 
+def code_mark() -> str:
+    """A mark of ModTrap's own files as they are on disk now: the program, the page, the scripts, the data. The
+    program is read once, at the start; the scripts and the page are read from disk each time. After an update of
+    the files without a restart the two are of different versions (WHY§67): this mark tells."""
+    root = Path(__file__).parent
+    h = hashlib.sha256()
+    for f in sorted(root.rglob("*")):
+        if f.is_file() and f.suffix.lower() in (".py", ".pas", ".js", ".html", ".css", ".json") and "__pycache__" not in f.parts:
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            h.update(("%s|%d|%d\n" % (f.relative_to(root).as_posix(), st.st_size, st.st_mtime_ns)).encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
+STARTED_WITH = code_mark()
+NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
+                                "/api/demaster/install", "/api/add/run", "/api/probe/start"))
+
+
 class Api:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -98,6 +119,8 @@ class Api:
         self.program_paths = dryrun.winauto.running_paths     # which MO2 is running (WHY§58); replaced in tests
         self.ask_close = dryrun.winauto.ask_to_close          # asks this modlist's MO2 to close; replaced in tests
         self._mo2_seen: tuple[float, dict] = (0.0, {})
+        self._mo2_ours = False                  # the MO2 that is running was started by ModTrap for a run (WHY§67)
+        self._code_seen: tuple[float, bool] = (0.0, False)
         self.poll = 1.0
         self.store = sessions.Store()
         self.session: sessions.Session | None = None
@@ -430,7 +453,7 @@ class Api:
             made = [r.path for r in m.plugins.values() if r.path is not None
                     and any(e.tool == name for e in adding.generated(m, r, memo))]
             try:
-                job = toolrun.ToolJob(inst, title, made, launcher=self.launcher, running=self.running, poll=self.poll)
+                job = toolrun.ToolJob(inst, title, made, launcher=self._launch, running=self.running, poll=self.poll)
             except toolrun.Refused as e:
                 raise Bad(str(e)) from None
 
@@ -461,7 +484,7 @@ class Api:
             try:
                 p = records.plan(m, mods)
                 base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
-                job = records.Job(m, p, records.new_job_dir(base), launcher=self.launcher, running=self.running,
+                job = records.Job(m, p, records.new_job_dir(base), launcher=self._launch, running=self.running,
                                   poll=self.poll, closer=self.closer, presser=self.presser)
             except (records.Refused, dryrun.Refused) as e:
                 raise Bad(str(e)) from None
@@ -552,7 +575,12 @@ class Api:
                             events.append(e)
             except OSError:
                 pass
-        return {"events": events[::-1][:2000], "total": len(events)}
+        out = {"events": events[::-1][:2000], "total": len(events), "jobs": [], "can_change": self.changes is not None}
+        if self.changes is not None:                    # the jobs themselves, standing or not (WHY§67)
+            out["jobs"] = ([dict(j, what="demaster") for j in self.changes.demaster_jobs()] +
+                           [dict(j, what="add") for j in self.changes.jobs()])
+            out["jobs"].sort(key=lambda j: j.get("when", ""), reverse=True)
+        return out
 
     def tool_stop(self) -> dict:
         if self.tooljob is None:
@@ -581,7 +609,7 @@ class Api:
             try:
                 p = dryrun.plan(m, self._mods(body))
                 base = self.store.dir(s.id) / "jobs" if s is not None else None
-                job = dryrun.Job(m, p, dryrun.new_job_dir(base), launcher=self.launcher, running=self.running,
+                job = dryrun.Job(m, p, dryrun.new_job_dir(base), launcher=self._launch, running=self.running,
                                  poll=self.poll, closer=self.closer, presser=self.presser)
             except dryrun.Refused as e:
                 raise Bad(str(e)) from None
@@ -996,6 +1024,21 @@ class Api:
 
     # --- MO2: open or closed, for this modlist (WHY§58) ---------------------------------------------------------------
 
+    def updated_on_disk(self) -> bool:
+        """Have ModTrap's own files changed since this ModTrap started? Looked at every few seconds."""
+        when, was = self._code_seen
+        if time.time() - when > 5:
+            was = code_mark() != STARTED_WITH
+            self._code_seen = (time.time(), was)
+        return was
+
+    def _launch(self, cmd: list[str], cwd: str):
+        """Starts MO2's command for a job. A MO2 that was not open before is then ModTrap's own for this run: it
+        closes by itself afterwards, and until it has, nothing asks the owner whether to close it (WHY§67)."""
+        if self.mo2()["state"] == "closed":
+            self._mo2_ours = True
+        return self.launcher(cmd, cwd)
+
     def mo2(self) -> dict:
         """Is MO2 open on this modlist? "open", "closed", or "unknown" (it cannot be told: then nothing that needs
         it closed is done). A MO2 of another modlist does not count: it has its own lists. Where it cannot be told
@@ -1008,12 +1051,47 @@ class Api:
             paths_now = None
         if paths_now is None:
             r = self.running(dryrun.MO2_EXE)
-            return {"state": "unknown" if r is None else "open" if r else "closed", "other": False}
-        if not paths_now:
-            return {"state": "closed", "other": False}
-        if not mine or any(dryrun.winauto.same_file(p, mine) for p in paths_now):
-            return {"state": "open", "other": False}
-        return {"state": "closed", "other": True}          # only the MO2 of another modlist is running
+            st = {"state": "unknown" if r is None else "open" if r else "closed", "other": False}
+        elif not paths_now:
+            st = {"state": "closed", "other": False}
+        elif not mine or any(dryrun.winauto.same_file(p, mine) for p in paths_now):
+            st = {"state": "open", "other": False}
+        else:
+            st = {"state": "closed", "other": True}         # only the MO2 of another modlist is running
+        if st["state"] == "closed":
+            self._mo2_ours = False
+        st["ours"] = st["state"] == "open" and self._mo2_ours
+        return st
+
+    def wait_mo2_gone(self, seconds: float = 45.0, poll: float = 0.5, ask_after: float = 5.0,
+                      owners_too: bool = False) -> bool:
+        """Waits for a MO2 that ModTrap itself started for a run to have gone, before a step that needs MO2 closed.
+        Its end-of-run message is closed as it shows, and after some seconds it is asked to close (never ended).
+        A MO2 the owner opened is left alone and not waited for, unless `owners_too`: the last step of a demaster
+        whose confirmed plan said MO2 would be closed for it (WHY§67). True when no MO2 of this modlist is open."""
+        m = self.model
+        exe = str(m.instance.root / dryrun.MO2_EXE) if m is not None else ""
+        start, asked = time.monotonic(), False
+        while True:
+            st = self.mo2()
+            if st["state"] != "open":
+                return st["state"] == "closed"
+            if not (st.get("ours") or owners_too):
+                return False
+            waited = time.monotonic() - start
+            if waited > seconds:
+                return False
+            try:
+                dryrun.winauto.close_message(dryrun.MO2_EXE)
+                if not asked and waited >= ask_after and exe:
+                    asked = True
+                    if self.ask_close(exe):
+                        log.info("MO2 was asked to close%s (as a click on its X does)",
+                                 ": ModTrap had started it for a run" if st.get("ours") else
+                                 " for the demaster's last step, as its plan said")
+            except Exception:
+                pass
+            time.sleep(poll)
 
     def mo2_closed(self) -> bool | None:
         st = self.mo2()["state"]
@@ -1027,6 +1105,7 @@ class Api:
             raise Bad("ModTrap is running something through MO2 right now; wait until it has ended")
         if self.mo2()["state"] != "open":
             return {"asked": False, "mo2": self.mo2()}
+        ours = self._mo2_ours
         asked = False
         try:
             asked = bool(self.ask_close(str(m.instance.root / dryrun.MO2_EXE)))
@@ -1034,7 +1113,8 @@ class Api:
             asked = False
         if not asked:
             raise Bad("MO2 could not be asked to close: close it yourself")
-        log.info("MO2 was asked to close, on your word (as a click on its X does)")
+        log.info("MO2 was asked to close%s (as a click on its X does)",
+                 ": ModTrap had started it for a run" if ours else ", on your word")
         self._mo2_seen = (0.0, {})
         return {"asked": True, "mo2": self.mo2()}
 
@@ -1050,6 +1130,7 @@ class Api:
             self.launcher([str(exe), "-p", m.instance.profile], str(m.instance.root))
         except OSError as e:
             raise Bad("MO2 could not be started: %s" % logbook.why(e)) from None
+        self._mo2_ours = False                  # this one is the owner's to close
         log.info("MO2 was started for you (profile '%s')", m.instance.profile)
         self._mo2_seen = (0.0, {})
         return {"started": True, "mo2": self.mo2()}
@@ -1058,6 +1139,7 @@ class Api:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "changes": self.changes is not None,
+                   "updated_on_disk": self.updated_on_disk(),
                    "save": self.saver.public(),
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
@@ -1208,6 +1290,10 @@ class Api:
         return 404, {"error": "not found"}
 
     def post(self, path: str, body: dict) -> tuple[int, object, Callable[[], None] | None]:
+        if path in NEEDS_SAME_VERSION and self.updated_on_disk():
+            raise Bad("ModTrap's own files have changed since it was started (an update). Quit ModTrap and start it "
+                      "again first: until then the program in memory and the scripts on disk are of different "
+                      "versions, and nothing is started.")
         if path == "/api/open":
             folder, profile = body.get("folder"), body.get("profile")
             if not isinstance(folder, str) or len(folder) > 1000:

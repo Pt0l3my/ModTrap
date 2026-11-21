@@ -89,6 +89,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 64 | 2026-11-21 | Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold | METHOD | #tools #steps #page #process |
 | 65 | 2026-11-21 | The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm | FACT | #tools #steps #xedit #process |
 | 66 | 2026-11-21 | Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all | DECIDED | #tools #steps #xedit #process |
+| 67 | 2026-11-21 | "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared | DECIDED | #process #page #mo2 #history |
 
 ## Entries
 
@@ -1461,3 +1462,40 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - For the owner's list as it stands (the mod demastered before this version): the tools wait. The page tells
   the owner so, and that the modlist's own guide for this mod says to run the behaviour tool and the patcher, and
   not the distant-view generator.
+- Later, 2026-11-21: the owner's next try showed the same step. The new script had run, but under the old
+  program: see WHY§67. This entry's method is still unproven on the owner's list.
+
+### 67. "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared
+
+`2026-11-21` · DECIDED · `#process #page #mo2 #history` · refs: MT9, MT15, MT17, DESIGN§5, DESIGN§7, DESIGN§12, WHY§58, WHY§60, WHY§66
+
+- The owner: "can you add job history tab to history page? these jobs that are done should be archived in a
+  separate page, and also add a button to clear session job history. currently the selection page just keeps
+  stacking jobs, including reverted ones, forever. No change, still wants dyndolod to run in steps. I also noticed
+  that at some point ModTrap keeps asking MO2 to be closed down, if it's part of demaster process, then let it
+  close or open MO2 automatically."
+- FACT (the owner's session file): the dry run's report carries the new script's header, yet its job file has none
+  of the lines the new program writes for the script, and the log has the earlier version's wording for tools.
+  The files had been replaced while ModTrap was running: the scripts and the page are read from disk at each use,
+  the program once, at the start. So a new script ran under an old program, and WHY§66 was not tried at all.
+- DECIDED: ModTrap takes a mark of its own files (names, sizes, times) when it starts and compares it when asked
+  to start a run, a demaster, an add, a revert or a tool. If the files have changed it starts nothing, and the
+  page says so at the top with a Quit button. Reading goes on. A mismatch of versions is worse than a pause.
+- FACT: a run through MO2 starts a MO2 of ModTrap's own, which takes some seconds to leave after xEdit is closed
+  (WHY§58). The page saw it open and asked the owner whether to close it, each time.
+- DECIDED: ModTrap remembers that the open MO2 is the one it started. The page then asks nothing, and the server
+  waits for it to go: it closes MO2's end-of-run message, and after five seconds asks it to close as a click on
+  its X does. Never by force.
+- DECIDED: in the one go (WHY§60) the plan the owner confirms now says that MO2 is closed for the last step if
+  it is open. So that step closes an open MO2 of this modlist without a second question, the same gentle way.
+  Outside the one go (Revert, an add, "Put them in place" pressed by hand) the question stays: there no plan
+  said so. ModTrap does not open MO2 again by itself: nothing it does needs MO2 open, and the page has the button.
+- DECIDED: the History tab lists the jobs of the session, demasters and adds, newest first, each with its state;
+  one still in place has its Revert there. The Selection tab and the Add mods tab show only what is in hand and
+  the jobs still in place, with a line that leads to the History tab for the rest.
+- DECIDED: "Clear job history" takes the jobs that no longer stand (reverted, or stopped) off the list. A job in
+  place is never cleared, since its Revert needs it. Nothing is deleted: the job folders, their safe folders and
+  the record of every change (MT15) stay on disk; a list of hidden names is all that is written.
+- Checked: tests for the mark, the waiting, and the clearing; in a browser on an invented list, with MO2 shown as
+  open: the one go asked nothing, the job was listed, reverted from the History tab and cleared.
+- Not checked: any of it on the owner's PC.

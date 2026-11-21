@@ -172,7 +172,12 @@ failure that names the folder xEdit read.
 MO2 must be closed only while ModTrap writes to the profile (§6.5 step 2, Re-enable and Revert): an open MO2 keeps
 the mod list in memory and writes it back (MO01§2). ModTrap checks whether this modlist's own MO2 is running,
 shows it on the page, and before such a step asks whether to close MO2; on yes it asks MO2 to close as a click on
-its X does, and waits. It never ends MO2 (WHY§58).
+its X does, and waits. It never ends MO2 (WHY§58). Two cases need no question (WHY§67): a MO2 that ModTrap itself
+started for a run and that is still leaving is waited for; and the last step of a demaster done in one go closes an
+open MO2 the same gentle way, because the plan the owner confirmed said it would.
+
+ModTrap notes its own files when it starts. If they change while it runs (an update), it starts nothing more and
+asks to be quit and started again: the scripts are read from disk, the program is not (WHY§67).
 
 Our script and the job file live in ModTrap's work folder, outside the instance's mods and outside xEdit's folder:
 nothing is installed into either.
@@ -256,6 +261,10 @@ instance:
   priority;
 - each change of order: the file, the old and new positions, with date and time;
 - each Revert.
+
+Above that record the History tab lists the session's jobs (demasters and adds), newest first, with their state;
+a job still in place has its Revert there. The other tabs show only the jobs still in place. **Clear job history**
+takes the jobs that no longer stand off the list; nothing is deleted, and the record itself is kept (WHY§67).
 
 Every disabled mod in the history has **Re-enable**: it enables the mod again at the priority it had, puts its
 plugins back at the positions recorded, and warns if a demastered dependant would not need it any more or if the
