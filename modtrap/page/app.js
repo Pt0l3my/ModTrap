@@ -32,6 +32,7 @@ async function mo2Closed() {
   let m = state.mo2;
   try { m = (await call("/api/state")).mo2 || m; } catch (e) { /* use what is known */ }
   if (!m || m.state !== "open") return true;         // closed; or it cannot be told, and the server then decides
+  if (m.ours) return true;                            // ModTrap's own MO2 of the last run, leaving: the server waits for it
   if (!await confirmBox("MO2 is open on this modlist. This step changes MO2's lists, and MO2 must be closed for it.\n\nClose MO2 now?")) return false;
   try { await call("/api/mo2/close", {}); } catch (e) { toast(e.message); return false; }
   for (let i = 0; i < 60; i++) {
@@ -445,7 +446,7 @@ function demasterChain() {
     else if (["failed", "stopped"].includes(job.state)) state.dmChain = "";
   }
   if (state.dmChain === "install" && d) {
-    if (d.state === "verified") { state.dmChain = ""; demasterCall("/api/demaster/install", {}, "In place. ModTrap is reading the modlist again."); }
+    if (d.state === "verified") { state.dmChain = ""; demasterCall("/api/demaster/install", { close_mo2: true }, "In place. ModTrap is reading the modlist again.", true); }
     else if (d.state === "failed") state.dmChain = "";
   }
 }
@@ -456,8 +457,9 @@ async function askDemasterPlan() {
   renderDemaster(true);
 }
 
-async function demasterCall(path, body, done) {
-  try { await api(path, body || {}); state.dmError = ""; if (done) toast(done); }
+async function demasterCall(path, body, done, noAsk) {
+  // In the one go the confirmed plan already said MO2 is closed for the last step: no second question (WHY§67).
+  try { await (noAsk ? call : api)(path, body || {}); state.dmError = ""; if (done) toast(done); }
   catch (e) { state.dmError = e.message; }
   state.dmPlan = null;
   state.gen = (state.gen || 0) + 1;
@@ -486,7 +488,7 @@ function renderDemaster(force) {
     const cancel = el("button", { type: "button", text: "Not now" });
     cancel.addEventListener("click", () => { state.dmPlan = null; renderDemaster(true); });
     cards.push(el("div", { class: "card installer" }, el("h2", { text: "What the demaster is about to do" }), planList(p),
-      el("p", { text: "First: copies of every plugin above and of the profile's three lists go into the job's safe folder. Then xEdit opens through MO2 with ModTrap's script, takes out of each plugin exactly what the dry run listed, in memory only, and writes each finished plugin as a new file in ModTrap's own folder. ModTrap checks every new file, and only then puts them in place: its own mod with the new plugins is added, the patches are switched off and the mod is disabled. This is the whole demaster, in one go; MO2 must be closed for the last part, and ModTrap asks if it is not. Revert undoes all of it." }),
+      el("p", { text: "First: copies of every plugin above and of the profile's three lists go into the job's safe folder. Then xEdit opens through MO2 with ModTrap's script, takes out of each plugin exactly what the dry run listed, in memory only, and writes each finished plugin as a new file in ModTrap's own folder. ModTrap checks every new file, and only then puts them in place: its own mod with the new plugins is added, the patches are switched off and the mod is disabled. This is the whole demaster, in one go. MO2 must be closed for the last part: if it is open, ModTrap closes it then, as a click on its X does (never by force). Revert undoes all of it." }),
       p.blocked ? el("p", { class: "would-needs", text: "Some plugins are left to you, so the mod itself will stay enabled until those no longer need it." }) : null,
       ...p.notes.map((n) => el("p", { class: "dim", text: n })),
       el("div", { class: "actions" }, go, cancel)));
@@ -532,7 +534,9 @@ function renderDemaster(force) {
         el("p", {}, again, el("span", { class: "dim", text: "  ModTrap reads the modlist afresh and takes up what is left. If the same plugin is left again, send “Save this session” (Log tab)." }))];
     })() : []),
     el("p", { class: "dim", text: "Open MO2 and look: the new mod is at the end of the list, the patches are unticked" + (d.check.disabled ? ", and the mod is disabled" : "") + ". The Steps tab shows what is left, such as tools to run again." })));
-  for (const j of ((d && d.jobs) || []).slice(0, 12)) {
+  const allJobs = (d && d.jobs) || [];
+  const earlier = allJobs.filter((j) => j.state !== "installed").length;
+  for (const j of allJobs.filter((x) => x.state === "installed").slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Revert" });
     undo.addEventListener("click", async () => {
       if (!await confirmBox("Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed? MO2 must be closed.")) return;
@@ -542,6 +546,11 @@ function renderDemaster(force) {
       " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
       el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
       ...((j.stale || []).length ? [el("p", { class: "message bad", text: "Made again since: " + j.stale.join(", ") + ". The original changed after ModTrap demastered it (a tool has probably made it again), and ModTrap’s older copy in “" + j.mod_name + "” still wins over it. Delete ModTrap’s copy of " + (j.stale.length > 1 ? "these plugins" : "this plugin") + " from that mod’s folder, then press Rescan and look at Health." })] : [])));
+  }
+  if (earlier) {
+    const go = el("button", { type: "button", class: "linkish", text: "the History tab" });
+    go.addEventListener("click", () => showTab("history"));
+    cards.push(el("p", { class: "dim" }, plural(earlier, "earlier job") + " that no longer " + (earlier === 1 ? "stands is" : "stand are") + " kept on ", go, "."));
   }
   box.hidden = !cards.length;
   box.replaceChildren(...cards);
@@ -690,12 +699,51 @@ async function pollHistory() {
     if (text === state.historyText) return;
     state.historyText = text;
     const box = $("history");
+    const jobCards = [];
+    if ((d.jobs || []).length) {
+      const gone = d.jobs.filter((j) => j.state !== "installed" && j.state !== "added").length;
+      const clear = el("button", { type: "button", text: "Clear job history", disabled: !gone });
+      clear.title = gone ? "Takes the jobs that no longer stand off this list. Jobs still in place stay; the list of changes below is not touched." : "Every job listed is still in place";
+      clear.addEventListener("click", async () => {
+        if (!await confirmBox("Take the " + plural(gone, "job") + " that no longer " + (gone === 1 ? "stands" : "stand") + " (reverted or stopped) off this list?\n\nJobs that are still in place stay, with their Revert. Nothing in your modlist changes, and the list of changes below is kept.")) return;
+        try { const r = await api("/api/jobs/clear", {}); toast(plural(r.cleared, "job") + " cleared."); } catch (e) { toast(e.message); }
+        state.historyText = ""; state.dmText = ""; state.addText = "";
+        pollHistory(); tick();
+      });
+      const row = (j) => {
+        const stands = j.state === "installed" || j.state === "added";
+        const what = j.what === "add" ? "added" : "demastered";
+        const tr = el("tr", {}, el("td", { class: "c-num", text: String(j.when || "").replace("T", " ") }),
+          el("td", {}, el("span", { class: "tag " + (stands ? "good" : ""), text: stands ? what + ", in place" : j.state === "reverted" ? what + ", reverted" : "stopped" })),
+          el("td", { text: (j.mods || []).join(", ") }),
+          el("td", { class: "dim", text: j.what === "add" ? "plugins: " + ((j.plugins || []).join(", ") || "none")
+            : "new plugins in “" + j.mod_name + "”: " + ((j.plugins || []).join(", ") || "none") + " · disabled: " + ((j.disabled || []).join(", ") || "none") + " · deactivated: " + plural((j.deactivated || []).length, "patch", "patches") }));
+        const cell = el("td", {});
+        if (stands && d.can_change) {
+          const undo = el("button", { type: "button", text: j.what === "add" ? "Take it out again" : "Revert" });
+          undo.addEventListener("click", async () => {
+            if (!await confirmBox(j.what === "add" ? "Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder?" : "Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed?")) return;
+            try { await api(j.what === "add" ? "/api/add/revert" : "/api/demaster/revert", { job: j.job }); toast("Put back as it was."); } catch (e) { toast(e.message); }
+            state.historyText = ""; state.dmText = ""; state.addText = ""; state.gen = (state.gen || 0) + 1;
+            await tick(); pollHistory();
+          });
+          cell.append(undo);
+        }
+        tr.append(cell);
+        return tr;
+      };
+      jobCards.push(el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Jobs of this session" }), clear),
+        el("p", { class: "dim", text: "Every demaster and every add ModTrap carried out here, newest first. A job in place can be undone from here or from its own tab; one that no longer stands is only kept for looking at." }),
+        el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "State" }), el("th", { text: "Mods" }), el("th", { text: "What it did" }), el("th", {}))),
+          el("tbody", {}, ...d.jobs.map(row)))));
+    }
     if (!d.events.length) {
-      box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Nothing yet" }),
+      box.replaceChildren(...jobCards, el("div", { class: "card" }, el("h2", { text: "Nothing yet" }),
         el("p", { class: "dim", text: "ModTrap has changed nothing in this modlist in this session. When it adds a mod or demasters one, every change is listed here with its date and time, the mod's priority and each plugin's place in the load order." })));
       return;
     }
-    box.replaceChildren(...[el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "What" }), el("th", { text: "Details" }))),
+    box.replaceChildren(...[...jobCards, el("h2", { class: "pad-top", text: "Every change, one by one" }),
+      el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "What" }), el("th", { text: "Details" }))),
       el("tbody", {}, ...d.events.map((e) => el("tr", {}, el("td", { class: "c-num", text: String(e.when || "").replace("T", " ") }),
         el("td", { text: HISTORY_WORDS[e.kind] || e.kind }), el("td", { text: historyLine(e) }))))),
       d.total > d.events.length ? el("p", { class: "dim", text: "Showing the newest " + d.events.length + " of " + d.total + "." }) : null].filter(Boolean));
@@ -1746,7 +1794,7 @@ function addActionCard(d) {
       "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
       state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null);
   }
-  for (const j of (d.added || []).slice(0, 12)) {
+  for (const j of (d.added || []).filter((x) => x.state === "added").slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Take it out again" });
     undo.addEventListener("click", async () => {
       if (!await confirmBox("Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder? MO2 must be closed.")) return;
@@ -1981,6 +2029,13 @@ async function tick() {
   state.changes = !!s.changes;
   state.mo2 = s.mo2 || null;
   renderMo2();
+  const up = $("updated");
+  up.hidden = !s.updated_on_disk;
+  if (s.updated_on_disk && !up.textContent) {
+    const quit = el("button", { type: "button", text: "Quit ModTrap" });
+    quit.addEventListener("click", quitModTrap);
+    up.replaceChildren("ModTrap's own files have changed since this ModTrap was started (an update). Quit it and start it again: until then the program in memory and the scripts on disk are of different versions, and ModTrap starts nothing.  ", quit);
+  }
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
   demasterChain();

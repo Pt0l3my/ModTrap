@@ -195,7 +195,20 @@ class ToolEvidence(unittest.TestCase):
 
     def test_a_tool_runs_again_only_where_its_output_carries_the_mods_changes(self):
         m = model.build(instance.load(self.root))
+        # Without a dry run that told what the mod changes, no tool is judged by records: it is said to wait.
         deep = steps.look_deeper(m, ["Bramble"])
+        self.assertEqual({o["plugin"]: o["judged"] for o in deep["outputs"]},
+                         {"Synthesis.esp": False, "Synthesis Gameplay.esp": False, "Bashed Patch, 0.esp": False})
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        self.assertEqual(sorted(k for k in by if k.startswith("tool")),
+                         ["tool:ParallaxGen (PGPatcher)", "tools-wait"])        # judged by files; and the two that wait
+        self.assertEqual((by["tools-wait"]["state"], sorted(i["text"].split(":")[0] for i in by["tools-wait"]["items"])),
+                         ("waiting for the dry run", ["Synthesis", "Wrye Bash"]))
+        # What xEdit tells in the dry run (XE01§18): the mod changes A in its value; its patch changes C. B, which
+        # the mod only holds, is not among them.
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}],
+                "Inn - Bramble Patch.esp": [{"form": "02000C00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        deep = steps.look_deeper(m, ["Bramble"], told)
         got = {o["plugin"]: (o["tool"], o["shared"], o["carried"]) for o in deep["outputs"]}
         self.assertEqual(got, {"Synthesis.esp": ("Synthesis", 1, 1),            # A, with the mod's value
                                "Synthesis Gameplay.esp": ("Synthesis", 1, 0),   # A, with another value
@@ -234,7 +247,7 @@ class ToolEvidence(unittest.TestCase):
             f = self.root / "profiles" / "Default" / name
             f.write_bytes(f.read_bytes().replace(b"Bramble.esp", b"Still.esp\r\n" + (b"*" if name == "plugins.txt" else b"") + b"Bramble.esp", 1))
         m = model.build(instance.load(self.root))
-        deep = steps.look_deeper(m, ["Still"])
+        deep = steps.look_deeper(m, ["Still"], {"Still.esp": []})       # xEdit looked through it: it changes nothing
         self.assertEqual({o["plugin"]: (o["shared"], o["carried"]) for o in deep["outputs"]},
                          {"Synthesis.esp": (0, 0), "Synthesis Gameplay.esp": (0, 0), "Bashed Patch, 0.esp": (0, 0)})
         by = {x["key"]: x for x in steps.compile_steps(m, ["Still"], None, deep, auto=True)["steps"]}
@@ -243,3 +256,81 @@ class ToolEvidence(unittest.TestCase):
         self.assertEqual((clear["state"], sorted(i["text"].split(":")[0] for i in clear["items"])),
                          ("not needed", ["ParallaxGen (PGPatcher)", "Synthesis", "Wrye Bash"]))
         self.assertTrue(all(i["evidence"] for i in clear["items"]))
+
+
+class PointersAcrossPlugins(unittest.TestCase):
+    """WHY§65: two plugins write the same pointer differently when their master lists differ. Comparing bytes
+    called a patch's untouched list "changed" and a tool's copy of it "the mod's". Invented plugins, each with the
+    game's first file as its first master, as real plugins have: a form list that points at a global of Core."""
+
+    def setUp(self):
+        from modtrap import probe
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        G, H, L = 0xA00, 0xB00, 0xC00                       # Core's two globals and its list, by their ids there
+        sky = "Skyrim.esm"
+
+        def lst(masters, core_at, *points):
+            """A plugin holding Core's list; `core_at` is Core's place among its masters, each point (place, id)."""
+            recs = [probe.flst(core_at << 24 | L, "MT_List", [at << 24 | ident for at, ident in points])]
+            return probe.plugin_file(list(masters), [probe.group(b"FLST", recs)], 1, 0x900, "invented")
+
+        core = probe.plugin_file([sky], [                    # in Core itself, its own records are numbered 01
+            probe.group(b"GLOB", [probe.glob(1 << 24 | G, "MT_G", 1.0), probe.glob(1 << 24 | H, "MT_H", 2.0)]),
+            probe.group(b"FLST", [probe.flst(1 << 24 | L, "MT_List", [1 << 24 | G])])], 3, 0x900, "invented")
+        other = probe.plugin_file([sky], [probe.group(b"GLOB", [probe.glob(1 << 24 | H, "MT_OtherH", 9.0)])], 1, 0x900, "invented")
+        wide = (sky, "Other.esp", "Core.esp")                # here Other is 01 and Core is 02
+        self.root = fx.make_instance(Path(self.tmp.name) / "List", [
+            ("+", "Patcher Output", {
+                # holds the list as Core has it, written in its own numbering (Core's G as 02...)
+                "Synthesis.esp": lst(wide, 2, (2, G)),
+                # holds the mod's real change, Core's H, written in its own numbering
+                "Synthesis Gameplay.esp": lst(wide, 2, (2, H)),
+                # the very bytes the mod wrote (01...), but here 01 is Other: it points at Other's record
+                "Bashed Patch, 0.esp": lst(wide, 2, (1, H))}),
+            # a patch for the mod that holds the list untouched, in the wide numbering
+            ("+", "Inn Patches", {"Inn - Bramble Patch.esp": lst(wide + ("Bramble.esp",), 2, (2, G))}),
+            # the mod: it makes the list point at Core's H (Core is 01 here)
+            ("+", "Bramble", {"Bramble.esp": lst((sky, "Core.esp"), 1, (1, H))}),
+            ("+", "Other", {"Other.esp": other}),
+            ("+", "Core", {"Core.esp": core}),
+        ], load_order=["Core.esp", "Other.esp", "Bramble.esp", "Inn - Bramble Patch.esp", "Synthesis.esp",
+                       "Synthesis Gameplay.esp", "Bashed Patch, 0.esp"])
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def test_the_same_pointer_written_two_ways_is_the_same(self):
+        mods = self.root / "mods"
+        key = ("core.esp", 0xC00)
+        with plugin.Records(mods / "Core" / "Core.esp") as core, \
+                plugin.Records(mods / "Inn Patches" / "Inn - Bramble Patch.esp") as patch, \
+                plugin.Records(mods / "Bramble" / "Bramble.esp") as mod, \
+                plugin.Records(mods / "Patcher Output" / "Synthesis Gameplay.esp") as carries, \
+                plugin.Records(mods / "Patcher Output" / "Bashed Patch, 0.esp") as lookalike:
+            point = lambda r: dict(r.fields(key))["LNAM"]            # noqa: E731
+            self.assertNotEqual(point(core), point(patch))           # other bytes ...
+            self.assertTrue(plugin.same_field(point(core), core, point(patch), patch))       # ... the same record
+            self.assertFalse(plugin.same_field(point(core), core, point(mod), mod))          # the mod's real change
+            self.assertNotEqual(point(mod), point(carries))
+            self.assertTrue(plugin.same_field(point(mod), mod, point(carries), carries))     # carried, in other bytes
+            self.assertEqual(point(mod), point(lookalike))           # the same bytes ...
+            self.assertFalse(plugin.same_field(point(mod), mod, point(lookalike), lookalike))    # ... another record
+            name = lambda r: dict(r.fields(key))["EDID"]             # noqa: E731
+            self.assertTrue(plugin.same_field(name(core), core, name(carries), carries))     # plain values: as written
+
+    def test_only_a_real_change_that_is_really_carried_counts(self):
+        m = model.build(instance.load(self.root))
+        # As xEdit tells it: the mod changes where the list points; the patch, which holds it untouched, nothing.
+        told = {"Bramble.esp": [{"form": "01000C00", "kind": "FLST", "owner": "Core.esp", "fields": ["LNAM"]}],
+                "Inn - Bramble Patch.esp": []}
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        self.assertEqual({o["plugin"]: (o["shared"], o["carried"]) for o in deep["outputs"]},
+                         {"Synthesis.esp": (1, 0),                   # holds the list, without the mod's change
+                          "Synthesis Gameplay.esp": (1, 1),          # carries it
+                          "Bashed Patch, 0.esp": (1, 0)})            # the mod's bytes, pointing elsewhere: not it
+        by = [d["by"] for o in deep["outputs"] for d in o["details"]]
+        self.assertEqual(by, [["Bramble.esp"]] * 3)                  # the untouched patch changed nothing

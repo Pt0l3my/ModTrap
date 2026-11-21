@@ -112,6 +112,10 @@ class Switch(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         got = self.settled(body)
         self.assertEqual((got["staged"][0]["state"], got["added"][0]["state"]), ("ready", "reverted"))
+        self.assertEqual([(j["what"], j["state"]) for j in self.api.get("/api/history", {})[1]["jobs"]], [("add", "reverted")])
+        self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 1})
+        self.assertEqual(self.api.get("/api/history", {})[1]["jobs"], [])
+        self.assertEqual(self.settled(body)["added"], [])
 
     def test_taking_it_out_after_mo2_rewrote_the_lists_goes_line_by_line(self) -> None:
         self.api.changes = changes.Changes(self.api, require_probe=False)
@@ -207,7 +211,7 @@ class DemasterThroughThePage(unittest.TestCase):
         here = str(self.root / "ModOrganizer.exe")
         elsewhere = str(Path(self.tmp.name) / "Another List" / "ModOrganizer.exe")
         fx.write(Path(elsewhere), b"another modlist's MO2")
-        mo2 = self.api.mo2
+        mo2 = lambda: {k: v for k, v in self.api.mo2().items() if k != "ours"}        # noqa: E731
         self.assertEqual(mo2(), {"state": "closed", "other": False})          # as far as "is one running" tells
         self.mo2_running = True
         self.assertEqual((mo2()["state"], self.api.changes.closed()), ("open", False))
@@ -246,6 +250,42 @@ class DemasterThroughThePage(unittest.TestCase):
         self.api.launcher = lambda cmd, cwd: started.append((cmd, cwd))
         self.assertTrue(self.api.post("/api/mo2/open", {})[1]["started"])
         self.assertEqual(started, [([here, "-p", self.api.model.instance.profile], str(self.root))])
+        self.assertEqual(snapshot(self.root), self.before)
+
+    def test_a_mo2_that_modtrap_started_is_waited_for_not_asked_about(self) -> None:
+        """WHY§67. The MO2 of a run closes by itself; a step that needs MO2 closed waits for it, and closes its
+        message. The owner's own MO2 is closed in a demaster only because the confirmed plan said so."""
+        here = str(self.root / "ModOrganizer.exe")
+        running: list[str] = []
+        self.api.program_paths = lambda image: list(running)
+        asked: list[str] = []
+        self.api.ask_close = lambda path: (asked.append(path), running.clear())[0] is None
+        self.api._launch(["x"], str(self.root)) if False else None
+        # ModTrap starts MO2 for a run while none is open: that MO2 is ModTrap's own.
+        self.api.launcher = lambda cmd, cwd: running.append(here)
+        self.api._launch(["ModOrganizer.exe", "run"], str(self.root))
+        self.assertEqual(self.api.mo2(), {"state": "open", "other": False, "ours": True})
+        self.assertTrue(self.api.wait_mo2_gone(5, poll=0.01, ask_after=0.02))     # it is asked to leave, and leaves
+        self.assertEqual((asked, self.api.mo2()["state"]), ([here], "closed"))
+        # A MO2 the owner opened is not ModTrap's: nothing waits for it or closes it unasked ...
+        running.append(here)
+        asked.clear()
+        self.assertEqual(self.api.mo2()["ours"], False)
+        self.assertFalse(self.api.wait_mo2_gone(0.05, poll=0.01, ask_after=0.02))
+        self.assertEqual(asked, [])
+        # ... except where the owner's confirmed plan said ModTrap would: the last step of a demaster.
+        self.assertTrue(self.api.wait_mo2_gone(5, poll=0.01, ask_after=0.02, owners_too=True))
+        self.assertEqual(asked, [here])
+
+    def test_an_update_without_a_restart_is_noticed_and_nothing_is_started(self) -> None:
+        """WHY§67: the program in memory and the scripts on disk must be of one version."""
+        self.assertFalse(self.api.state()["updated_on_disk"])
+        self.api._code_seen = (time.time(), True)               # as if ModTrap's files had changed on disk
+        self.assertTrue(self.api.state()["updated_on_disk"])
+        for path in ("/api/dryrun/start", "/api/probe/start", "/api/demaster/start"):
+            with self.assertRaises(Bad) as c:
+                self.api.post(path, {"mods": ["Bramble"]})
+            self.assertIn("Quit ModTrap and start it again", str(c.exception))
         self.assertEqual(snapshot(self.root), self.before)
 
     def test_new_plugins_that_wait_are_dropped_when_the_modlist_moves_on(self) -> None:
@@ -310,6 +350,9 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], [])
         events = self.api.get("/api/history", {})[1]
         self.assertEqual(events["events"][0]["kind"], "verified")
+        self.assertEqual([(j["what"], j["state"]) for j in events["jobs"]], [("demaster", "installed")])
+        self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 0})   # a job in place is never cleared
+        self.assertEqual(len(self.api.state()["demaster"]["jobs"]), 1)
         self.assertIn("mod disabled", [e["kind"] for e in events["events"]])
         back = self.api.post("/api/demaster/revert", {"job": jobs[0]["job"]})[1]
         self.ready()
@@ -317,6 +360,12 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["state"], "reverted")
         self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "reverted")
+        # A reverted job is only kept for looking at: the owner can clear it. Its folder and the history stay.
+        self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 1})
+        self.assertEqual(self.api.state()["demaster"]["jobs"], [])
+        after = self.api.get("/api/history", {})[1]
+        self.assertEqual((after["jobs"], after["events"][0]["kind"]), ([], "reverted"))
+        self.assertTrue((self.api.changes._jobs_dir() / jobs[0]["job"] / "plan.json").is_file())
 
     def test_revert_after_mo2_rewrote_the_lists_goes_line_by_line(self) -> None:
         self.dry_run()

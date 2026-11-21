@@ -23,7 +23,7 @@ from .server import Bad
 log = logbook.get("add")
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
-         "/api/demaster/drop",
+         "/api/demaster/drop", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
 
 
@@ -57,6 +57,7 @@ class Changes:
         return probejob.passed(api.store.dir(api.session.id), api.model.instance)
 
     def probe_start(self, body: dict) -> dict:
+        self.api.wait_mo2_gone()                # a MO2 of ModTrap's own last run may still be leaving (WHY§67)
         api = self.api
         with self._lock:
             m = api._need()
@@ -75,7 +76,7 @@ class Changes:
             while work.exists():
                 work, n = base / ("probe-%s-%d" % (time.strftime("%Y%m%d-%H%M%S"), n)), n + 1
             work.mkdir(parents=True)
-            pr = probejob.Probe(m, work, api.store.dir(api.session.id), launcher=api.launcher, running=api.running,
+            pr = probejob.Probe(m, work, api.store.dir(api.session.id), launcher=api._launch, running=api.running,
                                 closed=self.closed, poll=api.poll, read=api._cache.read, closer=api.closer,
                                 presser=api.presser)
 
@@ -131,6 +132,16 @@ class Changes:
             raise Bad("there is no session to keep the job in")
         return self.api.store.dir(s.id) / "jobs"
 
+    def _hidden(self) -> set[str]:
+        """The finished jobs the owner cleared from the lists (WHY§67). Their folders, and the history of what
+        ModTrap changed, stay."""
+        try:
+            with open(self._jobs_dir() / "hidden.json", "rb") as f:
+                data = json.loads(f.read(4 * 1024 * 1024).decode("utf-8"))
+            return {x for x in data if isinstance(x, str)}
+        except (OSError, ValueError, Bad, TypeError):
+            return set()
+
     def jobs(self) -> list[dict]:
         """The adds this session carried out, newest first."""
         try:
@@ -138,7 +149,20 @@ class Changes:
                              reverse=True)
         except (OSError, Bad):
             return []
-        return [x for x in (addjob.AddJob.summary(p) for p in folders) if x is not None]
+        hidden = self._hidden()
+        return [x for x in (addjob.AddJob.summary(p) for p in folders if p.name not in hidden) if x is not None]
+
+    def jobs_clear(self, body: dict) -> dict:
+        """Takes the jobs that no longer stand (reverted, or failed) off the lists. A job that is still in place
+        stays: its Revert needs it. Nothing is deleted, and the history of changes is not touched."""
+        gone = [j["job"] for j in self.jobs() if j["state"] != "added"] + \
+               [j["job"] for j in self.demaster_jobs() if j["state"] != "installed"]
+        hidden = sorted(self._hidden() | set(gone))
+        try:
+            paths.write_atomic(self._jobs_dir() / "hidden.json", (json.dumps(hidden, indent=1) + "\n").encode("utf-8"))
+        except OSError as e:
+            raise Bad("the list could not be cleared: %s" % logbook.why(e)) from None
+        return {"cleared": len(gone)}
 
     def _planned(self, body: dict) -> tuple[object, addjob.Plan]:
         api = self.api
@@ -167,6 +191,7 @@ class Changes:
         return out
 
     def run(self, body: dict) -> dict:
+        self.api.wait_mo2_gone()                # a MO2 of ModTrap's own last run may still be leaving (WHY§67)
         api = self.api
         with self._lock:
             if self.gate():
@@ -197,6 +222,7 @@ class Changes:
         return {"job": work.name, "done": done}
 
     def revert(self, body: dict) -> dict:
+        self.api.wait_mo2_gone()                # a MO2 of ModTrap's own last run may still be leaving (WHY§67)
         api = self.api
         name = body.get("job")
         if not isinstance(name, str) or not re.fullmatch(r"add-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
@@ -267,7 +293,7 @@ class Changes:
             while work.exists():
                 work, n = base / ("demaster-%s-%d" % (time.strftime("%Y%m%d-%H%M%S"), n)), n + 1
             work.mkdir(parents=True)
-            dm = demaster.Demaster(m, job.plan, pl, work, api.store.dir(api.session.id), launcher=api.launcher,
+            dm = demaster.Demaster(m, job.plan, pl, work, api.store.dir(api.session.id), launcher=api._launch,
                                    running=api.running, closed=self.closed, poll=api.poll, closer=api.closer,
                                    presser=api.presser)
             self.dm, self.dm_state, self.dm_message, self.dm_check = dm, "working", "", None
@@ -299,6 +325,9 @@ class Changes:
             dm = self.dm
             if dm is None or self.dm_state != "verified":
                 raise Bad("there is no verified demaster to put in place")
+            # The MO2 of the xEdit run may still be leaving; and in the one go, the plan the owner confirmed said
+            # MO2 would be closed for this step (WHY§67).
+            api.wait_mo2_gone(owners_too=body.get("close_mo2") is True)
             try:
                 done = dm.install()
                 self.dm_check = dm.check()
@@ -322,7 +351,10 @@ class Changes:
         except (OSError, Bad):
             return []
         out = []
+        hidden = self._hidden()
         for d in folders:
+            if d.name in hidden:
+                continue
             try:
                 with open(d / "plan.json", "rb") as f:
                     data = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
@@ -370,6 +402,7 @@ class Changes:
         return out
 
     def demaster_revert(self, body: dict) -> dict:
+        self.api.wait_mo2_gone()                # a MO2 of ModTrap's own last run may still be leaving (WHY§67)
         api = self.api
         name = body.get("job")
         if not isinstance(name, str) or not re.fullmatch(r"demaster-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
@@ -457,6 +490,8 @@ class Changes:
             return self.demaster_revert(body)
         if path == "/api/demaster/drop":
             return self.demaster_drop(body)
+        if path == "/api/jobs/clear":
+            return self.jobs_clear(body)
         if path == "/api/add/plan":
             return self.plan(body)
         if path == "/api/add/run":

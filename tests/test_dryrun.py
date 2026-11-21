@@ -204,6 +204,15 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual([i["would"] for i in gen["items"]], ["record", "entry"])
         self.assertTrue((job.dir / "result.json").is_file())
         self.assertIn("xEdit: finished", " ".join(ln["text"] for ln in logbook.lines_after(0)[0]))
+        # The script is asked what the trapped plugin and the patches made for it really change (XE01§18), and the
+        # result keeps what it told: the tools are judged from that (WHY§66).
+        asked = (job.dir / "script" / "modtrap-job.txt").read_text(encoding="utf-8-sig")
+        self.assertIn("touch.count=3\ntouch.0=Bramble.esp\ntouch.1=BrambleLanternPatch.esp\n"
+                      "touch.2=Collection - Bramble.esp", asked.replace("\r\n", "\n"))
+        self.assertEqual(r["touched"], {
+            "Bramble.esp": [{"form": "00012345", "kind": "FLST", "owner": "Skyrim.esm", "fields": ["LNAM"]}],
+            "BrambleLanternPatch.esp": [], "Collection - Bramble.esp": []})
+        self.assertEqual(json.loads((job.dir / "result.json").read_text(encoding="utf-8"))["touched"], r["touched"])
 
     def test_xedit_closing_early_is_a_failure_that_says_so(self):
         p = dryrun.plan(self.m, ["Bramble"])

@@ -7,6 +7,8 @@
   The job is a text file beside this script, modtrap-job.txt, of key=value lines written by ModTrap:
     format=modtrap-job/1   mode=report   out=<report file>   progress=<progress file>
     trap.count=N  trap.0=<plugin> ...     dep.count=N  dep.0=<plugin> ...
+    touch.count=N  touch.0=<plugin> ...   the plugins whose own changes are to be told (the trapped plugins and
+                                          the patches made for them); may be absent
   The report is tab-separated lines; the first field says what the line is:
     H  format, mode, xEdit's version
     F  a dependant: file, records, masters (comma separated)
@@ -25,6 +27,11 @@
        ReportEntry): file, the record's form id, the list's name, the entry's place in it, the plugin loaded
        before the dependant whose version of the list has the very same entry ("" if none), and 1 if taking
        the entry out would join the conditions on either side of it differently, else 0
+    T  a record that a plugin named under touch.N in the job really changes (see ReportTouched): file, the
+       record's form id, its signature, the plugin the record belongs to, and the signatures of the fields that
+       differ from the version the plugin's author had before them (comma separated; ? where a part that
+       differs has no signature of its own)
+    V  such a plugin has been looked through: file, how many records it changes
     D  a dependant is done: file, records, records needing a trapped plugin
     M  a dependant named in the job is not loaded: file
     U  a loaded plugin xEdit holds as changed although this script changed nothing: file
@@ -417,6 +424,100 @@ begin
   Say('done ' + fn + ': ' + IntToStr(hits) + ' of ' + IntToStr(n) + ' records need a trapped plugin');
 end;
 
+// The signatures of the fields an element stands for: its own if its name begins with one ("XCLR - Regions"),
+// else those of what lies under it.
+function SigsOf(el: IInterface): string;
+var
+  i: integer;
+  nm, part, all: string;
+begin
+  nm := Name(el);
+  if (Length(nm) > 6) and (Copy(nm, 5, 3) = ' - ') then begin
+    Result := Copy(nm, 1, 4);
+    Exit;
+  end;
+  all := '';
+  for i := 0 to Pred(ElementCount(el)) do begin
+    part := SigsOf(ElementByIndex(el, i));
+    if part <> '' then begin
+      if all <> '' then
+        all := all + ',';
+      all := all + part;
+    end;
+  end;
+  Result := all;
+end;
+
+// What a plugin itself changes. For each record it holds but does not own, its version is compared, part by
+// part, with the version in the last of the plugin's own masters that holds the record (not a trapped one): what
+// the plugin's author had before them. xEdit compares what the parts mean, not how they are written: a name kept
+// as text is the name kept in a strings file, and a list is the same list in whatever order it was saved. A
+// record with no differing part is held but not changed, and is not reported. It only reads.
+procedure ReportTouched(f: IInterface);
+var
+  i, j, k, n, myOrder, order, bestOrder: integer;
+  e, m, v, prev, el, pe: IInterface;
+  fn, own, vfile, sigs, part: string;
+  differs: boolean;
+begin
+  fn := GetFileName(f);
+  slMasters.Clear;
+  for i := 0 to Pred(MasterCount(f)) do
+    slMasters.Add(GetFileName(MasterByIndex(f, i)));
+  myOrder := GetLoadOrder(f);
+  n := 0;
+  for i := 0 to Pred(RecordCount(f)) do begin
+    e := RecordByIndex(f, i);
+    m := MasterOrSelf(e);
+    own := GetFileName(GetFile(m));
+    if not SameText(own, fn) then begin
+      prev := nil;
+      bestOrder := -1;
+      for j := -1 to Pred(OverrideCount(m)) do begin
+        if j < 0 then
+          v := m
+        else
+          v := OverrideByIndex(m, j);
+        order := GetLoadOrder(GetFile(v));
+        if (order < myOrder) and (order > bestOrder) then begin
+          vfile := GetFileName(GetFile(v));
+          if (slMasters.IndexOf(vfile) >= 0) and (not IsTrapped(vfile)) then begin
+            bestOrder := order;
+            prev := v;
+          end;
+        end;
+      end;
+      if Assigned(prev) then begin
+        sigs := '';
+        for k := 0 to Pred(ElementCount(e)) do begin
+          el := ElementByIndex(e, k);
+          if Name(el) <> 'Record Header' then begin
+            pe := ElementByName(prev, Name(el));
+            differs := not Assigned(pe);
+            if Assigned(pe) then
+              differs := Shape(pe) <> Shape(el);
+            if differs then begin
+              part := SigsOf(el);
+              if part = '' then
+                part := '?';
+              if sigs <> '' then
+                sigs := sigs + ',';
+              sigs := sigs + part;
+            end;
+          end;
+        end;
+        if sigs <> '' then begin
+          slOut.Add('T' + #9 + fn + #9 + IntToHex(GetLoadOrderFormID(e), 8) + #9 + Signature(e) + #9 + own + #9 + sigs);
+          n := n + 1;
+        end;
+      end;
+    end;
+  end;
+  slOut.Add('V' + #9 + fn + #9 + IntToStr(n));
+  SaveReport;
+  Say('looked through ' + fn + ': it changes ' + IntToStr(n) + ' record(s) of other plugins');
+end;
+
 function FindFile(wanted: string): IInterface;
 var
   i: integer;
@@ -435,7 +536,7 @@ var
   f: IInterface;
   depName: string;
 begin
-  slOut.Add('H' + #9 + 'modtrap-report/4' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
+  slOut.Add('H' + #9 + 'modtrap-report/5' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
   n := StrToInt(slJob.Values['trap.count']);
   for i := 0 to Pred(n) do
     slTrap.Add(slJob.Values['trap.' + IntToStr(i)]);
@@ -455,6 +556,14 @@ begin
     else begin
       slOut.Add('M' + #9 + depName);
       Say('not loaded: ' + depName);
+    end;
+  end;
+  if slJob.Values['touch.count'] <> '' then begin
+    n := StrToInt(slJob.Values['touch.count']);
+    for i := 0 to Pred(n) do begin
+      f := FindFile(slJob.Values['touch.' + IntToStr(i)]);
+      if Assigned(f) then
+        ReportTouched(f);
     end;
   end;
   // This script changed nothing. A plugin xEdit nonetheless holds as changed would be saved when xEdit closes:

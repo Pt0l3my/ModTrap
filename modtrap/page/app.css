@@ -273,3 +273,8 @@ details.evidence summary:hover { color: var(--text); }
 details.evidence ul { margin: 4px 0 2px 18px; padding: 0; }
 details.evidence li { list-style: none; overflow-wrap: anywhere; }
 .step li.plain { list-style: none; margin-left: -18px; }
+
+/* The History tab: the jobs, then every change (WHY§67). */
+h2.pad-top { margin-top: 18px; }
+#updated button { margin-left: 8px; }
+#history .card .tag { white-space: nowrap; }

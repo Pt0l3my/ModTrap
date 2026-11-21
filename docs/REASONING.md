@@ -87,6 +87,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 62 | 2026-11-21 | New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed | METHOD | #page #safety #process |
 | 63 | 2026-11-21 | The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds | FACT | #xedit #tools #steps #process |
 | 64 | 2026-11-21 | Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold | METHOD | #tools #steps #page #process |
+| 65 | 2026-11-21 | The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm | FACT | #tools #steps #xedit #process |
+| 66 | 2026-11-21 | Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all | DECIDED | #tools #steps #xedit #process |
+| 67 | 2026-11-21 | "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared | DECIDED | #process #page #mo2 #history |
 
 ## Entries
 
@@ -1412,3 +1415,87 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Shown in a browser on invented plugins: a tool whose plugin carries the mod's value is to run, one that holds
   the record with another value is named beside it as speaking against, one that holds only what the mod does
   not change is cleared; the folds open to the records. The owner's list shows what it gives there.
+- Later, 2026-11-21: the comparison of bytes in this entry raised a false alarm on the owner's list, and the
+  limit as worded here was wrong. Corrected in WHY§65 (TL01§10).
+
+### 65. The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm
+
+`2026-11-21` · FACT · `#tools #steps #xedit #process` · refs: MT17, DESIGN§6.3, DESIGN§14, XE02, TL01§9, TL01§10, WHY§61, WHY§63, WHY§64
+
+- FACT (the owner's session file): the whole demaster went through again from a clean start, in one go: five
+  plugins demastered and verified, twelve patches deactivated, two mods disabled, the check clean. Four of the
+  five lost exactly the one master. The fifth, the editor-made one, went from 113 masters to 54: xEdit's Clean
+  Masters takes off every master the plugin does not use, not only the trapped one (the guide's own step does
+  the same). A master nothing in the plugin uses does nothing in the game; the owner is told.
+- The owner, with a picture of the tool steps: "dyndolod is still there with evidence, I am surpised SDA has
+  anything to do with occulsions and the like. can you double check the logic?"
+- FACT: the logic was wrong, in the way TL01§10 describes. Comparing bytes across plugins that number their
+  masters differently made untouched fields look changed and unrelated copies look carried. WHY§64's stated
+  limit ("can miss, does not invent") was false.
+- METHOD: fields are compared with each plugin's numbering in mind (TL01§10), with tests that rebuild the false
+  alarm on invented plugins: an untouched patch no longer counts, a real change written in other bytes is found,
+  and the mod's own bytes pointing elsewhere are not taken for it. What each verdict rests on is also written
+  into the log, so a saved session shows it. For a tool whose need depends on what kind of thing changed (the
+  distant-view generator: only what is seen from afar), the step now says that.
+- Not claimed: that the comparison is exact. It is made without knowing what each field means (TL01§10's limit).
+  If a verdict still looks wrong to the owner, the log now holds the records to settle it with.
+- Later, 2026-11-21: the false alarm stayed. Its cause lay deeper than the numbering of masters: see WHY§66.
+
+### 66. Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all
+
+`2026-11-21` · DECIDED · `#tools #steps #xedit #process` · refs: MT17, DESIGN§6.2, DESIGN§14, XE01§14, XE01§18, TL01§9, TL01§10, TL01§11, WHY§63, WHY§64, WHY§65
+
+- The owner, with the evidence unfolded: "no changes, dyndolod is still required in steps".
+- FACT: the evidence named, for worldspaces, the field that holds the name, and for a cell its list of regions.
+  The mod changes neither. The game's files keep names in strings files and the mod as text; the list is the
+  same list in another order (XE01§18). Three attempts at reading bytes (WHY§63, WHY§64, WHY§65) each met
+  another way in which the same value is written differently. There will be more.
+- DECIDED (the method is ModTrap's, MT17): ModTrap's own reader no longer says what a mod changes. xEdit says it,
+  in the dry run that is made anyway, for the mod's plugins and the patches made for it (XE01§18). ModTrap then
+  only looks for those changed fields in the plugins that tools made (TL01§11). A tool for which no dry run has
+  told this is not judged by records at all, and the page says so and how to get it judged; it is never told to
+  run on a guess.
+- Ruled out: teaching ModTrap's reader the meaning of each field (xEdit's definitions are its own work and under
+  its own licence, and are thousands of lines); loading the tools' plugins into xEdit as well, to ask both
+  questions there (their masters are most of a large list).
+- The scripts changed, so the probe runs again before real work; its dry run exercises the new lines.
+- For the owner's list as it stands (the mod demastered before this version): the tools wait. The page tells
+  the owner so, and that the modlist's own guide for this mod says to run the behaviour tool and the patcher, and
+  not the distant-view generator.
+- Later, 2026-11-21: the owner's next try showed the same step. The new script had run, but under the old
+  program: see WHY§67. This entry's method is still unproven on the owner's list.
+
+### 67. "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared
+
+`2026-11-21` · DECIDED · `#process #page #mo2 #history` · refs: MT9, MT15, MT17, DESIGN§5, DESIGN§7, DESIGN§12, WHY§58, WHY§60, WHY§66
+
+- The owner: "can you add job history tab to history page? these jobs that are done should be archived in a
+  separate page, and also add a button to clear session job history. currently the selection page just keeps
+  stacking jobs, including reverted ones, forever. No change, still wants dyndolod to run in steps. I also noticed
+  that at some point ModTrap keeps asking MO2 to be closed down, if it's part of demaster process, then let it
+  close or open MO2 automatically."
+- FACT (the owner's session file): the dry run's report carries the new script's header, yet its job file has none
+  of the lines the new program writes for the script, and the log has the earlier version's wording for tools.
+  The files had been replaced while ModTrap was running: the scripts and the page are read from disk at each use,
+  the program once, at the start. So a new script ran under an old program, and WHY§66 was not tried at all.
+- DECIDED: ModTrap takes a mark of its own files (names, sizes, times) when it starts and compares it when asked
+  to start a run, a demaster, an add, a revert or a tool. If the files have changed it starts nothing, and the
+  page says so at the top with a Quit button. Reading goes on. A mismatch of versions is worse than a pause.
+- FACT: a run through MO2 starts a MO2 of ModTrap's own, which takes some seconds to leave after xEdit is closed
+  (WHY§58). The page saw it open and asked the owner whether to close it, each time.
+- DECIDED: ModTrap remembers that the open MO2 is the one it started. The page then asks nothing, and the server
+  waits for it to go: it closes MO2's end-of-run message, and after five seconds asks it to close as a click on
+  its X does. Never by force.
+- DECIDED: in the one go (WHY§60) the plan the owner confirms now says that MO2 is closed for the last step if
+  it is open. So that step closes an open MO2 of this modlist without a second question, the same gentle way.
+  Outside the one go (Revert, an add, "Put them in place" pressed by hand) the question stays: there no plan
+  said so. ModTrap does not open MO2 again by itself: nothing it does needs MO2 open, and the page has the button.
+- DECIDED: the History tab lists the jobs of the session, demasters and adds, newest first, each with its state;
+  one still in place has its Revert there. The Selection tab and the Add mods tab show only what is in hand and
+  the jobs still in place, with a line that leads to the History tab for the rest.
+- DECIDED: "Clear job history" takes the jobs that no longer stand (reverted, or stopped) off the list. A job in
+  place is never cleared, since its Revert needs it. Nothing is deleted: the job folders, their safe folders and
+  the record of every change (MT15) stay on disk; a list of hidden names is all that is written.
+- Checked: tests for the mark, the waiting, and the clearing; in a browser on an invented list, with MO2 shown as
+  open: the one go asked nothing, the job was listed, reverted from the History tab and cleared.
+- Not checked: any of it on the owner's PC.
