@@ -116,7 +116,7 @@ def main(argv):
     say("xEdit has loaded %d files; %d trapped plugin(s)" % (len(loaded) + 5, len(trap)))
     if mode == "crash":
         return 3
-    out.append("H\tmodtrap-report/5\treport\t67175680")
+    out.append("H\tmodtrap-report/6\treport\t67175680")
     if mode == "absent":                # an xEdit that looks in another game folder: none of the plugins is there
         out.append("P\tC:\\Elsewhere\\Data\\\t81")
         out += ["N\t" + t for t in trap] + ["M\t" + d for d in deps] + ["X\tok\t"]
@@ -175,14 +175,17 @@ def main(argv):
             n = 3
         out.append("D\t%s\t3\t%d" % (d, n))
         say("done %s: %d of 3 records need a trapped plugin" % (d, n))
-    # What the plugins named under touch.N really change (the script's T and V lines): the stand-in says each was
+    # What the plugins named under touch.N really change (the script's T, W and V lines): the stand-in says each was
     # looked through, and that the first, the trapped plugin, changes one invented record of the game's.
     for i in range(int(job.get("touch.count", "0") or 0)):
         name = job["touch.%d" % i]
         if name in loaded:
             if i == 0 and not name.startswith("ModTrap Probe - "):
                 out.append("T\t%s\t00012345\tFLST\tSkyrim.esm\tLNAM" % name)
-            out.append("V\t%s\t%d" % (name, 1 if i == 0 and not name.startswith("ModTrap Probe - ") else 0))
+                out.append("T\t%s\t00012346\tCELL\tSkyrim.esm\tXCLC" % name)    # changed, but others say the same
+                out.append("W\t%s\t00012345\tFLST\tSkyrim.esm\tLNAM" % name)
+            n = 1 if i == 0 and not name.startswith("ModTrap Probe - ") else 0
+            out.append("V\t%s\t%d\t%d" % (name, 2 * n, n))
     if mode == "touch":                 # a misbehaving run that alters a dependant on disk
         target = next(Path(p) for p in argv if p.endswith(".esp") and Path(p).exists())
         target.write_bytes(target.read_bytes() + b"x")

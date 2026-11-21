@@ -30,6 +30,8 @@ PAGE_DIR = Path(__file__).resolve().parent / "page"
 PAGE_JS = ("app.js",)
 PAGE_CSS = ("app.css",)
 TOKEN_HEADER = "X-ModTrap-Token"
+HANDOVER_PATH = "/api/handover"
+HANDOVER_HEADER = "X-ModTrap-Handover"
 LOCATE_PATH = "/api/locate"
 SAVE_PATH = "/api/save/download"  # the packed session, handed out once (WHY§48)
 UPLOAD_PATH = "/api/add/upload"   # a dropped mod archive, as its bytes (DESIGN§16.1)
@@ -70,6 +72,7 @@ class App:
         self.httpd: "Server | None" = None
         self.token = secrets.token_urlsafe(24)
         self.nonce = secrets.token_urlsafe(16)
+        self.handover = secrets.token_urlsafe(24)     # for another start of ModTrap on this PC, never the page (WHY§68)
         self.hosts: set[str] = set()
         self.origins: set[str] = set()
         self.api = api
@@ -298,7 +301,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send(200, self.app.page, "text/html; charset=utf-8")
         return self.send(404, {"error": "not found"})
 
+    def _handover(self) -> None:
+        """Another start of ModTrap on this PC asks this one to save and close (WHY§68). It is not a page: it sends
+        no Origin, and it has this start's key from ModTrap's own folder, which no web page can read."""
+        got = self.headers.get(HANDOVER_HEADER, "").encode("utf-8", "surrogateescape")
+        if (self.headers.get("Host", "") not in self.app.hosts or self.headers.get("Origin") is not None
+                or (self.headers.get("Content-Length") or "0") != "0" or self.headers.get("Transfer-Encoding")
+                or not hmac.compare_digest(got, self.app.handover.encode("ascii"))):
+            return self._refuse("not a handover")
+        ask = getattr(self.app.api, "handover", None)
+        if ask is None:
+            return self.send(404, {"error": "not found"})
+        try:
+            answer, after = ask()
+        except Bad as e:
+            return self.send(409, {"error": str(e)})
+        except Exception as e:
+            return self._error(e)
+        self.send(200, answer)
+        if after is not None:
+            try:
+                self.wfile.flush()
+            except OSError:
+                pass
+            threading.Thread(target=after, name="after-answer", daemon=True).start()
+
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == HANDOVER_PATH:
+            return self._handover()
         why = self.guard(True)
         if why:
             return self._refuse(why)

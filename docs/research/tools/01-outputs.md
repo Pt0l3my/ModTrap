@@ -142,3 +142,26 @@ Nothing of them is copied: ModTrap keeps only names and marks, as data (`modtrap
 - **Limit.** The second question is still asked of bytes. A changed name kept as text, or a changed list, is
   found in a tool's plugin only if that plugin writes it the same way; tools built on xEdit do. A tool whose
   plugin writes it otherwise would be missed.
+
+## 12. What a behaviour tool reads of a mod: lists and patch folders, not animation files (2026-11-21)
+
+Read in Pandora Behaviour Engine+'s source (GPL-3.0; facts only, nothing copied), commit `1f26bbc` of 2026-10-01.
+
+- **FACT.** Its patch mods are folders under `Nemesis_Engine/mod/` holding `info.ini`, and under
+  `Pandora_Engine/mod/` holding `info.xml` (`Pandora.Core/Mods/Providers/NemesisModInfoProvider.cs:13-15`,
+  `PandoraModInfoProvider.cs:17-19`, `FileBasedModInfoProvider.cs:20-26`).
+- **FACT.** For each project it looks at every folder under that project's `animations` folder
+  (`Pandora.Skyrim/Format/FNIS/FNISParser.cs:199-206`). A folder is taken in only if it holds
+  `FNIS_<folder>_List.txt` and the project's behaviour folder holds `FNIS_<folder>_Behavior.hkx`; for a creature
+  the names carry the creature's name too (`FNISParser.cs:137-159`, `:162-179`, `:291-347`). Otherwise the
+  folder is passed over with a warning.
+- **FACT.** Nothing there reads an animation file for its own sake: an animation reaches the output through a
+  list or a patch.
+- **LIKELY (not read in source).** Nemesis reads its own patch folders and the same lists; FNIS reads the lists.
+- **METHOD.** A behaviour tool is told to run again for a mod only if the mod carries a list or a patch folder
+  that tool reads. A mod with plain animation files only gives it nothing: the game, or an animation framework,
+  loads those as they are. As a second witness ModTrap searches the files of the tool's output mod for the
+  names of the mod's own animation folders (`animations\<folder>\`) and of its graph files: a file that names
+  one was built with the mod in it, whatever the mod's files look like.
+- **Limit.** The search assumes that such names stand in the output as plain text. Not checked on real output.
+  Packed archives are not looked into. Whether a patch folder was ticked in the tool cannot be told from files.

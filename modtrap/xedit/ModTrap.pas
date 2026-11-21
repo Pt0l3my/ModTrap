@@ -9,6 +9,8 @@
     trap.count=N  trap.0=<plugin> ...     dep.count=N  dep.0=<plugin> ...
     touch.count=N  touch.0=<plugin> ...   the plugins whose own changes are to be told (the trapped plugins and
                                           the patches made for them); may be absent
+    made.count=N  made.0=<plugin> ...     the plugins a tool made: they have no say in which version of a
+                                          record wins (see ReportTouched); may be absent
   The report is tab-separated lines; the first field says what the line is:
     H  format, mode, xEdit's version
     F  a dependant: file, records, masters (comma separated)
@@ -31,7 +33,10 @@
        record's form id, its signature, the plugin the record belongs to, and the signatures of the fields that
        differ from the version the plugin's author had before them (comma separated; ? where a part that
        differs has no signature of its own)
-    V  such a plugin has been looked through: file, how many records it changes
+    W  a record in which such a plugin has a stake (see ReportTouched): as T, with the signatures of the fields
+       in which it has the last word and the next in line says something else, or that it changed and no
+       plugin that stays says the same
+    V  such a plugin has been looked through: file, how many records it changes, in how many it has a stake
     D  a dependant is done: file, records, records needing a trapped plugin
     M  a dependant named in the job is not loaded: file
     U  a loaded plugin xEdit holds as changed although this script changed nothing: file
@@ -42,7 +47,7 @@
 unit ModTrap;
 
 var
-  slJob, slOut, slProg, slTrap, slNeed, slMasters, slFit: TStringList;
+  slJob, slOut, slProg, slTrap, slNeed, slMasters, slFit, slGone, slMade: TStringList;
   sOut, sProg, gMissing: string;
   gMissed: integer;
   gTainted: integer;
@@ -452,13 +457,21 @@ end;
 // part, with the version in the last of the plugin's own masters that holds the record (not a trapped one): what
 // the plugin's author had before them. xEdit compares what the parts mean, not how they are written: a name kept
 // as text is the name kept in a strings file, and a list is the same list in whatever order it was saved. A
-// record with no differing part is held but not changed, and is not reported. It only reads.
+// record with no differing part is held but not changed, and is not reported.
+//
+// A change is not yet a stake. A plugin often says, in a part, what other plugins say too (a value an editor
+// writes the same into every plugin it saves), or says it and is overruled by a later plugin. What a tool's
+// output may owe to this plugin is narrower: a part in which this plugin has the last word among the plugins no
+// tool made, where the version that would win without the leaving plugins says something else; or a part it
+// changed in which no plugin that stays says the same (a tool that merges may have taken it from here). Those
+// parts are reported as W. The leaving plugins are those named under touch.N; the plugins tools made are named
+// under made.N. It only reads.
 procedure ReportTouched(f: IInterface);
 var
-  i, j, k, n, myOrder, order, bestOrder: integer;
-  e, m, v, prev, el, pe: IInterface;
-  fn, own, vfile, sigs, part: string;
-  differs: boolean;
+  i, j, k, n, w, myOrder, order, bestOrder, winOrder, aftOrder: integer;
+  e, m, v, prev, aft, el, pe: IInterface;
+  fn, own, vfile, sigs, wsigs, part, mine: string;
+  differs, stake: boolean;
 begin
   fn := GetFileName(f);
   slMasters.Clear;
@@ -466,56 +479,110 @@ begin
     slMasters.Add(GetFileName(MasterByIndex(f, i)));
   myOrder := GetLoadOrder(f);
   n := 0;
+  w := 0;
   for i := 0 to Pred(RecordCount(f)) do begin
     e := RecordByIndex(f, i);
     m := MasterOrSelf(e);
     own := GetFileName(GetFile(m));
     if not SameText(own, fn) then begin
       prev := nil;
+      aft := nil;
       bestOrder := -1;
+      winOrder := -1;
+      aftOrder := -1;
       for j := -1 to Pred(OverrideCount(m)) do begin
         if j < 0 then
           v := m
         else
           v := OverrideByIndex(m, j);
         order := GetLoadOrder(GetFile(v));
+        vfile := GetFileName(GetFile(v));
         if (order < myOrder) and (order > bestOrder) then begin
-          vfile := GetFileName(GetFile(v));
           if (slMasters.IndexOf(vfile) >= 0) and (not IsTrapped(vfile)) then begin
             bestOrder := order;
             prev := v;
           end;
         end;
+        // Among the plugins no tool made: whose version wins now, and whose would with the leaving ones gone.
+        if slMade.IndexOf(vfile) < 0 then begin
+          if order > winOrder then
+            winOrder := order;
+          if (slGone.IndexOf(vfile) < 0) and (order > aftOrder) then begin
+            aftOrder := order;
+            aft := v;
+          end;
+        end;
       end;
-      if Assigned(prev) then begin
-        sigs := '';
-        for k := 0 to Pred(ElementCount(e)) do begin
-          el := ElementByIndex(e, k);
-          if Name(el) <> 'Record Header' then begin
+      sigs := '';
+      wsigs := '';
+      for k := 0 to Pred(ElementCount(e)) do begin
+        el := ElementByIndex(e, k);
+        if Name(el) <> 'Record Header' then begin
+          mine := Shape(el);
+          differs := False;
+          if Assigned(prev) then begin
             pe := ElementByName(prev, Name(el));
             differs := not Assigned(pe);
             if Assigned(pe) then
-              differs := Shape(pe) <> Shape(el);
+              differs := Shape(pe) <> mine;
+          end;
+          // A stake, first way: this plugin has the last word on the record, and what would win without it
+          // says something else in this part.
+          stake := False;
+          if (winOrder = myOrder) and Assigned(aft) then begin
+            pe := ElementByName(aft, Name(el));
+            stake := not Assigned(pe);
+            if Assigned(pe) then
+              stake := Shape(pe) <> mine;
+          end;
+          // Second way: it changed the part, and no plugin that stays says the same in it.
+          if differs and (not stake) then begin
+            stake := True;
+            for j := -1 to Pred(OverrideCount(m)) do
+              if stake then begin
+                if j < 0 then
+                  v := m
+                else
+                  v := OverrideByIndex(m, j);
+                vfile := GetFileName(GetFile(v));
+                if (slGone.IndexOf(vfile) < 0) and (slMade.IndexOf(vfile) < 0) then begin
+                  pe := ElementByName(v, Name(el));
+                  if Assigned(pe) then
+                    if Shape(pe) = mine then
+                      stake := False;
+                end;
+              end;
+          end;
+          if differs or stake then begin
+            part := SigsOf(el);
+            if part = '' then
+              part := '?';
             if differs then begin
-              part := SigsOf(el);
-              if part = '' then
-                part := '?';
               if sigs <> '' then
                 sigs := sigs + ',';
               sigs := sigs + part;
             end;
+            if stake then begin
+              if wsigs <> '' then
+                wsigs := wsigs + ',';
+              wsigs := wsigs + part;
+            end;
           end;
         end;
-        if sigs <> '' then begin
-          slOut.Add('T' + #9 + fn + #9 + IntToHex(GetLoadOrderFormID(e), 8) + #9 + Signature(e) + #9 + own + #9 + sigs);
-          n := n + 1;
-        end;
+      end;
+      if sigs <> '' then begin
+        slOut.Add('T' + #9 + fn + #9 + IntToHex(GetLoadOrderFormID(e), 8) + #9 + Signature(e) + #9 + own + #9 + sigs);
+        n := n + 1;
+      end;
+      if wsigs <> '' then begin
+        slOut.Add('W' + #9 + fn + #9 + IntToHex(GetLoadOrderFormID(e), 8) + #9 + Signature(e) + #9 + own + #9 + wsigs);
+        w := w + 1;
       end;
     end;
   end;
-  slOut.Add('V' + #9 + fn + #9 + IntToStr(n));
+  slOut.Add('V' + #9 + fn + #9 + IntToStr(n) + #9 + IntToStr(w));
   SaveReport;
-  Say('looked through ' + fn + ': it changes ' + IntToStr(n) + ' record(s) of other plugins');
+  Say('looked through ' + fn + ': it changes ' + IntToStr(n) + ' record(s) of other plugins, and has a stake in ' + IntToStr(w));
 end;
 
 function FindFile(wanted: string): IInterface;
@@ -536,7 +603,7 @@ var
   f: IInterface;
   depName: string;
 begin
-  slOut.Add('H' + #9 + 'modtrap-report/5' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
+  slOut.Add('H' + #9 + 'modtrap-report/6' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
   n := StrToInt(slJob.Values['trap.count']);
   for i := 0 to Pred(n) do
     slTrap.Add(slJob.Values['trap.' + IntToStr(i)]);
@@ -558,8 +625,18 @@ begin
       Say('not loaded: ' + depName);
     end;
   end;
+  if slJob.Values['made.count'] <> '' then begin
+    n := StrToInt(slJob.Values['made.count']);
+    for i := 0 to Pred(n) do
+      slMade.Add(slJob.Values['made.' + IntToStr(i)]);
+  end;
+  for i := 0 to Pred(slTrap.Count) do
+    slGone.Add(slTrap[i]);
   if slJob.Values['touch.count'] <> '' then begin
     n := StrToInt(slJob.Values['touch.count']);
+    for i := 0 to Pred(n) do
+      if slGone.IndexOf(slJob.Values['touch.' + IntToStr(i)]) < 0 then
+        slGone.Add(slJob.Values['touch.' + IntToStr(i)]);
     for i := 0 to Pred(n) do begin
       f := FindFile(slJob.Values['touch.' + IntToStr(i)]);
       if Assigned(f) then
@@ -589,6 +666,8 @@ begin
   slNeed := TStringList.Create;
   slMasters := TStringList.Create;
   slFit := TStringList.Create;
+  slGone := TStringList.Create;
+  slMade := TStringList.Create;
   slJob.LoadFromFile(ScriptsPath + 'modtrap-job.txt');
   sOut := slJob.Values['out'];
   sProg := slJob.Values['progress'];
@@ -622,6 +701,8 @@ begin
   slTrap.Free;
   slNeed.Free;
   slMasters.Free;
+  slGone.Free;
+  slMade.Free;
   slFit.Free;
 end;
 

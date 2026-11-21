@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
 
-from . import logbook, model, paths, winauto
+from . import logbook, model, paths, process, tools, winauto
 from .instance import GAME, Executable, Instance, fold
 
 SCRIPT = Path(__file__).resolve().parent / "xedit" / "ModTrap.pas"
@@ -211,6 +211,13 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
                 and named_for(name, p.trapped, p.trapped_mods):
             touch.append(name)
     lines += ["touch.count=%d" % len(touch)] + ["touch.%d=%s" % (i, n) for i, n in enumerate(touch)]
+    # The plugins a tool made: they have no say in which version of a record wins, so that the script can tell
+    # where the leaving plugins have the last word among the others (XE01§19, WHY§69).
+    binaries = {e.title: e.binary for e in m.instance.executables}
+    made = [r.name for r in (m.plugins[f] for f in m.order)
+            if r.active and r.source is not None and fold(r.name) not in game
+            and any(e.kind != "editor" for e in tools.identify(r.name, r.author, r.source, m.instance.output_mods, binaries))]
+    lines += ["made.count=%d" % len(made)] + ["made.%d=%s" % (i, n) for i, n in enumerate(made)]
     # With a byte-order mark: the script's string list then reads the file as UTF-8, whatever the PC's own text
     # encoding, so a folder name with letters outside it still arrives whole (WHY§34).
     paths.write_atomic(script_dir / "modtrap-job.txt", ("\r\n".join(lines) + "\r\n").encode("utf-8-sig"))
@@ -384,8 +391,11 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
                  "data_path": "", "trap_missing": [], "loaded": 0,
                  # what each looked-through plugin really changes, by xEdit's own comparison (XE01§18): plugin ->
                  # [{"form", "kind", "owner", "fields"}]; a plugin is a key only if the script looked through it
-                 "touched": {}}
+                 "touched": {},
+                 # how many records each looked-through plugin changes at all (a stake is narrower, XE01§19)
+                 "changes": {}}
     touched_rows: dict[str, list[dict]] = {}
+    changed_rows: dict[str, int] = {}
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
     parts: dict[tuple[str, str, str], dict] = {}
@@ -420,10 +430,15 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
         elif kind == "G" and len(f) >= 7 and f[4].isdigit():
             entries[(f[1], f[2], f[3], int(f[4]))] = {"src": f[5], "breaks": f[6] == "1"}
         elif kind == "T" and len(f) >= 6:
+            changed_rows[f[1]] = changed_rows.get(f[1], 0) + 1
+        elif kind == "W" and len(f) >= 6:
             touched_rows.setdefault(f[1], []).append({"form": f[2], "kind": f[3], "owner": f[4],
                                                       "fields": sorted({x for x in f[5].split(",") if x})})
-        elif kind == "V" and len(f) >= 2:
+        elif kind == "V" and len(f) >= 4:
+            # Only a script that tells stakes (W) is believed: an earlier one told every change, and a tool that
+            # holds a value many plugins share was then asked to run again for nothing (WHY§69).
             out["touched"][f[1]] = touched_rows.get(f[1], [])
+            out["changes"][f[1]] = changed_rows.get(f[1], 0)
         elif kind == "D" and len(f) >= 4 and f[1] in files:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:
@@ -534,8 +549,10 @@ class OkPresser:
     (XE01§13). For a run ModTrap started, that list is ModTrap's own, so ModTrap presses OK. Called from a job's
     waiting loop while the script has not started."""
 
-    def __init__(self, image: str, press: Callable[[str], bool] = winauto.press_module_selection_ok):
+    def __init__(self, image: str, press: Callable[[str], bool] = winauto.press_module_selection_ok,
+                 board: "process.Board | None" = None, stage: str = ""):
         self.image, self._press = image, press
+        self.board, self.stage = board, stage
         self.pressed = 0
         self._next = 0.0
 
@@ -550,6 +567,8 @@ class OkPresser:
             hit = False
         if hit:
             self.pressed += 1
+            if self.board is not None and self.stage:
+                self.board.mark(self.stage, "ok", process.DONE, "pressed")
             if self.pressed == 1:
                 log.info("xEdit asked which plugins to load. The ones ModTrap listed were already ticked: ModTrap "
                          "pressed OK.")
@@ -635,6 +654,7 @@ class Job:
         self._thread: threading.Thread | None = None
         self.manifest: dict = {}
         self.on_end: Callable[[], None] | None = None     # called once the job has ended and is written down
+        self.board = process.BOARD                         # what the Process tab shows of this job (WHY§70)
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="dry-run", daemon=True)
@@ -655,6 +675,7 @@ class Job:
 
     def _fail(self, text: str) -> None:
         self.state, self.message, self.ended = "failed", logbook.mask(text), time.time()
+        self.board.stop("dry", self.message)
         log.error("the dry run failed: %s", text)
         self._xedit_log()
 
@@ -691,7 +712,12 @@ class Job:
         p = self.plan
         log.info("dry run %s: %d trapped plugin(s), %d dependant(s), %d plugin(s) for xEdit to load",
                  self.id, len(p.trapped), len(p.dependants), len(p.load))
+        board = self.board
+        board.begin("dry", process.DRY, drop=("change", "install"))
+        board.mark("dry", "prepare", process.GOING, "%d dependant(s)" % len(p.dependants))
         self.manifest = prepare(self.model, p, self.dir)
+        board.mark("dry", "prepare", process.DONE)
+        board.mark("dry", "start", process.GOING, p.tool)
         log.info("the dependants are copied and hashed in the job's safe folder (%d file(s))", len(p.dependants))
         if not Path(p.mo2).is_file():
             raise Refused("ModOrganizer.exe was not found in the modlist's folder")
@@ -711,13 +737,22 @@ class Job:
             raise Refused("MO2 could not be started: " + logbook.why(e)) from None
         progress, report = self.dir / "progress.txt", self.dir / "report.tsv"
         seen, seen_running, gone_since = 0, False, None
-        ok = OkPresser(image, self._presser)
+        ok = OkPresser(image, self._presser, board, "dry")
+        try:
+            touch = sum(1 for ln in (self.dir / "script" / "modtrap-job.txt").read_text(encoding="utf-8-sig").splitlines()
+                        if re.match(r"touch\.\d+=", ln))
+        except OSError:
+            touch = 0
+        told = process.Lines("dry", len(p.dependants), touch, board)
+        board.mark("dry", "start", process.DONE)
+        board.mark("dry", "ok", process.GOING, "waiting for xEdit's window")
         self.state = "loading"
         log.info("xEdit is loading the plugins; its own window shows the progress. This can take some minutes. If its "
                  "“Module Selection” window stays open, press OK there: the right plugins are already ticked.")
         while True:
             if self._stop.wait(self._poll):
                 self.state, self.message, self.ended = "stopped", "stopped at your request", time.time()
+                board.stop("dry", "stopped at your request")
                 log.warn("the dry run was stopped; xEdit is left for you to close (it has changed nothing)")
                 return
             if seen == 0:
@@ -726,6 +761,7 @@ class Job:
             for ln in lines[seen:]:
                 log.info("xEdit: %s", ln)
                 self.state = "reading"
+                told.take(ln)
             seen = len(lines)
             ended = _ended(report)
             if ended:
@@ -745,7 +781,11 @@ class Job:
                 raise Refused("the dry run took longer than %d minutes; ModTrap stopped waiting" % (TIME_LIMIT // 60))
         self.state = "checking"
         self.result = parse_report(_read(report), p.trapped, p.trapped_mods, self.model.instance.primary)
+        board.settle("dry", "close")
+        board.mark("dry", "close", process.GOING)
         close_xedit(image, self._running, self._closer, self._poll, mo2_was_running=mo2_was_running)   # XE01§11
+        board.mark("dry", "close", process.DONE)
+        board.mark("dry", "check", process.GOING)
         # The script only read. Prove it: every dependant must still be the file that was copied (DESIGN§8).
         changed = []
         for fd in self.manifest["dependants"]:
@@ -762,6 +802,7 @@ class Job:
             self.message = ("these plugins are not the files they were before the dry run: %s. Their originals are "
                             "in the job's safe folder." % ", ".join(changed))
             log.error("%s", self.message)
+            board.stop("dry", self.message)
             return
         if self.result["end"] != "ok":
             self._fail("the script reported a failure: " + (self.result["reason"] or "no reason given"))
@@ -781,6 +822,7 @@ class Job:
         paths.write_atomic(self.dir / "result.json", (json.dumps(self.result, indent=1) + "\n").encode("utf-8"))
         self.state = "done"
         fs = self.result["files"]
+        board.mark("dry", "check", process.DONE, "%d dependant(s) read, every one unchanged on disk" % len(fs))
         log.info("the dry run is done in %d s: %d dependant(s) read, every one unchanged on disk",
                  int(self.ended - self.started), len(fs))
         for fd in fs:

@@ -64,4 +64,6 @@ in [docs/design/](docs/design/).
 - A fact read in MO2's or xEdit's source goes in a research note (`docs/research/`), with its label and its file
   and line at a named commit. A decision is recorded with its date and the owner's words, amended only by a dated
   note, and its id is never renumbered.
+- Every change under `modtrap/` gets a version of its own (MT22): run `python3 tools/bump.py` before the commit
+  (a test fails otherwise), and tell the owner the version with each change handed over.
 - Text the owner reads uses British spelling.

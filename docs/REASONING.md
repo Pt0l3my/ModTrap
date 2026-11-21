@@ -90,6 +90,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 65 | 2026-11-21 | The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm | FACT | #tools #steps #xedit #process |
 | 66 | 2026-11-21 | Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all | DECIDED | #tools #steps #xedit #process |
 | 67 | 2026-11-21 | "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared | DECIDED | #process #page #mo2 #history |
+| 68 | 2026-11-21 | A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running | DECIDED | #process #version #server #page |
+| 69 | 2026-11-21 | The other tools checked: a change is not a stake (the patcher was asked for a value many plugins share), and a behaviour tool reads lists and patch folders, not animation files | DECIDED | #tools #steps #xedit #process |
+| 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
 
 ## Entries
 
@@ -1499,3 +1502,105 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests for the mark, the waiting, and the clearing; in a browser on an invented list, with MO2 shown as
   open: the one go asked nothing, the job was listed, reverted from the History tab and cleared.
 - Not checked: any of it on the owner's PC.
+- Later, 2026-11-21: the mark of names, sizes and times is replaced by a mark of contents, and the notice names
+  the versions: see WHY§68.
+
+### 68. A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running
+
+`2026-11-21` · DECIDED · `#process #version #server #page` · refs: MT22, MT11, MT17, MT20, DESIGN§2, DESIGN§17, WHY§9, WHY§67
+
+- The owner, on the update that ran without a restart (WHY§67): "that's an issue, we need to start involving
+  version updates to prevent that error".
+- FACT: the version had stood at one placeholder since the first day. A session file therefore could not tell
+  which ModTrap had made it, and neither the owner nor the page could tell an old ModTrap from a new one.
+- FACT (read in ModTrap's own start-up code): a ModTrap started while another still runs found its port taken
+  and quietly took another. Two pages were then open, of two versions, and nothing said which was which. The
+  mark of WHY§67 does not catch this when the update was unpacked into a new folder: the older one's files do
+  not change.
+- FACT: the mark of WHY§67 used the files' dates. Unpacking the same version again changes the dates, and would
+  have raised the notice for nothing.
+- DECIDED (MT22): the version is `0.3.n`, in `modtrap/version.json`, with a mark of the contents of ModTrap's
+  files (line endings left out; the record itself and Python's own caches left out). `tools/bump.py` raises the
+  number once for each commit and writes the mark; a test fails while the files and the mark disagree. So every
+  state of the files that is pushed has a number of its own, and the owner is told that number with each change.
+- DECIDED: the version is shown on the page, in the window ModTrap runs in, at the start of its log, in every
+  saved session file, and in the log line of each job that is started.
+- DECIDED: the notice of WHY§67 now compares contents, and names both versions: the one running and the one on
+  disk. Where the files a ModTrap started from are not those its version was written for (an update unpacked
+  over an older folder leaves the older one's files; a copy cut short; a file edited), the page says "files
+  differ" beside the version and the log says why. It is a warning, not a refusal: the tests cannot know which
+  file is at fault.
+- DECIDED: one ModTrap at a time. A running ModTrap leaves a note in its own work folder: its port, its version
+  and a key made for that start. A new start asks the running one, with that key, to save its session and
+  close, waits for its port, and takes its place; the owner's session comes back as after any Quit (MT20). One
+  that is in the middle of a job is left alone: the new start says so, opens the running one's page and ends.
+- METHOD: the key is not the page's token, and the request is not open to a page. It must carry the key, the
+  right Host, no Origin and no body; a browser cannot send it without the key, and the key is in a folder no
+  web page can read. It opens that one request only. A program of the same user on the same PC could read it,
+  as it could already end ModTrap's process.
+- METHOD: a page left open from the ModTrap that closed is refused by the new one (its token is of another
+  start). It now loads itself again, once, and is then the new one's page.
+- REJECTED for now: ModTrap fetching its own updates. It would be the first time ModTrap reaches the network,
+  and the first time it runs code it has just downloaded. MT11 leaves an updater for later; it is the owner's
+  to ask for.
+- LIMIT: a ModTrap older than 0.3.1 leaves no note and cannot be asked. Going from such a one to this version,
+  it has to be quit by hand once.
+- Checked: tests for the mark, the bump, the refusals of the request and the three outcomes of a take-over; two
+  real starts one after the other on one port here: the first saved and ended, the second took the port.
+- Not checked: on the owner's PC, where a port is released under Windows' rules.
+
+### 69. The other tools checked: a change is not a stake, and a behaviour tool reads lists and patch folders, not animation files
+
+`2026-11-21` · DECIDED · `#tools #steps #xedit #process` · refs: MT17, DESIGN§13, DESIGN§14, XE01§18, XE01§19, TL01§8, TL01§11, TL01§12, WHY§66, WHY§67
+
+- The owner, on version 0.3.1 with a new dry run: "dyndolod isn't requested anymore. Can you double check other
+  tools are properly requested by reliable logic?"
+- FACT (the session file): WHY§66's method worked on the owner's list. The distant-view generator is cleared,
+  with its evidence: six records the mod changes, none with the mod's values.
+- FACT: the patcher was asked to run for one record: a worldspace's table of heights, which the mod "changes"
+  and one of the patcher's plugins holds the same. xEdit also reported cells changed in their place on the
+  grid. A dialogue mod has no business with either. LIKELY these are what the game's editor writes into every
+  plugin it saves that holds such a record (XE01§19); then many plugins say the same, and the patcher's copy
+  proves nothing about this mod.
+- FACT: the behaviour tool was asked because the mod carries four files that ModTrap files under animations.
+  Read in that tool's source (TL01§12): it takes a mod's animations in through a list or a patch folder only.
+  Whether those four files include a list, the session file does not say.
+- DECIDED (the method is ModTrap's, MT17): tools are judged by records from **stakes**, told by xEdit
+  (XE01§19): parts where the leaving plugins have the last word and the next in line says something else, or
+  where they say what no plugin that stays says. A dry run made before this version tells no stakes; its
+  tools wait for a new one, as in WHY§66.
+- DECIDED: a behaviour tool is asked for a list or a patch folder it reads, or where its output names one of
+  the mod's animation folders; plain animation files clear it, with the files shown.
+- LOOKED AT, left as it is: the generators that work on files are judged by files of their output at the mod's
+  paths, and by the mod carrying files for distant view (TL01§8). The second is a wide net (it also catches
+  ready-made files that are nobody's input); nothing on the owner's list speaks against it yet, and the source
+  of that tool is not open to read.
+- Not judged, as before: what is packed in archives; tools MO2 has no output mod for.
+- For the owner's mod the modlist's guide says: behaviour tool and patcher. ModTrap now decides both by
+  evidence and shows it; where it differs from the guide, the evidence is there to judge.
+- Checked: tests on invented plugins and folders. Not checked: the new lines on a real xEdit (the probe runs
+  them first), and the search of a real behaviour output.
+
+### 70. A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves
+
+`2026-11-21` · DECIDED · `#page #process #steps` · refs: MT17, DESIGN§4, DESIGN§14, DESIGN§18, WHY§60, WHY§61
+
+- The owner: "can you add job process tab that would show the steps as smaller boxes interlinked and within each
+  step box show list of tasks to complete to finish. This new page will show the process in real time (also add
+  text colors, white normally, amber ongoing, green complete, red error, etc.)."
+- FACT: until now the page knew a job only as a word (working, verified, installed) and the log's lines. What a
+  job was doing at a given moment was in the log alone.
+- DECIDED: each job tells a board what its tasks are when it starts, and marks each as it goes: waiting, going,
+  done, failed, skipped, or waiting for the owner. For the part xEdit does, the marks come from the lines
+  ModTrap's own scripts write while they work (which dependant is read, which plugin is written), so the page
+  follows xEdit without asking it anything. The board decides nothing; a job that never marks it works as before.
+- DECIDED: the stages are the ones the one go runs (WHY§60): probe, dry run, plan, demaster on copies, put in
+  place; and one more box made from the Steps tab for what follows (tools, the owner's checks). Colours as the
+  owner asked, with purple for what waits for the owner and grey for what is not needed.
+- DECIDED: the probe's inner dry run and change write to a board of their own: on the page the probe is one box
+  with its seven steps, and the real dry run's box is not painted by a test on invented plugins.
+- REJECTED: working the stages out on the page from the log's text. The log's wording is for reading and
+  changes; a mark is a contract.
+- Checked: tests for the board and for the stages through a whole demaster on the stand-in; in a browser, the
+  one go from probe to in place, the box going amber while xEdit runs, and all green at the end.
+- Not checked: on the owner's PC; a failed run's red box was checked by test only, not by eye.

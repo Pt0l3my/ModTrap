@@ -256,3 +256,25 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   that differ, and for each plugin looked through a line (`V`). ModTrap judges tools from these lines alone
   (TL01§11). Unproven until the owner's next dry run; the probe runs the new lines of the script on the invented
   plugins first.
+
+## 19. A change is not yet a stake: what a tool's output can owe to a plugin (the owner's list, 2026-11-21)
+
+- **FACT (the owner's list, a dry run with §18's lines).** For a dialogue mod the script reported, truthfully, a
+  worldspace changed in its table of heights, and several cells changed in their place on the grid. A patcher's
+  plugin held the same table of heights, and was told to run again.
+- **LIKELY.** These are values the game's editor writes when it saves a plugin that holds such a record: the
+  same in every plugin saved that way, and different from the game's own files. Many plugins of a large list
+  then say the same thing in that part. The patcher's copy need not come from this mod at all.
+- **METHOD.** The script now also tells, for each record a leaving plugin holds but does not own, the parts in
+  which it has a **stake** (line W). A part is a stake in one of two ways. (1) The plugin has the last word on
+  the record among the plugins no tool made, and the version that would win with the leaving plugins gone says
+  something else in that part: a tool that works from the winning version saw this plugin's value, and will
+  see another. (2) The plugin changed the part (§18), and no version of the record in a plugin that stays, the
+  record's own plugin included, says the same: a tool that merges from every version could have it from here
+  only. The leaving plugins are those of `touch.N`; the plugins tools made are named in the job as `made.N`,
+  and have no say in what wins.
+- **METHOD.** Tools are judged from the stakes only (TL01§11's second question, asked of fewer parts). The count
+  of all changes (T) is kept and shown beside it.
+- **Limit.** A part the plugin removes, where the next in line has it, is not told. A tool's plugin ModTrap
+  does not know as such counts as an ordinary plugin: where it wins a record, the mod has no stake there.
+- **Not checked** on a real xEdit yet: the lines are exercised by the probe's dry run, on invented plugins.

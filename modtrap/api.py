@@ -19,7 +19,13 @@ import tempfile
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
+from . import process, version
 from .server import Bad
+
+
+def probejob_steps() -> tuple:
+    from . import probejob                     # imported late: nothing of the probe is loaded for looking only
+    return probejob.STEPS
 
 log = logbook.get("app")
 
@@ -76,23 +82,6 @@ class HeaderCache:
         return got  # type: ignore[return-value]
 
 
-def code_mark() -> str:
-    """A mark of ModTrap's own files as they are on disk now: the program, the page, the scripts, the data. The
-    program is read once, at the start; the scripts and the page are read from disk each time. After an update of
-    the files without a restart the two are of different versions (WHY§67): this mark tells."""
-    root = Path(__file__).parent
-    h = hashlib.sha256()
-    for f in sorted(root.rglob("*")):
-        if f.is_file() and f.suffix.lower() in (".py", ".pas", ".js", ".html", ".css", ".json") and "__pycache__" not in f.parts:
-            try:
-                st = f.stat()
-            except OSError:
-                continue
-            h.update(("%s|%d|%d\n" % (f.relative_to(root).as_posix(), st.st_size, st.st_mtime_ns)).encode("utf-8"))
-    return h.hexdigest()[:16]
-
-
-STARTED_WITH = code_mark()
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
                                 "/api/demaster/install", "/api/add/run", "/api/probe/start"))
 
@@ -120,7 +109,7 @@ class Api:
         self.ask_close = dryrun.winauto.ask_to_close          # asks this modlist's MO2 to close; replaced in tests
         self._mo2_seen: tuple[float, dict] = (0.0, {})
         self._mo2_ours = False                  # the MO2 that is running was started by ModTrap for a run (WHY§67)
-        self._code_seen: tuple[float, bool] = (0.0, False)
+        self._code_seen: tuple[float, dict | None] = (0.0, None)
         self.poll = 1.0
         self.store = sessions.Store()
         self.session: sessions.Session | None = None
@@ -285,6 +274,16 @@ class Api:
         log.info("ModTrap is closing; the session is saved")
         self.save_log()
         return {"quit": True}, self.on_quit
+
+    def handover(self) -> tuple[dict, Callable[[], None] | None]:
+        """Another start of ModTrap on this PC takes over (WHY§68): this one saves and closes, unless it is in the
+        middle of something."""
+        if self._busy() or (self.changes is not None and self.changes.busy()) or \
+                (self.tooljob is not None and self.tooljob.state in ("starting", "running")):
+            raise Bad("in the middle of a job")
+        log.info("ModTrap was started again on this PC: this one (%s) saves its session and closes", VERSION)
+        answer, after = self.quit({})
+        return dict(answer, version=VERSION), after
 
     def _locked(self) -> str:
         """Why the session in use may not start a job, or "" when it may."""
@@ -632,8 +631,9 @@ class Api:
         if job is not None:
             pub = job.public()
             res = pub.get("result") or {}
-            if pub.get("state") == "done" and sorted(pub.get("plan", {}).get("trapped_mods", [])) == want and res.get("touched"):
-                return res["touched"], str(pub.get("id", ""))
+            if pub.get("state") == "done" and sorted(pub.get("plan", {}).get("trapped_mods", [])) == want \
+                    and res.get("touched") and "changes" in res:     # told by a script that tells stakes (WHY§69)
+                return dict(res["touched"], **{"": res["changes"]}), str(pub.get("id", ""))
         s = self.session
         if s is None:
             return None, ""
@@ -652,8 +652,8 @@ class Api:
                     res = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
             except (OSError, ValueError, AttributeError):
                 continue
-            if isinstance(res, dict) and res.get("touched"):
-                return res["touched"], d.name
+            if isinstance(res, dict) and res.get("touched") and isinstance(res.get("changes"), dict):
+                return dict(res["touched"], **{"": res["changes"]}), d.name
         return None, ""
 
     def steps(self, body: dict) -> dict:
@@ -1024,11 +1024,12 @@ class Api:
 
     # --- MO2: open or closed, for this modlist (WHY§58) ---------------------------------------------------------------
 
-    def updated_on_disk(self) -> bool:
-        """Have ModTrap's own files changed since this ModTrap started? Looked at every few seconds."""
+    def updated_on_disk(self) -> dict | None:
+        """Have ModTrap's own files changed since this ModTrap started (WHY§67)? Then: the version now on disk
+        (WHY§68). Looked at every few seconds."""
         when, was = self._code_seen
-        if time.time() - when > 5:
-            was = code_mark() != STARTED_WITH
+        if time.time() - when > 3:
+            was = {"version": version.recorded()[0]} if version.code_mark() != version.STARTED else None
             self._code_seen = (time.time(), was)
         return was
 
@@ -1135,11 +1136,73 @@ class Api:
         self._mo2_seen = (0.0, {})
         return {"started": True, "mo2": self.mo2()}
 
+    def process_public(self, dm: dict | None = None, pr: dict | None = None) -> list[dict]:
+        """The demaster as stages and tasks, as far as ModTrap itself carries it (DESIGN§18, WHY§70): the probe,
+        the dry run, the plan, the change on copies, putting it in place. Each task has a state the page colours:
+        waiting, going, done, failed, skipped, yours (waits for the owner)."""
+        P = process
+        out: list[dict] = []
+
+        def stage(key: str, title: str, who: str, tasks: list[dict], note: str = "") -> None:
+            out.append({"key": key, "title": title, "who": who, "tasks": tasks, "state": P.stage_state(tasks),
+                        "note": note})
+
+        ch = self.changes
+        # 1. The probe: ModTrap proves itself on this modlist with invented plugins, before it touches a real one.
+        if ch is not None and ch.require_probe:
+            pr = pr if pr is not None else ch.probe_public()
+            known = {"passed": P.DONE, "failed": P.FAILED, "going": P.GOING, "skipped": P.SKIPPED}
+            tasks = [{"key": s["key"], "text": s["title"], "state": known.get(s.get("result", ""), P.WAITING),
+                      "note": s.get("detail", "") or ""} for s in pr.get("steps", [])]
+            note = ""
+            if not pr.get("reason") and pr.get("state") != "working":
+                note = "Passed%s; it holds for this xEdit and these scripts." % (" on " + pr["when"].replace("T", " ") if pr.get("when") else "")
+                if not tasks:
+                    tasks = [{"key": "passed", "text": "The probe has passed on this modlist", "state": P.DONE, "note": ""}]
+            elif not tasks:
+                tasks = [{"key": k, "text": t, "state": P.WAITING, "note": ""} for k, t in probejob_steps()]
+            if pr.get("state") == "failed" and pr.get("message") and not any(t["state"] == P.FAILED for t in tasks):
+                tasks.append({"key": "why", "text": "The probe stopped", "state": P.FAILED, "note": pr["message"]})
+            stage("probe", "Probe", "ModTrap", tasks, note or (pr.get("reason") or ""))
+        # 2. The dry run.
+        tasks = P.BOARD.tasks("dry")
+        job = self.job.public() if self.job is not None else None
+        if not tasks:
+            tasks = [{"key": k, "text": t, "state": P.DONE if job and job.get("state") == "done" else P.WAITING, "note": ""}
+                     for k, t in P.DRY]
+        stage("dry", "Dry run", "ModTrap", tasks,
+              "" if not job else "For %s." % ", ".join(job.get("plan", {}).get("trapped_mods", [])[:4]))
+        # 3. The plan: what the dry run sorted, and the owner's word.
+        dm = dm if dm is not None else ch.demaster_public() if ch is not None else {}
+        files = (job or {}).get("result", {}).get("files", []) if job and job.get("state") == "done" else []
+        sorted_task = {"key": "sort", "text": "Sort the dependants by what they take from the mod", "state": P.WAITING, "note": ""}
+        if files:
+            kinds: dict[str, int] = {}
+            for fd in files:
+                kinds[fd.get("reading", "?")] = kinds.get(fd.get("reading", "?"), 0) + 1
+            sorted_task.update(state=P.DONE, note="; ".join("%d %s" % (n, k) for k, n in sorted(kinds.items())))
+        going = dm.get("state") in ("working", "verified", "installed") or bool(P.BOARD.tasks("change"))
+        confirm = {"key": "confirm", "text": "You read the plan and press “Go ahead”",
+                   "state": P.DONE if going else P.YOURS if files and ch is not None else P.WAITING, "note": ""}
+        stage("plan", "Plan", "you", [sorted_task, confirm])
+        if ch is None:
+            return out
+        # 4. and 5. The change on copies, and putting it in place.
+        tasks = P.BOARD.tasks("change") or [{"key": k, "text": t, "state": P.WAITING, "note": ""} for k, t in P.CHANGE]
+        stage("change", "Demaster on copies", "ModTrap", tasks, dm.get("message", "") if dm.get("state") == "failed" else "")
+        tasks = P.BOARD.tasks("install") or [{"key": k, "text": t, "state": P.WAITING, "note": ""} for k, t in P.INSTALL]
+        if dm.get("state") == "verified" and not P.BOARD.tasks("install"):
+            tasks[0] = dict(tasks[0], state=P.YOURS if dm.get("mo2_closed") is False else P.WAITING,
+                            note="MO2 is open: ModTrap closes it in the one go, or asks you" if dm.get("mo2_closed") is False else "")
+        stage("install", "Put in place", "ModTrap", tasks)
+        return out
+
     def state(self) -> dict:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "changes": self.changes is not None,
                    "updated_on_disk": self.updated_on_disk(),
+                   "version_differs": version.DIFFERS,
                    "save": self.saver.public(),
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
@@ -1154,6 +1217,7 @@ class Api:
             out["mo2"] = None
         out["demaster"] = self.changes.demaster_public() if self.changes is not None else None
         out["probe"] = self.changes.probe_public() if self.changes is not None else None
+        out["process"] = self.process_public(out["demaster"], out["probe"]) if m is not None else []
         settings = paths.load_settings()
         out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         out["log_epoch"] = self.log_epoch
@@ -1291,9 +1355,13 @@ class Api:
 
     def post(self, path: str, body: dict) -> tuple[int, object, Callable[[], None] | None]:
         if path in NEEDS_SAME_VERSION and self.updated_on_disk():
-            raise Bad("ModTrap's own files have changed since it was started (an update). Quit ModTrap and start it "
-                      "again first: until then the program in memory and the scripts on disk are of different "
-                      "versions, and nothing is started.")
+            on_disk = (self.updated_on_disk() or {}).get("version", "")
+            raise Bad("This is ModTrap %s, still running, but the files in its folder have changed since it was "
+                      "started%s. Quit ModTrap and start it again first: until then the program in memory and the "
+                      "scripts on disk are of different versions, and nothing is started."
+                      % (VERSION, " (they are version %s now)" % on_disk if on_disk and on_disk != VERSION else ""))
+        if path in NEEDS_SAME_VERSION:
+            log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":
             folder, profile = body.get("folder"), body.get("profile")
             if not isinstance(folder, str) or len(folder) > 1000:

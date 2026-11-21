@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import adding, addjob, demaster, dryrun, instance, logbook, model, paths, plugin, probe
+from . import process
 from .instance import fold
 
 log = logbook.get("probe")
@@ -234,6 +235,7 @@ class Probe:
             raise Failed("dry", str(e)) from None
         job = dryrun.Job(m2, dp, self.dir / "dry", launcher=self._launcher, running=self._running, poll=self._poll,
                          closer=self._closer, presser=self._presser)
+        job.board = process.Board()          # the probe has its own box on the Process tab: its steps (WHY§70)
         (self.dir / "dry").mkdir(parents=True, exist_ok=True)
         job.start()
         while job.state not in ("done", "failed", "stopped"):
@@ -291,6 +293,7 @@ class Probe:
         self._dm = demaster.Demaster(m2, dp, dpl, self.dir / "demaster", self.session_dir, launcher=self._launcher,
                                      running=self._running, closed=self._closed, poll=self._poll, closer=self._closer,
                                      presser=self._presser)
+        self._dm.board = process.Board()
         (self.dir / "demaster").mkdir(parents=True, exist_ok=True)
         try:
             self._dm.make_safe()

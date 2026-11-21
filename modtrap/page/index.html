@@ -55,6 +55,7 @@
   <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
+  <button data-tab="process" title="The demaster as it goes: each stage a box, its tasks inside, coloured as they are carried out">Process <span id="process-dot" class="live-dot" hidden></span></button>
   <button data-tab="add" title="Add a mod to the modlist safely: what it needs, where it goes, what it replaces, and the steps">Add mods <span id="add-count" class="count" hidden></span></button>
   <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-tab="tools">Tools</button>
@@ -196,6 +197,18 @@
     <div class="scroll">
       <div id="probe-box" class="pad"></div>
       <div id="tools-list" class="pad"></div>
+    </div>
+  </section>
+
+  <section id="tab-process" class="tab" hidden>
+    <div class="tools">
+      <strong id="process-summary">Process</strong>
+      <span class="spacer"></span>
+      <span class="legend"><span class="t-waiting">to come</span><span class="t-going">going on now</span><span class="t-done">done</span><span class="t-failed">stopped with an error</span><span class="t-yours">waits for you</span><span class="t-skipped">not needed</span></span>
+    </div>
+    <div class="scroll pad">
+      <p class="dim" id="process-intro">The demaster from start to finish, as it happens. Each box is a stage, linked to the next; inside it are the tasks that finish it. Click a box's title to go where that stage is worked.</p>
+      <div id="process-flow" class="flow"></div>
     </div>
   </section>
 

@@ -280,12 +280,13 @@ class DemasterThroughThePage(unittest.TestCase):
     def test_an_update_without_a_restart_is_noticed_and_nothing_is_started(self) -> None:
         """WHY§67: the program in memory and the scripts on disk must be of one version."""
         self.assertFalse(self.api.state()["updated_on_disk"])
-        self.api._code_seen = (time.time(), True)               # as if ModTrap's files had changed on disk
+        self.api._code_seen = (time.time(), {"version": "9.9.9"})   # as if ModTrap's files had changed on disk
         self.assertTrue(self.api.state()["updated_on_disk"])
         for path in ("/api/dryrun/start", "/api/probe/start", "/api/demaster/start"):
             with self.assertRaises(Bad) as c:
                 self.api.post(path, {"mods": ["Bramble"]})
             self.assertIn("Quit ModTrap and start it again", str(c.exception))
+            self.assertIn("they are version 9.9.9 now", str(c.exception))
         self.assertEqual(snapshot(self.root), self.before)
 
     def test_new_plugins_that_wait_are_dropped_when_the_modlist_moves_on(self) -> None:
@@ -313,6 +314,11 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(sorted(x["plugin"] for x in p["demaster"]), ["Generated.esp", "Lantern.esp"])
         self.assertEqual((p["switch_off"], p["disable_mods"], p["needs_you"], p["mod_name"]),
                          (["BrambleLanternPatch.esp", "Collection - Bramble.esp"], ["Bramble - Lantern Patch"], [], "ModTrap - Bramble"))
+        # The Process tab's stages (DESIGN§18): the dry run is done, the plan waits for the owner, the rest is to come.
+        stages = {x["key"]: x for x in self.api.state()["process"]}
+        self.assertEqual([(k, v["state"]) for k, v in stages.items()],
+                         [("dry", "done"), ("plan", "yours"), ("change", "waiting"), ("install", "waiting")])
+        self.assertIn("2 can be demastered; 2 patch only", stages["plan"]["tasks"][0]["note"])
         got = self.api.post("/api/demaster/start", {})[1]
         self.assertEqual(got["state"], "working")
         with self.assertRaises(Bad):
@@ -327,9 +333,18 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         self.mo2_running = False
         self.assertFalse(self.api.job_state()["job"]["stale"])                 # the dry run is of the modlist as it is
+        stages = {x["key"]: x for x in self.api.state()["process"]}
+        self.assertEqual((stages["plan"]["state"], stages["change"]["state"], stages["install"]["state"]),
+                         ("done", "done", "yours"))          # it was refused above: MO2 was open
+        self.assertIn("MO2 must be closed", stages["install"]["tasks"][0]["note"])
+        self.assertEqual([(t["text"], t["state"], t["note"]) for t in stages["change"]["tasks"] if t["key"].startswith("v:")],
+                         [("Lantern.esp", "done", "verified"), ("Generated.esp", "done", "verified")])
         d = self.api.post("/api/demaster/install", {})[1]
         self.ready()
         self.assertEqual((d["state"], d["check"]["ok"]), ("installed", True))
+        placed = {x["key"]: x for x in self.api.state()["process"]}["install"]
+        self.assertEqual((placed["state"], {t["key"]: t["state"] for t in placed["tasks"]}),
+                         ("done", {"mo2": "done", "mod": "done", "off": "done", "disable": "done", "reread": "done", "health": "done"}))
         self.assertTrue(self.api.job_state()["job"]["stale"])                  # the modlist was read again: said so
         m = model.build(instance.load(self.root))
         self.assertEqual(m.issues, [])

@@ -19,7 +19,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   patches, their tools, and a Steps tab); MT16 settled by the facts; MT19 (a drop box for the modlist folder); MT20 (Quit, and sessions: one
   active session per modlist).
 - **2026-11-21.** MT21 (adding mods safely: analysis, steps, and carrying out what ModTrap can; the how is
-  ModTrap's to choose).
+  ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
 - **Open.** None. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -448,3 +448,22 @@ tools like synthesis that is not shipped with ModTrap. Can that be done?" So the
 **the owner drops the mod's archive on ModTrap, and ModTrap takes it from there**: it unpacks the archive, analyses
 it, compiles the steps and carries out all it can; left to the owner are the tools ModTrap does not contain, an
 installer's questions, and playing (DESIGN§16.1, DESIGN§16.8, WHY§41). The other two points stand.
+
+## MT22
+
+**Versions** · *2026-11-21 · Decided by the owner; the how is left to ModTrap (as MT17)*
+
+**Decision.** ModTrap carries a version that changes with every update, and uses it so that an older ModTrap is
+never mistaken for a newer one.
+
+**Owner's words.** "that's an issue, we need to start involving version updates to prevent that error" (the error:
+an update unpacked while ModTrap ran, so that a new script ran under the old program, WHY§67).
+
+**Settled under that freedom** (DESIGN§17, WHY§68; the owner may overrule any of it):
+
+- The version is `0.3.n`; `n` rises with every change that is pushed. The owner is told the number with each change.
+- It is shown on the page, in ModTrap's window, in its log and in every saved session file.
+- A ModTrap whose files changed while it runs starts no job, and says which version is running and which is on disk.
+- One ModTrap at a time: a new start makes one that is still running save its session and close, and takes its
+  place. One in the middle of a job is left alone.
+- ModTrap does not fetch updates itself (MT11 leaves an updater for later).
