@@ -901,7 +901,7 @@ function addCandidate(name) {
 }
 
 const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"],
-  installer: ["has an installer", "warn"], failed: ["not taken in", "bad"] };
+  installer: ["waiting for your answers", "warn"], failed: ["not taken in", "bad"] };
 
 function renderAddPicked() {
   const box = $("add-picked");
@@ -1036,7 +1036,7 @@ function shareTable(title, list, word) {
     list.length > 300 ? el("p", { class: "dim", text: "Showing the first 300 mods." }) : null);
 }
 
-function addModCard(x, place) {
+function addModCard(x, place, built) {
   const where = place.before ? "directly before “" + place.before + "” in MO2's list" : "last in MO2's list (the highest priority)";
   const plugs = x.plugins.map((p) => {
     if (p.unreadable) return el("div", { class: "plug" }, el("p", {}, el("span", { class: "mono", text: p.name }), el("span", { class: "tag bad", text: "could not be read" })), el("p", { class: "dim", text: p.unreadable }));
@@ -1056,7 +1056,12 @@ function addModCard(x, place) {
   const carries = Object.keys(x.kinds).length ? kindsText(x.kinds) : "no files";
   return el("div", { class: "card" },
     el("div", { class: "card-head" }, el("h2", {}, modLink(x.name),
-      el("span", { class: "tag " + (x.enabled ? "good" : x.staged ? "warn" : ""), text: x.enabled ? "enabled, priority " + x.priority : x.staged ? "unpacked by ModTrap, not in MO2 yet" : "installed, not enabled" }))),
+      el("span", { class: "tag " + (x.enabled ? "good" : x.staged ? "warn" : ""), text: x.enabled ? "enabled, priority " + x.priority : x.staged ? "unpacked by ModTrap, not in MO2 yet" : "installed, not enabled" })),
+      built ? (() => {
+        const b = el("button", { type: "button", text: "Change the installer's answers", title: "Show this mod's installer questions again" });
+        b.addEventListener("click", () => { state.installers = state.installers || {}; state.installers[built.id] = { picks: null, open: true }; loadInstaller(built.id); });
+        return b;
+      })() : null),
     el("p", { class: "dim", text: "Brings " + carries + (x.cut ? " (the listing was cut short: it is a very large mod)" : "") + "." }),
     x.enabled ? null : el("p", {}, "Its place among the mods: " + where + "."),
     ...plugs,
@@ -1064,6 +1069,61 @@ function addModCard(x, place) {
     shareTable(x.enabled ? "It replaces" : "There it would replace", x.wins, "of"),
     shareTable(x.enabled ? "It loses" : "There it would lose", x.loses, "to"),
     !x.wins.length && !x.loses.length ? el("p", { class: "dim", text: "It shares no loose file with any enabled mod." }) : null);
+}
+
+// An installer's questions (DESIGN§16.1): every step that shows for the answers so far, on one card.
+const OPTION_WORDS = { Required: ["required", "good"], Recommended: ["recommended", "good"], NotUsable: ["not usable here", "bad"], CouldBeUsable: ["may not suit your modlist", "warn"] };
+
+async function loadInstaller(id) {
+  state.installers = state.installers || {};
+  const cur = state.installers[id] || { picks: null };
+  if (cur.picks === null) cur.picks = Object.assign({}, ((state.stagedInfo || {})[id] || {}).picks || {});
+  state.installers[id] = cur;
+  try { cur.view = await api("/api/add/installer", { id: id, picks: cur.picks }); cur.error = ""; }
+  catch (e) { cur.error = e.message; }
+  state.addText = "";
+  pollAdd(true);
+}
+
+function installerCard(info) {
+  const cur = (state.installers || {})[info.id];
+  if (!cur || (!cur.view && !cur.error)) { loadInstaller(info.id); return el("div", { class: "card" }, el("h2", { text: info.name }), el("p", { class: "dim", text: "Reading its installer…" })); }
+  if (cur.error) return el("div", { class: "card" }, el("h2", { text: info.name }), el("p", { class: "would-needs", text: cur.error }));
+  const v = cur.view;
+  const steps = v.steps.map((st) => el("div", { class: "istep" }, st.name ? el("h3", { text: st.name }) : null, ...st.groups.map((g) => {
+    const name = "inst-" + info.id + "-" + g.key;
+    const set = (list) => { cur.picks[g.key] = list; loadInstaller(info.id); };
+    const rows = g.options.map((o) => {
+      const box = el("input", { type: g.single ? "radio" : "checkbox", name: name, checked: o.chosen, disabled: o.locked });
+      box.addEventListener("change", () => {
+        if (g.single) set([o.n]);
+        else set(g.options.filter((x) => (x.n === o.n ? box.checked : x.chosen)).map((x) => x.n));
+      });
+      const [word, cls] = OPTION_WORDS[o.type] || ["", ""];
+      return el("label", { class: "iopt" + (o.locked && !o.chosen ? " off" : "") }, box, el("span", {}, el("strong", { text: o.name }),
+        word ? el("span", { class: "tag " + cls, text: word }) : null, o.description ? el("span", { class: "dim idesc", text: o.description }) : null));
+    });
+    if (g.none_allowed) {
+      const none = el("input", { type: "radio", name: name, checked: !g.options.some((o) => o.chosen) });
+      none.addEventListener("change", () => set([]));
+      rows.push(el("label", { class: "iopt" }, none, el("span", {}, el("strong", { text: "None" }))));
+    }
+    const rule = { SelectExactlyOne: "choose one", SelectAtMostOne: "choose one or none", SelectAtLeastOne: "choose at least one", SelectAny: "choose any", SelectAll: "all of these are installed" }[g.type] || "";
+    return el("fieldset", { class: "igroup" }, el("legend", {}, g.name || "Options", el("span", { class: "dim", text: "  " + rule })), ...rows);
+  })));
+  const go = el("button", { type: "button", class: "primary", text: info.state === "ready" ? "Build it again with these answers" : "Use these answers", disabled: v.problems.length > 0 });
+  go.addEventListener("click", async () => {
+    go.disabled = true;
+    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; toast("Built “" + info.name + "” from your answers."); }
+    catch (e) { cur.error = e.message; }
+    state.addText = "";
+    pollAdd(true);
+  });
+  return el("div", { class: "card installer" }, el("h2", {}, v.name || info.name, el("span", { class: "tag warn", text: "asks which parts to install" })),
+    el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder and analyses it." }),
+    ...steps, ...v.problems.map((t) => el("p", { class: "would-needs", text: t })),
+    v.steps.length ? null : el("p", { class: "dim", text: "It asks nothing: everything it installs is fixed." }),
+    el("div", { class: "actions" }, go, el("span", { class: "dim", text: plural(v.files, "file entry", "file entries") + " would be installed" })));
 }
 
 function addStepCard(st, d) {
@@ -1115,9 +1175,11 @@ function renderAdd(d) {
       el("p", { class: "dim", text: "Nothing in MO2 changes yet. Putting the mod into MO2 and in its place for you, with a safe folder and Revert, is the part that is still switched off." }))].filter(Boolean));
     return;
   }
+  const asking = (d.staged || []).filter((r) => r.installer && (r.state === "installer" || ((state.installers || {})[r.id] || {}).open));
+  const askCards = asking.map(installerCard);
   if (!d.looking && !(d.mods || []).length && !d.failed) {
-    $("add-summary").textContent = d.unpacking || (state.uploads || []).length ? "Unpacking…" : "";
-    box.replaceChildren(...[noteCard, d.unpacking || (state.uploads || []).length ? el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Taking the archive in…"),
+    $("add-summary").textContent = d.unpacking || (state.uploads || []).length ? "Unpacking…" : asking.length ? "Waiting for your answers" : "";
+    box.replaceChildren(...[noteCard, ...askCards, d.unpacking || (state.uploads || []).length ? el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Taking the archive in…"),
       el("p", { class: "dim", text: "It is copied into ModTrap's own work folder and unpacked there. A large mod takes a while; nothing in your modlist is being changed." })) : null].filter(Boolean));
     return;
   }
@@ -1139,7 +1201,8 @@ function renderAdd(d) {
     el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files, without xEdit. Nothing in MO2 has been changed: the steps marked “You” are done by hand in MO2 for now, and ModTrap checks them each time the modlist is read." }), room,
       d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
       d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
-    ...d.mods.map((x) => addModCard(x, d.place)),
+    ...askCards,
+    ...d.mods.map((x) => addModCard(x, d.place, (d.staged || []).find((r) => r.installer && r.state === "ready" && r.name === x.name))),
     el("h2", { text: "The steps, in order" }), ...cards].filter(Boolean));
 }
 
@@ -1158,7 +1221,7 @@ async function pollAdd(force) {
     const infoText = JSON.stringify(info);
     if (d.gone && d.gone.length) { state.staged = state.staged.filter((id) => !d.gone.includes(id)); saveUi(); }
     if (infoText !== JSON.stringify(state.stagedInfo || {}) || (d.gone && d.gone.length)) { state.stagedInfo = info; renderAddPicked(); }
-    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length;
+    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length + JSON.stringify(state.installers || {});
     if (text !== state.addText) { state.addText = text; renderAdd(d); }
   } catch (e) { /* the next round tries again */ }
 }

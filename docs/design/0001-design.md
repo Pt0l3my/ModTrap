@@ -327,9 +327,12 @@ built: §16.5.
 - ModTrap then finds the folder in it that would become the mod: through wrapping folders and a `Data` folder, to
   the one that holds plugins or the game's usual folders. The mod's name is the archive's, without the numbers a
   download site adds.
-- **An installer that asks questions.** An archive with a `fomod` installer, or with several folders to choose
-  from, is said so and handed to MO2 for now: the owner installs it there, and ModTrap carries on from the
-  installed mod. ModTrap asking those questions on its own page is the next piece (§16.8).
+- **An installer that asks questions** (MO02). An archive with a `fomod` installer file, or with several folders
+  to choose from, is not taken as it is: ModTrap shows the installer's own questions on the Add mods tab, every
+  step that applies on one card, with what the installer recommends already chosen and the options that do not
+  suit the load order marked. The answers build the mod's folder in the session's folder, in the installer's own
+  order of files; the owner can change the answers and build it again. An installer ModTrap cannot read (an older
+  script-based one, or a damaged file) is handed to MO2: the owner installs it there and finds it by name.
 - The unpacked mod is analysed where it lies (§16.2 to §16.7), exactly as it would be once in MO2.
 - A mod MO2 has already installed is found by name, or by dropping its folder or the archive it was installed from
   (MO01§7): a page learns only the name of what was dropped, so the name is matched.
@@ -407,8 +410,7 @@ to 3 and Revert are written and tested against invented lists, and nothing the p
 5. For each tool that must run again (§16.6): start it through MO2 for the owner, who works it; ModTrap waits and
    checks the tool's output afterwards.
 
-Left to the owner: an installer's questions (asked on ModTrap's own page, once that is built: the installer's
-description file names the choices and what each installs), the tools themselves, a patch where the record check
+Left to the owner: an installer's questions (§16.1), the tools themselves, a patch where the record check
 shows one is needed, and playing. "Take it out again" disables the mod and deactivates its plugins; nothing is
 deleted (MT9).
 

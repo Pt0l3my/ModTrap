@@ -65,6 +65,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 40 | 2026-11-21 | Adding mods: what is built, the placing rule, and what was ruled out | METHOD | #adding #mo2 #page #tools |
 | 41 | 2026-11-21 | A dropped archive is unpacked by ModTrap itself, in its own folder | METHOD | #adding #mo2 #safety #licence |
 | 42 | 2026-11-21 | Carrying out an add: written and tested against invented lists, switched off | METHOD | #adding #mo2 #safety #process |
+| 43 | 2026-11-21 | An installer's questions are asked on ModTrap's own page | METHOD | #adding #page #safety #licence |
 
 ## Entries
 
@@ -795,3 +796,27 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Not proven, and why it stays switched off: whether MO2 keeps the mod order and the load order exactly as
   written when it next starts (WHY§26), and whether it takes a mod folder with only that one line in `meta.ini`
   as an installed mod (LIKELY, MO01§7). Both are for the probe on the owner's PC.
+
+### 43. An installer's questions are asked on ModTrap's own page
+
+`2026-11-21` · METHOD · `#adding #page #safety #licence` · refs: MT21, DESIGN§16.1, MO02§2, MO02§3, MO02§4, MO02§5, MO02§6, WHY§41
+
+- WHY§41 handed a mod with an installer to MO2 and named this as the next piece. Built: `modtrap/fomod.py`, the
+  questions on the Add mods tab, and the build of the mod's folder from the answers.
+- METHOD: the format's meaning was read in MO2's own installer (MO02), which has no licence file, so nothing of it
+  is copied: ModTrap's reader is its own code over Python's XML reader. Where the format leaves a choice, ModTrap
+  does what MO2 does, so that a mod built by ModTrap is the mod MO2 would have installed for the same answers:
+  the fallback encodings, the order of options, what is chosen to begin with, the order files are copied in.
+- METHOD: all steps that apply are shown on one card, not as pages. The answers are sent as a whole each time and
+  the card is worked out afresh, so a step that depends on an earlier answer appears or goes as that answer
+  changes. A group the owner has not touched keeps what the installer recommends.
+- METHOD (safety): the file is another person's. It is size-capped; a file that declares its own document rules
+  (the way such a file can be made to swell without end) is refused, in any encoding; every source must lie in
+  the archive and every destination in the mod being built, by the same name check as unpacking (WHY§41).
+- METHOD: an archive that only holds several folders to choose from gets one question made for it: which of the
+  folders, a later one winning a shared file.
+- Left out, and said: images; the game's version (a version condition is taken as met); `alwaysInstall` and
+  `installIfUsable`, which MO2 does not act on either (MO02§4); and the older script-based installers.
+- FACT: tested with an invented installer (steps that depend on a flag, an option that depends on the load order,
+  priorities, a conditional file), and driven in a browser from the drop to the analysed mod. Not proven: real
+  mods' installers, which are often untidy; the first few on the owner's PC will show what is missing.

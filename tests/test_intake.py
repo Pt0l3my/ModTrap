@@ -25,6 +25,17 @@ NEW_MOD = {"Heather 2.1/Heather.esp": plugin.build((SKY, "Quill.esp")),
            "Heather 2.1/textures/shared/a.dds": b"newer", "Heather 2.1/readme.txt": b"words"}
 
 
+FOMOD_XML = """<config><moduleName>Heather</moduleName>
+<requiredInstallFiles><file source="Core\\Heather.esp" destination="Heather.esp"/></requiredInstallFiles>
+<installSteps order="Explicit"><installStep name="Colour"><optionalFileGroups>
+<group name="Pick a colour" type="SelectExactlyOne"><plugins order="Explicit">
+<plugin name="Purple"><description>Purple.</description><files><folder source="Purple" destination=""/></files>
+<typeDescriptor><type name="Recommended"/></typeDescriptor></plugin>
+<plugin name="White"><description>White.</description><files><folder source="White" destination=""/></files>
+<typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+</plugins></group></optionalFileGroups></installStep></installSteps></config>"""
+
+
 def snapshot(root: Path) -> dict:
     return {p.relative_to(root).as_posix(): (p.stat().st_size, p.stat().st_mtime_ns)
             for p in root.rglob("*") if p.is_file()}
@@ -82,12 +93,45 @@ class Intake(unittest.TestCase):
         heather = got["mods"][1]
         self.assertIn("Thistle", [c["mod"] for c in heather["wins"] + heather["loses"]])
 
-    def test_an_archive_with_an_installer_is_handed_to_mo2(self) -> None:
-        rec = self.drop("Options.zip", zipped({"fomod/ModuleConfig.xml": b"<config/>", "Core/Options.esp": plugin.build(())}))
+    def test_an_installers_questions_are_asked_and_the_answers_build_the_mod(self) -> None:
+        files = {"Wrap/fomod/ModuleConfig.xml": FOMOD_XML.encode(), "Wrap/Core/Heather.esp": plugin.build((SKY, "Quill.esp")),
+                 "Wrap/Purple/textures/shared/a.dds": b"purple", "Wrap/White/textures/shared/a.dds": b"white"}
+        rec = self.drop("Heather Installer.zip", zipped(files))
         got = self.settled([], [rec["id"]])
-        self.assertEqual(got["staged"][0]["state"], "installer")
-        self.assertIn("install it in MO2", got["staged"][0]["note"])
-        self.assertEqual(got["mods"], [])
+        self.assertEqual((got["staged"][0]["state"], got["staged"][0]["installer"]), ("installer", True))
+        self.assertEqual(got["mods"], [])                               # nothing to analyse until it is answered
+        v = self.api.post("/api/add/installer", {"id": rec["id"], "picks": {}})[1]
+        self.assertEqual([[o["name"] for o in g["options"] if o["chosen"]] for g in v["steps"][0]["groups"]], [["Purple"]])
+        done = self.api.post("/api/add/choose", {"id": rec["id"], "picks": {"0.0": [1]}})[1]
+        self.assertEqual((done["state"], done["files"]), ("ready", 2))
+        got = self.settled([], [rec["id"]])
+        x = got["mods"][0]
+        self.assertEqual([p["name"] for p in x["plugins"]], ["Heather.esp"])
+        root = Path(self.api._staged[rec["id"]]["root"])
+        self.assertEqual((root / "textures" / "shared" / "a.dds").read_bytes(), b"white")
+        # answering again builds it afresh and the old build goes
+        self.api.post("/api/add/choose", {"id": rec["id"], "picks": {"0.0": [0]}})
+        self.assertFalse(root.exists())
+        self.assertEqual((Path(self.api._staged[rec["id"]]["root"]) / "textures" / "shared" / "a.dds").read_bytes(), b"purple")
+        self.assertEqual(snapshot(self.root), self.before)
+
+    def test_folders_to_choose_from_are_asked_too(self) -> None:
+        rec = self.drop("Parts.zip", zipped({"00 Core/Parts.esp": plugin.build(()), "01 Extra/meshes/a.nif": b"x"}))
+        self.settled([], [rec["id"]])
+        v = self.api.post("/api/add/installer", {"id": rec["id"], "picks": {}})[1]
+        self.assertEqual([o["name"] for o in v["steps"][0]["groups"][0]["options"]], ["00 Core", "01 Extra"])
+        with self.assertRaises(Bad):
+            self.api.post("/api/add/choose", {"id": rec["id"], "picks": {"0.0": []}})        # nothing chosen
+        done = self.api.post("/api/add/choose", {"id": rec["id"], "picks": {"0.0": [0, 1]}})[1]
+        self.assertEqual(done["files"], 2)
+
+    def test_an_installer_modtrap_cannot_read_is_handed_to_mo2(self) -> None:
+        rec = self.drop("Odd.zip", zipped({"fomod/ModuleConfig.xml": b"<notconfig/>", "Core/Odd.esp": plugin.build(())}))
+        got = self.settled([], [rec["id"]])
+        self.assertEqual((got["staged"][0]["state"], got["staged"][0]["installer"]), ("installer", False))
+        self.assertIn("Install it in MO2", got["staged"][0]["note"])
+        with self.assertRaises(Bad):
+            self.api.post("/api/add/installer", {"id": rec["id"], "picks": {}})
 
     def test_what_is_not_an_archive_is_said_and_nothing_is_kept_of_a_refusal(self) -> None:
         rec = self.drop("Words.zip", b"not an archive at all")

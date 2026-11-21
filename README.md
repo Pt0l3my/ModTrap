@@ -11,7 +11,7 @@ then starts your own xEdit through MO2 with ModTrap's script, which only reads, 
 out of each dependant plugin. A Steps tab lists everything the demaster takes, to do by hand for now. The step in which ModTrap does it for you ("Demaster Selected") is written but switched off until it has been proven on a real modlist.
 
 ModTrap also helps to **add** a mod: drop the mod's archive on the page. ModTrap unpacks it in its own work folder
-(a .7z or .rar needs 7-Zip installed), and tells what the mod needs, where it should go among the mods and in the
+(a .7z or .rar needs 7-Zip installed), asks the mod's own installer questions if it has any, and tells what the mod needs, where it should go among the mods and in the
 load order, which files of which mods it would replace, which tools must run again, and the steps in order. Putting
 the mod into MO2 for you is written into the design but not built: for now nothing in your modlist changes.
 
