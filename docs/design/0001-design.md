@@ -323,6 +323,10 @@ history (§12).
   modlist changed in between (a mod no longer there), what cannot be restored is dropped, and the rest is.
 - Quitting while a job is going asks first. A dry run cut short this way is shown afterwards as not finished; the
   rule for a demaster cut short belongs with Revert (§11) and is not yet designed.
+- **Save this session** (WHY§48). A button on the Log tab packs the session's log and its jobs' text records,
+  with a description of the setup and the profile's three lists, into one `.7z` and downloads it, for the owner to
+  send when asking for help. The owner's folders and user name are taken out as it is packed; no plugin, archive
+  or other content of a mod goes in. The archive is written with Python alone.
 
 ## 16. Adding mods (MT21)
 

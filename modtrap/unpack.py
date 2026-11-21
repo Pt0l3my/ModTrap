@@ -180,7 +180,9 @@ def _un7z(exe: Path, src: Path, dest: Path) -> int:
     for e in entries:
         if e.get("Folder") == "+" or e.get("Attributes", "").startswith("D"):
             continue
-        if e.get("Symbolic Link") or e.get("Hard Link") or "L" in e.get("Attributes", "").split(" ")[0]:
+        attrs = e.get("Attributes", "").split(" ")
+        # A link shows as its own field, as an L among Windows' attribute letters, or as a mode that starts with l.
+        if e.get("Symbolic Link") or e.get("Hard Link") or "L" in attrs[0] or any(a.startswith("l") for a in attrs[1:]):
             raise Refused("The archive holds a link to another place. ModTrap does not unpack it.")
         if e.get("Encrypted") == "+":
             raise Refused("The archive is protected by a password. Install it through MO2.")

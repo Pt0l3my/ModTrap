@@ -47,6 +47,9 @@ and, for what it takes to add a mod that MO2 has installed:
 python -m modtrap add "C:\Modlists\Example" --mod "Some New Mod"
 ```
 
+If something goes wrong, "Save this session" on the Log tab packs the session's log and records into one .7z file,
+with your folders and user name taken out and nothing of any mod in it, to send when asking for help.
+
 See:
 
 - [docs/design/0001-design.md](docs/design/0001-design.md): what ModTrap is to do and how;

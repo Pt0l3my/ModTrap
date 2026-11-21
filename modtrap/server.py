@@ -10,6 +10,8 @@ from __future__ import annotations
 import hmac
 import http.server
 import json
+import os
+import re
 import secrets
 import socket
 import socketserver
@@ -29,6 +31,7 @@ PAGE_JS = ("app.js",)
 PAGE_CSS = ("app.css",)
 TOKEN_HEADER = "X-ModTrap-Token"
 LOCATE_PATH = "/api/locate"
+SAVE_PATH = "/api/save/download"  # the packed session, handed out once (WHY§48)
 UPLOAD_PATH = "/api/add/upload"   # a dropped mod archive, as its bytes (DESIGN§16.1)
 UPLOAD_MAX = 64 * 1024 ** 3
 LOCATE_MAX = 3 * 1024 * 1024      # a dropped folder's ModOrganizer.ini in base64, and the folder's name
@@ -190,6 +193,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
+    def send_file(self, path, name: str) -> None:
+        """A file as a download, sent once and then removed (the packed session, WHY§48). Its name is ModTrap's
+        own: letters, digits, dots, dashes."""
+        try:
+            size = os.path.getsize(path)
+            f = open(path, "rb")
+        except OSError:
+            return self.send(404, {"error": "the file to download is no longer there"})
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-7z-compressed")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % re.sub(r"[^A-Za-z0-9._-]", "-", name))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+            self.send_header("Content-Security-Policy", CSP % (self.app.nonce, self.app.nonce))
+            self.end_headers()
+            while True:
+                block = f.read(256 * 1024)
+                if not block:
+                    break
+                self.wfile.write(block)
+        finally:
+            f.close()
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
     def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
         """The standard library's own errors (a bad request line, a method it lacks) with ModTrap's headers."""
         try:
@@ -242,6 +277,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path == "/":
                 return self.send(200, self.app.page, "text/html; charset=utf-8")
+            if path == SAVE_PATH and self.app.api is not None:
+                take = getattr(self.app.api, "save_take", None)
+                got = take() if take is not None else None
+                if got is None:
+                    return self.send(404, {"error": "there is nothing to download: press “Save this session” again"})
+                return self.send_file(got[0], got[1])
             if path.startswith("/api/") and self.app.api is not None:
                 code, body = self.app.api.get(path, query)
                 return self.send(code, body)

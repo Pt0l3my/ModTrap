@@ -70,6 +70,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 45 | 2026-11-21 | The record check and starting the tools: built, and not behind the switch | METHOD | #adding #xedit #tools #process |
 | 46 | 2026-11-21 | "Demaster Selected" on the page behind the same switch, and a History tab | METHOD | #xedit #mo2 #safety #page #process |
 | 47 | 2026-11-21 | The probe is built and gates real work; Revert goes line by line once MO2 has run | METHOD | #safety #mo2 #xedit #process |
+| 48 | 2026-11-21 | "Save this session": the logs cleaned and packed into one .7z, written with Python alone | METHOD | #page #safety #licence #process |
 
 ## Entries
 
@@ -771,6 +772,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - FACT: tested here with zips for real and with a stand-in for 7-Zip; the page was driven in a browser with a real
   upload. Not proven: the call to the real 7-Zip (its switches and the shape of its listing are from memory of its
   documentation, not from a run), and large archives on the owner's PC.
+- Later, 2026-11-21: the call was run against 7-Zip 23.01 here (WHY§48): a .7z made by 7-Zip unpacks; one with a
+  password, with or without its names hidden, is refused in words; one holding a link is refused. Its listing
+  shows a link as a mode starting with "l", which the reader now looks for. Still not run: 7-Zip on Windows, whose
+  listing gives attribute letters instead of a mode.
 
 ### 42. Carrying out an add: written and tested against invented lists, switched off
 
@@ -928,3 +933,37 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   browser on an invented list.
 - Not proven: the probe itself is the proof still to come. Its first real run is expected to fail somewhere, and
   to say where.
+
+### 48. "Save this session": the logs cleaned and packed into one .7z, written with Python alone
+
+`2026-11-21` · METHOD · `#page #safety #licence #process` · refs: MT20, DESIGN§15, DESIGN§4, WHY§9, WHY§33, WHY§41, WHY§47
+
+- The owner asked for one button that packs what is needed to diagnose a run into a single .7z to download from
+  the page, and gave the design of the same feature in another of their tools, including the archive's layout and
+  the pitfalls found in its review. Built to that design: `modtrap/sevenz.py`, `modtrap/savelog.py`, a button on
+  the Log tab.
+- METHOD (what goes in), fitted to ModTrap, whose sessions are folders, not stamped files: the session's log as it
+  stands; its `session.json`, history and probe outcome; the text records of its newest jobs (plans, reports,
+  xEdit's own log, the lists handed to xEdit, each safe folder's record but not its copies); what was noted of
+  dropped archives; the open profile's three list files; ModTrap's settings; and a short description of the setup.
+  Never: a plugin, an archive, an unpacked mod, a safe folder's copies, or another session. Only files with a
+  text ending are taken, and folders that hold mods' content are not entered.
+- METHOD (cleaning): each text is cleaned as it is packed. Known folders become the same placeholders as in the
+  log; the user name is replaced only where it is a part of a path; any other absolute path keeps only its last
+  part; a web address is not a path. A `.json` is parsed, every string and key cleaned, and written again, so it
+  stays valid; a `.jsonl` goes line by line, a torn last line as text. A text that cannot be cleaned is replaced
+  by a note, never passed through.
+- METHOD (packing): off the request, one at a time; a second press while packing does nothing. Each file's size
+  is noted when it is opened and no more is read, in blocks cut at a line end. The archive is written in the
+  system's temporary folder, handed out once through the page's own token, and removed after that or at the next
+  press. With nothing to pack, no archive is made and the page says so.
+- METHOD (the .7z): one solid LZMA2 stream with Python's `lzma`, and the header written by hand from the
+  format's description: no dependency, nothing bundled.
+- FACT: read back three ways: by a reader written in the tests from the same description, by an independent
+  library where it is installed, and by 7-Zip 23.01 itself ("Everything is Ok"), each checking every file. The
+  library and the program are only used by the tests, which pass over them where they are not installed; neither
+  is a dependency of ModTrap. The download was driven in a real browser.
+- A side gain: with 7-Zip installed here, WHY§41's untested call to it could be run (its Later line).
+- Not proven: 7-Zip on Windows opening the archive, though the format is the same; and what a real session's
+  files hold that the cleaning does not expect. The first archive from the owner's PC should be looked through
+  by the owner before it is sent.
