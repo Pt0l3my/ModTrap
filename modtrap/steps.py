@@ -172,18 +172,25 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str]) -> tuple[l
 
 # --- compiling the steps ------------------------------------------------------------------------------------------
 
-def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None, deep: dict | None = None) -> dict:
+def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None, deep: dict | None = None,
+                  auto: bool = False) -> dict:
     """The steps for taking `mod_names` out. `job` is the dry run's public state for the same mods, if there is
-    one; `deep` is what `look_deeper` found (it takes seconds on a large list, so it is worked out once)."""
+    one; `deep` is what `look_deeper` found (it takes seconds on a large list, so it is worked out once). `auto`
+    says that ModTrap may change the modlist (it was started with the switch): the steps that "Demaster Selected"
+    carries out are then ModTrap's, not the owner's (WHY§57)."""
     inst = m.instance
     mods = [x for x in (inst.mod(n) for n in mod_names) if x is not None and x.kind == "mod"]
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)            # by file, enabled or not
     tf = {fold(p) for p in trapped}
     steps: list[dict] = []
 
-    def step(key: str, who: str, title: str, why: str, state: str, items: list | None = None, note: str = "") -> None:
+    def step(key: str, who: str, title: str, why: str, state: str, items: list | None = None, note: str = "",
+             action: str = "") -> None:
         steps.append({"key": key, "who": who, "title": title, "why": why, "state": state, "items": items or [],
-                      "note": note, "n": len(steps) + 1})
+                      "note": note, "n": len(steps) + 1, "action": action if state == "to do" else ""})
+
+    doer = "ModTrap" if auto else "you"                 # for what "Demaster Selected" carries out
+    press = "demaster" if auto else ""
 
     # Who else provides a trapped plugin: the plugin stays in the game while any of them is enabled.
     twins = []
@@ -236,29 +243,41 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
          "they take from it. The dry run tells a patch made only for the mod from a plugin that must be demastered.",
          dry_state, note=dry_note)
 
-    # 2-4. The dependants, sorted by what is to be done with them.
-    outputs = [r for r in active_left if makers(r)]
-    regen = [r for r in outputs if tools.proposal(makers(r)) != "demaster"]
-    editors = [r for r in outputs if r not in regen]          # written through an editor: cannot be made again
-    rest = [r for r in active_left if r not in outputs]
-    patch_only = [r for r in rest if verdict.get(fold(r.name), {}).get("reading") == "patch only"]
-    to_demaster = [r for r in rest if r not in patch_only] + editors
-    known = bool(result and same_job) or not active_left      # the dry run has sorted the dependants, or none is left
+    # 2-4. The dependants, sorted by what is to be done with them: by the dry run's reading where there is one
+    # (as "Demaster Selected" sorts them), else by what made them.
+    def reading(r: model.PluginRow) -> str:
+        return verdict.get(fold(r.name), {}).get("reading", "")
 
-    step("switch-off", "you", "Switch off the patches made only for the mod",
+    patch_only = [r for r in active_left if reading(r) == "patch only"]
+    can = [r for r in active_left if reading(r) == "can be demastered"]
+    others = [r for r in active_left if r not in patch_only and r not in can]
+    regen = [r for r in others if makers(r) and tools.proposal(makers(r)) != "demaster"]    # a tool makes it again
+    needs = [r for r in others if r not in regen]
+    to_demaster = can + needs
+    known = bool(result and same_job) or not active_left      # the dry run has sorted the dependants, or none is left
+    by_hand = [r for r in needs if reading(r) == "needs you"]
+
+    step("switch-off", doer, "Switch off the patches made only for the mod",
          "A patch made for the mod (by its name and its few masters), or a plugin in which every record belongs to "
          "the mod, has no purpose without it. It is deactivated, and a mod that holds nothing but such patches is "
-         "disabled whole; nothing in them is changed. “Demaster Selected” does this.",
+         "disabled whole; nothing in them is changed." + (
+             " ModTrap does this when you press “Demaster Selected”." if auto else
+             " Deactivate each on MO2's Plugins tab. (Started with --allow-changes, ModTrap does this itself.)"),
          "waiting for the dry run" if not known else "to do" if patch_only else "done",
          [brief(r) for r in patch_only],
-         note="" if known else "The dry run shows which dependants are patches of this kind.")
-    step("demaster", "you", "Demaster the plugins that must go on working without the mod",
-         "Each of these needs the mod only in places: its copies of the mod's records, and entries pointing at "
-         "them. Those are taken out in xEdit (the guide's Master Removal steps), then Clean Masters. ModTrap will do "
-         "this itself once its demaster step is built; the dry run lists exactly what would go.",
+         note="" if known else "The dry run shows which dependants are patches of this kind.", action=press)
+    step("demaster", doer, "Demaster the plugins that must go on working without the mod",
+         "Each of these needs the mod only in places: its copies of the mod's records, entries pointing at them, "
+         "and parts it only carries on from the mod. The dry run lists exactly what would be taken out or put "
+         "back." + (" ModTrap does this in the same “Demaster Selected”: it works on copies in a mod of its own, "
+                    "checks each, and leaves the originals untouched." if auto else
+                    " By hand these are the guide's Master Removal steps in xEdit, then Clean Masters. (Started "
+                    "with --allow-changes, ModTrap does this itself.)"),
          "waiting for the dry run" if not known else "to do" if to_demaster else "done",
          [brief(r) for r in to_demaster],
-         note="Done when the plugin no longer lists the mod as a master (press Rescan to check).")
+         note=("%d of these need you: ModTrap leaves them as they are, and the mod then stays enabled until they "
+               "no longer list it as a master. The Dry run tab shows what in them." % len(by_hand)) if by_hand else
+         "Done when the plugin no longer lists the mod as a master (press Rescan to check).", action=press)
     if regen:
         step("regenerate", "you", "Run again the tools whose output depends on the mod",
              "These plugins were made by a tool, from the load order as it was. Once the mod and its patches are "
@@ -279,9 +298,11 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         disable.append({"mod": t["mod"], "priority": mm.priority if mm else None, "enabled": bool(mm and mm.enabled),
                         "why": "it also provides %s" % t["plugin"]})
     all_off = all(not d["enabled"] for d in disable)
-    step("disable", "you", "Disable the mod%s in MO2" % ("s" if len(disable) > 1 else ""),
-         "Disabled, never removed: the mod stays in MO2's list and can be enabled again. Do it only when nothing "
-         "active needs its plugins any more, or MO2 will warn of missing masters.",
+    step("disable", doer, "Disable the mod%s in MO2" % ("s" if len(disable) > 1 else ""),
+         "Disabled, never removed: the mod stays in MO2's list and can be enabled again." + (
+             " ModTrap does it at the end of “Demaster Selected”, once nothing active needs its plugins any more."
+             if auto else " Do it only when nothing active needs its plugins any more, or MO2 will warn of missing "
+             "masters."),
          "done" if all_off else "to do" if not blockers else "waiting",
          disable, note="" if not blockers or all_off else "%d active plugin(s) still list a ticked plugin as a master." % blockers)
 

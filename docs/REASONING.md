@@ -79,6 +79,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 54 | 2026-11-21 | The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows | FACT | #xedit #mo2 #process |
 | 55 | 2026-11-21 | What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first | DECIDED | #procedure #xedit #safety #process |
 | 56 | 2026-11-21 | The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out | FACT | #xedit #mo2 #tools #safety #process |
+| 57 | 2026-11-21 | The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button | METHOD | #page #steps #process |
 
 ## Entries
 
@@ -1199,3 +1200,18 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   or time changed.
 - Still a first: the demaster of real plugins. The put-back of a script attachment and the removal of a
   condition run there for the first time, each checked by the script against its source (XE01§16).
+
+### 57. The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button
+
+`2026-11-21` · METHOD · `#page #steps #process` · refs: MT18, MT21, DESIGN§14, WHY§46, WHY§52, WHY§55
+
+- The owner, with a picture of the step "Switch off the patches made only for the mod", marked "You": "can this
+  not be done by ModTrap?"
+- FACT: it can, and "Demaster Selected" does it (WHY§46, WHY§52). The Steps tab was written before that was built
+  and still gave switching off, demastering and disabling the mod to the owner, with words to match.
+- METHOD: when ModTrap is started with the switch, those three steps are ModTrap's; the first two carry a
+  "Demaster Selected…" button that shows the plan and asks, as the Selection tab's does. Without the switch
+  they stay the owner's, and say that ModTrap does them when started with it.
+- METHOD: the tab now sorts the dependants as the demaster itself does, by the dry run's reading first: a tool's
+  output that the dry run found demasterable is listed under demastering, not under "run the tool again", and
+  the demaster step says how many of its plugins need the owner.

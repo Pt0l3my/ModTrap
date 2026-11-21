@@ -616,7 +616,7 @@ class Api:
             threading.Thread(target=work, name="steps-deep", daemon=True).start()
         deep = self._deep.get(key)
         job = self.job.public() if self.job else None
-        out = steps.compile_steps(m, mods, job, deep)
+        out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None)
         out["looking"] = bool(mods) and deep is None
         return out
 

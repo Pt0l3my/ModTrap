@@ -1125,6 +1125,12 @@ function renderSteps2(d) {
       st.note ? el("p", { text: st.note }) : null,
       st.items.length ? el("ul", {}, ...st.items.slice(0, 200).map(stepItem)) : null,
       st.items.length > 200 ? el("p", { class: "dim", text: "Showing the first 200 of " + st.items.length + "." }) : null);
+    if (st.action === "demaster") {
+      const go = el("button", { type: "button", text: "Demaster Selected…" });
+      go.title = "Shows what ModTrap would do, and asks before doing it";
+      go.addEventListener("click", () => { showTab("selection"); askDemasterPlan(); });
+      body.append(el("p", {}, go, el("span", { class: "dim", text: "  ModTrap does this step for you: it shows its plan first and asks before changing anything." })));
+    }
     if (st.manual) {
       const box = el("input", { type: "checkbox", checked: ticked });
       box.addEventListener("change", () => {
