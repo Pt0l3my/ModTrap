@@ -47,6 +47,7 @@ class Plan:
     needs_you: list[str]                             # dependants ModTrap will not touch
     mod_name: str                                    # ModTrap's own mod for the new plugins
     notes: list[str] = field(default_factory=list)
+    disable_mods: list[str] = field(default_factory=list)    # patch mods made for the trapped mods: disabled whole
 
     @property
     def blocked(self) -> bool:
@@ -95,6 +96,19 @@ def plan(m: model.Model, dry: dict, mod_name: str = "") -> Plan:
             out.demaster[r.name] = actions_for(f)
         else:
             out.needs_you.append(r.name)
+    # A mod that is all, or nearly all, patches for the trapped mods is disabled whole, as a person would, so that
+    # its loose files go with its plugins (DESIGN§5, WHY§28, WHY§52). A patch among others in a collection is only
+    # deactivated.
+    off = {fold(n) for n in out.switch_off}
+    for name in out.trapped_mods:
+        trapped_mod = m.instance.mod(name)
+        for g in model.groups(m, trapped_mod) if trapped_mod else []:
+            if g.reading in ("whole mod", "most of the mod") and all(fold(r.name) in off for r in g.dependants) \
+                    and g.mod.enabled and g.mod.name not in out.disable_mods and g.mod.name not in out.trapped_mods:
+                out.disable_mods.append(g.mod.name)
+                if g.leftover:
+                    out.notes.append("%s is disabled whole; it also holds %s, which does not need the mod" % (
+                        g.mod.name, ", ".join(g.leftover)))
     if not out.demaster and not out.switch_off:
         raise Refused("the dry run found nothing ModTrap can do by itself")
     return out
@@ -281,6 +295,16 @@ class Demaster:
                     done["deactivated"].append(n)
                     self.history.add("plugin deactivated", plugin=n, position=r.position, plugin_kind=r.kind,
                                      mod=r.source, mod_priority=r.source_priority, why="a patch made only for the mod")
+            if self.plan.disable_mods:
+                self.safe.may_change(self.pdir / "modlist.txt")
+                profile.set_mods(self.pdir, {n: False for n in self.plan.disable_mods})
+                self.safe.wrote(self.pdir / "modlist.txt")
+                for n in self.plan.disable_mods:
+                    mod = self.inst.mod(n)
+                    done["disabled"].append(n)
+                    self.history.add("mod disabled", mod=n, priority=mod.priority, why="patches made only for the mod",
+                                     plugins=[{"name": r.name, "position": r.position, "kind": r.kind}
+                                              for r in self.model.provided_by(mod)])
             if not self.plan.blocked:
                 self.safe.may_change(self.pdir / "modlist.txt")
                 profile.set_mods(self.pdir, {n: False for n in self.plan.trapped_mods})

@@ -82,7 +82,9 @@ For each dependant plugin, one treatment. ModTrap proposes it; the owner can cha
 - **Switch off** (patch-only): the plugin exists only for the trapped mod. ModTrap **disables its mod** when every
   plugin that mod provides is patch-only, and **deactivates the plugin alone** when it is one among others, as in a
   patch collection (WHY§26). The first reading comes from the headers (which of a mod's plugins depend on the
-  trapped mod); the dry run settles it (nothing, or almost nothing, of the plugin would remain).
+  trapped mod); the dry run settles it: the plugin is a patch for the mod by its few masters and its name
+  (at most two masters besides the game's own and the trapped ones, and the mod's name or initials in its own:
+  WHY§52), or nothing of it would remain.
   Where most of a mod's plugins depend on the trapped mod and nothing else needs the rest, ModTrap proposes
   disabling the mod whole and names the leftover plugins for the owner to judge (WHY§28).
 - **Run the tool again**: the plugin is the generated output of a patcher or generator (§13). The output of an
@@ -96,7 +98,7 @@ are done automatically, C is reported at first and automatic later, D always bec
 |---|---|---|
 | A | The record itself belongs to the trapped plugin (the dependant overrides it) | Take the dependant's copy of the record out of the dependant |
 | B | An entry in a list inside a record that belongs to someone else (a FormID list entry, a levelled list entry, a keyword in a keyword list) | Take that entry out, keep the record |
-| C | A single field that cannot simply be absent (for example the one race of an actor) | At first: as D. Later: put back the value the record has in the dependant's remaining masters, if they have the record |
+| C | A part of a record that the dependant only carries on from the trapped mod (a condition, a script property, a single field) | At first: as D, with the dry run saying where the part comes from and what it is without the mod (XE01§14, WHY§52). Later: put the part back as the dependant's remaining masters have it |
 | D | Anything else, or anything xEdit refuses to change | Change nothing in this dependant; report it as "needs you", with the record and field |
 
 These are edits inside the dependant plugins only. The trapped mod's own files are never edited and never deleted.

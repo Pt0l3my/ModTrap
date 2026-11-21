@@ -241,7 +241,7 @@ class Changes:
     def _plan_public(pl: demaster.Plan) -> dict:
         return {"mods": pl.trapped_mods, "trapped": pl.trapped, "mod_name": pl.mod_name,
                 "demaster": [{"plugin": k, "actions": len(v)} for k, v in pl.demaster.items()],
-                "switch_off": pl.switch_off, "needs_you": pl.needs_you, "notes": pl.notes, "blocked": pl.blocked}
+                "switch_off": pl.switch_off, "disable_mods": pl.disable_mods, "needs_you": pl.needs_you, "notes": pl.notes, "blocked": pl.blocked}
 
     def demaster_plan(self, body: dict) -> dict:
         _m, _job, pl = self._dm_plan()

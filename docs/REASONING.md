@@ -74,6 +74,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 49 | 2026-11-21 | The first real run of the probe: what passed, what failed, and what was changed for it | FACT | #xedit #mo2 #adding #process |
 | 50 | 2026-11-21 | The probe passes on the owner's PC: what that proves, what it does not, and a message of MO2's | FACT | #xedit #mo2 #safety #process |
 | 51 | 2026-11-21 | xEdit's "Module Selection" window: always shown in script mode, nothing to choose, ModTrap presses OK | FACT | #xedit #page #process |
+| 52 | 2026-11-21 | The first real dry run against the guide: the same plugins, a different split; what was changed for it | FACT | #procedure #xedit #safety #process |
 
 ## Entries
 
@@ -1052,3 +1053,47 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   and the page tell the owner to press OK if the window stays.
 - Ruled out: starting xEdit in edit mode with `-autoload` and running the script another way (edit mode has no
   switch that runs a script); a plugin mode (they load one plugin and do their own work).
+
+### 52. The first real dry run against the guide: the same plugins, a different split; what was changed for it
+
+`2026-11-21` · FACT · `#procedure #xedit #safety #process` · refs: MT4, MT6, MT17, DESIGN§5, XE01§14, WHY§2, WHY§26, WHY§28, WHY§50, WHY§51
+
+- The owner ran the first real dry run (17 dependants of one mod, read in under three minutes, every file
+  unchanged) and said: "you can compare that to what the JoJ guide asks for (keep in mind that guide can miss
+  some things, as it's few months old", and "basically it's about finding what xedit find registered for the big
+  patch files the modlist features".
+- FACT: the guide's own steps for that mod (the owner's pictures of 2026-11-20, WHY§2) name 15 plugins: one patch
+  mod to disable whole (7 plugins), 5 single patches to deactivate in other mods' collections, and 3 big patch
+  files of the list to demaster by hand. ModTrap's dry run found those 15 and two more big files, which are
+  newer than the guide. Nothing the guide names was missed.
+- FACT: the split was not the guide's. ModTrap read a dependant as a patch only when nothing of it would remain,
+  so it would have demastered the 5 single patches and left 6 of the patch mod's 7 as "needs you". The guide
+  switches all 12 off without looking inside: they are patches for the mod, and have no purpose without it.
+- DECIDED (the method is ModTrap's, MT6 and MT17): a dependant is a patch for the mod, and is switched off
+  whatever it holds, when it has at most two masters besides the game's own files and the trapped plugins, and
+  its name holds the mod's or the plugin's whole name, or their initials as a word of its own. On the real
+  report this gives exactly the guide's split: the 12 switched off, the 5 big files kept for demastering. A mod
+  all (or nearly all) of whose plugins are switched off this way is disabled whole, as the guide does, so that
+  its loose files go too (DESIGN§5, WHY§28); a patch among others in a collection is only deactivated. Both are
+  undone by Revert, and nothing in those plugins is changed.
+- Ruled out: few masters alone (a mod that merely builds on the trapped mod would be switched off, and the
+  probe's own plugin that must go on working has one master); the name alone (a big patch may carry a like
+  name); "every plugin of its mod depends on the trapped mod" as a reason by itself (true of the probe's mod
+  too). The name and the masters together are a proposal, not a proof; changing a single proposal on the page
+  (MT6) is not built yet.
+- FACT: in the five big files, what needs the mod is: list entries (one file; already automatic, case B), the
+  files' copies of the mod's own records (already automatic, case A), and, in every "needs you" record, a part
+  of a record of the game or of another mod: a condition of a dialogue line that names something of the mod, a
+  script's property pointing into the mod, a "previous line" field pointing at one of the mod's lines. Seven
+  such records are the same in two of the files. This is what the guide means by a record "forwarding" the
+  mod's data: the big patch carries on what the mod, or a patch for the mod, put into that record.
+- LIKELY, and what the next dry run is to show: for each such part, some plugin loaded before the big patch (the
+  mod itself or one of its patches) has the very same part, and the big patch's remaining masters have that part
+  without the mod. Putting it back as it is there is MT4's case C, and is what a person following the guide's
+  "more surgical edit" does. MT4 makes C automatic only once real dry runs show it reliable.
+- METHOD: the reading script now reports, for every such part, where it comes from and what it would be without
+  the mod (XE01§14), and the dry run shows it beside each "needs you" record: "carried on from …; without the mod
+  this part is as in …", or "added on top of what … has". It is reported only. The applying half is built when
+  the owner's next dry run shows what share of the parts it covers.
+- The guide and the list are named here only in the owner's own words; no plugin name, record or id of the real
+  list is in the repository.

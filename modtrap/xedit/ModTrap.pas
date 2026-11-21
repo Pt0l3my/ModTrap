@@ -14,6 +14,13 @@
        1 if that plugin is trapped (the dependant overrides a trapped plugin's own record) else 0, editor id
     E  an element of such a record that points at a trapped plugin: file, the record's form id, the element's
        path, the plugin and form id it points at, and the chain of elements from it up to its record (see ChainOf)
+    C  for a record that belongs to another plugin, one line for each of its parts (the record's direct
+       elements) that needs a trapped plugin, saying where that part comes from (see ReportCarried): file, the
+       record's form id, the part's name, what kind of element it is, the plugin loaded before the dependant
+       whose version of the part is the same ("" if none), the dependant's last master whose version of the
+       part needs no trapped plugin ("" if none), how that version stands ("present", "absent", or "needs"
+       and a plugin the dependant does not have as a master), how many entries of the part need a trapped
+       plugin, and 1 if the part without those entries is what that master has, else 0
     D  a dependant is done: file, records, records needing a trapped plugin
     M  a dependant named in the job is not loaded: file
     U  a loaded plugin xEdit holds as changed although this script changed nothing: file
@@ -24,8 +31,9 @@
 unit ModTrap;
 
 var
-  slJob, slOut, slProg, slTrap, slNeed: TStringList;
-  sOut, sProg: string;
+  slJob, slOut, slProg, slTrap, slNeed, slMasters, slFit: TStringList;
+  sOut, sProg, gMissing: string;
+  gTainted: integer;
 
 function Clean(s: string): string;
 begin
@@ -107,6 +115,143 @@ begin
   slOut.Add('E' + #9 + plugName + #9 + recForm + #9 + Clean(Path(leaf)) + #9 + linkFile + #9 + linkForm + #9 + ChainOf(leaf));
 end;
 
+// An element with everything under it as text: names and values. Two elements with the same text hold the same.
+function Shape(e: IInterface): string;
+var
+  i: integer;
+  child: IInterface;
+  sub, all: string;
+begin
+  if ElementCount(e) = 0 then begin
+    Result := Clean(GetEditValue(e));
+    Exit;
+  end;
+  all := '(';
+  for i := 0 to Pred(ElementCount(e)) do begin
+    child := ElementByIndex(e, i);
+    sub := Shape(child);
+    all := all + Clean(Name(child)) + '=' + sub + ';';
+  end;
+  Result := all + ')';
+end;
+
+// The same text, leaving out the entries that need a trapped plugin; gTainted counts them.
+function ShapeWithout(e: IInterface): string;
+var
+  i: integer;
+  child: IInterface;
+  sub, all: string;
+begin
+  gTainted := 0;
+  all := '(';
+  for i := 0 to Pred(ElementCount(e)) do begin
+    child := ElementByIndex(e, i);
+    if NeedsTrapped(child) then
+      gTainted := gTainted + 1
+    else begin
+      sub := Shape(child);
+      all := all + Clean(Name(child)) + '=' + sub + ';';
+    end;
+  end;
+  Result := all + ')';
+end;
+
+// Does everything this element points at lie in the dependant or in its masters? If not, gMissing names one.
+function Fits(e: IInterface; depName: string): boolean;
+var
+  i: integer;
+begin
+  Result := True;
+  gMissing := '';
+  slFit.Clear;
+  ReportRequiredMasters(e, slFit, False, True);
+  for i := 0 to Pred(slFit.Count) do
+    if (slMasters.IndexOf(slFit[i]) < 0) and not SameText(slFit[i], depName) then begin
+      Result := False;
+      gMissing := slFit[i];
+      Exit;
+    end;
+end;
+
+// Where a part of a record comes from. The dependant overrides a record of another plugin, and this part of it
+// (one of the record's direct elements) needs a trapped plugin. Among the versions of the record in the plugins
+// loaded before the dependant, this finds the last whose version of the part is the same as the dependant's (the
+// dependant then only carries that version on), and the last, in a master of the dependant that is not trapped,
+// whose version needs no trapped plugin (what the part is without the trapped plugins). It only reads.
+procedure ReportCarried(fn, recForm: string; rec, top: IInterface);
+var
+  m, v, vt: IInterface;
+  i, myOrder, order, sameOrder, prevOrder, tainted: integer;
+  mine, rest, vfile, sameFile, prevFile, prevState, prevShape, restSame: string;
+begin
+  m := MasterOrSelf(rec);
+  myOrder := GetLoadOrder(GetFile(rec));
+  mine := Shape(top);
+  tainted := 0;
+  rest := '';
+  if (ElementTypeAsText(top) = 'etSubRecordArray') or (ElementTypeAsText(top) = 'etArray') then begin
+    rest := ShapeWithout(top);
+    tainted := gTainted;
+  end;
+  sameFile := '';
+  prevFile := '';
+  prevState := '';
+  prevShape := '';
+  sameOrder := -1;
+  prevOrder := -1;
+  for i := -1 to Pred(OverrideCount(m)) do begin
+    if i < 0 then
+      v := m
+    else
+      v := OverrideByIndex(m, i);
+    order := GetLoadOrder(GetFile(v));
+    if order < myOrder then begin
+      vfile := GetFileName(GetFile(v));
+      vt := ElementByName(v, Name(top));
+      if Assigned(vt) then
+        if (order > sameOrder) and (Shape(vt) = mine) then begin
+          sameOrder := order;
+          sameFile := vfile;
+        end;
+      if (order > prevOrder) and (not IsTrapped(vfile)) and (slMasters.IndexOf(vfile) >= 0) then begin
+        if not Assigned(vt) then begin
+          prevOrder := order;
+          prevFile := vfile;
+          prevState := 'absent';
+          prevShape := '';
+        end else if not NeedsTrapped(vt) then begin
+          prevOrder := order;
+          prevFile := vfile;
+          prevShape := Shape(vt);
+          if Fits(vt, fn) then
+            prevState := 'present'
+          else
+            prevState := 'needs ' + gMissing;
+        end;
+      end;
+    end;
+  end;
+  restSame := '0';
+  if (tainted > 0) and (prevFile <> '') then
+    if ((prevState = 'absent') and (rest = '()')) or ((prevState <> 'absent') and (rest = prevShape)) then
+      restSame := '1';
+  slOut.Add('C' + #9 + fn + #9 + recForm + #9 + Clean(Name(top)) + #9 + ElementTypeAsText(top) + #9 + sameFile + #9 +
+    prevFile + #9 + prevState + #9 + IntToStr(tainted) + #9 + restSame);
+end;
+
+procedure ReportParts(fn, recForm: string; rec: IInterface);
+var
+  i: integer;
+  top: IInterface;
+begin
+  for i := 0 to Pred(ElementCount(rec)) do begin
+    top := ElementByIndex(rec, i);
+    if CanContainFormIDs(top) then
+      if NeedsTrapped(top) then
+        ReportCarried(fn, recForm, rec, top);
+  end;
+end;
+
 // Every lowest element under el that needs a trapped plugin.
 procedure Walk(plugName, recForm: string; el: IInterface);
 var
@@ -134,10 +279,12 @@ begin
   fn := GetFileName(f);
   n := RecordCount(f);
   masters := '';
+  slMasters.Clear;
   for i := 0 to Pred(MasterCount(f)) do begin
     if i > 0 then
       masters := masters + ',';
     masters := masters + GetFileName(MasterByIndex(f, i));
+    slMasters.Add(GetFileName(MasterByIndex(f, i)));
   end;
   slOut.Add('F' + #9 + fn + #9 + IntToStr(n) + #9 + masters);
   Say('reading ' + fn + ' (' + IntToStr(n) + ' records)');
@@ -153,8 +300,10 @@ begin
       else
         trapped := '0';
       slOut.Add('R' + #9 + fn + #9 + Signature(e) + #9 + recForm + #9 + own + #9 + trapped + #9 + Clean(EditorID(e)));
-      if trapped = '0' then
+      if trapped = '0' then begin
         Walk(fn, recForm, e);
+        ReportParts(fn, recForm, e);
+      end;
     end;
     if (i > 0) and (i mod 5000 = 0) then
       Say(fn + ': ' + IntToStr(i) + ' of ' + IntToStr(n) + ' records, ' + IntToStr(hits) + ' need a trapped plugin');
@@ -182,7 +331,7 @@ var
   f: IInterface;
   depName: string;
 begin
-  slOut.Add('H' + #9 + 'modtrap-report/2' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
+  slOut.Add('H' + #9 + 'modtrap-report/3' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
   n := StrToInt(slJob.Values['trap.count']);
   for i := 0 to Pred(n) do
     slTrap.Add(slJob.Values['trap.' + IntToStr(i)]);
@@ -224,6 +373,8 @@ begin
   slProg := TStringList.Create;
   slTrap := TStringList.Create;
   slNeed := TStringList.Create;
+  slMasters := TStringList.Create;
+  slFit := TStringList.Create;
   slJob.LoadFromFile(ScriptsPath + 'modtrap-job.txt');
   sOut := slJob.Values['out'];
   sProg := slJob.Values['progress'];
@@ -256,6 +407,8 @@ begin
   slProg.Free;
   slTrap.Free;
   slNeed.Free;
+  slMasters.Free;
+  slFit.Free;
 end;
 
 end.

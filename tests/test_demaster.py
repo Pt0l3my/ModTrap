@@ -56,15 +56,18 @@ class DemasterTests(unittest.TestCase):
     def test_plan_from_a_dry_run(self):
         _, dry = self.dry("clean")
         pl = demaster.plan(self.m, dry)
-        self.assertEqual(sorted(pl.demaster), ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"])
-        self.assertEqual(pl.switch_off, ["BrambleLanternPatch.esp"])
+        # A patch named for the mod is switched off whether or not anything of it would remain (WHY§52): the one
+        # in a collection is deactivated alone; the mod that is nothing but such a patch is disabled whole.
+        self.assertEqual(sorted(pl.demaster), ["Generated.esp", "Lantern.esp"])
+        self.assertEqual(pl.switch_off, ["BrambleLanternPatch.esp", "Collection - Bramble.esp"])
+        self.assertEqual(pl.disable_mods, ["Bramble - Lantern Patch"])
         self.assertEqual((pl.needs_you, pl.blocked), ([], False))
         # An entry is reached by its route and named; the record of the trapped plugin's own comes last.
         self.assertEqual(pl.demaster["Lantern.esp"], ["00012345|E|1/2|LNAM - FormID", "05000801|R"])
         self.assertEqual(pl.mod_name, "ModTrap - Bramble")
         _, dry = self.dry("xEdit")                                  # here two dependants need the owner
         pl = demaster.plan(self.m, dry)
-        self.assertEqual((sorted(pl.needs_you), pl.blocked), (["BrambleLanternPatch.esp", "Lantern.esp"], True))
+        self.assertEqual((sorted(pl.needs_you), pl.blocked), (["Lantern.esp"], True))
 
     def test_entries_of_one_list_go_highest_first(self):
         el = lambda route: {"route": route, "entry": "LNAM - FormID"}   # noqa: E731
@@ -80,10 +83,11 @@ class DemasterTests(unittest.TestCase):
         d = self.job()
         d.make_safe()
         d.run_xedit()
-        self.assertEqual(sorted(d.verify()), ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"])
+        self.assertEqual(sorted(d.verify()), ["Generated.esp", "Lantern.esp"])
         self.assertEqual(self.tree(), before)                       # up to here nothing in the modlist has changed
         done = d.install()
-        self.assertEqual((done["disabled"], done["deactivated"]), (["Bramble"], ["BrambleLanternPatch.esp"]))
+        self.assertEqual((done["disabled"], done["deactivated"]),
+                         (["Bramble - Lantern Patch", "Bramble"], ["BrambleLanternPatch.esp", "Collection - Bramble.esp"]))
         check = d.check()
         self.assertEqual((check["ok"], check["new_problems"], check["needs_you"]), (True, [], []))
         # The modlist as MO2 will see it: ModTrap's mod on top provides the demastered plugins, Bramble is off.
@@ -101,10 +105,13 @@ class DemasterTests(unittest.TestCase):
         # The history says what was done and where things were.
         events = history.History(self.session).all()
         kinds = [e["kind"] for e in events]
-        self.assertEqual(kinds.count("plugin demastered"), 3)
+        self.assertEqual(kinds.count("plugin demastered"), 2)
         self.assertEqual([k for k in kinds if k != "plugin demastered"],
-                         ["mod added", "plugin deactivated", "mod disabled", "verified"])
-        off = next(e for e in events if e["kind"] == "mod disabled")
+                         ["mod added", "plugin deactivated", "plugin deactivated", "mod disabled", "mod disabled",
+                          "verified"])
+        patches = next(e for e in events if e["kind"] == "mod disabled")
+        self.assertEqual((patches["mod"], patches["why"]), ("Bramble - Lantern Patch", "patches made only for the mod"))
+        off = next(e for e in events if e["kind"] == "mod disabled" and e["mod"] == "Bramble")
         self.assertEqual((off["mod"], off["priority"], off["plugins"]),
                          ("Bramble", 1, [{"name": "Bramble.esp", "position": 5, "kind": "esp"}]))
         dem = next(e for e in events if e["kind"] == "plugin demastered" and e["plugin"] == "Lantern.esp")
@@ -134,9 +141,10 @@ class DemasterTests(unittest.TestCase):
         d.make_safe()
         d.run_xedit()
         self.assertEqual(d.verify(), [])
-        self.assertEqual(sorted(d.plan.needs_you), ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"])
+        self.assertEqual(sorted(d.plan.needs_you), ["Generated.esp", "Lantern.esp"])
         done = d.install()                                          # only the patch is switched off
-        self.assertEqual((done["plugins"], done["disabled"], done["deactivated"]), ([], [], ["BrambleLanternPatch.esp"]))
+        self.assertEqual((done["plugins"], done["disabled"], done["deactivated"]),
+                         ([], ["Bramble - Lantern Patch"], ["BrambleLanternPatch.esp", "Collection - Bramble.esp"]))
         self.assertFalse((self.root / "mods" / "ModTrap - Bramble").exists())
         self.assertTrue(model.build(instance.load(self.root)).instance.mod("Bramble").enabled)   # the mod stays on
         self.assertFalse(d.check()["disabled"])
@@ -146,7 +154,7 @@ class DemasterTests(unittest.TestCase):
         d.make_safe()
         d.run_xedit()
         good = d.verify()
-        self.assertEqual(len(good), 2)
+        self.assertEqual(len(good), 1)
         self.assertEqual(len(d.plan.needs_you), 1)
         self.assertIn("refused", " ".join(d.plan.notes))
         d.install()

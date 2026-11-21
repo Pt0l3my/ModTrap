@@ -18,7 +18,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 from . import logbook, model, paths, winauto
 from .instance import GAME, Executable, Instance, fold
@@ -285,14 +285,62 @@ def read_chain(text: str) -> dict:
     return {"kind": "field", "entry": "", "index": -1, "array": "", "array_length": 0, "steps": steps, "route": []}
 
 
-def parse_report(text: str) -> dict:
+PARTNERS = 2        # a patch for the mod: at most this many masters besides the game's own and the trapped ones
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _initials(name: str) -> set[str]:
+    """The first letters of a name's words, read two ways: words as written, and words as capitals begin them."""
+    words = [re.sub(r"[^A-Za-z0-9]", "", w) for w in re.split(r"[\s_]+", name)]
+    plain = "".join(w[0] for w in words if w)
+    camel = "".join(w[0] for w in re.findall(r"[A-Z]+[a-z0-9]*|[a-z0-9]+", name))
+    return {x.lower() for x in (plain, camel) if len(x) >= 3}
+
+
+def named_for(dependant: str, trapped: Iterable[str], trapped_mods: Iterable[str]) -> bool:
+    """Is a plugin named after a trapped mod, as patches are ("Inn - Lantern Patch.esp", "LNT_Inn.esp")? Its name
+    holds the trapped plugin's or the mod's whole name, or their initials as a word of its own."""
+    stem = dependant.rsplit(".", 1)[0]
+    flat, words = _squash(stem), {w for w in re.split(r"[^a-z0-9]+", stem.lower()) if w}
+    for name in [t.rsplit(".", 1)[0] for t in trapped] + list(trapped_mods):
+        if len(_squash(name)) >= 4 and _squash(name) in flat:
+            return True
+        if _initials(name) & words:
+            return True
+    return False
+
+
+def carried(part: dict, sources: set[str]) -> str:
+    """How a part of a record that needs a trapped plugin came to do so, from the script's C line (XE01§14):
+    "carried" (the dependant's version of the part is that of a trapped plugin, or of another dependant: it only
+    carries it on), "added" (the entries that need the trapped plugin sit on top of what the dependant's remaining
+    masters have), or "" (the dependant's own doing, or nothing to put in its place)."""
+    if not part or not part["prev"] or part["state"] not in ("present", "absent"):
+        return ""
+    if fold(part["same"]) in sources:
+        return "carried"
+    return "added" if part["rest_same"] else ""
+
+
+def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[str] = (),
+                 primary: Iterable[str] = ()) -> dict:
     """The script's report as the page shows it: per dependant, what needs a trapped plugin and what ModTrap would
     do about each (MT4): "record" (the dependant's copy of a trapped plugin's own record: taken out), "entry" (an
-    entry of a list that is safe to shorten: taken out), "needs you" (anything else)."""
+    entry of a list that is safe to shorten: taken out), "needs you" (anything else).
+
+    With the trapped plugins and mods named, a dependant that is a patch for the mod by its masters and its name
+    is read as "patch only" whatever it holds (MT6, WHY§52), and each part that needs the owner says whether the
+    dependant only carries it on from the mod (reported, not yet acted on: MT4)."""
+    trapped, trapped_mods = list(trapped), list(trapped_mods)
+    game = {fold(x) for x in primary} | {fold(x) for x in trapped}
     out: dict = {"format": "", "xedit": "", "end": "", "reason": "", "files": [], "not_loaded": [], "held_changed": [],
                  "data_path": "", "trap_missing": [], "loaded": 0}
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
+    parts: dict[tuple[str, str, str], dict] = {}
     for line in text.split("\n"):              # not splitlines(): the chain's separators would count as line ends
         f = line.rstrip("\r").split("\t")
         kind = f[0]
@@ -314,9 +362,12 @@ def parse_report(text: str) -> dict:
             rec["elements"].append({"kind": c["kind"], "entry": c["entry"], "index": c["index"], "array": c["array"],
                                     "array_length": c["array_length"], "path": f[3], "target_file": f[4],
                                     "target_form": f[5], "would": "entry" if safe else "needs you",
-                                    "route": c["route"],
+                                    "route": c["route"], "part": c["steps"][-1]["name"] if c["steps"] else "",
                                     "chain": [[st["name"], st["element"], st["value"], st["count"]]
                                               for st in c["steps"]]})
+        elif kind == "C" and len(f) >= 10:
+            parts[(f[1], f[2], f[3])] = {"part": f[3], "element": f[4], "same": f[5], "prev": f[6], "state": f[7],
+                                         "tainted": int(f[8] or 0), "rest_same": f[9] == "1"}
         elif kind == "D" and len(f) >= 4 and f[1] in files:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:
@@ -330,7 +381,9 @@ def parse_report(text: str) -> dict:
             out["held_changed"].append(f[1])
         elif kind == "X" and len(f) >= 2:
             out["end"], out["reason"] = f[1], f[2] if len(f) > 2 else ""
+    sources = {fold(x) for x in trapped} | {fold(n) for n in files}
     for fd in files.values():
+        fd["carried"] = 0
         for rec in fd["items"]:
             if rec["own"]:
                 rec["would"] = "record"
@@ -341,12 +394,25 @@ def parse_report(text: str) -> dict:
             else:
                 rec["would"] = "needs you"
                 fd["needs_you"] += 1
+                hard = [e for e in rec["elements"] if e["would"] == "needs you"]
+                for e in hard:
+                    part = parts.get((fd["name"], rec["form"], e["part"]))
+                    e["came"] = carried(part, sources)
+                    if part:
+                        e["same_as"], e["without"], e["without_state"] = part["same"], part["prev"], part["state"]
+                rec["carried"] = bool(hard) and all(e["came"] for e in hard)
+                fd["carried"] += rec["carried"]
+        partners = [x for x in fd["masters"] if fold(x) not in game]
+        fd["made_for"] = bool(trapped) and len(partners) <= PARTNERS and named_for(fd["name"], trapped, trapped_mods)
+        fd["why"] = ""
         if not fd["done"]:
             fd["reading"] = "not finished"
+        elif fd["made_for"]:
+            fd["reading"], fd["why"] = "patch only", "named for the mod"     # a patch for the mod: switch it off (MT6)
         elif fd["needs_you"]:
             fd["reading"] = "needs you"
         elif fd["records"] and fd["own"] >= fd["records"]:
-            fd["reading"] = "patch only"          # nothing of it would remain: switch it off (MT6)
+            fd["reading"], fd["why"] = "patch only", "nothing would remain"  # switch it off (MT6)
         else:
             fd["reading"] = "can be demastered"
     return out
@@ -583,7 +649,7 @@ class Job:
             if elapsed > TIME_LIMIT:
                 raise Refused("the dry run took longer than %d minutes; ModTrap stopped waiting" % (TIME_LIMIT // 60))
         self.state = "checking"
-        self.result = parse_report(_read(report))
+        self.result = parse_report(_read(report), p.trapped, p.trapped_mods, self.model.instance.primary)
         close_xedit(image, self._running, self._closer, self._poll, mo2_was_running=mo2_was_running)   # XE01§11
         # The script only read. Prove it: every dependant must still be the file that was copied (DESIGN§8).
         changed = []
@@ -623,8 +689,10 @@ class Job:
         log.info("the dry run is done in %d s: %d dependant(s) read, every one unchanged on disk",
                  int(self.ended - self.started), len(fs))
         for fd in fs:
-            log.info("  %s: %d record(s) of the trapped mod's own, %d list entr(ies), %d that need you -> %s",
-                     fd["name"], fd["own"], fd["entries"], fd["needs_you"], fd["reading"])
+            log.info("  %s: %d record(s) of the trapped mod's own, %d list entr(ies), %d that need you%s -> %s%s",
+                     fd["name"], fd["own"], fd["entries"], fd["needs_you"],
+                     " (%d of them only carried on from the mod)" % fd["carried"] if fd.get("carried") else "",
+                     fd["reading"], " (%s)" % fd["why"] if fd.get("why") else "")
 
 
 def _read(path: Path) -> str:

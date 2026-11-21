@@ -246,9 +246,9 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
     known = bool(result and same_job) or not active_left      # the dry run has sorted the dependants, or none is left
 
     step("switch-off", "you", "Switch off the patches made only for the mod",
-         "A plugin in which every record belongs to the mod has nothing left without it. Deactivate it on MO2's "
-         "Plugins tab (or disable its mod, if every plugin of that mod is listed here). ModTrap will do this itself "
-         "once its demaster step is built.",
+         "A patch made for the mod (by its name and its few masters), or a plugin in which every record belongs to "
+         "the mod, has no purpose without it. It is deactivated, and a mod that holds nothing but such patches is "
+         "disabled whole; nothing in them is changed. “Demaster Selected” does this.",
          "waiting for the dry run" if not known else "to do" if patch_only else "done",
          [brief(r) for r in patch_only],
          note="" if known else "The dry run shows which dependants are patches of this kind.")

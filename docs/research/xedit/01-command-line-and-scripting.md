@@ -165,3 +165,22 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   the script's first line arrives, and presses a limited number of times. LIKELY until seen on the owner's PC:
   that the press, sent as a message from another program, is taken (it is not when xEdit runs with higher
   rights than ModTrap). If it is not, the owner presses OK as before; the page and the log say so.
+
+## 14. Telling where a part of a record comes from (source; unproven on a real list until the next dry run)
+
+- **FACT.** A script can walk every version of a record: `MasterOrSelf` gives the first, `OverrideCount` and
+  `OverrideByIndex` the rest (`xEdit/JvI/xejviScriptAdapter.pas:2173-2180`), and `GetLoadOrder` of each version's
+  file says where it loads (`:2207`). `ElementByName` finds a named part of a version (`:2133`), and
+  `GetEditValue` gives a value as text (`:2093`).
+- **FACT.** There is a ready-made comparison (`SortKey`, `:2090`), but a container's key is built from its
+  members' keys (`Core/wbImplementation.pas:7090-7103`) and a definition may give a member a key of its own, so
+  two different parts could share a key. **METHOD.** ModTrap's script therefore compares its own text of a part:
+  every element's name and value, all the way down.
+- **FACT.** A script can also copy a part from one version of a record into another (`wbCopyElementToRecord`,
+  `:2113`) and take an element out (`RemoveElement`, `:2145`): what putting a part back would use. Not used yet.
+- **METHOD.** For a record of another plugin that the dependant overrides, and each direct part of it that needs
+  a trapped plugin, the reading script writes one line (`C`): the last plugin before the dependant whose version
+  of the part is the same as the dependant's; the dependant's last master, not trapped, whose version needs no
+  trapped plugin, and whether that version is present, absent, or would need a master the dependant lacks; and,
+  for a list, whether the list without the entries that need a trapped plugin is exactly that master's list.
+  The script only reads.

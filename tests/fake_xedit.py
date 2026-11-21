@@ -112,7 +112,7 @@ def main(argv):
     say("xEdit has loaded %d files; %d trapped plugin(s)" % (len(loaded) + 5, len(trap)))
     if mode == "crash":
         return 3
-    out.append("H\tmodtrap-report/2\treport\t67175680")
+    out.append("H\tmodtrap-report/3\treport\t67175680")
     if mode == "absent":                # an xEdit that looks in another game folder: none of the plugins is there
         out.append("P\tC:\\Elsewhere\\Data\\\t81")
         out += ["N\t" + t for t in trap] + ["M\t" + d for d in deps] + ["X\tok\t"]
@@ -154,6 +154,9 @@ def main(argv):
             out.append("R\t%s\tNPC_\t00054321\tSkyrim.esm\t0\tInventedPerson" % d)
             out.append("E\t%s\t00054321\tNPC_ \\ RNAM - Race\t%s\t05000802\t%s" % (d, trap[0], chain(
                 ("RNAM - Race", "etSubRecord", "dtFormID", 0, 9))))
+            # Where that part comes from: the trapped plugin's own version of the record is the same, and without
+            # it the game's own record says what the part is (the script's C line).
+            out.append("C\t%s\t00054321\tRNAM - Race\tetSubRecord\t%s\tSkyrim.esm\tpresent\t0\t0" % (d, trap[0]))
             n = 3
         out.append("D\t%s\t3\t%d" % (d, n))
         say("done %s: %d of 3 records need a trapped plugin" % (d, n))

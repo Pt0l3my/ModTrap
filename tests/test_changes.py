@@ -205,15 +205,16 @@ class DemasterThroughThePage(unittest.TestCase):
     def test_plan_run_put_in_place_and_revert(self) -> None:
         self.dry_run()
         p = self.api.post("/api/demaster/plan", {})[1]
-        self.assertEqual(sorted(x["plugin"] for x in p["demaster"]), ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"])
-        self.assertEqual((p["switch_off"], p["needs_you"], p["mod_name"]), (["BrambleLanternPatch.esp"], [], "ModTrap - Bramble"))
+        self.assertEqual(sorted(x["plugin"] for x in p["demaster"]), ["Generated.esp", "Lantern.esp"])
+        self.assertEqual((p["switch_off"], p["disable_mods"], p["needs_you"], p["mod_name"]),
+                         (["BrambleLanternPatch.esp", "Collection - Bramble.esp"], ["Bramble - Lantern Patch"], [], "ModTrap - Bramble"))
         got = self.api.post("/api/demaster/start", {})[1]
         self.assertEqual(got["state"], "working")
         with self.assertRaises(Bad):
             self.api.post("/api/dryrun/start", {"mods": ["Bramble"]})          # one thing at a time
         d = self.worked()
         self.assertEqual((d["state"], sorted(d["written"]), d["mo2_closed"]),
-                         ("verified", ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"], True))
+                         ("verified", ["Generated.esp", "Lantern.esp"], True))
         self.assertEqual(snapshot(self.root), self.before)                    # verified, and still nothing changed
         self.mo2_running = True
         with self.assertRaises(Bad):
@@ -229,7 +230,8 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(m.row("Lantern.esp").source, "ModTrap - Bramble")
         jobs = self.api.state()["demaster"]["jobs"]
         self.assertEqual([(j["state"], j["disabled"], j["deactivated"]) for j in jobs],
-                         [("installed", ["Bramble"], ["BrambleLanternPatch.esp"])])
+                         [("installed", ["Bramble - Lantern Patch", "Bramble"],
+                           ["BrambleLanternPatch.esp", "Collection - Bramble.esp"])])
         events = self.api.get("/api/history", {})[1]
         self.assertEqual(events["events"][0]["kind"], "verified")
         self.assertIn("mod disabled", [e["kind"] for e in events["events"]])
