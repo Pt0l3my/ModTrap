@@ -62,6 +62,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 37 | 2026-11-20 | Which tool made a plugin: read in the tools' own sources, kept as data | FACT | #tools |
 | 38 | 2026-11-20 | A Browse button: an in-page folder picker | METHOD | #page |
 | 39 | 2026-11-20 | The demaster built end to end against a stand-in, and kept switched off | METHOD | #xedit #mo2 #safety #process |
+| 40 | 2026-11-21 | Adding mods: what is built, the placing rule, and what was ruled out | METHOD | #adding #mo2 #page #tools |
 
 ## Entries
 
@@ -702,3 +703,35 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   the load order after its lists were rewritten (WHY§26); and MO2 is reliably found open or closed.
 - Not built: the page for it, the probe's own run, Re-enable, and Revert on the page. They come when the first
   real dry run has shown that the foundation holds.
+
+### 40. Adding mods: what is built, the placing rule, and what was ruled out
+
+`2026-11-21` · METHOD · `#adding #mo2 #page #tools` · refs: MT21, MT9, MT17, DESIGN§16, DESIGN§13, DESIGN§14, MO01§7, XE02§6, XE01§10, TL01§6, WHY§27, WHY§30, WHY§36, WHY§39
+
+- The owner asked for a way to add extra mods safely, in place of "add it last, and its plugin last" (MT21), and
+  left the how open. Built now, read-only: `modtrap/adding.py`, an Add mods tab, and `python -m modtrap add`.
+- DECIDED (under MT21's freedom): **MO2 installs.** Ruled out: ModTrap unpacking archives itself. Most archives are
+  7z or rar, which Python cannot read without third-party code; many mods come with an installer that asks which
+  options to take; and MO2 already does both. So ModTrap starts from a mod that is installed and disabled, and a
+  dropped archive is only a name to find that mod by (as WHY§30 found for folders: a page gets no path).
+- METHOD: **the placing rule.** "Last" is right for what the owner wants (the new mod wins) and wrong only where
+  something was meant to stay last: what the tools made. So the proposal is: after everything made by hand, before
+  the tools' output. For plugins that is the run of tool-made plugins at the end of the load order, found by the
+  same marks as DESIGN§13; for mods, the output mods at the end of the list. An editor's output does not count as
+  tool-made (TL01§6): it is the modlist's hand-made patches, and the new plugin goes after them, as it does today.
+- LIKELY, and the limit of that rule: going after the hand-made patches means the new plugin takes back every
+  record it shares with them. That is what happens today too, unseen. Seeing it needs xEdit (DESIGN§16.5); until
+  that is built, a step says how to look by hand. ModTrap does not pretend to settle record conflicts from headers.
+- SPECULATION: an output mod with no plugin and no entry in MO2's settings (a behaviour or texture generator's
+  folder) is recognised only by "output" in its name. On a list that names such mods otherwise, the new mod would
+  be proposed after them; the report lists what it takes as outputs, so the owner can see when that is wrong.
+- METHOD: shared files are found by entering, in each other mod, only the folders the new mod also has. Listing
+  every file of a few thousand mods would take minutes; this takes one folder listing for a mod that shares
+  nothing. It has a time limit and says when it was cut short. Not yet run on a real list.
+- Not compared, and said on the page: files inside archives. Not known: the game's version (so the newer header
+  format is only pointed out, XE02§6).
+- FACT: tested on an invented list only (21 tests): the place among mods and plugins, masters in each state, the
+  room in the load order, files won and lost, the tool to run again, the steps in order, and that nothing is
+  written. The page was driven in a browser on that list.
+- Next, on the owner's PC: `python -m modtrap add` on a real mod, to see the timing of the shared-files search and
+  whether the outputs it recognises are the real ones.

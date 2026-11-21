@@ -1,7 +1,7 @@
 # Design 0001: ModTrap
 
 *2026-11-20 · Adopted as the working design under MT17; revised the same day after the owner's answers (MT4 to
-MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), the dry run (WHY§31), sessions (WHY§33), the Steps tab (WHY§35). The demaster itself is written and tested against a stand-in for xEdit but switched off (WHY§36, WHY§39): nothing the page can do writes to an instance. Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
+MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), the dry run (WHY§31), sessions (WHY§33), the Steps tab (WHY§35). The demaster itself is written and tested against a stand-in for xEdit but switched off (WHY§36, WHY§39): nothing the page can do writes to an instance. Adding mods (§16, MT21) is built as far as it only reads (WHY§40). Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
 [REASONING.md](../REASONING.md), `MO01` and `XE01` are [the research notes](../research/README.md).*
 
 ## 1. What ModTrap does
@@ -305,3 +305,85 @@ history (§12).
   modlist changed in between (a mod no longer there), what cannot be restored is dropped, and the rest is.
 - Quitting while a job is going asks first. A dry run cut short this way is shown afterwards as not finished; the
   rule for a demaster cut short belongs with Revert (§11) and is not yet designed.
+
+## 16. Adding mods (MT21)
+
+Beside taking mods out, ModTrap helps to put extra mods in. The owner's own way is to add a mod last and its plugin
+last; that works until the new files or records land after something that was meant to stay last, or the plugin
+needs something that is not there. This section is what ModTrap does about it. Built so far: §16.1 to §16.4, §16.6
+and §16.7, all read-only (WHY§40). Not built: §16.5 and §16.8.
+
+### 16.1 What is dropped
+
+- MO2 installs the mod, as always, and it is left disabled. ModTrap does not unpack archives or run a mod's
+  installer: MO2 does both well, and an installer asks questions only the owner can answer (WHY§40).
+- On the Add mods tab the owner finds the mod by name, or drops its archive or its folder on the page. A page learns
+  only the name of what was dropped, so the name is matched: a folder against the mods' names, an archive against
+  the file each mod was installed from (MO01§7). A file MO2 has downloaded but not installed, or does not know, is
+  said so, with what to do.
+- Up to twenty mods are analysed together; the list is kept in the session (§15).
+
+### 16.2 What the mod needs
+
+- Every master of every plugin it brings, and where that master is: active in the modlist; in the modlist but not
+  active; in a disabled mod (which is then offered to be added too); coming along with another mod of the same
+  batch; or nowhere.
+- Room in the load order: the full and the light plugins active now, and with the new ones, against the game's
+  limits (XE02§6).
+- A plugin that cannot be read, a master-flagged plugin that needs one that is not, and a header in the newer
+  format (XE02§6) are pointed out.
+
+### 16.3 Where it goes
+
+- **Among the mods:** after every ordinary mod, so that it wins each file it shares with them, as it does when the
+  owner puts it last; but before the mods that hold what the modlist's tools made (§13), which stay last and are
+  made again. A mod counts as a tool's output when MO2 sends a tool's new files to it, when every plugin in it was
+  made by a tool, or, failing both, when its name says "output". A separator right before the outputs stays with
+  them. With no output found, the mod goes last.
+- **In the load order:** after every master the plugin names, and before the run of tool-made plugins at the end
+  (§13; an editor's output does not count, TL01§6). A master-flagged plugin goes to the end of the masters' block
+  instead, since the game loads those first. Several new plugins are ordered among themselves, masters first.
+- The place is a proposal with its reason. The report shows what the mod wins and loses there (§16.4), so the owner
+  can judge it.
+
+### 16.4 Files it shares with other mods
+
+- For each mod to add: the enabled mods (and the overwrite folder) that hold a loose file of the same path, split
+  into those the new mod would replace and those it would lose to in its place, with counts by kind of file (§14's
+  kinds) and a few examples.
+- The kinds that go wrong quietly are pointed out: a plugin of the same name, compiled scripts, a script extender
+  plugin, face files, an archive of the same name, menu files. Files lost to a tool's output mean that tool runs
+  again (§16.6).
+- METHOD: only folders the new mod also has are entered in the other mods, so a mod that shares nothing costs one
+  listing of its top folder; the search has a time limit and says when it was cut short.
+- Not compared: files packed inside archives (`.bsa`). A loose file always wins over a packed one.
+
+### 16.5 Records (not built)
+
+- Which records the new plugin overrides, and which other plugins change the same records, only xEdit can read. It
+  can tell a script whether a record is in conflict (XE01§10). ModTrap is to read this through the same read-only
+  run as the dry run (§7) and list, for each record the new plugin takes from a patch of the modlist, what is lost;
+  from that, whether a patch is needed and for which records.
+- Until then the step list says how to look in xEdit by hand.
+
+### 16.6 Tools that must run again
+
+- A tool that made a plugin of this modlist from what the new mod brings: the tools data says what each tool reads
+  (plugins; meshes and textures; LOD), and words the condition where it depends on what the mod changes. A tool
+  ModTrap does not know is taken to read plugins, and the step says "if it applies".
+- A tool fed by the mod's loose files, as in §14: animations, LOD, grass cache, BodySlide data.
+
+### 16.7 The steps
+
+In order, each with who does it, why, and whether the modlist's files show it done (as §14): get what the mod
+needs; enable it in its place; activate its plugins in their place; look at the shared files that go wrong quietly;
+check the records in xEdit; run the tools again; the health check (§3); play. `python -m modtrap add FOLDER --mod
+NAME` prints the same report.
+
+### 16.8 Carrying the steps out (not built)
+
+- With MO2 closed (§8), and through the same safe folder, history and Revert as a demaster (§11, §12): move the mod
+  to its place and enable it, put its plugins in their place and activate them. "Take it out again" disables the
+  mod and deactivates its plugins; nothing is deleted (MT9).
+- Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting
+  tool's rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.

@@ -193,6 +193,7 @@ function currentUi() {
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
+    adding: [...(state.adding || [])],
   };
 }
 
@@ -221,6 +222,10 @@ function applyUi(ui) {
     state.collapsed = new Set(Array.isArray(ui.collapsed) ? ui.collapsed : []);
     state.stepsDone = ui.stepsDone && typeof ui.stepsDone === "object" ? ui.stepsDone : {};
     state.stepsText = "";
+    state.adding = (Array.isArray(ui.adding) ? ui.adding : []).filter((n) => { const m = findMod(n); return m && m.kind === "mod"; });
+    state.addNotes = [];
+    state.addText = "";
+    renderAddPicked();
     state.picked = new Set();
     for (const n of Array.isArray(ui.picked) ? ui.picked : []) {
       const m = findMod(n);
@@ -877,6 +882,210 @@ async function pollSteps(force) {
   } catch (e) { /* the next round tries again */ }
 }
 
+// --- the Add mods tab (MT21, DESIGN§16) ------------------------------------------------------------------------------
+
+function addKey(k) { return "add::" + (state.adding || []).slice().sort().join("|") + "::" + k; }
+
+function addCandidate(name) {
+  state.adding = state.adding || [];
+  if (state.adding.some((n) => fold(n) === fold(name))) return false;
+  if (state.adding.length >= 20) { toast("Twenty mods at a time is the most ModTrap analyses."); return false; }
+  state.adding.push(name);
+  renderAddPicked();
+  saveUi();
+  pollAdd(true);
+  return true;
+}
+
+function renderAddPicked() {
+  const box = $("add-picked");
+  const list = state.adding || [];
+  box.hidden = !list.length;
+  const badge = $("add-count");
+  badge.hidden = !list.length;
+  badge.textContent = list.length;
+  box.replaceChildren(el("span", { class: "dim", text: "To add:" }), ...list.map((n) => {
+    const x = el("button", { type: "button", title: "Take “" + n + "” off this list. Nothing in MO2 changes.", "aria-label": "Take " + n + " off the list", text: "×" });
+    x.addEventListener("click", () => { state.adding = state.adding.filter((y) => y !== n); renderAddPicked(); saveUi(); pollAdd(true); });
+    return el("span", { class: "pick" }, modLink(n), x);
+  }));
+}
+
+function addMatches() {
+  const q = fold($("add-search").value.trim());
+  const box = $("add-matches");
+  if (!q) { box.hidden = true; return; }
+  const have = new Set((state.adding || []).map(fold));
+  const hits = state.mods.filter((m) => m.kind === "mod" && !have.has(fold(m.name)) && fold(m.name).includes(q));
+  hits.sort((a, b) => (a.enabled - b.enabled) || (fold(a.name).indexOf(q) - fold(b.name).indexOf(q)) || a.name.localeCompare(b.name));
+  box.replaceChildren(...hits.slice(0, 40).map((m) => {
+    const b = el("button", { type: "button", role: "option" }, el("span", { class: "name", text: m.name }),
+      el("span", { class: "tag " + (m.enabled ? "good" : ""), text: m.enabled ? "enabled" : "disabled" }),
+      el("span", { class: "dim", text: plural(m.files, "plugin") }));
+    b.addEventListener("click", () => { addCandidate(m.name); $("add-search").value = ""; box.hidden = true; $("add-search").focus(); });
+    return b;
+  }));
+  if (!hits.length) box.append(el("p", { class: "dim", text: "MO2 has no mod with that in its name. Install the mod in MO2 first (leave it disabled), then press Rescan." }));
+  else if (hits.length > 40) box.append(el("p", { class: "dim", text: "Showing 40 of " + hits.length + ": type more of the name." }));
+  box.hidden = false;
+}
+
+// Dropped files and folders, by their names: the mods MO2 installed from them (DESIGN§16.1).
+async function dropMods(names) {
+  showTab("add");
+  try {
+    const d = await api("/api/add/resolve", { items: names.slice(0, 50).map((n) => ({ name: n })) });
+    const notes = [];
+    let added = 0;
+    for (const it of d.items) {
+      if (!it.mods.length) { notes.push({ name: it.name, text: it.how, bad: true }); continue; }
+      for (const m of it.mods) if (addCandidate(m)) added++;
+      if (!it.sure) notes.push({ name: it.name, text: "Taken to be the mod “" + it.mods[0] + "”, because " + it.how + ". Take it off the list if that is not the one." });
+      else if (it.mods.length > 1) notes.push({ name: it.name, text: "MO2 installed " + it.mods.length + " mods from this file: all of them are on the list. Take off the ones you do not mean." });
+    }
+    state.addNotes = notes;
+    state.addText = "";
+    if (added) toast(plural(added, "mod") + " put on the list to add."); else if (!notes.length) toast("Already on the list.");
+    pollAdd(true);
+  } catch (e) { problem(e.message); }
+}
+
+const KIND_ONE = { "plugin": "plugin", "textures": "texture", "meshes": "mesh", "scripts": "script", "animations": "animation file", "menus": "menu file",
+  "archive": "archive", "other files": "other file", "script extender plugin": "script extender plugin", "sequence file": "sequence file" };
+const KIND_MANY = { "plugin": "plugins", "archive": "archives", "script extender plugin": "script extender plugins", "sequence file": "sequence files",
+  "voice or sound": "voice or sound files", "face data": "face files", "lod": "LOD files", "grass cache": "grass cache files",
+  "settings for a script extender plugin": "settings files", "bodyslide data": "BodySlide files" };
+const kindsText = (kinds) => Object.entries(kinds).sort((a, b) => b[1] - a[1])
+  .map(([k, n]) => n + " " + (n === 1 && KIND_ONE[k] ? KIND_ONE[k] : KIND_MANY[k] || k)).join(", ");
+
+function shareTable(title, list, word) {
+  if (!list.length) return null;
+  const files = list.reduce((n, c) => n + c.files, 0);
+  const rows = list.slice(0, 300).map((c) => el("tr", {},
+    el("td", { class: "c-num", text: c.files }),
+    el("td", {}, modLink(c.mod), c.output ? el("span", { class: "tag warn", title: c.output, text: "a tool's output" }) : null,
+      c.adding ? el("span", { class: "tag", text: "also being added" }) : null,
+      ...c.notable.map((k) => el("span", { class: "tag warn", text: k }))),
+    el("td", { class: "dim" }, kindsText(c.kinds), el("span", { class: "mono", text: "   " + c.examples.join("  ·  ") + (c.files > c.examples.length ? "  …" : "") }))));
+  return el("details", {}, el("summary", {}, title + ": " + plural(files, "file") + " " + word + " " + plural(list.length, "mod")),
+    el("table", { class: "share" }, el("tbody", {}, ...rows)),
+    list.length > 300 ? el("p", { class: "dim", text: "Showing the first 300 mods." }) : null);
+}
+
+function addModCard(x, place) {
+  const where = place.before ? "directly before “" + place.before + "” in MO2's list" : "last in MO2's list (the highest priority)";
+  const plugs = x.plugins.map((p) => {
+    if (p.unreadable) return el("div", { class: "plug" }, el("p", {}, el("span", { class: "mono", text: p.name }), el("span", { class: "tag bad", text: "could not be read" })), el("p", { class: "dim", text: p.unreadable }));
+    const pr = p.proposed;
+    const bad = p.masters.filter((m) => m.state !== "active" && m.state !== "comes along");
+    return el("div", { class: "plug" },
+      el("p", {}, p.active ? pluginLink(p.name) : el("span", { class: "mono", text: p.name }), el("span", { class: "tag", text: p.kind }),
+        el("span", { class: "tag " + (p.active ? "good" : ""), text: p.active ? "active, position " + p.position : "not active yet" })),
+      p.active ? null : el("p", {}, "Goes " + (pr.before ? "directly before " : "at the end of the load order"), pr.before ? pluginLink(pr.before) : null,
+        el("span", { class: "dim", text: "  (" + pr.why + ")" })),
+      el("p", { class: "dim" }, "Masters: " + (p.masters.length ? p.masters.map((m) => m.name).join(", ") : "none"),
+        bad.length ? el("span", { class: "tag bad", text: plural(bad.length, "master") + " not ready" }) : p.masters.length ? el("span", { class: "tag good", text: "all there" }) : null),
+      ...bad.map((m) => el("p", { class: "would-needs", text: m.name + ": " + (m.state === "missing" ? "no mod in this MO2 has it" : m.state === "inactive" ? "in the modlist, not active" : "in a disabled mod: " + m.mods.join(" or ")) })),
+      p.replaces ? el("p", { class: "would-needs" }, "Another mod has a plugin of this name: ", modLink(p.replaces.mod), ". This mod's copy would be the one used; " + plural(p.replaces.dependants, "plugin") + " name it as a master.") : null,
+      ...p.notes.map((n) => el("p", { class: "would-needs", text: n })));
+  });
+  const carries = Object.keys(x.kinds).length ? kindsText(x.kinds) : "no files";
+  return el("div", { class: "card" },
+    el("div", { class: "card-head" }, el("h2", {}, modLink(x.name),
+      el("span", { class: "tag " + (x.enabled ? "good" : ""), text: x.enabled ? "enabled, priority " + x.priority : "installed, not enabled" }))),
+    el("p", { class: "dim", text: "Brings " + carries + (x.cut ? " (the listing was cut short: it is a very large mod)" : "") + "." }),
+    x.enabled ? null : el("p", {}, "Its place among the mods: " + where + "."),
+    ...plugs,
+    x.plugins.length ? null : el("p", { class: "dim", text: "It has no plugin: nothing goes into the load order." }),
+    shareTable(x.enabled ? "It replaces" : "There it would replace", x.wins, "of"),
+    shareTable(x.enabled ? "It loses" : "There it would lose", x.loses, "to"),
+    !x.wins.length && !x.loses.length ? el("p", { class: "dim", text: "It shares no loose file with any enabled mod." }) : null);
+}
+
+function addStepCard(st, d) {
+  const done = state.stepsDone || {};
+  const ticked = st.manual && !!done[addKey(st.key)];
+  const isDone = ticked || st.state === "done" || st.state === "not needed";
+  const waiting = !isDone && st.state.startsWith("waiting");
+  const [word, cls] = ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
+  const body = el("div", {},
+    el("h3", {}, st.title, el("span", { class: "who" + (st.who === "you" ? " you" : ""), text: st.who === "you" ? "You" : "ModTrap" }),
+      el("span", { class: "tag " + cls, text: word })),
+    el("p", { class: "dim", text: st.why }),
+    st.note ? el("p", { text: st.note }) : null,
+    st.items.length ? el("ul", {}, ...st.items.map((it) => el("li", {}, it.text,
+      it.tag ? el("span", { class: "tag " + (it.cls || ""), text: it.tag }) : null,
+      it.add && findMod(it.add) ? (() => {
+        const b = el("button", { type: "button", class: "linkish", text: "  add it too" });
+        b.addEventListener("click", () => addCandidate(it.add));
+        return b;
+      })() : null))) : null);
+  if (st.manual) {
+    const box = el("input", { type: "checkbox", checked: ticked });
+    box.addEventListener("change", () => {
+      state.stepsDone = state.stepsDone || {};
+      if (box.checked) state.stepsDone[addKey(st.key)] = true; else delete state.stepsDone[addKey(st.key)];
+      saveUi();
+      renderAdd(d);
+    });
+    body.append(el("label", { class: "tickoff" }, box, "I have done this"));
+  }
+  return [isDone, el("div", { class: "step " + (isDone ? "done" : waiting ? "waiting" : "todo") }, el("div", { class: "num", text: isDone ? "✓" : st.n }), body)];
+}
+
+function renderAdd(d) {
+  const box = $("add-report");
+  const notes = state.addNotes || [];
+  const noteCard = notes.length ? el("div", { class: "card add-notes" }, el("h2", { text: "About what you dropped" }),
+    el("ul", {}, ...notes.map((n) => el("li", {}, el("span", { class: "mono", text: n.name }), ": " + n.text)))) : null;
+  if (!(state.adding || []).length) {
+    $("add-summary").textContent = "";
+    box.replaceChildren(...[noteCard, el("div", { class: "card" }, el("h2", { text: "Add a mod to this modlist, safely" }),
+      el("p", { text: "Install the mod in MO2 as you always do, and leave it disabled. Then find it in the box above, or drop its archive or its folder on this page. ModTrap reads it against the whole modlist and tells you:" }),
+      el("ul", {},
+        el("li", { text: "what it needs: masters that are missing, switched off or in a disabled mod, and whether the load order has room;" }),
+        el("li", { text: "where it should go, among the mods and in the load order, and why: after everything made by hand, before what the modlist's tools made;" }),
+        el("li", { text: "which files of which mods it would replace there, and which it would lose, with the kinds that go wrong quietly pointed out;" }),
+        el("li", { text: "which of the modlist's tools must run again, and every step in order." })),
+      el("p", { class: "dim", text: "ModTrap only reads here: nothing in MO2 changes. Putting the mod in its place for you, with a safe folder and Revert, comes with the part that is still switched off." }))].filter(Boolean));
+    return;
+  }
+  if (d.looking) {
+    $("add-summary").textContent = "Reading…";
+    box.replaceChildren(...[noteCard, el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Reading the mod against the whole modlist…"),
+      el("p", { class: "dim", text: "Its plugins' headers, and the file names of every enabled mod it shares a folder with. Seconds on a large modlist; nothing is being changed." }))].filter(Boolean));
+    return;
+  }
+  if (d.failed) { $("add-summary").textContent = ""; box.replaceChildren(el("div", { class: "card" }, el("p", { class: "would-needs", text: d.failed }))); return; }
+  let open = 0;
+  const cards = d.steps.map((st) => { const [isDone, card] = addStepCard(st, d); if (!isDone) open++; return card; });
+  $("add-summary").textContent = open ? plural(open, "step") + " to go" : "Every step is done";
+  const s = d.slots;
+  const room = el("p", { class: s.full.after > s.full.limit || s.light.after > s.light.limit ? "would-needs" : "dim",
+    text: "Room in the load order: full plugins " + s.full.now + (s.full.after !== s.full.now ? " → " + s.full.after : "") + " of " + s.full.limit +
+      ", light plugins " + s.light.now + (s.light.after !== s.light.now ? " → " + s.light.after : "") + " of " + s.light.limit + "." });
+  box.replaceChildren(...[noteCard,
+    el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files, without xEdit. Nothing in MO2 has been changed: the steps marked “You” are done by hand in MO2 for now, and ModTrap checks them each time the modlist is read." }), room,
+      d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
+      d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
+    ...d.mods.map((x) => addModCard(x, d.place)),
+    el("h2", { text: "The steps, in order" }), ...cards].filter(Boolean));
+}
+
+async function pollAdd(force) {
+  if (state.status !== "ready") return;
+  const mods = (state.adding || []).slice();
+  const key = mods.join("|") + "#" + state.loaded;
+  if (!force && key === state.addKeySeen && !state.addLooking) return;
+  try {
+    const d = mods.length ? await api("/api/add", { mods: mods }) : { looking: false, mods: [], steps: [] };
+    state.addKeySeen = key;
+    state.addLooking = d.looking;
+    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []);
+    if (text !== state.addText) { state.addText = text; renderAdd(d); }
+  } catch (e) { /* the next round tries again */ }
+}
+
 // --- tabs, the log, and the loop -------------------------------------------------------------------------------------
 
 function showTab(name) {
@@ -942,12 +1151,13 @@ async function tick() {
   updateDryButton();
   await pollJob();
   await pollSteps(false);
+  await pollAdd(false);
   await pollLog();
 }
 
 function loop() {
   if (state.quit) return;
-  const busy = state.status === "reading" || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  const busy = state.status === "reading" || state.addLooking || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 
@@ -1060,14 +1270,18 @@ function dropped(ev) {
   if (!dt) return;
   // The entries must be taken while the drop event is still being handled.
   const items = dt.items ? Array.from(dt.items).filter((i) => i.kind === "file") : [];
-  const entry = items.length && items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+  const entries = items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)).filter(Boolean);
+  const names = entries.length ? entries.map((e) => e.name) : Array.from(dt.files || []).map((f) => f.name);
+  const ready = state.status === "ready";             // a modlist is open: what is dropped may be a mod to add
+  const entry = entries.length === 1 ? entries[0] : null;
   if (entry && entry.isDirectory) {
     entry.getFile("ModOrganizer.ini", {}, (fe) => fe.file((f) => giveIni(entry.name, f), () => problem("ModOrganizer.ini in that folder could not be read.")),
-      () => problem("There is no ModOrganizer.ini in “" + entry.name + "”. Drop the modlist's own folder: the one with ModOrganizer.exe in it."));
+      () => (ready ? dropMods(names) : problem("There is no ModOrganizer.ini in “" + entry.name + "”. Drop the modlist's own folder: the one with ModOrganizer.exe in it.")));
     return;
   }
-  if (entry && entry.isFile) {
-    if (/^modorganizer\.ini$/i.test(entry.name)) { entry.file((f) => giveIni(null, f), () => problem("That file could not be read.")); return; }
+  if (entry && entry.isFile && /^modorganizer\.ini$/i.test(entry.name)) { entry.file((f) => giveIni(null, f), () => problem("That file could not be read.")); return; }
+  if (names.length && ready) { dropMods(names); return; }
+  if (names.length) {
     problem("Drop the modlist's folder itself (the one with ModOrganizer.exe in it), not a file from it. A page cannot tell where a dropped file lives.");
     return;
   }
@@ -1077,7 +1291,10 @@ function dropped(ev) {
 }
 
 let dragDepth = 0;
-const dragOn = (yes) => document.body.classList.toggle("dragging", yes);
+const dragOn = (yes) => {
+  document.body.classList.toggle("dragging", yes);
+  $("drop-words").textContent = state.status === "ready" ? "Drop a mod's archive or folder here to add it, or another modlist's folder to open that" : "Drop your modlist folder here";
+};
 document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dragOn(true); });
 document.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; });
 document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dragOn(false); });
@@ -1097,6 +1314,15 @@ $("job-stop").addEventListener("click", async () => {
 });
 $("quit").addEventListener("click", quitModTrap);
 $("steps-rescan").addEventListener("click", () => $("rescan").click());
+$("add-rescan").addEventListener("click", () => $("rescan").click());
+$("add-search").addEventListener("input", () => addMatches());
+$("add-search").addEventListener("focus", () => addMatches());
+$("add-search").addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { $("add-matches").hidden = true; return; }
+  if (ev.key === "Enter") { const first = $("add-matches").querySelector("button"); if (first && !$("add-matches").hidden) first.click(); }
+  if (ev.key === "ArrowDown") { const first = $("add-matches").querySelector("button"); if (first) { ev.preventDefault(); first.focus(); } }
+});
+document.addEventListener("click", (ev) => { if (!ev.target.closest(".combo")) $("add-matches").hidden = true; });
 $("session-btn").addEventListener("click", () => {
   const panel = $("session-panel");
   panel.hidden = !panel.hidden;

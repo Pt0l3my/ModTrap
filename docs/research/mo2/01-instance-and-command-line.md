@@ -75,3 +75,14 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 - **METHOD.** §2's last LIKELY item (what MO2 does with a re-enabled mod's plugins): read `pluginlist.cpp` before
   Re-enable is built, and confirm on the owner's PC.
 - **METHOD.** §4 and §5: the probe on the owner's PC (DESIGN§9).
+
+## 7. A mod's meta.ini, and the downloads folder
+
+- **FACT.** When MO2 installs a mod from an archive it writes `installationFile` into the mod's `meta.ini`, in the
+  first, unnamed group, which Qt writes as `[General]` (`installationmanager.cpp:526, 550`). The value is the
+  archive's file name alone when the archive is in MO2's downloads folder, and its full path otherwise
+  (`installationmanager.cpp:719-721`).
+- **FACT.** The downloads folder is the `download_directory` setting, `downloads` under the base folder by default
+  (`settings.cpp:1711`, `shared/appconfig.inc:5`).
+- **METHOD.** ModTrap reads that one line of each mod's `meta.ini`, and takes the file name after the last slash, to
+  tell which mod a dropped archive was installed as (DESIGN§16.1).

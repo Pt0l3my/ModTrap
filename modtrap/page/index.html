@@ -23,7 +23,7 @@
     <div id="session-panel" class="session-panel" hidden></div>
   </div>
   <div id="drop" class="drop">
-    <div class="drop-title">Drop your modlist folder here
+    <div class="drop-title"><span id="drop-words">Drop your modlist folder here</span>
       <span class="qm" tabindex="0" title="Drag the modlist's folder (the one with ModOrganizer.exe in it) from Explorer onto this page. A browser never tells a page where a dropped folder is, so ModTrap reads one small file from it, ModOrganizer.ini, and uses it to find the folder on this PC. Nothing else in the folder is read at that point, and nothing is sent anywhere.">?</span>
     </div>
     <form id="open-form" autocomplete="off">
@@ -53,6 +53,7 @@
   <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
+  <button data-tab="add" title="Add a mod to the modlist safely: what it needs, where it goes, what it replaces, and the steps">Add mods <span id="add-count" class="count" hidden></span></button>
   <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-tab="tools">Tools</button>
   <button data-tab="log">Log</button>
@@ -73,6 +74,7 @@
         <h3>Opened before</h3>
         <div id="recent-list" class="recent-list"></div>
       </div>
+      <p class="dim">Adding a mod instead? Once the modlist is open, the Add mods tab tells what a new mod needs, where it should go, what it replaces, and the steps to add it safely.</p>
       <p class="dim small">ModTrap runs on this PC only and sends nothing anywhere.</p>
     </div>
   </section>
@@ -164,6 +166,21 @@
       <button id="steps-rescan" type="button" title="Read the modlist again, to see which steps its files now show as done">Rescan to check</button>
     </div>
     <div id="steps-list" class="scroll pad"></div>
+  </section>
+
+  <section id="tab-add" class="tab" hidden>
+    <div class="tools">
+      <div class="combo">
+        <input id="add-search" type="search" placeholder="Find a mod that MO2 has installed…" spellcheck="false" autocomplete="off" aria-label="Find a mod to add" aria-controls="add-matches">
+        <div id="add-matches" class="matches" role="listbox" hidden></div>
+      </div>
+      <span class="dim">or drop the mod's archive or folder anywhere on this page</span>
+      <span class="spacer"></span>
+      <strong id="add-summary"></strong>
+      <button id="add-rescan" type="button" title="Read the modlist again, to see which steps its files now show as done">Rescan to check</button>
+    </div>
+    <div id="add-picked" class="chips" hidden></div>
+    <div id="add-report" class="scroll pad"></div>
   </section>
 
   <section id="tab-health" class="tab" hidden>

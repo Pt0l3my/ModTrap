@@ -88,3 +88,12 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **METHOD.** Whether clearing `esUnsaved` on a file keeps §5's save from touching it, whether `CleanMasters`
   behaves from a script as from the menu, whether a script can append to a file as it goes, and §3's LIKELY item:
   the probe on the owner's PC (DESIGN§9).
+
+## 10. Reading conflicts from a script
+
+- **FACT.** A script can ask whether a record is in conflict: `ConflictAllForMainRecord(record)` and
+  `ConflictThisForMainRecord(record)` are answered by xEdit's script host (`xEdit/JvI/xejviScriptHost.pas:293,
+  301`), and xEdit ships a script that uses them (`Build/Edit Scripts/Detect conflict between elements.pas`; read
+  for what it shows of the interface, not copied).
+- **METHOD.** For DESIGN§16.5, not used yet. What the answers are worth with a load order cut down by `-P:` is to
+  be tried on the owner's PC before anything is built on them.

@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import NAME, VERSION, browse, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps
+from . import NAME, VERSION, adding, browse, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps
 from .server import Bad
 
 log = logbook.get("app")
@@ -81,6 +81,8 @@ class Api:
         self._run = 0
         self._lists: dict[str, tuple[object, dict]] = {}
         self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
+        self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
+        self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
@@ -444,6 +446,59 @@ class Api:
         out["looking"] = bool(mods) and deep is None
         return out
 
+    # --- adding mods (MT21, DESIGN§16): read-only ------------------------------------------------------------------
+
+    def add_resolve(self, body: dict) -> dict:
+        """What the dropped files and folders are in this MO2, by their names (DESIGN§16.1)."""
+        m = self._need()
+        items = body.get("items")
+        if (not isinstance(items, list) or not items or len(items) > 50 or not all(
+                isinstance(x, dict) and isinstance(x.get("name"), str) and 0 < len(x["name"]) <= 300 for x in items)):
+            raise Bad("what was dropped could not be used")
+        inst = m.instance
+        names = {instance.fold(x.name) for x in inst.mods if x.kind == "mod"}
+        index: dict | None = {}
+        if any(instance.fold(x["name"].strip()) not in names for x in items):
+            hit = self._installed
+            if hit is None or hit[0] is not m:
+                hit = (m, adding.installed_from(inst))        # one small read of each mod's meta.ini
+                self._installed = hit
+            index = hit[1]
+        got = adding.resolve(inst, [{"name": x["name"]} for x in items], index)
+        log.info("add: %d dropped, %d found in MO2", len(got), sum(1 for g in got if g["mods"]))
+        return {"items": got}
+
+    def add(self, body: dict) -> dict:
+        """The analysis for the mods to add (DESIGN§16). It lists file names in many folders, which takes
+        seconds on a large list: it runs once, off the request, and the answer says while it is still going."""
+        m = self._need()
+        mods = body.get("mods")
+        if not isinstance(mods, list) or len(mods) > 20 or not all(isinstance(x, str) and 0 < len(x) <= 300 for x in mods):
+            raise Bad("the mods to add did not arrive")
+        if not mods:
+            return {"looking": False, "mods": [], "steps": [], "summary": "Nothing to analyse yet."}
+        key = (id(m), tuple(mods))
+        with self._lock:
+            started = key in self._adding
+            if not started:
+                self._adding = {k: v for k, v in self._adding.items() if k[0] == id(m)}
+                self._adding[key] = None
+        if not started:
+            def work() -> None:
+                try:
+                    found = adding.analyse(m, mods, read=self._cache.read)
+                    log.info("add: analysed %d mod(s): %s", len(found["mods"]), found["summary"])
+                except Exception as e:
+                    log.warn("analysing the mods to add failed: %s", logbook.why(e))
+                    found = {"failed": "The analysis failed: %s" % logbook.why(e), "mods": [], "steps": []}
+                with self._lock:
+                    self._adding[key] = found
+            threading.Thread(target=work, name="adding", daemon=True).start()
+        got = self._adding.get(key)
+        if got is None:
+            return {"looking": True, "mods": [], "steps": []}
+        return dict(got, looking=False)
+
     def job_state(self) -> dict:
         return {"job": self.job.public() if self.job else None}
 
@@ -608,6 +663,10 @@ class Api:
                 raise Bad(str(e)) from None
         if path == "/api/steps":
             return 200, self.steps(body), None
+        if path == "/api/add":
+            return 200, self.add(body), None
+        if path == "/api/add/resolve":
+            return 200, self.add_resolve(body), None
         if path == "/api/job/stop":
             if self.job is None:
                 raise Bad("no dry run is going")

@@ -37,3 +37,15 @@ xEdit's code.
   the end of the header record and never reads a plugin's other records (WHY§10).
 - **METHOD.** A file that does not start with `TES4`, whose sizes run past the end of the file, or whose header is
   larger than a fixed cap is reported as unreadable and never guessed at.
+
+## 6. The header's version, and the room in the load order
+
+- **FACT.** The `HEDR` field starts with a version number, a 4-byte float. xEdit writes 1.7 into a new Skyrim
+  plugin, and 1.71 for Skyrim SE (`Core/wbDefinitionsTES5.pas:13643-13645`, `Core/wbImplementation.pas:3132`).
+- **LIKELY.** 1.71 came with game version 1.6.1130 and allows a wider range of record numbers in a light plugin; an
+  older game needs a backport to load such a plugin as meant. Known from the modding community, not read in a
+  source here; ModTrap only points the version out (DESIGN§16.2).
+- **FACT.** xEdit gives a light plugin one of the places `FE 000` to `FE FFF` and refuses more ("Too many light
+  modules"), and gives a full plugin a place below `FE` (`Core/wbImplementation.pas:3145-3158`): 4096 light and 254
+  full plugins.
+- **METHOD.** ModTrap counts the active plugins of each sort against those two numbers (DESIGN§16.2).

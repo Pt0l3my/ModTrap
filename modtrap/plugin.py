@@ -30,6 +30,7 @@ class Header:
     description: str
     masters: tuple[str, ...]
     fields: tuple[str, ...] = field(default=(), compare=False)   # the header's field types, in order
+    version: float | None = field(default=None, compare=False)   # the HEDR field's version number (XE02§4)
 
     @property
     def esm_flag(self) -> bool:
@@ -87,6 +88,7 @@ def parse(data: bytes) -> Header:
     if end > len(data):
         raise Unreadable("the plugin's header runs past the end of the file")
     author = description = ""
+    version: float | None = None
     masters: list[str] = []
     fields: list[str] = []
     at = RECORD_HEADER
@@ -118,12 +120,14 @@ def parse(data: bytes) -> Header:
             if not name:
                 raise Unreadable("the plugin names a master with an empty name")
             masters.append(name)
+        elif ftype == b"HEDR" and fsize >= 4 and version is None:
+            version = round(struct.unpack_from("<f", body)[0], 3)
         elif ftype == b"CNAM":
             author = _text(body)
         elif ftype == b"SNAM":
             description = _text(body)
     return Header(flags=flags, author=author, description=description, masters=tuple(masters),
-                  fields=tuple(fields))
+                  fields=tuple(fields), version=version)
 
 
 def read(path: Path) -> Header:
@@ -145,7 +149,7 @@ def read(path: Path) -> Header:
 
 
 def build(masters: tuple[str, ...] | list[str] = (), *, flags: int = 0, author: str = "",
-          description: str = "") -> bytes:
+          description: str = "", version: float = 1.7) -> bytes:
     """A minimal plugin of our own: a header and no records. For ModTrap's probe (DESIGN§9) and its tests: every
     fixture is written by this function, never taken from a real mod."""
     def fld(ftype: bytes, body: bytes) -> bytes:
@@ -153,7 +157,7 @@ def build(masters: tuple[str, ...] | list[str] = (), *, flags: int = 0, author: 
             return b"XXXX" + struct.pack("<HI", 4, len(body)) + ftype + struct.pack("<H", 0) + body
         return ftype + struct.pack("<H", len(body)) + body
 
-    body = fld(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))
+    body = fld(b"HEDR", struct.pack("<fII", version, 0, 0x800))
     body += fld(b"CNAM", author.encode("utf-8") + b"\x00")
     if description:
         body += fld(b"SNAM", description.encode("utf-8") + b"\x00")
