@@ -1,0 +1,213 @@
+"""Carrying out the adding of mods (DESIGN§16.8), on an invented modlist. Switched off: nothing the page calls
+reaches it."""
+
+from __future__ import annotations
+
+import inspect
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+from modtrap import adding, addjob, api, history, instance, logbook, model, plugin, profile
+
+from ._fixtures import make_instance, write
+from .test_adding import SKY, invented
+
+b = plugin.build
+
+
+def snapshot(root: Path) -> dict:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+class PlacingInTheLists(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = invented(Path(self.tmp.name))
+        self.pdir = self.root / "profiles" / "Default"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def mods(self) -> list[str]:
+        return [ln for ln in (self.pdir / "modlist.txt").read_bytes().decode().split("\r\n") if ln and ln[0] != "#"]
+
+    def test_a_listed_mod_is_moved_and_enabled(self) -> None:
+        before = self.mods()
+        ch = profile.place_mod(self.pdir, "Thistle", "Outputs_separator")
+        now = self.mods()
+        self.assertEqual(now[:3], ["+Tool Output", "+Outputs_separator", "+Thistle"])     # the file is highest first
+        self.assertEqual(sorted(x[1:] for x in now), sorted(x[1:] for x in before))       # nobody else moved or changed
+        self.assertEqual([x for x in now if x[1:] != "Thistle"], [x for x in before if x[1:] != "Thistle"])
+        self.assertEqual((ch.lines[0]["from"], ch.lines[0]["to"]), ("-", "+"))
+
+    def test_a_new_mod_is_added_at_its_place_or_on_top(self) -> None:
+        profile.place_mod(self.pdir, "Heather", "Quill")
+        now = self.mods()
+        self.assertEqual(now[now.index("+Quill") + 1], "+Heather")
+        ch = profile.place_mod(self.pdir, "Top Mod", "")
+        self.assertEqual(self.mods()[0], "+Top Mod")
+        self.assertEqual(ch.lines[0]["priority"], len(self.mods()) - 1)
+
+    def test_what_cannot_be_placed_is_refused_and_nothing_is_written(self) -> None:
+        old = (self.pdir / "modlist.txt").read_bytes()
+        for name, before in (("Thistle", "Nobody"), ("Thistle", "Thistle"), ("+Bad", ""), ("Two\nLines", "")):
+            with self.assertRaises(profile.Refused):
+                profile.place_mod(self.pdir, name, before)
+        self.assertEqual((self.pdir / "modlist.txt").read_bytes(), old)
+
+    def test_plugins_go_into_both_lists_in_agreement(self) -> None:
+        changes = profile.place_plugins(self.pdir, [("Dormant.esp", "Generated.esp"), ("Thistle.esp", "Generated.esp"),
+                                                    ("Beacon.esm", "Quill.esp")])
+        lo = [x for x in (self.pdir / "loadorder.txt").read_bytes().decode().split("\r\n") if x and x[0] != "#"]
+        pl = [x for x in (self.pdir / "plugins.txt").read_bytes().decode().split("\r\n") if x and x[0] != "#"]
+        self.assertEqual(lo[5:], ["Lantern.esm", "Beacon.esm", "Quill.esp", "Dormant.esp", "Thistle.esp", "Generated.esp"])
+        self.assertEqual(pl, ["*Lantern.esm", "*Beacon.esm", "*Quill.esp", "*Dormant.esp", "*Thistle.esp", "*Generated.esp"])
+        self.assertEqual([c.file for c in changes], ["loadorder.txt", "plugins.txt"])
+        self.assertEqual(changes[0].lines[0]["position"], 8)
+        inst = instance.load(self.root)
+        self.assertEqual([n for n, a in inst.load_order if a][5:], lo[5:])
+
+    def test_a_plugin_goes_last_when_no_place_is_named_and_a_listed_one_is_moved(self) -> None:
+        profile.place_plugins(self.pdir, [("Thistle.esp", "")])
+        profile.place_plugins(self.pdir, [("Quill.esp", "")])
+        pl = [x for x in (self.pdir / "plugins.txt").read_bytes().decode().split("\r\n") if x and x[0] != "#"]
+        self.assertEqual(pl, ["*Lantern.esm", "*Generated.esp", "*Thistle.esp", "*Quill.esp"])
+        with self.assertRaises(profile.Refused):
+            profile.place_plugins(self.pdir, [("Thistle.esp", "Nowhere.esp")])
+
+
+class Adding(unittest.TestCase):
+    def setUp(self) -> None:
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = invented(Path(self.tmp.name) / "list")
+        self.work = Path(self.tmp.name) / "session"
+        self.heather = Path(self.tmp.name) / "unpacked" / "Heather"
+        write(self.heather / "Heather.esp", b((SKY, "Quill.esp")))
+        write(self.heather / "textures" / "shared" / "a.dds", b"newer")
+        self.closed: bool | None = True
+        self.before = snapshot(self.root)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def job(self, names: list[str], staged: bool = True) -> addjob.AddJob:
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        extra = [adding.staged_mod("Heather", self.heather)] if staged else []
+        rep = adding.analyse(m, names, staged=extra)
+        p = addjob.plan(m, rep, {"Heather": {"root": str(self.heather), "archive": "Heather-1-0.zip"}})
+        return addjob.AddJob(inst, m, p, self.work / "jobs" / "add-1", self.work, lambda: self.closed)
+
+    def test_an_unpacked_mod_and_an_installed_one_are_added_in_place(self) -> None:
+        j = self.job(["Thistle"])
+        done = j.run()
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        order = [x.name for x in inst.mods if x.kind in ("mod", "separator")]
+        self.assertEqual(order[-4:], ["Thistle", "Heather", "Outputs_separator", "Tool Output"])
+        self.assertTrue(inst.mod("Thistle").enabled and inst.mod("Heather").enabled)
+        active = [n for n, a in inst.load_order if a]
+        self.assertEqual(active[-4:], ["Quill.esp", "Heather.esp", "Thistle.esp", "Generated.esp"])
+        self.assertEqual(m.issues, [])
+        self.assertEqual(m.row("Heather.esp").source, "Heather")
+        self.assertIn(b"installationFile=Heather-1-0.zip", (self.root / "mods" / "Heather" / "meta.ini").read_bytes())
+        self.assertEqual((self.root / "mods" / "Heather" / "textures" / "shared" / "a.dds").read_bytes(), b"newer")
+        self.assertEqual([x["name"] for x in done["mods"]], ["Thistle", "Heather"])
+        kinds = [e["kind"] for e in history.History(self.work).all()]
+        self.assertEqual(kinds, ["mod enabled", "mod added", "plugin activated", "plugin activated", "verified"])
+        events = history.History(self.work).all()
+        self.assertEqual(events[1]["archive"], "Heather-1-0.zip")
+        self.assertIsInstance(events[2]["position"], int)
+
+    def test_revert_puts_the_modlist_back_file_for_file(self) -> None:
+        j = self.job(["Thistle"])
+        j.run()
+        self.assertNotEqual(snapshot(self.root), self.before)
+        self.assertEqual(j.revert(), {"left": []})
+        self.assertEqual(snapshot(self.root), self.before)
+        self.assertFalse((self.root / "mods" / "Heather").exists())
+        self.assertTrue(self.heather.is_dir())                      # ModTrap's unpacked copy is still there
+
+    def test_a_copy_changed_since_is_left_and_said(self) -> None:
+        j = self.job([])
+        j.run()
+        write(self.root / "mods" / "Heather" / "notes of mine.txt", b"kept")
+        self.assertEqual(j.revert(), {"left": ["Heather"]})
+        self.assertTrue((self.root / "mods" / "Heather" / "notes of mine.txt").is_file())
+        for n in addjob.LISTS:
+            self.assertEqual((self.root / "profiles" / "Default" / n).read_bytes(), self.before["profiles/Default/" + n])
+
+    def test_mo2_open_or_not_known_to_be_closed_refuses_before_anything(self) -> None:
+        for state in (False, None):
+            self.closed = state
+            with self.assertRaises(addjob.Refused):
+                self.job(["Thistle"]).run()
+            self.assertEqual(snapshot(self.root), self.before)
+
+    def test_a_list_changed_since_the_plan_refuses(self) -> None:
+        j = self.job(["Thistle"])
+        p = self.root / "profiles" / "Default" / "modlist.txt"
+        p.write_bytes(p.read_bytes() + b"-Someone Else\r\n")
+        with self.assertRaises(addjob.Refused):
+            j.run()
+        self.assertFalse((self.root / "mods" / "Heather").exists())
+
+    def test_what_a_mod_needs_must_be_there_first(self) -> None:
+        with self.assertRaises(addjob.Refused) as c:
+            self.job(["Needs Absent"], staged=False)
+        self.assertIn("Nowhere.esp", str(c.exception))
+
+    def test_a_mod_of_that_name_is_never_overwritten(self) -> None:
+        j = self.job([])
+        write(self.root / "mods" / "Heather" / "theirs.txt", b"someone else's")
+        with self.assertRaises(addjob.Refused):
+            j.run()
+        self.assertEqual((self.root / "mods" / "Heather" / "theirs.txt").read_bytes(), b"someone else's")
+        for n in addjob.LISTS:
+            self.assertEqual((self.root / "profiles" / "Default" / n).read_bytes(), self.before["profiles/Default/" + n])
+
+    def test_a_failure_part_way_puts_everything_back(self) -> None:
+        j = self.job(["Thistle"])
+        real = profile.place_plugins
+
+        def fail(*a, **k):
+            raise profile.Refused("the list could not be written (invented)")
+        profile.place_plugins = fail
+        try:
+            with self.assertRaises(addjob.Refused) as c:
+                j.run()
+        finally:
+            profile.place_plugins = real
+        self.assertIn("everything was put back", str(c.exception))
+        self.assertEqual(snapshot(self.root), self.before)
+        self.assertEqual(history.History(self.work).all()[-1]["kind"], "reverted")
+
+    def test_a_mod_with_no_output_in_the_list_goes_last(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            root = make_instance(Path(d) / "l", [("-", "Thistle", {"Thistle.esp": b((SKY,))}),
+                                                 ("+", "Quill", {"Quill.esp": b((SKY,))})], load_order=["Quill.esp"])
+            inst = instance.load(root)
+            m = model.build(inst)
+            p = addjob.plan(m, adding.analyse(m, ["Thistle"]))
+            addjob.AddJob(inst, m, p, Path(d) / "w" / "j", Path(d) / "w", lambda: True).run()
+            inst = instance.load(root)
+            self.assertEqual([x.name for x in inst.mods if x.kind == "mod"], ["Quill", "Thistle"])
+            self.assertEqual([n for n, a in inst.load_order if a][-2:], ["Quill.esp", "Thistle.esp"])
+
+
+class SwitchedOff(unittest.TestCase):
+    def test_nothing_the_page_calls_reaches_it(self) -> None:
+        imports = [ln for ln in inspect.getsource(api).splitlines() if ln.startswith(("from ", "import ")) or ln.startswith("               ")]
+        named = " ".join(imports).replace(",", " ").replace("(", " ").replace(")", " ").split()
+        self.assertNotIn("addjob", named)
+        self.assertNotIn("profile", named)
+        src = inspect.getsource(adding) + inspect.getsource(__import__("modtrap.unpack", fromlist=["x"]))
+        self.assertNotIn("addjob", src)
+
+
+if __name__ == "__main__":
+    unittest.main()

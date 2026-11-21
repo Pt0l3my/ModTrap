@@ -64,6 +64,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 39 | 2026-11-20 | The demaster built end to end against a stand-in, and kept switched off | METHOD | #xedit #mo2 #safety #process |
 | 40 | 2026-11-21 | Adding mods: what is built, the placing rule, and what was ruled out | METHOD | #adding #mo2 #page #tools |
 | 41 | 2026-11-21 | A dropped archive is unpacked by ModTrap itself, in its own folder | METHOD | #adding #mo2 #safety #licence |
+| 42 | 2026-11-21 | Carrying out an add: written and tested against invented lists, switched off | METHOD | #adding #mo2 #safety #process |
 
 ## Entries
 
@@ -765,3 +766,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - FACT: tested here with zips for real and with a stand-in for 7-Zip; the page was driven in a browser with a real
   upload. Not proven: the call to the real 7-Zip (its switches and the shape of its listing are from memory of its
   documentation, not from a run), and large archives on the owner's PC.
+
+### 42. Carrying out an add: written and tested against invented lists, switched off
+
+`2026-11-21` · METHOD · `#adding #mo2 #safety #process` · refs: MT21, MT9, MT14, MT15, DESIGN§16.8, DESIGN§8, DESIGN§11, DESIGN§12, MO01§2, MO01§7, WHY§16, WHY§26, WHY§36, WHY§39, WHY§41
+
+- The owner said to carry on. Written: `modtrap/addjob.py`, and two more list edits in `modtrap/profile.py`
+  (`place_mod`, `place_plugins`). As with the demaster (WHY§39), nothing the page can call reaches them, and a
+  test checks that.
+- METHOD (`place_mod`): `modlist.txt` lists the highest priority first, so "directly before X as MO2 shows the
+  list" is the line after X's. A listed mod's line is moved, an unlisted one's is added; every other line is
+  written back byte for byte.
+- METHOD (`place_plugins`): both lists are written, in agreement, because MO2 takes the order from the newer one
+  (MO01§2). `loadorder.txt` gets the name before the named plugin; in `plugins.txt`, which leaves the game's own
+  plugins out, it goes before the first later plugin that file names, with the star.
+- METHOD (`addjob`): refuse unless MO2 is known to be closed and the three lists are still as planned; the lists
+  into the safe folder; each unpacked mod copied into MO2's mods folder, never over an existing one, with a
+  `meta.ini` naming its archive; each mod placed and enabled, each plugin placed and activated; then the modlist
+  is read again from disk and must show every mod enabled in place, every plugin active after its masters, used
+  from its own mod, and no new problem. Anything else, or any error, puts everything back.
+- DECIDED (under MT9 and MT14, which pull apart here): Revert removes the copy of a mod that ModTrap itself made
+  in that job, but only while that folder is file for file as copied; if anything in it has changed since, it is
+  left and named. The unpacked original stays in the session's folder either way. No other mod is ever removed.
+- FACT: tested on invented lists: an unpacked mod and an installed, disabled one added together land in place
+  with a clean health check; Revert leaves the whole modlist folder byte for byte as before; MO2 open or unknown,
+  a list changed since the plan, a missing master, a name already taken, and a failure part way each refuse or
+  put everything back.
+- Not proven, and why it stays switched off: whether MO2 keeps the mod order and the load order exactly as
+  written when it next starts (WHY§26), and whether it takes a mod folder with only that one line in `meta.ini`
+  as an installed mod (LIKELY, MO01§7). Both are for the probe on the owner's PC.

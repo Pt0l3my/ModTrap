@@ -311,7 +311,8 @@ history (§12).
 Beside taking mods out, ModTrap helps to put extra mods in. The owner's own way is to add a mod last and its plugin
 last; that works until the new files or records land after something that was meant to stay last, or the plugin
 needs something that is not there. This section is what ModTrap does about it. Built so far: §16.1 to §16.4, §16.6
-and §16.7, none of which changes a modlist (WHY§40, WHY§41). Not built: §16.5 and §16.8.
+and §16.7, none of which changes a modlist (WHY§40, WHY§41). §16.8 is written in part and switched off (WHY§42). Not
+built: §16.5.
 
 ### 16.1 What is dropped
 
@@ -392,9 +393,11 @@ needs; enable it in its place; activate its plugins in their place; look at the 
 check the records in xEdit; run the tools again; the health check (§3); play. `python -m modtrap add FOLDER --mod
 NAME` prints the same report.
 
-### 16.8 Carrying the steps out (not built)
+### 16.8 Carrying the steps out (steps 1 to 3 written, switched off)
 
-What "Add it" is to do on its own, in order, each step in the history (§12) and undone by Revert (§11):
+What "Add it" is to do on its own, in order, each step in the history (§12) and undone by Revert (§11). Steps 1
+to 3 and Revert are written and tested against invented lists, and nothing the page can call reaches them
+(WHY§42); steps 4 and 5 are not built.
 
 1. With MO2 closed (§8): copy the unpacked mod into MO2's mods folder under its name, with a `meta.ini` naming the
    archive (MO01§7), so that MO2 knows it as an installed mod.
