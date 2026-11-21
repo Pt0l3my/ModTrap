@@ -276,6 +276,9 @@ class Changes:
                 dm.make_safe()
                 dm.run_xedit()
                 good = dm.verify()
+                if not good and not dm.plan.switch_off and not dm.plan.disable_mods:
+                    # Nothing to put in place: say why, and stop here. The modlist is as it was.
+                    raise demaster.Refused("nothing could be demastered this time. " + " ".join(dm.plan.notes[:6]))
                 self.dm_state = "verified"
                 log.info("the demaster's new plugins are verified: %s", ", ".join(good) or "none")
             except (demaster.Refused, safe.Refused) as e:

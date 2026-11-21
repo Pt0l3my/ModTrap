@@ -88,6 +88,10 @@ class StepsTests(unittest.TestCase):
         self.assertEqual([i["plugin"] for i in by["demaster"]["items"]], ["Lantern.esp", "Generated.esp"])
         self.assertNotIn("regenerate", by)
         self.assertIn("Demaster Selected", by["switch-off"]["why"])
+        # While a demaster is in hand its steps say so, and offer no second start (WHY§61).
+        going = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, going=True)["steps"]}
+        self.assertEqual([(going[k]["state"], going[k]["action"]) for k in ("switch-off", "demaster", "disable")],
+                         [("going", ""), ("going", ""), ("going", "")])
         # Every step says truly who does it (WHY§58): ModTrap, the owner, or ModTrap starting a tool the owner runs.
         self.assertEqual({k: v["who"] for k, v in by.items() if not k.startswith("tool:")},
                          {"dry": "ModTrap", "switch-off": "ModTrap", "demaster": "ModTrap", "disable": "ModTrap",

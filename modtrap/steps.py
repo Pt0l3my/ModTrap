@@ -173,7 +173,7 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str]) -> tuple[l
 # --- compiling the steps ------------------------------------------------------------------------------------------
 
 def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None, deep: dict | None = None,
-                  auto: bool = False) -> dict:
+                  auto: bool = False, going: bool = False) -> dict:
     """The steps for taking `mod_names` out. `job` is the dry run's public state for the same mods, if there is
     one; `deep` is what `look_deeper` found (it takes seconds on a large list, so it is worked out once). `auto`
     says that ModTrap may change the modlist (it was started with the switch): the steps that "Demaster Selected"
@@ -190,7 +190,7 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                       "note": note, "n": len(steps) + 1, "action": action if state == "to do" else ""})
 
     doer = "ModTrap" if auto else "you"                 # for what "Demaster Selected" carries out
-    press = "demaster" if auto else ""
+    press = "demaster" if auto and not going else ""
 
     # Who else provides a trapped plugin: the plugin stays in the game while any of them is enabled.
     twins = []
@@ -346,6 +346,10 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
              "A new game is the clean way; on an existing save, expect oddities from that, not from the demaster. "
              % scripts["count"] if scripts else "") + "If something is off, the Log tab's lines help to find out why.",
          "to do" if all_off else "waiting")
+    if going:                                           # a demaster is in hand: its steps say so (WHY§61)
+        for st in steps:
+            if st["key"] in ("switch-off", "demaster", "disable") and st["state"] in ("to do", "waiting"):
+                st["state"], st["action"] = "going", ""
     manual = {"mentions", "play"} | {s["key"] for s in steps if s["key"].startswith("tool:")}
     for s in steps:
         s["manual"] = s["key"] in manual           # nothing on disk can prove these: the owner ticks them off

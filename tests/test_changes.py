@@ -267,9 +267,11 @@ class DemasterThroughThePage(unittest.TestCase):
             self.api.post("/api/demaster/install", {})                         # MO2 is open
         self.assertEqual(snapshot(self.root), self.before)
         self.mo2_running = False
+        self.assertFalse(self.api.job_state()["job"]["stale"])                 # the dry run is of the modlist as it is
         d = self.api.post("/api/demaster/install", {})[1]
         self.ready()
         self.assertEqual((d["state"], d["check"]["ok"]), ("installed", True))
+        self.assertTrue(self.api.job_state()["job"]["stale"])                  # the modlist was read again: said so
         m = model.build(instance.load(self.root))
         self.assertEqual(m.issues, [])
         self.assertFalse(m.instance.mod("Bramble").enabled)

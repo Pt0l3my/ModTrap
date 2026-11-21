@@ -620,7 +620,8 @@ class Api:
             threading.Thread(target=work, name="steps-deep", daemon=True).start()
         deep = self._deep.get(key)
         job = self.job.public() if self.job else None
-        out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None)
+        out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None,
+                                  going=self.changes is not None and self.changes.dm_state in ("working", "verified"))
         out["looking"] = bool(mods) and deep is None
         return out
 
@@ -942,7 +943,14 @@ class Api:
         return dict(got, looking=False, unpacking=busy, staged=status, gone=gone, added=added, records=rec)
 
     def job_state(self) -> dict:
-        return {"job": self.job.public() if self.job else None}
+        if not self.job:
+            return {"job": None}
+        out = self.job.public()
+        # The modlist has been read again since (a demaster, a Rescan, a change in MO2): the result describes the
+        # modlist as it was, and a demaster needs a fresh one (WHY§61).
+        out["stale"] = bool(out.get("state") == "done" and not out.get("past")
+                            and getattr(self.job, "model", None) is not self.model)
+        return {"job": out}
 
     # --- answers ---------------------------------------------------------------------------------------------------
 

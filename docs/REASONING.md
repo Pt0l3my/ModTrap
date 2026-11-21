@@ -83,6 +83,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 58 | 2026-11-21 | ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it | METHOD | #mo2 #page #steps #safety #process |
 | 59 | 2026-11-21 | The first real demaster: four big files done, one left; "Demaster Selected" now goes in one go; a row click shows a mod and what is tied to it | FACT | #xedit #page #safety #process |
 | 60 | 2026-11-21 | A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go | METHOD | #page #safety #process |
+| 61 | 2026-11-21 | Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date | FACT | #xedit #page #steps #safety #process |
 
 ## Entries
 
@@ -1284,6 +1285,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   box ticks. The mod list the server sends names, for each mod, the mods that need it and the mods it needs.
 - Shown in a browser on the invented list: the row click, the marks, the box, and a demaster from a bare tick to
   "in place" with one "Go ahead".
+- Later, 2026-11-21: the session file showed the LIKELY above to be wrong. No action was refused; the topics'
+  empty groups kept the master in use (XE01§17, WHY§61). The change made here stays, and is needed by the fix.
 
 ### 60. A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go
 
@@ -1303,3 +1306,34 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   modlist, this xEdit and these scripts.
 - Shown in a browser on the invented list with the gate on: one press, one question, the probe's seven steps,
   the dry run, the plan, "Go ahead", in place.
+
+### 61. Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date
+
+`2026-11-21` · FACT · `#xedit #page #steps #safety #process` · refs: MT5, MT17, MT18, DESIGN§6.3, DESIGN§6.5, DESIGN§14, XE01§17, WHY§53, WHY§56, WHY§59, WHY§60
+
+- FACT (the owner's session file): the whole chain of WHY§60 ran on the real list: the probe passed, the dry run
+  ran by itself, four big files were demastered and put in place, the patches switched off. The fifth file was
+  kept back again, and a second go on it alone ended with "0 plugins" and an offer to put nothing in place.
+- FACT: the cause is in xEdit, not in a refusal (XE01§17): a dialogue topic's group of lines stays when the topic
+  is taken out, and its label keeps the trapped plugin in use. WHY§59's reading was wrong and is marked so.
+- METHOD: the changing script takes a record's group of children out before the record (XE01§17). The scripts
+  changed, so the probe runs again first (WHY§53, WHY§60); the probe's own plugins hold no record with such a
+  group, so this is first run on the real file, under the same checks as before: the plugin is written only if
+  the master is gone, and ModTrap checks the new file itself.
+- METHOD: a second demaster of the same mod no longer stumbles over the first one's mod: its own mod gets the
+  next free name ("… (2)"); no mod is ever overwritten (MT5). A run in which nothing could be demastered and
+  nothing is to be switched off stops with the reason, and offers nothing to put in place.
+- The owner: "the pop up messages are just standard browser style, can you make them look same as the ModTrap
+  UI?" METHOD: every question the page asks (closing MO2, running the probe, Revert, finishing or renaming a
+  session, quitting, stopping) is ModTrap's own box in the page's look, with Yes and No, Enter and Escape.
+- The owner: "double check the the steps and dry run get updated as the process completes its tasks". FACT, as
+  found by driving the page: (1) once a demaster had disabled the mod, the page unticked it, because a disabled
+  mod provides no plugin, and the Steps tab went blank just when its last steps mattered; (2) while a demaster
+  ran, its steps still read "to do"; (3) after it, the Dry run tab showed the earlier dry run as if current;
+  (4) the Dry run tab's pane of lines held every dry run of the day, the oldest on top.
+  METHOD: (1) a ticked mod stays ticked when it is disabled; (2) the steps a demaster carries out read "going"
+  while it runs, and "done" when the modlist has been read again; (3) a dry run made before the modlist was last
+  read says so, and "Demaster Selected" makes a fresh one by itself; (4) the pane holds the lines of the latest
+  run and opens at their end.
+- Shown in a browser on the invented list: the question box, the steps going and then done with the mod still
+  ticked, and the out-of-date note.

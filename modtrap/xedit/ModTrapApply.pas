@@ -39,7 +39,7 @@ unit ModTrapApply;
 var
   slJob, slOut, slProg, slTrap, slNeed: TStringList;
   sOut, sProg, sOutDir: string;
-  gMissed, gGone: integer;
+  gMissed, gGone, gGroups: integer;
 
 function Clean(s: string): string;
 begin
@@ -293,7 +293,7 @@ end;
 function DoAction(f: IInterface; action: string): string;
 var
   form, what, route, expected: string;
-  rec, target: IInterface;
+  rec, target, grp: IInterface;
 begin
   Result := '';
   form := Part(action, '|', 0);
@@ -314,6 +314,15 @@ begin
     if not IsTrapped(GetFileName(GetFile(MasterOrSelf(rec)))) then begin
       Result := 'the record does not belong to a trapped plugin';
       Exit;
+    end;
+    // A record such as a dialogue topic or a cell has a group of children (its lines, its references) that is
+    // labelled with the record's own id. xEdit does not take that group out with the record, and counts its
+    // label as a use of the trapped plugin, so the master would stay. The group goes first, with what is in it:
+    // nothing can live under a record that is no longer there.
+    grp := ChildGroup(rec);
+    if Assigned(grp) then begin
+      gGroups := gGroups + 1;
+      Remove(grp);
     end;
     Remove(rec);
     Exit;
@@ -373,7 +382,11 @@ begin
   end;
   if gGone > 0 then
     Say(fn + ': ' + IntToStr(gGone) + ' record(s) had already gone with the record above them');
+  if gGroups > 0 then
+    Say(fn + ': ' + IntToStr(gGroups) + ' group(s) of children went with their record');
   gGone := 0;
+  gGroups := 0;
+  gGroups := 0;
   CleanMasters(f);
   masters := '';
   stillHas := False;
@@ -390,7 +403,10 @@ begin
       Inc(stillNeed);
   slOut.Add('C' + #9 + fn + #9 + masters + #9 + IntToStr(stillNeed) + #9 + IntToStr(RecordCount(f)));
   if stillHas or (stillNeed > 0) then begin
-    slOut.Add('K' + #9 + fn + #9 + 'it still needs a trapped plugin after the changes (' + IntToStr(stillNeed) + ' record(s))');
+    if stillNeed > 0 then
+      slOut.Add('K' + #9 + fn + #9 + 'it still needs a trapped plugin after the changes (' + IntToStr(stillNeed) + ' record(s))')
+    else
+      slOut.Add('K' + #9 + fn + #9 + 'no record in it needs a trapped plugin any more, but xEdit still counts one as used (a group of records probably still carries its id)');
     Say('kept as it was: ' + fn + ' still needs a trapped plugin');
     Exit;
   end;

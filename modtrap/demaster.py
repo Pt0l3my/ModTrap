@@ -89,8 +89,14 @@ def plan(m: model.Model, dry: dict, mod_name: str = "") -> Plan:
     if dry.get("state") != "done" or not dry.get("result") or dry.get("unchanged") is not True:
         raise Refused("a finished dry run is needed first")
     p, result = dry["plan"], dry["result"]
+    # ModTrap's own mod for this job. A mod is never overwritten: where an earlier demaster of the same mods
+    # left its own mod in place, this one gets the next free name (WHY§61).
+    base = mod_name or MOD_PREFIX + " + ".join(p["trapped_mods"])[:80]
+    name, n = base, 2
+    while m.instance.mod(name) is not None or (m.instance.mods_dir / name).exists():
+        name, n = "%s (%d)" % (base, n), n + 1
     out = Plan(trapped_mods=list(p["trapped_mods"]), trapped=list(p["trapped"]), demaster={}, switch_off=[],
-               needs_you=[], mod_name=mod_name or MOD_PREFIX + " + ".join(p["trapped_mods"])[:80])
+               needs_you=[], mod_name=name)
     seen = {fold(f["name"]) for f in result["files"]}
     for name in p["dependants"]:
         if fold(name) not in seen:
