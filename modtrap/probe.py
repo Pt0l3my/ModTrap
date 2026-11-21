@@ -5,11 +5,15 @@ Used by the probe's run (modtrap/probejob.py, WHY§47). The record layout below 
 it is widely documented (XE02 covers the header from xEdit's definitions; the records and groups are LIKELY until
 xEdit has loaded these files on the owner's PC, which is the first thing the probe shows).
 
-The three plugins:
-- "ModTrap Probe - Bad.esp": the mod to take out. Two global variables.
+The four plugins:
+- "ModTrap Probe - Base.esp": a plugin that stays, and that Bad builds on. Two material types, "stone" and
+  "brick"; brick's parent is stone.
+- "ModTrap Probe - Bad.esp": the mod to take out. Two global variables and a material type of its own, and its
+  own version of Base's brick, whose parent it makes its own material.
 - "ModTrap Probe - Override.esp": a plugin that must go on working. It overrides one of Bad's globals (to be taken
   out whole), has a global of its own, and a form list of its own with two entries: its own global and one of Bad's
-  (that one entry to be taken out, the list kept).
+  (that one entry to be taken out, the list kept). It also carries Bad's version of Base's brick on, parent and
+  all (that parent to be put back as Base has it: MT4's case C, WHY§55).
 - "ModTrap Probe - Patch.esp": a patch made only for Bad: it overrides both of Bad's globals and has nothing else.
 """
 
@@ -19,6 +23,7 @@ import struct
 
 from . import plugin
 
+BASE = "ModTrap Probe - Base.esp"
 BAD = "ModTrap Probe - Bad.esp"
 OVERRIDE = "ModTrap Probe - Override.esp"
 PATCH = "ModTrap Probe - Patch.esp"
@@ -67,25 +72,48 @@ def plugin_file(masters: list[str], groups: list[bytes], records: int, next_id: 
     return b"TES4" + struct.pack("<IIIIHH", len(head), 0, 0, 0, FORM_VERSION, 0) + head + b"".join(groups)
 
 
-def probe_set() -> dict[str, bytes]:
-    """The three probe plugins, by file name. In a plugin with one master, form ids starting 00 belong to that
-    master and those starting 01 are the plugin's own."""
-    bad = plugin_file([], [group(b"GLOB", [glob(0x00000800, "MTP_BadOne", 1.0), glob(0x00000801, "MTP_BadTwo", 2.0)])],
-                      2, 0x802, "Invented by ModTrap for its probe. Safe to delete.")
-    override = plugin_file([BAD], [
-        group(b"GLOB", [glob(0x00000800, "MTP_BadOne", 10.0), glob(0x01000800, "MTP_OwnGlobal", 3.0)]),
-        group(b"FLST", [flst(0x01000801, "MTP_OwnList", [0x01000800, 0x00000801])]),
-    ], 3, 0x802, "Invented by ModTrap for its probe. Safe to delete.")
-    patch = plugin_file([BAD], [group(b"GLOB", [glob(0x00000800, "MTP_BadOne", 20.0), glob(0x00000801, "MTP_BadTwo", 21.0)])],
-                        2, 0x800, "Invented by ModTrap for its probe. Safe to delete.")
-    return {BAD: bad, OVERRIDE: override, PATCH: patch}
+def matt(form_id: int, editor_id: str, name: str, parent: int | None = None) -> bytes:
+    """A material type (MATT): an editor id, optionally its parent (PNAM, another material type) and a name."""
+    fields = [(b"EDID", _zstr(editor_id))]
+    if parent is not None:
+        fields.append((b"PNAM", struct.pack("<I", parent)))
+    return record(b"MATT", form_id, fields + [(b"MNAM", _zstr(name))])
 
+
+STONE, BRICK, BAD_STUFF = 0x00000800, 0x00000801, 0x01000802        # as Base and Bad number them (Bad: Base is 00)
+
+
+def probe_set() -> dict[str, bytes]:
+    """The four probe plugins, by file name. A form id's first byte says whose it is: a plugin's masters in their
+    order from 00, then the plugin's own."""
+    note = "Invented by ModTrap for its probe. Safe to delete."
+    base = plugin_file([], [group(b"MATT", [matt(STONE, "MTP_Stone", "stone"), matt(BRICK, "MTP_Brick", "brick", STONE)])],
+                       2, 0x802, note)
+    bad = plugin_file([BASE], [
+        group(b"GLOB", [glob(0x01000800, "MTP_BadOne", 1.0), glob(0x01000801, "MTP_BadTwo", 2.0)]),
+        group(b"MATT", [matt(BRICK, "MTP_Brick", "brick", BAD_STUFF), matt(BAD_STUFF, "MTP_BadStuff", "bad stuff")]),
+    ], 4, 0x803, note)
+    # In Override, Base is 00, Bad is 01 and its own records are 02.
+    override = plugin_file([BASE, BAD], [
+        group(b"GLOB", [glob(0x01000800, "MTP_BadOne", 10.0), glob(0x02000800, "MTP_OwnGlobal", 3.0)]),
+        group(b"FLST", [flst(0x02000801, "MTP_OwnList", [0x02000800, 0x01000801])]),
+        group(b"MATT", [matt(BRICK, "MTP_Brick", "brick", BAD_STUFF)]),
+    ], 4, 0x802, note)
+    # In Patch, Bad is 00 (Bad's own records, which Bad itself numbers 01).
+    patch = plugin_file([BAD], [group(b"GLOB", [glob(0x00000800, "MTP_BadOne", 20.0), glob(0x00000801, "MTP_BadTwo", 21.0)])],
+                        2, 0x800, note)
+    return {BASE: base, BAD: bad, OVERRIDE: override, PATCH: patch}
+
+
+# The brick's parent as the demastered Override must hold it: put back to Base's stone, and not Bad's material.
+PARENT_BACK = b"PNAM" + struct.pack("<HI", 4, STONE)
+PARENT_BAD = b"PNAM" + struct.pack("<HI", 4, BAD_STUFF)
 
 # What a dry run of the probe must report, and what a demaster of it must leave (the probe's pass mark).
 EXPECTED = {
-    OVERRIDE: {"records": 3, "own": 1, "entries": 1, "needs_you": 0, "reading": "can be demastered",
-               "masters_after": [], "records_after": 2, "list_entries_after": 1},
-    PATCH: {"records": 2, "own": 2, "entries": 0, "needs_you": 0, "reading": "patch only"},
+    OVERRIDE: {"records": 4, "own": 1, "entries": 1, "parts": 1, "needs_you": 0, "reading": "can be demastered",
+               "masters_after": [BASE]},
+    PATCH: {"records": 2, "own": 2, "entries": 0, "parts": 0, "needs_you": 0, "reading": "patch only"},
 }
 
 
@@ -93,7 +121,5 @@ def check_headers(files: dict[str, bytes]) -> None:
     """The probe's own files, read back by ModTrap's header reader: a slip here must never reach the owner's PC."""
     for name, data in files.items():
         h = plugin.parse(data)
-        if name == BAD:
-            assert h.masters == (), name
-        else:
-            assert h.masters == (BAD,), name
+        want = {BASE: (), BAD: (BASE,), OVERRIDE: (BASE, BAD), PATCH: (BAD,)}[name]
+        assert h.masters == want, name

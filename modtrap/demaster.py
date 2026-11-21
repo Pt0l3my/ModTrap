@@ -56,22 +56,32 @@ class Plan:
 
 
 def actions_for(file_result: dict) -> list[str]:
-    """What the script is to take out of one dependant, from the dry run's reading of it (MT4): its copies of the
-    trapped plugins' own records, and entries of lists that may be shortened. Entries of one list go highest place
-    first, so that taking one out does not move the next."""
-    records, entries = [], {}
+    """What the script is to do in one dependant, from the dry run's reading of it (MT4): take out entries of
+    lists, put back or take out parts it only carries on from the mod, and take out its copies of the trapped
+    plugins' own records. Entries go first, the later ones first, so that taking one out does not move the next;
+    parts are named, not counted, so they come after; whole records last."""
+    records, entries, parts = [], {}, {}
     for rec in file_result["items"]:
         if rec["would"] == "record":
             records.append("%s|R" % rec["form"])
-        elif rec["would"] == "entry":
+        elif rec["would"] in ("entry", "part"):
             for e in rec["elements"]:
-                if not e.get("route"):
-                    raise Refused("the dry run did not say where an entry of %s is" % rec["form"])
-                entries[(rec["form"], tuple(e["route"]))] = e["entry"]
+                if e["would"] == "entry":
+                    if not e.get("route"):
+                        raise Refused("the dry run did not say where an entry of %s is" % rec["form"])
+                    entries[(rec["form"], tuple(e["route"]))] = e["entry"]
+                elif e["would"] == "part" and e.get("action") in ("put back", "take out") and e.get("from"):
+                    if "|" in e["part"] or "|" in e["from"]:
+                        raise Refused("a name in %s cannot be passed to the script" % rec["form"])
+                    parts[(rec["form"], e["part"])] = "%s|%s|%s|%s" % (
+                        rec["form"], "P" if e["action"] == "put back" else "X", e["part"], e["from"])
+                else:
+                    raise Refused("the dry run did not say what to do about a part of %s" % rec["form"])
         else:
             raise Refused("a record that needs the owner is not something ModTrap takes out")
-    ordered = sorted(entries.items(), key=lambda kv: (kv[0][0], kv[0][1][:-1], -kv[0][1][-1]))
-    return ["%s|E|%s|%s" % (form, "/".join(str(i) for i in route), name) for (form, route), name in ordered] + records
+    ordered = sorted(entries.items(), key=lambda kv: (kv[0][0], tuple(-i for i in kv[0][1])))
+    return (["%s|E|%s|%s" % (form, "/".join(str(i) for i in route), name) for (form, route), name in ordered]
+            + list(parts.values()) + records)
 
 
 def plan(m: model.Model, dry: dict, mod_name: str = "") -> Plan:

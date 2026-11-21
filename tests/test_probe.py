@@ -114,6 +114,21 @@ class Probing(unittest.TestCase):
         self.assertIn("did not pass", p["reason"])
         self.assertEqual(p["left_behind"], [])
 
+    def test_a_carried_on_part_not_found_or_not_put_back_fails_the_probe(self) -> None:
+        """The probe proves MT4's case C on invented plugins before it is used on real ones (WHY§55)."""
+        self.tool = "probe-own"                                    # this xEdit does not say where the part comes from
+        p = self.run_probe()
+        r = self.results(p)
+        self.assertEqual((p["state"], r["dry"]), ("failed", "failed"))
+        self.assertIn("parts is 0, expected 1", next(s["detail"] for s in p["steps"] if s["key"] == "dry"))
+        self.assertEqual(snapshot(self.root), self.before)
+        self.tool = "probe-notback"                                # the changing script leaves the part as it was
+        p = self.run_probe()
+        r = self.results(p)
+        self.assertEqual((p["state"], r["dry"], r["apply"]), ("failed", "passed", "failed"))
+        self.assertIn("not put back", next(s["detail"] for s in p["steps"] if s["key"] == "apply"))
+        self.assertEqual(snapshot(self.root), self.before)
+
     def test_mo2_reordering_the_lists_fails_the_probe(self) -> None:
         def scramble() -> None:
             f = self.root / "profiles" / "Default" / "plugins.txt"

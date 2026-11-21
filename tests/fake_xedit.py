@@ -21,7 +21,7 @@ def apply(argv, job, loaded, trap, deps, say, mode):
     from modtrap import plugin
     mods = Path(argv[argv.index("--mods") + 1])
     outdir = Path(job["outdir"])
-    out = ["H\tmodtrap-apply/1\tapply\t67175680"]
+    out = ["H\tmodtrap-apply/2\tapply\t67175680"]
     say("xEdit has loaded %d files" % (len(loaded) + 5))
     for i, d in enumerate(deps):
         # The copy that depends on the trapped plugin (an older, disabled copy of the same name may lie about).
@@ -39,7 +39,11 @@ def apply(argv, job, loaded, trap, deps, say, mode):
         h = plugin.read(original)
         masters = [m for m in h.masters if m not in trap] if mode != "keepmaster" else list(h.masters)
         out.append("C\t%s\t%s\t0\t2" % (d, ",".join(masters)))
-        (outdir / d).write_bytes(plugin.build(tuple(masters), flags=h.flags, author="demastered by the stand-in"))
+        data = plugin.build(tuple(masters), flags=h.flags, author="demastered by the stand-in")
+        if d.startswith("ModTrap Probe - ") and any(a.split("|")[1] == "P" for a in acts) and mode != "probe-notback":
+            from modtrap import probe                     # the part the probe looks for, put back as Base has it
+            data += probe.group(b"MATT", [probe.matt(probe.BRICK, "MTP_Brick", "brick", probe.STONE)])
+        (outdir / d).write_bytes(data)
         out.append("W\t%s\t%s" % (d, outdir / d))
         say("written: " + d)
     out.append("X\tok\t")
@@ -112,7 +116,7 @@ def main(argv):
     say("xEdit has loaded %d files; %d trapped plugin(s)" % (len(loaded) + 5, len(trap)))
     if mode == "crash":
         return 3
-    out.append("H\tmodtrap-report/3\treport\t67175680")
+    out.append("H\tmodtrap-report/4\treport\t67175680")
     if mode == "absent":                # an xEdit that looks in another game folder: none of the plugins is there
         out.append("P\tC:\\Elsewhere\\Data\\\t81")
         out += ["N\t" + t for t in trap] + ["M\t" + d for d in deps] + ["X\tok\t"]
@@ -125,13 +129,22 @@ def main(argv):
             continue
         if d.startswith("ModTrap Probe - "):               # the probe's invented plugins, as xEdit should read them
             lists = "Odd Name" if mode == "probe-odd" else "FormIDs"
+            base = "ModTrap Probe - Base.esp"
             if "Override" in d:
-                out.append("F\t%s\t3\t%s" % (d, trap[0]))
-                out.append("R\t%s\tGLOB\t00000800\t%s\t1\tMTP_BadOne" % (d, trap[0]))
-                out.append("R\t%s\tFLST\t01000801\t%s\t0\tMTP_OwnList" % (d, d))
-                out.append("E\t%s\t01000801\tFLST \\ %s \\ LNAM - FormID\t%s\t00000801\t%s" % (d, lists, trap[0], chain(
+                part = "PNAM - Material Parent"
+                out.append("F\t%s\t4\t%s,%s" % (d, base, trap[0]))
+                out.append("R\t%s\tGLOB\t01000800\t%s\t1\tMTP_BadOne" % (d, trap[0]))
+                out.append("R\t%s\tFLST\t02000801\t%s\t0\tMTP_OwnList" % (d, d))
+                out.append("E\t%s\t02000801\tFLST \\ %s \\ LNAM - FormID\t%s\t01000801\t%s" % (d, lists, trap[0], chain(
                     ("LNAM - FormID", "etSubRecord", "dtFormID", 0, 1), (lists, "etSubRecordArray", "dtSubRecordArray", 2, 1))))
-                out.append("D\t%s\t3\t2" % d)
+                out.append("C\t%s\t02000801\t%s\tetSubRecordArray\t\t\t\t1\t0" % (d, lists))
+                out.append("G\t%s\t02000801\t%s\t1\t\t0" % (d, lists))
+                out.append("R\t%s\tMATT\t00000801\t%s\t0\tMTP_Brick" % (d, base))
+                out.append("E\t%s\t00000801\tMATT \\ %s\t%s\t01000802\t%s" % (d, part, trap[0], chain(
+                    (part, "etSubRecord", "dtFormID", 0, 2))))
+                if mode != "probe-own":         # an xEdit that does not find the part in the test mod's own version
+                    out.append("C\t%s\t00000801\t%s\tetSubRecord\t%s\t%s\tpresent\t0\t0" % (d, part, trap[0], base))
+                out.append("D\t%s\t4\t3" % d)
             else:
                 out.append("F\t%s\t2\t%s" % (d, trap[0]))
                 out.append("R\t%s\tGLOB\t00000800\t%s\t1\tMTP_BadOne" % (d, trap[0]))
@@ -154,9 +167,11 @@ def main(argv):
             out.append("R\t%s\tNPC_\t00054321\tSkyrim.esm\t0\tInventedPerson" % d)
             out.append("E\t%s\t00054321\tNPC_ \\ RNAM - Race\t%s\t05000802\t%s" % (d, trap[0], chain(
                 ("RNAM - Race", "etSubRecord", "dtFormID", 0, 9))))
-            # Where that part comes from: the trapped plugin's own version of the record is the same, and without
-            # it the game's own record says what the part is (the script's C line).
-            out.append("C\t%s\t00054321\tRNAM - Race\tetSubRecord\t%s\tSkyrim.esm\tpresent\t0\t0" % (d, trap[0]))
+            # Where that part comes from (the script's C line). Usually no earlier plugin has the same: it is the
+            # dependant's own doing, and needs the owner. In mode "carried" the trapped plugin's own version of the
+            # record is the same, and without it the game's own record says what the part is.
+            out.append("C\t%s\t00054321\tRNAM - Race\tetSubRecord\t%s\tSkyrim.esm\tpresent\t0\t0" % (
+                d, trap[0] if mode == "carried" else ""))
             n = 3
         out.append("D\t%s\t3\t%d" % (d, n))
         say("done %s: %d of 3 records need a trapped plugin" % (d, n))

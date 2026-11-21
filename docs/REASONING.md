@@ -76,6 +76,11 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 51 | 2026-11-21 | xEdit's "Module Selection" window: always shown in script mode, nothing to choose, ModTrap presses OK | FACT | #xedit #page #process |
 | 52 | 2026-11-21 | The first real dry run against the guide: the same plugins, a different split; what was changed for it | FACT | #procedure #xedit #safety #process |
 | 53 | 2026-11-21 | The second real dry run stopped at a file held by another program; the scripts now bear it, and a probe pass counts only for the scripts it ran | FACT | #xedit #mo2 #safety #process |
+| 54 | 2026-11-21 | The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows | FACT | #xedit #mo2 #process |
+| 55 | 2026-11-21 | What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first | DECIDED | #procedure #xedit #safety #process |
+| 56 | 2026-11-21 | The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out | FACT | #xedit #mo2 #tools #safety #process |
+| 57 | 2026-11-21 | The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button | METHOD | #page #steps #process |
+| 58 | 2026-11-21 | ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it | METHOD | #mo2 #page #steps #safety #process |
 
 ## Entries
 
@@ -1118,3 +1123,128 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - METHOD: after asking a MO2 that stopped at a message to close, ModTrap now waits and says in the log whether it
   closed, so the next session file answers whether the request dismisses the message (WHY§50's open point). The
   wait before asking is four seconds, not eight.
+
+### 54. The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows
+
+`2026-11-21` · FACT · `#xedit #mo2 #process` · refs: XE01§13, XE01§14, XE01§15, MO01§9, DESIGN§7, WHY§50, WHY§51, WHY§52, WHY§53
+
+- The owner, with the saved session: "that MO2 still keeps coming up though it seems ModTrap completes its tasks."
+- FACT: with the scripts of WHY§52 and WHY§53 the probe passed all seven steps and the dry run read all 17
+  dependants in 90 seconds, every file unchanged. The new script code runs on the owner's xEdit; no write failed.
+  The split is the guide's: 12 patches switched off, 5 big files for demastering.
+- FACT: each of the three runs ended with MO2 at its message; ModTrap asked MO2 to close after four seconds and
+  MO2 was gone within three more ("MO2 closed when asked"). WHY§50's open point is settled: the request does
+  dismiss the message. But the message stood on the screen for some seconds every time.
+- FACT: the message cannot be prevented from ModTrap's side. It is raised inside MO2 by one of the modlist's own
+  MO2 plugins when a run that MO2 started from the command line ends (MO01§9).
+- METHOD: ModTrap now looks, several times a second once xEdit has gone, for a visible window of the MO2 it
+  started whose caption is exactly MO2's message caption, and asks that window to close. MO2's main window has
+  a longer caption and is never touched, nor is a MO2 the owner had open. The earlier request to MO2 as a whole
+  stays as the fallback. Unproven until the owner's next run.
+
+### 55. What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first
+
+`2026-11-21` · DECIDED · `#procedure #xedit #safety #process` · refs: MT4, MT6, MT17, DESIGN§5, DESIGN§6.3, DESIGN§9, XE01§14, XE01§16, WHY§2, WHY§47, WHY§52, WHY§53, WHY§54
+
+- FACT (the dry run of WHY§54, with WHY§52's evidence lines): in the five big files, 32 records needed the owner, in 33 parts.
+  - In 17 of the parts, the part that needs the mod is the very same as in an earlier plugin that goes: the mod itself
+    (five script attachments in one generated file, three "previous line" fields in another) or a patch for the
+    mod that is switched off (nine condition lists). In each case the big file's last master without the mod
+    has the part, and nothing it points at is missing from the big file's masters.
+  - In 7 the part is the same as in another big file that loads earlier and is itself to be demastered.
+  - In 9 (seven of them those same records in that earlier file) the part is a list of conditions that no
+    earlier plugin has in that form: the big file merged it, and one entry of it needs the mod.
+- DECIDED (MT4 left "when C becomes automatic" to the evidence; MT17 leaves the method to ModTrap):
+  1. A part that is the same as a trapped plugin's, or as that of a patch that is switched off, is **put back**
+     as the dependant's last master without the mod has it, or **taken out** if that master has none.
+  2. A list in which each entry that needs the mod is also an entry of an earlier plugin's version of the list
+     (the dependant did not write it) loses **those entries**, except an entry of conditions whose removal would
+     join the conditions around it differently (XE01§16).
+  3. A part that is the same as an earlier dependant's which is itself demastered gets what that one gets, if
+     that is the same plugin's version; else rule 2 is tried on its own evidence.
+  4. Anything else still needs the owner: a part no earlier plugin has in that form and that is not such a list,
+     a source that would need a master the dependant lacks, an older report without the evidence.
+- Why not always "put back the last master's version": where the big file merged the list itself (the 9), the
+  last master's list is not what the big file would hold without the mod; taking out the mod's entry keeps the
+  rest of the merge. Why not always "take out the entry": a changed single field or a script attachment has no
+  entry to take out, and for a part that is wholly the mod's version, the master's version is the exact answer.
+- METHOD (safety): the changing script puts a part back only from a plugin that is not trapped, whose version
+  needs no trapped plugin, and then checks that the part reads exactly as that version; one refusal and the
+  dependant is not written (XE01§16). Entries go before parts and later lists before earlier ones, so that no
+  place found by the dry run has moved. ModTrap's own checks of every new plugin and every original stand as
+  before, and Revert undoes the lot.
+- METHOD (the probe): the probe has a fourth invented plugin, a base that stays, and the plugin that must go on
+  working now carries on the test mod's change to one of the base's records. The probe passes only if the dry run
+  reads that as "put back", and the new plugin holds the base's value and not the test mod's. The scripts
+  changed, so the probe must pass again before real work (WHY§53).
+- Unproven: the put-back of a script attachment and the removal of a condition, on real plugins. Both are
+  guarded by the checks above; the first real demaster shows them.
+
+### 56. The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out
+
+`2026-11-21` · FACT · `#xedit #mo2 #tools #safety #process` · refs: MT4, MT5, MT14, DESIGN§5, DESIGN§9, DESIGN§13, XE01§16, MO01§9, WHY§28, WHY§54, WHY§55
+
+- FACT (the owner's session): with WHY§55's scripts the probe passed every step. xEdit read the carried-on part
+  of the invented plugin as "put back", the changing script put it back, and the new plugin holds the base's
+  value. XE01§16's LIKELY holds for a single link.
+- FACT: the real dry run then read all five big files as "can be demastered", with nothing left for the owner:
+  7 keyword entries; 7 + 7 + 2 condition entries, each also found in a patch for the mod or in the mod itself,
+  none ending a run of "or"; 9 condition lists and 3 single fields put back from the files' own masters; 5
+  script attachments put back from the game's own file; 45 copies of the mod's own records taken out. The
+  twelve patches are switched off. This is the guide's whole list, and the two files the guide does not name.
+- FACT: closing MO2's message worked, but MO2 then took some seconds to leave, and ModTrap's fallback asked it
+  again with a warning in the log. METHOD: once the message is closed MO2 gets twelve seconds before that.
+- METHOD: ModTrap's demastered copy lies in ModTrap's own mod, above the original (MT5). If a tool later makes
+  the original again (one of the five is a generator's output, WHY§28), the copy would hide the newer file and
+  nothing would say so. An installed job now compares each original with what the safe folder knows of it, and
+  the job's card names any that changed since, with what to do. Hashing is done again only when a file's size
+  or time changed.
+- Still a first: the demaster of real plugins. The put-back of a script attachment and the removal of a
+  condition run there for the first time, each checked by the script against its source (XE01§16).
+
+### 57. The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button
+
+`2026-11-21` · METHOD · `#page #steps #process` · refs: MT18, MT21, DESIGN§14, WHY§46, WHY§52, WHY§55
+
+- The owner, with a picture of the step "Switch off the patches made only for the mod", marked "You": "can this
+  not be done by ModTrap?"
+- FACT: it can, and "Demaster Selected" does it (WHY§46, WHY§52). The Steps tab was written before that was built
+  and still gave switching off, demastering and disabling the mod to the owner, with words to match.
+- METHOD: when ModTrap is started with the switch, those three steps are ModTrap's; the first two carry a
+  "Demaster Selected…" button that shows the plan and asks, as the Selection tab's does. Without the switch
+  they stay the owner's, and say that ModTrap does them when started with it.
+- METHOD: the tab now sorts the dependants as the demaster itself does, by the dry run's reading first: a tool's
+  output that the dry run found demasterable is listed under demastering, not under "run the tool again", and
+  the demaster step says how many of its plugins need the owner.
+
+### 58. ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it
+
+`2026-11-21` · METHOD · `#mo2 #page #steps #safety #process` · refs: MT18, DESIGN§7, DESIGN§14, DESIGN§16.7, MO01§2, WHY§50, WHY§54, WHY§57
+
+- The owner: "make sure ModTrap knows if MO2 is open for the modlist, so it geyes out functions that require it
+  closed (same vice versa, grey out features the need MO2 open if not already open, or perhaps it could auto start
+  or close MO2 with prompt 'Close/open MO2?' with Yes or No)", and "most of these steps indicate 'You', including
+  the one you said ModTrap can do, can you double check which steps can be done by ModTrap".
+- FACT: ModTrap knew only whether any program called ModOrganizer.exe ran, by asking Windows' task list each
+  time; the buttons that need MO2 closed were greyed out with a line of text, and the owner had to close MO2 and
+  press "Check again".
+- METHOD: ModTrap now lists the running programs of that name with their full paths, through Windows' own calls,
+  and counts MO2 as open only if one of them is this modlist's own ModOrganizer.exe (the same file, however the
+  path is written). A MO2 of another modlist has its own lists and does not count. Where the list cannot be had,
+  the old answer stands; where nothing can be told, nothing that needs MO2 closed is done.
+- METHOD: the page shows "MO2 is open" or "MO2 is closed" beside the modlist's other facts. A step that changes
+  MO2's lists (adding and taking out again, putting a demaster in place, Revert, the probe) asks, when MO2 is
+  open, "Close MO2 now?"; on yes ModTrap asks that MO2's windows to close, as a click on the X does, waits until
+  it has gone, and goes on. It never ends MO2 and never closes it unasked (WHY§50's rule stands: the yes is the
+  owner's). The same place starts MO2 when it is closed, to look at a result.
+- FACT: nothing ModTrap does needs MO2 open beforehand: for xEdit and the tools it starts MO2's command itself,
+  and a MO2 that is open takes the command over (MO01§4). So nothing is greyed out for a closed MO2.
+- METHOD (the labels): each step now says who does it, for demastering and for adding mods alike. "ModTrap":
+  the dry run, switching off, demastering, disabling, enabling and activating an added mod, the record check,
+  the health check. "ModTrap starts it, you run it": a tool that is in MO2's list, with its start button, also
+  for a generated plugin whose tool MO2 names. "You": getting what a mod needs, judging shared files, settings
+  files of other mods that name the plugin, a tool that is not in MO2's list, and playing. Without the switch
+  the steps ModTrap would carry out stay the owner's, and say so.
+- Shown in a browser on the invented list: the labels, the indicator turning to "open", and a demaster put in
+  place through the question, with MO2 "closed" by it. On the owner's PC the listing of programs and the
+  request to close are unproven until the next session.

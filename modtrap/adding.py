@@ -307,7 +307,7 @@ def staged_mod(name: str, folder: Path) -> Mod:
 
 
 def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float = CONFLICT_SECONDS,
-            staged: list[Mod] | tuple[Mod, ...] = ()) -> dict:
+            staged: list[Mod] | tuple[Mod, ...] = (), auto: bool = False) -> dict:
     """Everything ModTrap can tell about adding these mods without xEdit. `staged` are mods unpacked in
     ModTrap's work folder, not yet in MO2: they are read where they lie."""
     inst = m.instance
@@ -471,7 +471,7 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
     again = run_again(m, kinds_all, new_plugins, memo)
     report = {"mods": out_mods, "place": place, "slots": slots, "tools": again, "cut": cut_any,
               "unknown": [n for n in names if inst.mod(n) is None]}
-    report["steps"] = compile_steps(m, report)
+    report["steps"] = compile_steps(m, report, auto)
     todo = [s for s in report["steps"] if s["state"] not in ("done", "not needed") and not s["manual"]]
     report["complete"] = bool(out_mods) and not todo
     report["summary"] = ("Nothing to analyse yet." if not out_mods else
@@ -520,8 +520,10 @@ def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dic
 
 # --- the steps (DESIGN§16.7) ----------------------------------------------------------------------------------------
 
-def compile_steps(m: model.Model, rep: dict) -> list[dict]:
+def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
     out: list[dict] = []
+
+    doer = "ModTrap" if auto else "you"                 # for what "Add it for me" carries out (WHY§58)
 
     def step(key: str, who: str, title: str, why: str, state: str, items: list | None = None, note: str = "",
              manual: bool = False) -> None:
@@ -582,11 +584,12 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
     items = [{"text": "%s: %s" % (x["name"], ("enabled, at priority %d" % x["priority"]) if x["enabled"]
                                     else "to enable, " + where), "mod": x["name"],
               "tag": "enabled" if x["enabled"] else "disabled", "cls": "good" if x["enabled"] else ""} for x in mods]
-    step("enable", "you", "Enable %s in MO2, in the right place" % ("the mods" if several else "the mod"),
+    step("enable", doer, "Enable %s in MO2, in the right place" % ("the mods" if several else "the mod"),
          "After every ordinary mod in MO2's list (so a higher priority than all of them: it wins the files it "
          "shares with them), and before what the modlist's tools made, which is made again afterwards. In MO2, "
-         "with the list sorted by priority: drag the mod %s, then tick it. “Add it for me”, above, does this for "
-         "you when it is switched on." % where,
+         "with the list sorted by priority: drag the mod %s, then tick it.%s" % (
+             where, " “Add it for me”, above, does this." if auto else
+             " Started with --allow-changes, ModTrap does this itself (“Add it for me”)."),
          "done" if not off else "waiting" if needs or unpacked else "to do", items,
          note=("The modlist keeps its outputs under the heading “%s”: the mod goes right before that heading, and "
                "the %d mod(s) under it, with whatever the list keeps after them, stay after it." % (
@@ -611,11 +614,13 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
             for n in p["notes"]:
                 items.append({"text": n, "tag": "note", "cls": "warn"})
         inactive = [p for _, p in plugs if not p["active"]]
-        step("activate", "you", "Activate the new plugin%s, in the right place" % ("s" if len(plugs) > 1 else ""),
+        step("activate", doer, "Activate the new plugin%s, in the right place" % ("s" if len(plugs) > 1 else ""),
              "After every master it names, and before the plugins the modlist's tools made: those are built from "
              "everything above them and are meant to stay last. Placed there, the new plugin wins over the plugins "
              "made by hand, as it does when you put it last; the step on records below shows what that overrides. In "
-             "MO2: Plugins tab, tick the plugin and drag it to its place. “Add it for me”, above, does this too.",
+             "MO2: Plugins tab, tick the plugin and drag it to its place." + (
+                 " “Add it for me”, above, does this too." if auto else
+                 " Started with --allow-changes, ModTrap does this itself (“Add it for me”)."),
              "done" if not inactive else "waiting" if off or needs else "to do", items)
 
     # 4. Files shared with other mods.
@@ -670,7 +675,7 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
         names = t["titles"]
         if t["tool"]:
             sure = not t["if"]
-            step("tool:" + t["tool"], "you",
+            step("tool:" + t["tool"], "both" if names else "you",
                  "Run %s again%s" % (t["tool"], "" if sure else ", if it applies"),
                  "%s built %s from the modlist as it was, without %s. %s" % (
                      t["tool"], ", ".join(t["plugins"][:4]) + (" and others" if len(t["plugins"]) > 4 else ""),
@@ -681,7 +686,7 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
                  note="Only you can tell when this is done: tick it off." if names else
                  "It is not in this MO2's list of tools; run it the way the modlist's own guide says.", manual=True)
         else:
-            step("tool:" + t["kind"], "you",
+            step("tool:" + t["kind"], "both" if names else "you",
                  "Run %s again" % (" or ".join("“%s”" % n for n in names) if names else "the tool that handles " + t["kind"]),
                  "%s %d file(s) of %s. A tool builds its output from all such files in the modlist, and that output "
                  "does not have the new ones in it until the tool runs again." % (

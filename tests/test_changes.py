@@ -202,6 +202,52 @@ class DemasterThroughThePage(unittest.TestCase):
         with self.assertRaises(Bad):
             self.api.post("/api/demaster/start", {})
 
+    def test_modtrap_knows_whether_this_modlists_mo2_is_open(self) -> None:
+        """WHY§58. What the page shows and asks about, and what a step that changes the lists goes by."""
+        here = str(self.root / "ModOrganizer.exe")
+        elsewhere = str(Path(self.tmp.name) / "Another List" / "ModOrganizer.exe")
+        fx.write(Path(elsewhere), b"another modlist's MO2")
+        mo2 = self.api.mo2
+        self.assertEqual(mo2(), {"state": "closed", "other": False})          # as far as "is one running" tells
+        self.mo2_running = True
+        self.assertEqual((mo2()["state"], self.api.changes.closed()), ("open", False))
+        self.mo2_running = None
+        self.assertEqual((mo2()["state"], self.api.changes.closed()), ("unknown", None))
+        # Where the running programs can be listed, only this modlist's own MO2 counts.
+        running: list[str] = []
+        self.api.program_paths = lambda image: list(running)
+        self.assertEqual(mo2(), {"state": "closed", "other": False})
+        running.append(elsewhere)
+        self.assertEqual((mo2(), self.api.changes.closed()), ({"state": "closed", "other": True}, True))
+        running.append(here)
+        self.assertEqual((mo2(), self.api.changes.closed()), ({"state": "open", "other": False}, False))
+        self.api._mo2_seen = (0.0, {})
+        self.assertEqual(self.api.state()["mo2"]["state"], "open")
+        # Closing is asked of this MO2 only, on the owner's word, and never while ModTrap runs something through it.
+        asked: list[str] = []
+
+        def ask(path: str) -> bool:
+            asked.append(path)
+            running.remove(here)
+            return True
+
+        self.api.ask_close = ask
+        self.assertEqual(self.api.post("/api/mo2/close", {})[1]["mo2"]["state"], "closed")
+        self.assertEqual(asked, [here])
+        self.assertFalse(self.api.post("/api/mo2/close", {})[1]["asked"])       # already closed: nothing is asked
+        self.assertEqual(asked, [here])
+        running.append(here)
+        self.api.ask_close = lambda path: False
+        with self.assertRaises(Bad):
+            self.api.post("/api/mo2/close", {})                                 # it could not be asked: said so
+        # Opening starts this modlist's own MO2 with its profile.
+        running.clear()
+        started: list = []
+        self.api.launcher = lambda cmd, cwd: started.append((cmd, cwd))
+        self.assertTrue(self.api.post("/api/mo2/open", {})[1]["started"])
+        self.assertEqual(started, [([here, "-p", self.api.model.instance.profile], str(self.root))])
+        self.assertEqual(snapshot(self.root), self.before)
+
     def test_plan_run_put_in_place_and_revert(self) -> None:
         self.dry_run()
         p = self.api.post("/api/demaster/plan", {})[1]
@@ -232,6 +278,15 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual([(j["state"], j["disabled"], j["deactivated"]) for j in jobs],
                          [("installed", ["Bramble - Lantern Patch", "Bramble"],
                            ["BrambleLanternPatch.esp", "Collection - Bramble.esp"])])
+        # A tool making an original again after the demaster: ModTrap's copy would hide the newer file. It says so.
+        original = self.root / "mods" / "Lantern" / "Lantern.esp"
+        keep, times = original.read_bytes(), original.stat()
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], [])
+        original.write_bytes(keep + b" made again by a tool")
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], ["Lantern.esp"])
+        original.write_bytes(keep)
+        os.utime(original, ns=(times.st_atime_ns, times.st_mtime_ns))
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], [])
         events = self.api.get("/api/history", {})[1]
         self.assertEqual(events["events"][0]["kind"], "verified")
         self.assertIn("mod disabled", [e["kind"] for e in events["events"]])

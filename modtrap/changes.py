@@ -17,6 +17,7 @@ from pathlib import Path
 import json
 
 from . import addjob, demaster, dryrun, history, logbook, paths, probejob, safe
+from .instance import fold
 from .server import Bad
 
 log = logbook.get("add")
@@ -35,6 +36,7 @@ class Changes:
         self.probe: probejob.Probe | None = None
         self.dm: demaster.Demaster | None = None        # the demaster in hand, if any
         self.dm_state = ""                              # working, verified, installed, failed
+        self._hashes: dict[tuple, str] = {}             # (path, size, time) -> sha256, for the stale check
         self.dm_message = ""
         self.dm_check: dict | None = None
         self._dm_thread: threading.Thread | None = None
@@ -120,8 +122,7 @@ class Changes:
 
     def closed(self) -> bool | None:
         """Is MO2 closed? None when it cannot be told; then nothing is changed."""
-        r = self.api.running(dryrun.MO2_EXE)
-        return None if r is None else not r
+        return self.api.mo2_closed()            # this modlist's MO2; another modlist's does not count (WHY§58)
 
     def _jobs_dir(self) -> Path:
         s = self.api.session
@@ -332,7 +333,36 @@ class Changes:
             out.append({"job": d.name, "when": data.get("when", ""), "mods": data.get("mods", []),
                         "mod_name": done.get("mod", ""), "plugins": done.get("plugins", []),
                         "disabled": done.get("disabled", []), "deactivated": done.get("deactivated", []),
-                        "state": "reverted" if reverted else "installed"})
+                        "state": "reverted" if reverted else "installed",
+                        "stale": [] if reverted else self._stale(d, done.get("plugins", []))})
+        return out
+
+    def _stale(self, job_dir: Path, plugins: list[str]) -> list[str]:
+        """The demastered plugins whose original has changed since. ModTrap's copy lies in ModTrap's own mod, above
+        the original; when a tool makes the original again, the copy hides the newer file (WHY§56). The original
+        as it was is known from the job's safe folder; a file is hashed again only when its size or time changed."""
+        try:
+            items = safe.Safe(job_dir / "safe").items
+        except safe.Refused:
+            return []
+        want = {fold(n) for n in plugins}
+        out = []
+        for item in items:
+            p = Path(item["path"])
+            if fold(p.name) not in want:
+                continue
+            try:
+                st = p.stat()
+            except OSError:
+                continue                                    # gone: nothing newer is being hidden
+            key = (str(p), st.st_size, st.st_mtime_ns)
+            if key not in self._hashes:
+                try:
+                    self._hashes[key] = safe.sha256(p)
+                except OSError:
+                    continue
+            if self._hashes[key] != item["sha256"]:
+                out.append(p.name)
         return out
 
     def demaster_revert(self, body: dict) -> dict:

@@ -3,7 +3,7 @@ and xEdit, and undone again, before any real mod is touched.
 
 Loaded only with --allow-changes (through modtrap/changes.py). It uses nothing of its own to change the modlist:
 the same add job, dry run, demaster and Revert that real work uses, so that passing here says something about
-them. The two test mods hold three tiny plugins written by ModTrap (modtrap/probe.py); nothing of a real mod is
+them. The two test mods hold four tiny plugins written by ModTrap (modtrap/probe.py); nothing of a real mod is
 read into them or changed.
 
 Each step answers one thing that could not be shown without the owner's PC:
@@ -209,7 +209,8 @@ class Probe:
         files = probe.probe_set()
         probe.check_headers(files)
         staged = self.dir / "staged"
-        for mod_name, names in ((BAD_MOD, (probe.BAD,)), (DEP_MOD, (probe.OVERRIDE, probe.PATCH))):
+        # Base stays when Bad's mod is disabled, so it lives with the dependants.
+        for mod_name, names in ((BAD_MOD, (probe.BAD,)), (DEP_MOD, (probe.BASE, probe.OVERRIDE, probe.PATCH))):
             (staged / mod_name).mkdir(parents=True, exist_ok=True)
             for n in names:
                 (staged / mod_name / n).write_bytes(files[n])
@@ -249,10 +250,10 @@ class Probe:
             if f is None:
                 wrong.append("%s was not read" % name)
                 continue
-            for key in ("records", "own", "entries", "needs_you", "reading"):
+            for key in ("records", "own", "entries", "parts", "needs_you", "reading"):
                 if f[key] != want[key]:
                     extra_words = ""
-                    if key in ("entries", "needs_you", "reading"):
+                    if key in ("entries", "parts", "needs_you", "reading"):
                         arrays = sorted({e["array"] or e["path"] for r in f["items"] for e in r["elements"]})
                         extra_words = "; xEdit names the list %s" % ", ".join("“%s”" % a for a in arrays) if arrays else ""
                     wrong.append("%s: %s is %r, expected %r%s" % (name, key, f[key], want[key], extra_words))
@@ -301,9 +302,17 @@ class Probe:
         if good != [probe.OVERRIDE]:
             raise Failed("apply", "the new plugin did not pass ModTrap's checks: " + "; ".join(dpl.notes[:3]))
         new = self._read(self._dm.out / probe.OVERRIDE)
-        if new.masters:
-            raise Failed("apply", "the new plugin still names a master: %s" % ", ".join(new.masters))
-        self._ok("apply", "the new %s names no master any more" % probe.OVERRIDE)
+        if list(new.masters) != probe.EXPECTED[probe.OVERRIDE]["masters_after"]:
+            raise Failed("apply", "the new plugin's masters are %s, expected only %s" % (
+                ", ".join(new.masters) or "none", probe.BASE))
+        try:
+            data = (self._dm.out / probe.OVERRIDE).read_bytes()
+        except OSError as e:
+            raise Failed("apply", "the new plugin could not be read: %s" % logbook.why(e)) from None
+        if probe.PARENT_BACK not in data or probe.PARENT_BAD in data:
+            raise Failed("apply", "the part carried on from the test mod was not put back as %s has it" % probe.BASE)
+        self._ok("apply", "the new %s no longer names the test mod, and the part it carried on is as %s has it" % (
+            probe.OVERRIDE, probe.BASE))
         self._ok("untouched")
 
         # --- install ----------------------------------------------------------------------------------------------

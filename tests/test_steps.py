@@ -76,6 +76,22 @@ class StepsTests(unittest.TestCase):
         self.assertEqual(by["dry"]["state"], "done")
         self.assertEqual([i["plugin"] for i in by["switch-off"]["items"]], ["BrambleLanternPatch.esp", "Collection - Bramble.esp"])
         self.assertEqual([i["plugin"] for i in by["demaster"]["items"]], ["Lantern.esp"])
+        self.assertEqual([i["plugin"] for i in by["regenerate"]["items"]], ["Generated.esp"])   # needs you: the tool makes it again
+        self.assertEqual({by[k]["who"] for k in ("switch-off", "demaster", "disable")}, {"you"})
+        self.assertEqual(by["switch-off"]["action"], "")
+        # Started with the switch, these are ModTrap's steps, with the button; and a tool's output that the dry run
+        # found demasterable is demastered with the rest, as "Demaster Selected" does (WHY§57).
+        job["result"]["files"][3]["reading"] = "can be demastered"
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True)["steps"]}
+        self.assertEqual({by[k]["who"] for k in ("switch-off", "demaster", "disable")}, {"ModTrap"})
+        self.assertEqual((by["switch-off"]["action"], by["demaster"]["action"], by["disable"]["action"]), ("demaster", "demaster", ""))
+        self.assertEqual([i["plugin"] for i in by["demaster"]["items"]], ["Lantern.esp", "Generated.esp"])
+        self.assertNotIn("regenerate", by)
+        self.assertIn("Demaster Selected", by["switch-off"]["why"])
+        # Every step says truly who does it (WHY§58): ModTrap, the owner, or ModTrap starting a tool the owner runs.
+        self.assertEqual({k: v["who"] for k, v in by.items() if not k.startswith("tool:")},
+                         {"dry": "ModTrap", "switch-off": "ModTrap", "demaster": "ModTrap", "disable": "ModTrap",
+                          "mentions": "you", "health": "ModTrap", "play": "you"})
 
     def test_the_modlist_itself_shows_the_steps_done(self):
         b = plugin.build

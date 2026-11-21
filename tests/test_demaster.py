@@ -69,12 +69,41 @@ class DemasterTests(unittest.TestCase):
         pl = demaster.plan(self.m, dry)
         self.assertEqual((sorted(pl.needs_you), pl.blocked), (["Lantern.esp"], True))
 
+    def test_a_part_carried_on_from_the_mod_goes_into_the_plan_and_through(self):
+        dp, dry = self.dry("carried")                    # Lantern's invented person: the race is the mod's doing
+        pl = demaster.plan(self.m, dry)
+        self.assertEqual(pl.demaster["Lantern.esp"],
+                         ["00012345|E|1/2|LNAM - FormID", "00054321|P|RNAM - Race|Skyrim.esm", "05000801|R"])
+        self.assertEqual(pl.needs_you, [])
+        dp.tool = "carried"
+        d = demaster.Demaster(self.m, dp, pl, dryrun.new_job_dir(self.session / "jobs"), self.session,
+                              launcher=self.launcher, running=lambda image: None, closed=lambda: True, poll=0.05)
+        d.make_safe()
+        d.run_xedit()
+        self.assertIn("Lantern.esp", d.verify())
+        job = (d.dir / "script" / "modtrap-job.txt").read_text(encoding="utf-8")
+        self.assertIn("|P|RNAM - Race|Skyrim.esm", job)
+
     def test_entries_of_one_list_go_highest_first(self):
-        el = lambda route: {"route": route, "entry": "LNAM - FormID"}   # noqa: E731
+        el = lambda route: {"route": route, "entry": "LNAM - FormID", "would": "entry"}   # noqa: E731
         f = {"items": [{"form": "0001", "would": "entry", "elements": [el([1, 0]), el([1, 3]), el([1, 2])]},
                        {"form": "0002", "would": "record", "elements": []}]}
         self.assertEqual(demaster.actions_for(f), ["0001|E|1/3|LNAM - FormID", "0001|E|1/2|LNAM - FormID",
                                                    "0001|E|1/0|LNAM - FormID", "0002|R"])
+        # Entries of a later list go before those of an earlier one (a list left empty goes, and moves what
+        # follows it); a part that is put back or taken out is named, so it comes after the entries; whole
+        # records come last (WHY§55).
+        part = lambda name, action, src: {"would": "part", "part": name, "action": action, "from": src}   # noqa: E731
+        f = {"items": [
+            {"form": "0003", "would": "part", "elements": [el([2, 1]), el([5, 0]), part("VMAD", "put back", "Base.esp"),
+                                                            part("VMAD", "put back", "Base.esp"),
+                                                            part("PNAM - Previous", "take out", "Base.esp")]},
+            {"form": "0002", "would": "record", "elements": []}]}
+        self.assertEqual(demaster.actions_for(f), [
+            "0003|E|5/0|LNAM - FormID", "0003|E|2/1|LNAM - FormID", "0003|P|VMAD|Base.esp",
+            "0003|X|PNAM - Previous|Base.esp", "0002|R"])
+        with self.assertRaises(demaster.Refused):
+            demaster.actions_for({"items": [{"form": "4", "would": "part", "elements": [part("A|B", "put back", "Base.esp")]}]})
         with self.assertRaises(demaster.Refused):
             demaster.actions_for({"items": [{"form": "1", "would": "needs you", "elements": []}]})
 

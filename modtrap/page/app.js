@@ -5,7 +5,16 @@ const TOKEN = document.body.dataset.token;
 const $ = (id) => document.getElementById(id);
 const state = { status: "none", mods: [], plugins: [], picked: new Set(), logAfter: 0, loaded: "", details: new Map() };
 
+// What changes MO2's lists must find MO2 closed: an open MO2 holds them in memory and writes its own back.
+const NEEDS_MO2_CLOSED = new Set(["/api/add/run", "/api/add/revert", "/api/demaster/install", "/api/demaster/revert",
+  "/api/probe/start", "/api/probe/cleanup"]);
+
 async function api(path, body) {
+  if (NEEDS_MO2_CLOSED.has(path) && !(await mo2Closed())) throw new Error("MO2 is still open; nothing was changed");
+  return call(path, body);
+}
+
+async function call(path, body) {
   const opt = { headers: { "X-ModTrap-Token": TOKEN } };
   if (body !== undefined) {
     opt.method = "POST";
@@ -16,6 +25,55 @@ async function api(path, body) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || ("the request failed (" + r.status + ")"));
   return data;
+}
+
+// MO2 open or closed for this modlist (state.mo2, from the server). Asks before closing it, and never forces.
+async function mo2Closed() {
+  let m = state.mo2;
+  try { m = (await call("/api/state")).mo2 || m; } catch (e) { /* use what is known */ }
+  if (!m || m.state !== "open") return true;         // closed; or it cannot be told, and the server then decides
+  if (!window.confirm("MO2 is open on this modlist. This step changes MO2's lists, and MO2 must be closed for it.\n\nClose MO2 now?")) return false;
+  try { await call("/api/mo2/close", {}); } catch (e) { toast(e.message); return false; }
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    try { m = (await call("/api/state")).mo2; } catch (e) { continue; }
+    if (m && m.state !== "open") { state.mo2 = m; renderMo2(); return true; }
+  }
+  toast("MO2 has not closed. It may be asking you something: look at its window.");
+  return false;
+}
+
+function renderMo2() {
+  const b = $("s-mo2"), m = state.mo2;
+  b.hidden = !m;
+  if (!m) return;
+  b.className = "chip link " + (m.state === "open" ? "warn" : m.state === "closed" ? "good" : "");
+  b.textContent = m.state === "open" ? "MO2 is open · close it…" : m.state === "closed" ? "MO2 is closed · open it" : "MO2: cannot tell if it is open";
+  b.title = m.state === "open" ? "ModTrap changes MO2's lists only while MO2 is closed. Reading and dry runs work either way."
+    : m.state === "closed" ? (m.other ? "A MO2 of another modlist is running; this modlist's MO2 is closed. " : "") + "Starts this modlist's MO2, to look at the result."
+    : "ModTrap could not find out whether MO2 is running; it will not change MO2's lists until it can.";
+}
+
+async function toggleMo2() {
+  const m = state.mo2;
+  if (!m || m.state === "unknown") return;
+  try {
+    if (m.state === "open") {
+      if (!window.confirm("Close MO2 now? It is asked to close as a click on its X does.")) return;
+      await call("/api/mo2/close", {});
+      toast("MO2 was asked to close.");
+    } else {
+      await call("/api/mo2/open", {});
+      toast("MO2 is starting.");
+    }
+  } catch (e) { toast(e.message); }
+}
+
+// Who does a step: ModTrap, the owner, or ModTrap starts a tool that the owner then works in.
+function whoTag(who) {
+  return el("span", { class: "who" + (who === "you" ? " you" : who === "both" ? " both" : ""),
+    title: who === "both" ? "ModTrap starts the tool through MO2 with the button below; what is done inside the tool is yours" : "",
+    text: who === "you" ? "You" : who === "both" ? "ModTrap starts it · you run it" : "ModTrap" });
 }
 
 function el(tag, attrs, ...kids) {
@@ -334,7 +392,7 @@ function renderDemaster(force) {
     el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. “Save this session” on the Log tab packs everything about this run into one file to send when asking for help." })));
   if (d && d.state === "verified") {
     const closed = d.mo2_closed === true;
-    const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: !closed });
+    const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: d.mo2_closed == null });
     put.addEventListener("click", () => {
       if (!window.confirm("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
       put.disabled = true;
@@ -344,7 +402,7 @@ function renderDemaster(force) {
       el("p", {}, plural(d.written.length, "plugin") + " no longer need the mod: ", el("span", { class: "mono", text: d.written.join(", ") })),
       d.plan.needs_you.length ? el("p", { class: "would-needs", text: "Left to you: " + d.plan.needs_you.join(", ") + ". " + d.plan.notes.join(" ") }) : null,
       el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
-        d.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
+        d.mo2_closed === false ? "MO2 is open. An open MO2 writes its own lists back over ModTrap's, so it must be closed for this: press the button and ModTrap asks whether to close it for you." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
       el("div", { class: "actions" }, put)));
   }
   if (d && d.state === "installed" && d.check) cards.push(el("div", { class: "card" }, el("h2", { text: d.check.ok ? "The demaster is in place, and the load order is clean" : "The demaster is in place, with something to look at" }),
@@ -359,7 +417,8 @@ function renderDemaster(force) {
     });
     cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
       " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
-      el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." })));
+      el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
+      ...((j.stale || []).length ? [el("p", { class: "message bad", text: "Made again since: " + j.stale.join(", ") + ". The original changed after ModTrap demastered it (a tool has probably made it again), and ModTrap’s older copy in “" + j.mod_name + "” still wins over it. Delete ModTrap’s copy of " + (j.stale.length > 1 ? "these plugins" : "this plugin") + " from that mod’s folder, then press Rescan and look at Health." })] : [])));
   }
   box.hidden = !cards.length;
   box.replaceChildren(...cards);
@@ -920,6 +979,7 @@ const JOB_WORDS = {
 const WOULD = {
   "record": ["would be taken out", "would-record", "The dependant's own copy of one of the trapped mod's records."],
   "entry": ["entry would be taken out", "would-entry", "An entry of a list that can be shortened; the record stays."],
+  "part": ["part would be put back", "would-entry", "The plugin only carries this part on from the trapped mod. It would be put back as the plugin's remaining masters have it; the record stays."],
   "needs you": ["needs you", "would-needs", "ModTrap would not change this by itself."],
 };
 const FILE_READING = {
@@ -931,8 +991,13 @@ const FILE_READING = {
 
 // Where a part that needs the owner came from, as the dry run found it (reported only, for now: MT4).
 function cameFrom(e) {
-  if (e.came === "carried") return "  · carried on from " + e.same_as + "; without the mod this part is " + (e.without_state === "absent" ? "absent, as in " : "as in ") + e.without;
-  if (e.came === "added") return "  · added on top of what " + e.without + " has";
+  if (e.would === "part") return e.action === "take out"
+    ? "  · carried on from " + e.same_as + "; " + e.from + " has no such part: it would be taken out"
+    : "  · carried on from " + e.same_as + "; it would be put back as " + e.from + " has it";
+  if (e.would === "entry" && e.came === "added") return "  · an entry from the mod, not this plugin's own: it would be taken out";
+  if (e.would === "needs you" && e.same_as !== undefined) return e.same_as
+    ? "  · the same as in " + e.same_as + ", but ModTrap cannot tell what to put in its place"
+    : "  · this plugin's own doing, or not found in an earlier plugin";
   return "";
 }
 
@@ -1014,8 +1079,8 @@ function renderJob(job) {
           ? "A patch for the trapped mod, by its name and its few masters: without the mod it has no purpose, so it would be switched off, not changed."
           : "Every record in it belongs to the trapped mod: nothing of it would remain.") : hint }),
         el("p", { text: f.records + " records; " + f.needing + " need the trapped mod: " + f.own + " of its own records, " +
-          plural(f.entries, "list entry", "list entries") + ", " + f.needs_you + " that need you" +
-          (f.carried ? " (" + f.carried + " of them only carried on from the mod: see the records)." : ".") }));
+          plural(f.entries, "list entry", "list entries") + ", " + plural(f.parts || 0, "part") + " carried on from the mod, " +
+          f.needs_you + " that need you." }));
       const shown = f.items.slice(0, 400);
       const list = el("ul");
       for (const it of shown) {
@@ -1092,6 +1157,7 @@ function stepItem(it) {
   if (it.plugin) {
     const li = el("li", {}, pluginLink(it.plugin), el("span", { class: "dim", text: "  position " + it.position + ", in " }), modLink(it.mod));
     if (it.made_by && it.made_by.length) li.append(el("span", { class: "tag warn", title: it.how || "", text: "made by " + it.made_by.join(", ") }));
+    if (it.tool_title && !it.verdict) li.append("  ", toolButton(it.tool_title));
     if (it.verdict) li.append(el("span", { class: "tag " + (it.verdict === "needs you" ? "warn" : "good"), text: it.verdict }),
       el("span", { class: "dim", text: "  " + it.own + " of the mod's own records, " + it.entries + " list entries, " + it.needs_you + " that need you" }));
     return li;
@@ -1112,12 +1178,18 @@ function renderSteps2(d) {
     if (!isDone) open++;
     const [word, cls] = ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
     const body = el("div", {},
-      el("h3", {}, st.title, el("span", { class: "who" + (st.who === "you" ? " you" : ""), text: st.who === "you" ? "You" : "ModTrap" }),
+      el("h3", {}, st.title, whoTag(st.who),
         el("span", { class: "tag " + cls, text: word })),
       el("p", { class: "dim", text: st.why }),
       st.note ? el("p", { text: st.note }) : null,
       st.items.length ? el("ul", {}, ...st.items.slice(0, 200).map(stepItem)) : null,
       st.items.length > 200 ? el("p", { class: "dim", text: "Showing the first 200 of " + st.items.length + "." }) : null);
+    if (st.action === "demaster") {
+      const go = el("button", { type: "button", text: "Demaster Selected…" });
+      go.title = "Shows what ModTrap would do, and asks before doing it";
+      go.addEventListener("click", () => { showTab("selection"); askDemasterPlan(); });
+      body.append(el("p", {}, go, el("span", { class: "dim", text: "  ModTrap does this step for you: it shows its plan first and asks before changing anything." })));
+    }
     if (st.manual) {
       const box = el("input", { type: "checkbox", checked: ticked });
       box.addEventListener("change", () => {
@@ -1147,7 +1219,9 @@ function renderSteps2(d) {
   const carries = Object.entries(d.contents || {}).filter(([k]) => k !== "other files").map(([k, n]) => n + " " + k);
   $("steps-info").textContent = "Taking out " + d.mods.join(", ") + (d.looking ? " · still looking into the mods' folders…" : carries.length ? " · besides plugins it carries: " + carries.join(", ") : "");
   const intro = el("div", { class: "card" },
-    el("p", { text: "Everything it takes to get " + (d.mods.length === 1 ? "this mod" : "these mods") + " out of the modlist, in order. ModTrap cannot change your modlist yet, so the steps marked “You” are done by hand in MO2 and xEdit for now; ModTrap checks them against the modlist's files each time it is read." }),
+    el("p", { text: "Everything it takes to get " + (d.mods.length === 1 ? "this mod" : "these mods") + " out of the modlist, in order. " + (state.changes
+      ? "Each step says who does it: “ModTrap” steps are carried out by “Demaster Selected”, which shows its plan and asks first; “ModTrap starts it · you run it” steps have a button that starts the tool through MO2; “You” steps are things only you can do or judge. ModTrap checks the steps against the modlist's files each time it is read."
+      : "ModTrap was started without --allow-changes, so it changes nothing: the steps marked “You” are done by hand in MO2 and xEdit, and ModTrap checks them against the modlist's files each time it is read.") }),
     el("p", { class: "dim", text: "Plugins to take out: " + d.trapped.join(", ") }));
   box.replaceChildren(...[toolCard(), intro, ...cards].filter(Boolean));
 }
@@ -1430,7 +1504,7 @@ function addActionCard(d) {
     }
     for (const x of p.plugins) lines.push("Put " + x.name + " " + (x.before ? "directly before " + x.before : "at the end") + " in the load order, and activate it.");
     const closed = p.mo2_closed === true;
-    const go = el("button", { type: "button", class: "primary", text: "Go ahead", disabled: !closed || p.nothing });
+    const go = el("button", { type: "button", class: "primary", text: "Go ahead", disabled: p.mo2_closed == null || p.nothing });
     go.addEventListener("click", async () => {
       go.disabled = true;
       try {
@@ -1453,7 +1527,7 @@ function addActionCard(d) {
       p.nothing ? el("p", { text: "Nothing: every mod is enabled and every plugin active already." }) : el("ol", {}, ...lines.map((t) => el("li", { text: t }))),
       el("p", { class: "dim", text: "First the three list files of the profile are copied into the job's safe folder. Afterwards ModTrap reads the modlist again and checks it; if anything is not as planned, everything is put back. “Take it out again” undoes it later." }),
       el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
-        p.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
+        p.mo2_closed === false ? "MO2 is open. An open MO2 writes its own lists back over ModTrap's, so it must be closed for this: press the button and ModTrap asks whether to close it for you." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
       el("div", { class: "actions" }, go, closed ? null : again, cancel));
   } else {
     const b = el("button", { type: "button", class: "primary", text: "Add it for me", disabled: !state.changes || !todo || st("needs").state !== "done" || d.looking || !!probeReason() });
@@ -1538,7 +1612,7 @@ function addStepCard(st, d) {
   const waiting = !isDone && st.state.startsWith("waiting");
   const [word, cls] = ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
   const body = el("div", {},
-    el("h3", {}, st.title, el("span", { class: "who" + (st.who === "you" ? " you" : ""), text: st.who === "you" ? "You" : "ModTrap" }),
+    el("h3", {}, st.title, whoTag(st.who),
       el("span", { class: "tag " + cls, text: word })),
     el("p", { class: "dim", text: st.why }),
     st.note ? el("p", { text: st.note }) : null,
@@ -1694,6 +1768,8 @@ async function tick() {
   const was = state.status;
   state.status = s.status;
   state.changes = !!s.changes;
+  state.mo2 = s.mo2 || null;
+  renderMo2();
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
   state.save = s.save || null;
@@ -1913,6 +1989,7 @@ $("plugins-clear").addEventListener("click", clearPluginFilters);
 $("tray-review").addEventListener("click", () => showTab("selection"));
 $("tray-clear").addEventListener("click", () => { for (const n of [...state.picked]) togglePick(n, false); });
 $("s-health").addEventListener("click", () => showTab("health"));
+$("s-mo2").addEventListener("click", toggleMo2);
 $("s-tools").addEventListener("click", () => showTab("tools"));
 for (const li of $("steps").children) li.addEventListener("click", () => { if (li.dataset.tab) showTab(li.dataset.tab); });
 $("log-copy").addEventListener("click", () => copyText($("log").textContent, "The log"));
