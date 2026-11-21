@@ -6,6 +6,7 @@ from __future__ import annotations
 import inspect
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -15,9 +16,12 @@ from pathlib import Path
 from modtrap import api, changes, instance, logbook, model
 from modtrap.server import Bad
 
+from . import _fixtures as fx
 from .test_adding import invented
 from .test_intake import NEW_MOD, snapshot
 from .test_unpack import zipped
+
+FAKE = str(Path(__file__).with_name("fake_xedit.py"))
 
 
 class Switch(unittest.TestCase):
@@ -124,6 +128,113 @@ class Switch(unittest.TestCase):
         for job in ("../../somewhere", "add-1", "dry-20260101-000000", 7):
             with self.assertRaises(Bad):
                 self.api.post("/api/add/revert", {"job": job})
+
+
+class DemasterThroughThePage(unittest.TestCase):
+    """The same demaster as tests/test_demaster.py, driven by the calls the page makes (WHY§46)."""
+
+    def setUp(self) -> None:
+        logbook.set_console(False)
+        logbook.clear()
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        self.root = fx.small_list(Path(self.tmp.name) / "Example List")
+        fx.write(self.root / "ModOrganizer.exe", b"not a real program")
+        self.api = api.Api()
+        self.api.poll = 0.03
+        self.mo2_running: bool | None = False
+        self.api.running = lambda image: self.mo2_running if image == "ModOrganizer.exe" else None
+        self.tool = "clean"
+        self.api.launcher = lambda cmd, cwd: subprocess.Popen(
+            [sys.executable, FAKE, *cmd[1:-1], self.tool, "--mods", str(self.root / "mods")], cwd=cwd)
+        self.api.changes = changes.Changes(self.api)
+        self.api.open(str(self.root), wait=True)
+        self.before = snapshot(self.root)
+
+    def tearDown(self) -> None:
+        t = self.api.changes._dm_thread
+        if t is not None:
+            t.join(20)
+        self.ready()
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def ready(self) -> None:
+        for _ in range(400):
+            if self.api.status == "ready":
+                return
+            time.sleep(0.02)
+
+    def dry_run(self) -> None:
+        self.api.post("/api/dryrun/start", {"mods": ["Bramble"]})
+        self.api.job.join(20)
+        self.assertEqual(self.api.job.state, "done", self.api.job.message)
+
+    def worked(self) -> dict:
+        self.api.changes._dm_thread.join(20)
+        return self.api.state()["demaster"]
+
+    def test_without_a_dry_run_there_is_no_plan(self) -> None:
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/plan", {})
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/start", {})
+
+    def test_plan_run_put_in_place_and_revert(self) -> None:
+        self.dry_run()
+        p = self.api.post("/api/demaster/plan", {})[1]
+        self.assertEqual(sorted(x["plugin"] for x in p["demaster"]), ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"])
+        self.assertEqual((p["switch_off"], p["needs_you"], p["mod_name"]), (["BrambleLanternPatch.esp"], [], "ModTrap - Bramble"))
+        got = self.api.post("/api/demaster/start", {})[1]
+        self.assertEqual(got["state"], "working")
+        with self.assertRaises(Bad):
+            self.api.post("/api/dryrun/start", {"mods": ["Bramble"]})          # one thing at a time
+        d = self.worked()
+        self.assertEqual((d["state"], sorted(d["written"]), d["mo2_closed"]),
+                         ("verified", ["Collection - Bramble.esp", "Generated.esp", "Lantern.esp"], True))
+        self.assertEqual(snapshot(self.root), self.before)                    # verified, and still nothing changed
+        self.mo2_running = True
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/install", {})                         # MO2 is open
+        self.assertEqual(snapshot(self.root), self.before)
+        self.mo2_running = False
+        d = self.api.post("/api/demaster/install", {})[1]
+        self.ready()
+        self.assertEqual((d["state"], d["check"]["ok"]), ("installed", True))
+        m = model.build(instance.load(self.root))
+        self.assertEqual(m.issues, [])
+        self.assertFalse(m.instance.mod("Bramble").enabled)
+        self.assertEqual(m.row("Lantern.esp").source, "ModTrap - Bramble")
+        jobs = self.api.state()["demaster"]["jobs"]
+        self.assertEqual([(j["state"], j["disabled"], j["deactivated"]) for j in jobs],
+                         [("installed", ["Bramble"], ["BrambleLanternPatch.esp"])])
+        events = self.api.get("/api/history", {})[1]
+        self.assertEqual(events["events"][0]["kind"], "verified")
+        self.assertIn("mod disabled", [e["kind"] for e in events["events"]])
+        back = self.api.post("/api/demaster/revert", {"job": jobs[0]["job"]})[1]
+        self.ready()
+        self.assertGreater(back["restored"], 0)
+        self.assertEqual(snapshot(self.root), self.before)
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["state"], "reverted")
+        self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "reverted")
+
+    def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
+        self.dry_run()
+        self.tool = "touch"                       # a run that alters an original on disk
+        self.api.post("/api/demaster/start", {})
+        d = self.worked()
+        self.assertEqual(d["state"], "failed")
+        self.assertIn("not the file it was", d["message"])
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/install", {})
+
+    def test_only_this_sessions_own_demasters_can_be_reverted(self) -> None:
+        for job in ("../x", "add-20260101-000000", "demaster-1", None):
+            with self.assertRaises(Bad):
+                self.api.post("/api/demaster/revert", {"job": job})
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/revert", {"job": "demaster-20260101-000000"})
 
 
 if __name__ == "__main__":

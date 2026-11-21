@@ -68,6 +68,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 43 | 2026-11-21 | An installer's questions are asked on ModTrap's own page | METHOD | #adding #page #safety #licence |
 | 44 | 2026-11-21 | "Add it for me" and Revert on the page, behind a switch that is off | DECIDED | #adding #safety #process #page |
 | 45 | 2026-11-21 | The record check and starting the tools: built, and not behind the switch | METHOD | #adding #xedit #tools #process |
+| 46 | 2026-11-21 | "Demaster Selected" on the page behind the same switch, and a History tab | METHOD | #xedit #mo2 #safety #page #process |
 
 ## Entries
 
@@ -869,3 +870,28 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - FACT: tested with the stand-ins (the record report read and sorted; a run through the stand-in xEdit with the
   plugin unchanged; a tool that writes, one that does not, one at a time, stopping), and the whole flow driven in
   a browser on an invented list: drop, add, record check, start the tool.
+
+### 46. "Demaster Selected" on the page behind the same switch, and a History tab
+
+`2026-11-21` · METHOD · `#xedit #mo2 #safety #page #process` · refs: MT1, MT2, MT9, MT14, MT15, DESIGN§6.3, DESIGN§6.4, DESIGN§6.5, DESIGN§8, DESIGN§11, DESIGN§12, WHY§36, WHY§39, WHY§44
+
+- The owner said to carry on. WHY§39's demaster is now reachable from the page, through `modtrap/changes.py` and so
+  only with `--allow-changes` (WHY§44). Without the flag the button is greyed out and says why.
+- METHOD: the page takes it in two go-aheads, because the two halves need opposite things of MO2. First
+  "Demaster Selected" shows the plan from the finished dry run; "Go ahead" makes the safe folder, runs xEdit
+  through MO2 with the changing script, and verifies the new plugins: MO2 is in use, and nothing in the modlist
+  has changed. Then "Put them in place" asks again and needs MO2 closed: ModTrap's mod with the new plugins, the
+  patch-only plugins deactivated, the ticked mods disabled, the health check. A failure in either half says why;
+  the first changes nothing, the second puts everything back (WHY§39).
+- METHOD: the plan is only made from a dry run of the modlist as it was last read, by this start of ModTrap; after
+  a restart or a rescan the dry run is run again first. The demaster does exactly what that dry run listed.
+- METHOD: each demaster the session put in place is listed with "Revert", which works from the job's safe folder
+  alone, so also after ModTrap was closed and started again.
+- METHOD: a History tab shows the session's history file (MT15), newest first: what, when, priorities and
+  positions. Reading it needs no switch; the page's own code only reads the file.
+- FACT: tested through the page's calls with the stand-in xEdit (plan, run, verified with the modlist untouched,
+  refused while MO2 is open, put in place, the history, Revert back to byte for byte; a run that alters an
+  original stops with nothing changed), and driven in a browser on an invented list.
+- Not proven, unchanged from WHY§39: the changing script in a real xEdit, a plugin written by it, MO2 keeping the
+  lists, and telling whether MO2 is open. The order to prove them in on the owner's PC: the dry run; the record
+  check; one small add with the switch; then a demaster of a small mod, with Revert at hand.

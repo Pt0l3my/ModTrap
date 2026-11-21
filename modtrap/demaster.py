@@ -1,8 +1,9 @@
 """The demaster itself (DESIGN§6.3 to DESIGN§6.5): from a finished dry run to a modlist in which the ticked mods are
 disabled and nothing misses a master, and back again with Revert.
 
-SWITCHED OFF. Nothing the page can call reaches this module (WHY§39). It is built and tested ahead, against a
-stand-in for xEdit; before it is switched on, ModTrap's read-only script must have run on a real modlist, and this
+BEHIND A SWITCH THAT IS OFF. The page reaches this module only through modtrap/changes.py, which is loaded only
+when ModTrap is started with --allow-changes (WHY§39, WHY§46). It is built and tested against a stand-in for
+xEdit; before the switch is used for real, ModTrap's read-only script must have run on a real modlist, and this
 module's own script (ModTrapApply.pas) on the probe's invented plugins.
 
 The order, and what each step may touch:

@@ -1,7 +1,7 @@
 # Design 0001: ModTrap
 
 *2026-11-20 · Adopted as the working design under MT17; revised the same day after the owner's answers (MT4 to
-MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), the dry run (WHY§31), sessions (WHY§33), the Steps tab (WHY§35). The demaster itself is written and tested against a stand-in for xEdit but switched off (WHY§36, WHY§39): nothing the page can do writes to an instance. Adding mods (§16, MT21) is built as far as it only reads (WHY§40). Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
+MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), the dry run (WHY§31), sessions (WHY§33), the Steps tab (WHY§35). The demaster itself and the adding of a mod are written, tested against stand-ins, and on the page behind a switch that is off: only a ModTrap started with `--allow-changes` can write to an instance (WHY§39, WHY§44, WHY§46). A History tab shows what was changed (§12). Adding mods (§16, MT21) is built as far as it only reads (WHY§40). Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
 [REASONING.md](../REASONING.md), `MO01` and `XE01` are [the research notes](../research/README.md).*
 
 ## 1. What ModTrap does

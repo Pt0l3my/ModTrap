@@ -269,6 +269,142 @@ function updateDryButton() {
   b.title = locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : "";
 }
 
+// --- the demaster itself (DESIGN§6.3 to §6.5), behind the switch (WHY§46) -------------------------------------------
+
+function sameMods(a, b) { return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort()); }
+
+function updateDemasterButton() {
+  const b = $("demaster");
+  const d = state.demaster;
+  const job = state.job;
+  const dryDone = job && job.state === "done" && !job.past && sameMods(job.plan.trapped_mods, state.picked);
+  const locked = state.session && state.session.locked;
+  const going = d && (d.state === "working" || d.state === "verified");
+  b.disabled = !state.changes || !dryDone || !!locked || !!going;
+  b.title = !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC. Until then the Steps tab lists the steps to do by hand." :
+    locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : !dryDone ? "Run the dry run for these mods first: the demaster does exactly what the dry run found" :
+    going ? "A demaster is already in hand: see below" : "Shows what ModTrap would do, and asks before doing it";
+}
+
+async function askDemasterPlan() {
+  try { state.dmPlan = await api("/api/demaster/plan", {}); state.dmError = ""; }
+  catch (e) { state.dmPlan = null; state.dmError = e.message; }
+  renderDemaster(true);
+}
+
+async function demasterCall(path, body, done) {
+  try { await api(path, body || {}); state.dmError = ""; if (done) toast(done); }
+  catch (e) { state.dmError = e.message; }
+  state.dmPlan = null;
+  state.gen = (state.gen || 0) + 1;
+  await tick();
+  renderDemaster(true);
+}
+
+function renderDemaster(force) {
+  const d = state.demaster;
+  const text = JSON.stringify(d || 0) + JSON.stringify(state.dmPlan || 0) + (state.dmError || "");
+  if (!force && text === state.dmText) return;
+  state.dmText = text;
+  const box = $("demaster-box");
+  const cards = [];
+  const planList = (p) => el("dl", { class: "kv" },
+    el("dt", { text: "Taking out" }), el("dd", {}, p.mods.join(", "), el("span", { class: "dim mono", text: "  " + p.trapped.join(", ") })),
+    el("dt", { text: "Demastered" }), el("dd", {}, p.demaster.length ? p.demaster.map((x) => x.plugin + " (" + x.actions + ")").join(", ") : "none"),
+    el("dt", { text: "Switched off" }), el("dd", { text: p.switch_off.length ? p.switch_off.join(", ") + "  (patches made only for the mod: deactivated, not changed)" : "none" }),
+    el("dt", { text: "Left to you" }), el("dd", { class: p.needs_you.length ? "would-needs" : "", text: p.needs_you.length ? p.needs_you.join(", ") : "none" }),
+    el("dt", { text: "New mod" }), el("dd", { text: "“" + p.mod_name + "”, with the highest priority: it holds the demastered copies; the originals stay untouched in their own mods" }));
+  if (state.dmPlan) {
+    const p = state.dmPlan;
+    const go = el("button", { type: "button", class: "primary", text: "Go ahead" });
+    go.addEventListener("click", () => { go.disabled = true; demasterCall("/api/demaster/start", {}, "The demaster has started: xEdit opens through MO2."); });
+    const cancel = el("button", { type: "button", text: "Not now" });
+    cancel.addEventListener("click", () => { state.dmPlan = null; renderDemaster(true); });
+    cards.push(el("div", { class: "card installer" }, el("h2", { text: "What the demaster is about to do" }), planList(p),
+      el("p", { text: "First: copies of every plugin above and of the profile's three lists go into the job's safe folder. Then xEdit opens through MO2 with ModTrap's script, takes out of each plugin exactly what the dry run listed, in memory only, and writes each finished plugin as a new file in ModTrap's own folder. ModTrap checks every new file. Nothing in your modlist has changed by then: putting them in place is a second step that asks again and needs MO2 closed." }),
+      p.blocked ? el("p", { class: "would-needs", text: "Some plugins are left to you, so the mod itself will stay enabled until those no longer need it." }) : null,
+      ...p.notes.map((n) => el("p", { class: "dim", text: n })),
+      el("div", { class: "actions" }, go, cancel)));
+  }
+  if (state.dmError) cards.push(el("div", { class: "card" }, el("p", { class: "would-needs", text: state.dmError })));
+  if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
+    el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone; the Log tab shows its lines. Nothing in your modlist is changed in this step." })));
+  if (d && d.state === "failed") cards.push(el("div", { class: "card" }, el("h2", { text: "The demaster stopped" }),
+    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. The Log tab has the lines, to copy when asking for help." })));
+  if (d && d.state === "verified") {
+    const closed = d.mo2_closed === true;
+    const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: !closed });
+    put.addEventListener("click", () => {
+      if (!window.confirm("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
+      put.disabled = true;
+      demasterCall("/api/demaster/install", {}, "In place. ModTrap is reading the modlist again.");
+    });
+    cards.push(el("div", { class: "card installer" }, el("h2", { text: "The new plugins are ready and verified" }),
+      el("p", {}, plural(d.written.length, "plugin") + " no longer need the mod: ", el("span", { class: "mono", text: d.written.join(", ") })),
+      d.plan.needs_you.length ? el("p", { class: "would-needs", text: "Left to you: " + d.plan.needs_you.join(", ") + ". " + d.plan.notes.join(" ") }) : null,
+      el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
+        d.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
+      el("div", { class: "actions" }, put)));
+  }
+  if (d && d.state === "installed" && d.check) cards.push(el("div", { class: "card" }, el("h2", { text: d.check.ok ? "The demaster is in place, and the load order is clean" : "The demaster is in place, with something to look at" }),
+    d.check.new_problems.length ? el("ul", {}, ...d.check.new_problems.map((x) => el("li", { class: "would-needs", text: x[0] + " needs " + x[1] + ", which is " + (x[2] === "inactive" ? "not active" : "missing") }))) : null,
+    d.check.needs_you.length ? el("p", { class: "would-needs", text: "Still to do by you, before the mod can be disabled: " + d.check.needs_you.join(", ") }) : null,
+    el("p", { class: "dim", text: "Open MO2 and look: the new mod is at the end of the list, the patches are unticked" + (d.check.disabled ? ", and the mod is disabled" : "") + ". The Steps tab shows what is left, such as tools to run again." })));
+  for (const j of ((d && d.jobs) || []).slice(0, 12)) {
+    const undo = el("button", { type: "button", text: "Revert" });
+    undo.addEventListener("click", () => {
+      if (!window.confirm("Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed? MO2 must be closed.")) return;
+      demasterCall("/api/demaster/revert", { job: j.job }, "Put back as it was.");
+    });
+    cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
+      " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
+      el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." })));
+  }
+  box.hidden = !cards.length;
+  box.replaceChildren(...cards);
+}
+
+// --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
+
+const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
+  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "verified": "Checked" };
+
+function historyLine(e) {
+  const bits = [];
+  if (e.mod) bits.push("“" + e.mod + "”" + (e.priority != null ? ", priority " + e.priority : "") + (e.priority_before != null ? " (was " + e.priority_before + ")" : ""));
+  if (e.plugin) bits.push(e.plugin + (e.position != null ? ", position " + e.position : "") + (e.plugin_kind ? " [" + e.plugin_kind + "]" : "") + (e.mod && !bits.length ? "" : ""));
+  if (e.now_in) bits.push("new copy in “" + e.now_in + "”");
+  if (e.masters_before) bits.push("masters " + e.masters_before.join(", ") + " → " + (e.masters_after || []).join(", "));
+  if (e.before) bits.push("placed directly before " + e.before);
+  if (e.archive) bits.push("from " + e.archive);
+  if (Array.isArray(e.plugins) && e.plugins.length) bits.push("plugins: " + e.plugins.map((p) => p.name + (p.position != null ? " at " + p.position : "")).join(", "));
+  if (e.why) bits.push(e.why);
+  if (e.kind === "verified") bits.push(e.ok === false ? "something to look at" : "as planned" + (e.what ? " (" + e.what + ")" : ""));
+  if (Array.isArray(e.restored) && e.restored.length) bits.push("put back: " + e.restored.join(", "));
+  if (Array.isArray(e.left) && e.left.length) bits.push("left in place: " + e.left.join(", "));
+  return bits.join(" · ");
+}
+
+async function pollHistory() {
+  if (state.status !== "ready" || state.tab !== "history") return;
+  try {
+    const d = await api("/api/history");
+    const text = JSON.stringify(d);
+    if (text === state.historyText) return;
+    state.historyText = text;
+    const box = $("history");
+    if (!d.events.length) {
+      box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Nothing yet" }),
+        el("p", { class: "dim", text: "ModTrap has changed nothing in this modlist in this session. When it adds a mod or demasters one, every change is listed here with its date and time, the mod's priority and each plugin's place in the load order." })));
+      return;
+    }
+    box.replaceChildren(...[el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "What" }), el("th", { text: "Details" }))),
+      el("tbody", {}, ...d.events.map((e) => el("tr", {}, el("td", { class: "c-num", text: String(e.when || "").replace("T", " ") }),
+        el("td", { text: HISTORY_WORDS[e.kind] || e.kind }), el("td", { text: historyLine(e) }))))),
+      d.total > d.events.length ? el("p", { class: "dim", text: "Showing the newest " + d.events.length + " of " + d.total + "." }) : null].filter(Boolean));
+  } catch (e) { /* the next round tries again */ }
+}
+
 async function sessionCall(path, body, done) {
   try { await api(path, body); if (done) toast(done); } catch (e) { problem(e.message); }
   $("session-panel").hidden = true;
@@ -1403,6 +1539,7 @@ function showTab(name) {
   state.tab = name;
   updateTray();
   saveUi();
+  if (name === "history") { state.historyText = ""; pollHistory(); }
 }
 
 async function pollLog() {
@@ -1446,6 +1583,7 @@ async function tick() {
   const was = state.status;
   state.status = s.status;
   state.changes = !!s.changes;
+  state.demaster = s.demaster || null;
   const toolText = JSON.stringify(s.tool || null);
   if (toolText !== state.toolText) { state.toolText = toolText; state.tool = s.tool || null; state.addText = ""; state.stepsText = ""; state.stepsKey = ""; state.addKeySeen = ""; }
   renderState(s);
@@ -1464,12 +1602,15 @@ async function tick() {
   await pollJob();
   await pollSteps(false);
   await pollAdd(false);
+  renderDemaster(false);
+  updateDemasterButton();
+  await pollHistory();
   await pollLog();
 }
 
 function loop() {
   if (state.quit) return;
-  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.demaster && state.demaster.state === "working") || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 
@@ -1621,6 +1762,7 @@ $("rescan").addEventListener("click", async () => {
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("dry-run").addEventListener("click", showPlan);
+$("demaster").addEventListener("click", askDemasterPlan);
 $("job-stop").addEventListener("click", async () => {
   if (!window.confirm("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
   try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }

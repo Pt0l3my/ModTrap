@@ -394,6 +394,8 @@ class Api:
             return True
         if self.recjob is not None and self.recjob.state not in ("done", "failed", "stopped"):
             return True
+        if self.changes is not None and self.changes.busy():
+            return True
         return self.job is not None and self.job.state not in ("done", "failed", "stopped")
 
     # --- starting one of the modlist's tools through MO2 (DESIGN§16.8 step 5) ----------------------------------------
@@ -466,6 +468,25 @@ class Api:
             raise Bad("no record check is going")
         self.recjob.stop()
         return self.recjob.public()
+
+    def history_events(self) -> dict:
+        """Everything ModTrap changed in this session's modlist (MT15, DESIGN§12), newest first. Read only: the
+        file is written by the jobs that change things."""
+        s = self.session
+        events: list = []
+        if s is not None:
+            try:
+                with open(self.store.dir(s.id) / "history.jsonl", "rb") as f:
+                    for ln in f.read(64 * 1024 * 1024).decode("utf-8", "replace").splitlines():
+                        try:
+                            e = json.loads(ln)
+                        except ValueError:
+                            continue
+                        if isinstance(e, dict):
+                            events.append(e)
+            except OSError:
+                pass
+        return {"events": events[::-1][:2000], "total": len(events)}
 
     def tool_stop(self) -> dict:
         if self.tooljob is None:
@@ -872,6 +893,7 @@ class Api:
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
+        out["demaster"] = self.changes.demaster_public() if self.changes is not None else None
         settings = paths.load_settings()
         out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         out["log_epoch"] = self.log_epoch
@@ -985,6 +1007,8 @@ class Api:
             return 200, self.mod(query.get("name", ""))
         if path == "/api/job":
             return 200, self.job_state()
+        if path == "/api/history":
+            return 200, self.history_events()
         if path == "/api/log":
             try:
                 after = int(query.get("after", "0"))
