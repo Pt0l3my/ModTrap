@@ -38,6 +38,10 @@ class FakeWindows(winauto.Windows):
         self.clicked.append(hwnd)
         return True
 
+    def close(self, hwnd):
+        self.clicked.append(("close", hwnd))
+        return True
+
 
 def desk(**changes) -> FakeWindows:
     t = {
@@ -68,6 +72,18 @@ class Pressing(unittest.TestCase):
             w = desk(**change)
             self.assertFalse(winauto.press_module_selection_ok("SSEEdit64.exe", w), change)
             self.assertEqual(w.clicked, [], change)
+
+    def test_only_the_programs_own_message_is_closed(self) -> None:
+        w = FakeWindows({
+            1: {"top": True, "cls": "Qt", "text": "Invented List - Mod Organizer v2", "program": "ModOrganizer.exe"},
+            2: {"top": True, "cls": "Qt", "text": "Mod Organizer", "program": "ModOrganizer.exe"},
+            3: {"top": True, "cls": "Qt", "text": "Mod Organizer", "program": "ModOrganizer.exe", "visible": False},
+            4: {"top": True, "cls": "X", "text": "Mod Organizer", "program": "Notes.exe"},
+        })
+        self.assertTrue(winauto.close_message("modorganizer.exe", win=w))
+        self.assertEqual(w.clicked, [("close", 2)])              # not MO2's main window, not another program's
+        self.assertFalse(winauto.close_message("Other.exe", win=w))
+        self.assertFalse(winauto.close_message("ModOrganizer.exe"))          # off Windows: nothing
 
     def test_off_windows_it_does_nothing(self) -> None:
         self.assertFalse(winauto.press_module_selection_ok("SSEEdit64.exe"))

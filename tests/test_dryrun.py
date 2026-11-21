@@ -160,6 +160,17 @@ class DryRunTests(unittest.TestCase):
         state.update(xedit=True, mo2=False)
         dryrun.close_xedit("SSEEdit64.exe", running, closer, poll=0.01, mo2_was_running=False, mo2_grace=0.1)
         self.assertEqual(calls, [("SSEEdit64.exe", False)])                                # it closed by itself
+        # Its message is closed the moment it shows, and MO2 then goes by itself: no need to ask MO2 to close.
+        calls.clear()
+        state.update(xedit=True, mo2=True)
+
+        def dismiss(image):
+            calls.append(("message", image))
+            state["mo2"] = False
+            return True
+
+        dryrun.close_xedit("SSEEdit64.exe", running, closer, poll=0.01, mo2_was_running=False, mo2_grace=2, dismiss=dismiss)
+        self.assertEqual(calls, [("SSEEdit64.exe", False), ("message", dryrun.MO2_EXE)])
 
     def test_xedit_loading_none_of_the_plugins_is_a_failure_that_says_where_it_looked(self):
         job = self.run_job(tool="absent")

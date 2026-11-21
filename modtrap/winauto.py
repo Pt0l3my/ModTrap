@@ -17,6 +17,8 @@ FORM_CLASS = "TfrmModuleSelect"            # xEdit's form: xeModuleSelectForm.pa
 FORM_TITLE = "Module Selection"            # its caption: xeModuleSelectForm.dfm:5
 OK_TEXTS = ("ok", "&ok")                   # its OK button's caption: xeModuleSelectForm.dfm:36
 BM_CLICK = 0x00F5
+WM_CLOSE = 0x0010
+MO2_MESSAGE_TITLE = "Mod Organizer"        # the caption of MO2's own message boxes (the owner's PC, WHY§50)
 
 
 class Windows:
@@ -45,6 +47,10 @@ class Windows:
         return ""
 
     def click(self, hwnd: int) -> bool:
+        return False
+
+    def close(self, hwnd: int) -> bool:
+        """Asks a window to close, as a click on its X does."""
         return False
 
 
@@ -127,6 +133,9 @@ class _Real(Windows):
     def click(self, hwnd: int) -> bool:
         return bool(self.user32.PostMessageW(hwnd, BM_CLICK, 0, 0))
 
+    def close(self, hwnd: int) -> bool:
+        return bool(self.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0))
+
 
 _real: Windows | None = None
 
@@ -166,4 +175,25 @@ def press_module_selection_ok(image: str, win: Windows | None = None) -> bool:
     return False
 
 
-__all__ = ["Windows", "press_module_selection_ok", "FORM_CLASS", "FORM_TITLE"]
+def close_message(image: str, title: str = MO2_MESSAGE_TITLE, win: Windows | None = None) -> bool:
+    """Closes a message a program is showing: every visible top window of the program whose file is `image` and
+    whose caption is exactly `title` is asked to close, as a click on its X does. For the MO2 that ModTrap's own
+    command started and that stops at a message once the run is over (MO01§9, WHY§54); MO2's main window has a
+    longer caption and is not touched. True when a window was asked."""
+    win = win or _windows()
+    if win is None:
+        return False
+    asked = False
+    try:
+        for hwnd in win.top_windows():
+            if not win.visible(hwnd) or win.text(hwnd).strip() != title:
+                continue
+            if win.program_of(hwnd).casefold() != image.casefold():
+                continue
+            asked = win.close(hwnd) or asked
+    except Exception:
+        return asked
+    return asked
+
+
+__all__ = ["Windows", "press_module_selection_ok", "close_message", "FORM_CLASS", "FORM_TITLE"]

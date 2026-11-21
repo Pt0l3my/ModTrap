@@ -76,6 +76,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 51 | 2026-11-21 | xEdit's "Module Selection" window: always shown in script mode, nothing to choose, ModTrap presses OK | FACT | #xedit #page #process |
 | 52 | 2026-11-21 | The first real dry run against the guide: the same plugins, a different split; what was changed for it | FACT | #procedure #xedit #safety #process |
 | 53 | 2026-11-21 | The second real dry run stopped at a file held by another program; the scripts now bear it, and a probe pass counts only for the scripts it ran | FACT | #xedit #mo2 #safety #process |
+| 54 | 2026-11-21 | The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows | FACT | #xedit #mo2 #process |
 
 ## Entries
 
@@ -1118,3 +1119,21 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - METHOD: after asking a MO2 that stopped at a message to close, ModTrap now waits and says in the log whether it
   closed, so the next session file answers whether the request dismisses the message (WHY§50's open point). The
   wait before asking is four seconds, not eight.
+
+### 54. The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows
+
+`2026-11-21` · FACT · `#xedit #mo2 #process` · refs: XE01§13, XE01§14, XE01§15, MO01§9, DESIGN§7, WHY§50, WHY§51, WHY§52, WHY§53
+
+- The owner, with the saved session: "that MO2 still keeps coming up though it seems ModTrap completes its tasks."
+- FACT: with the scripts of WHY§52 and WHY§53 the probe passed all seven steps and the dry run read all 17
+  dependants in 90 seconds, every file unchanged. The new script code runs on the owner's xEdit; no write failed.
+  The split is the guide's: 12 patches switched off, 5 big files for demastering.
+- FACT: each of the three runs ended with MO2 at its message; ModTrap asked MO2 to close after four seconds and
+  MO2 was gone within three more ("MO2 closed when asked"). WHY§50's open point is settled: the request does
+  dismiss the message. But the message stood on the screen for some seconds every time.
+- FACT: the message cannot be prevented from ModTrap's side. It is raised inside MO2 by one of the modlist's own
+  MO2 plugins when a run that MO2 started from the command line ends (MO01§9).
+- METHOD: ModTrap now looks, several times a second once xEdit has gone, for a visible window of the MO2 it
+  started whose caption is exactly MO2's message caption, and asks that window to close. MO2's main window has
+  a longer caption and is never touched, nor is a MO2 the owner had open. The earlier request to MO2 as a whole
+  stays as the fallback. Unproven until the owner's next run.

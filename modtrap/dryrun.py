@@ -481,7 +481,8 @@ class OkPresser:
 
 def close_xedit(image: str, running: Callable[[str], bool | None], closer: Callable[[str, bool], None],
                 poll: float = 1.0, grace: float = 20.0, changed: bool = False,
-                mo2_was_running: bool | None = None, mo2_grace: float = MO2_GRACE) -> None:
+                mo2_was_running: bool | None = None, mo2_grace: float = MO2_GRACE,
+                dismiss: Callable[[str], bool] = winauto.close_message) -> None:
     """After the script's end line: xEdit is asked to close, and ended if it has not gone after `grace` seconds.
     Ending it is safe: the script has finished and written what it writes itself, and an xEdit that is ended saves
     nothing (which, after a changing run, is exactly what is wanted: WHY§4).
@@ -504,10 +505,20 @@ def close_xedit(image: str, running: Callable[[str], bool | None], closer: Calla
     if mo2_was_running is not False or running(MO2_EXE) is not True:
         return                                      # the owner's own MO2, or one that cannot be watched, or gone
     end = time.time() + mo2_grace
+    dismissed = 0
     while time.time() < end:
         if running(MO2_EXE) is not True:
             return
-        time.sleep(wait)
+        try:
+            shown = dismissed < 5 and dismiss(MO2_EXE)       # its message, the moment it shows (WHY§54)
+        except Exception:
+            shown = False
+        if shown:
+            dismissed += 1
+            if dismissed == 1:
+                log.info("MO2 showed a message once the run was over (one of its own plugins failing after a "
+                         "command-line run: nothing of ModTrap's). ModTrap closed the message.")
+        time.sleep(min(wait, 0.2))
     log.warn("MO2, started only for this run, did not close by itself: it is probably showing a message (a plugin of "
              "MO2 failing after a command-line run does that). ModTrap asks it to close; if it stays, close it yourself.")
     closer(MO2_EXE, False)
