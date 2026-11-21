@@ -161,16 +161,17 @@ class Records:
     its id in that plugin): a record's first id byte counts into the plugin's masters, and past them means the
     plugin's own (XE02).
 
-    Fields are compared as bytes. A field that points at another record is written with that record's place
-    among the plugin's own masters, so the same field can be written differently in two plugins whose master
-    lists differ: equal bytes are taken as the same value, unequal bytes are not proof of a different one."""
+    Two plugins write the same field differently where it points at another record: the pointer's last byte is
+    that record's plugin's place among the writing plugin's own masters, and master lists differ. `same_field`
+    compares with that in mind; plain equality of bytes would call such fields different, and could call two
+    fields the same that are not (WHY§65)."""
 
     def __init__(self, path: Path, seconds: float = 8.0) -> None:
         self.path, self.name = path, path.name
         h = read(path)
         masters = [m.casefold() for m in h.masters]
         own = path.name.casefold()
-        self.own = own
+        self.own, self.masters = own, masters
         self.index: dict[tuple[str, int], tuple[int, int, int, str]] = {}      # key -> offset, length, flags, type
         self.cut = False
         self._file = open(path, "rb")
@@ -228,6 +229,12 @@ class Records:
             i += 6 + size
         return out
 
+    def owner_at(self, place: int) -> str | None:
+        """The plugin a pointer's last byte names here: one of this plugin's masters, or the plugin itself."""
+        if place < len(self.masters):
+            return self.masters[place]
+        return self.own if place == len(self.masters) else None
+
     def kind_of(self, key: tuple[str, int]) -> str:
         hit = self.index.get(key)
         return hit[3] if hit else ""
@@ -244,6 +251,56 @@ class Records:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+
+def same_field(a: bytes, ra: Records, b: bytes, rb: Records) -> bool:
+    """Do two fields of the same type, one from each plugin, hold the same? Equal bytes do, when the two plugins
+    number their masters alike. Otherwise bytes may differ, or agree, only by how each plugin numbers the plugin a
+    pointer leads to. So the two are walked together, four bytes at a time from every place they could differ:
+    a byte that differs is let pass only if, in each plugin's own numbering, it names the same plugin and the
+    three bytes before it agree (a pointer's id, then its plugin). And where the plugins number their masters
+    differently, bytes that agree in such a place while naming different plugins do not count as the same.
+
+    Without knowing what each field means this cannot be exact: a number that merely looks like a pointer can be
+    misread. It errs towards "different" for fields that agree by chance, and is exact for plain values."""
+    if len(a) != len(b):
+        return False
+    if a == b:
+        if ra.masters == rb.masters or len(a) < 4 or _text_like(a):
+            return True
+        # Equal bytes under different numberings: a pointer here would lead to different plugins. Look for one.
+        for k in range(3, len(a)):
+            oa, ob = ra.owner_at(a[k]), rb.owner_at(b[k])
+            # A pointer is one in both plugins' numbering; a plain number that only looks like one in the plugin
+            # with the long master list (a decimal's last byte, say) is not.
+            if oa != ob and _pointer_like(a, k, ra) and _pointer_like(b, k, rb):
+                return False
+        return True
+    for k in range(len(a)):
+        if a[k] == b[k]:
+            continue
+        if k < 3 or a[k - 3:k] != b[k - 3:k]:
+            return False
+        oa, ob = ra.owner_at(a[k]), rb.owner_at(b[k])
+        if oa is None or oa != ob:
+            return False
+    return True
+
+
+def _text_like(data: bytes) -> bool:
+    """Is this field written text: a name, a path? Longer than a single pointer, printable to its closing zero."""
+    body = data[:-1] if data.endswith(b"\x00") else data
+    return len(data) > 4 and all(32 <= c < 127 or c in (9, 10, 13) for c in body)
+
+
+def _pointer_like(data: bytes, k: int, r: Records) -> bool:
+    """Could the four bytes ending at k be a pointer to a record? Its plugin must be one this plugin knows, its id
+    must be one a record can have (not zero, and from 0x800 up unless it points into the game's first file), and
+    it must sit where pointers sit: on a four-byte boundary of the field."""
+    if (k + 1) % 4 or r.owner_at(data[k]) is None:
+        return False
+    ident = data[k - 3] | data[k - 2] << 8 | data[k - 1] << 16
+    return ident >= 0x800 or (ident > 0 and data[k] == 0)
 
 
 def record_ids(path: Path, seconds: float = 8.0) -> tuple[set[tuple[str, int]], bool]:

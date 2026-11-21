@@ -13,8 +13,10 @@ import re
 import time
 from pathlib import Path
 
-from . import dryrun, model, plugin, tools
+from . import dryrun, logbook, model, plugin, tools
 from .instance import GAME, OVERWRITE, Instance, Mod, fold
+
+log = logbook.get("steps")
 
 WALK_FILES = 60_000            # file names listed in one mod's folder at most
 WALK_SECONDS = 4.0
@@ -377,8 +379,11 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         evidence = [{"details": d} for d in e["details"]]
         if e["run"]:
             also = (" What speaks against it: " + "; ".join(e["clear"]) + ".") if e["clear"] else ""
+            when = known.get(tool, {}).get("reads_if", "")
             step("tool:" + tool, "both" if names else "you", "Run %s again" % tool,
-                 (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also,
+                 (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also + (
+                     " A new run matters " + when + "; the evidence below shows which records these are."
+                     if when else ""),
                  "to do", [{"tool": n} for n in names] + evidence,
                  note="Run it after the demaster. Only you can tell when this is done: tick it off." if names else
                  "It is not in this MO2's list of tools; run it the way the modlist's own guide says.")
@@ -523,7 +528,13 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
         partners = [x for x in r.masters if fold(x) not in game and fold(x) not in tf]
         if len(partners) <= dryrun.PARTNERS and dryrun.named_for(r.name, trapped, names):
             sources.append((r.name, r.path, tuple(r.masters)))
-    changes: dict[tuple[str, int], dict] = {}            # record -> {"by", "kind", "fields": set of (type, bytes)}
+    # record -> {"by", "kind", "fields": [(type, bytes, the plugin that wrote them so)]}
+    changes: dict[tuple[str, int], dict] = {}
+
+    def held(field: tuple[str, bytes], src: plugin.Records, others: list[tuple[str, bytes]], there: plugin.Records) -> bool:
+        """Is this field, as `src` wrote it, among `others`, as `there` wrote them? (plugin.same_field, WHY§65)"""
+        return any(t == field[0] and plugin.same_field(field[1], src, b, there) for t, b in others)
+
     unsure = False
     try:
         for name, path, masters in sources:
@@ -536,24 +547,20 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 if key[0] == src.own:
                     continue                             # the plugin's own record: nothing else can hold it unasked
                 mine = src.fields(key) or []
-                before = None
+                before, base = None, None
                 for master in reversed([x for x in masters if fold(x) not in tf]):
-                    held = records_of(path_of(master))
-                    if held is not None and key in held.index:
-                        before = held.fields(key)
+                    base = records_of(path_of(master))
+                    if base is not None and key in base.index:
+                        before = base.fields(key)
                         break
-                if before is None:
-                    changed = set(mine)                  # no earlier version to be had: every field counts
-                else:
-                    earlier = set(before)
-                    changed = {fd for fd in mine if fd not in earlier}
-                    if not changed and len(mine) == len(before):
-                        continue                         # held, but not changed
-                    if not changed:
-                        changed = {("(a field taken out)", b"")}
-                entry = changes.setdefault(key, {"by": [], "kind": kind, "fields": set()})
+                if before is None or base is None:
+                    continue        # what the author had before them cannot be read: nothing can be said of it
+                changed = [fd for fd in mine if not held(fd, src, before, base)]
+                if not changed:
+                    continue                             # held, but not changed (a field taken out carries nothing)
+                entry = changes.setdefault(key, {"by": [], "kind": kind, "fields": []})
                 entry["by"].append(name)
-                entry["fields"] |= changed
+                entry["fields"] += [(t, b, src) for t, b in changed]
 
         # 2. What each tool-made plugin carries of that.
         outputs = []
@@ -573,17 +580,24 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 row["records"] = len(out.index)
                 for key in out.index.keys() & changes.keys():
                     ch = changes[key]
-                    theirs = set(out.fields(key) or [])
-                    same = sorted({t for (t, b) in ch["fields"] if (t, b) in theirs})
+                    theirs = out.fields(key) or []
+                    same = sorted({t for (t, b, src) in ch["fields"] if held((t, b), src, theirs, out)})
                     row["shared"] += 1
                     row["carried"] += bool(same)
                     if len(row["details"]) < DETAILS or same:
                         row["details"].append({"kind": ch["kind"], "owner": key[0], "id": "%06X" % key[1],
                                                "by": sorted(set(ch["by"])), "carried": same,
-                                               "changed": sorted({t for (t, _b) in ch["fields"]})})
+                                               "changed": sorted({t for (t, _b, _s) in ch["fields"]})})
                 row["details"].sort(key=lambda d: (not d["carried"], d["kind"], d["owner"], d["id"]))
                 del row["details"][DETAILS:]
             outputs.append(row)
+            # Into the log too, so that a saved session shows what a verdict rests on (WHY§65).
+            log.info("tools: %s (%s): holds %d record(s) the mod changes, %d with the mod's changes in them%s",
+                     r.name, ev[0].tool, row["shared"], row["carried"], " (not read to the end)" if row["cut"] else "")
+            for d in row["details"][:12]:
+                log.info("tools:   %s %s of %s, changed by %s in %s: %s", d["kind"], d["id"], d["owner"],
+                         ", ".join(d["by"]), ", ".join(d["changed"][:8]),
+                         ("carries " + ", ".join(d["carried"][:8])) if d["carried"] else "none of it carried")
     finally:
         for rec in opened.values():
             if rec is not None:

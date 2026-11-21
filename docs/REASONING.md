@@ -87,6 +87,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 62 | 2026-11-21 | New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed | METHOD | #page #safety #process |
 | 63 | 2026-11-21 | The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds | FACT | #xedit #tools #steps #process |
 | 64 | 2026-11-21 | Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold | METHOD | #tools #steps #page #process |
+| 65 | 2026-11-21 | The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm | FACT | #tools #steps #xedit #process |
 
 ## Entries
 
@@ -1412,3 +1413,27 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Shown in a browser on invented plugins: a tool whose plugin carries the mod's value is to run, one that holds
   the record with another value is named beside it as speaking against, one that holds only what the mod does
   not change is cleared; the folds open to the records. The owner's list shows what it gives there.
+- Later, 2026-11-21: the comparison of bytes in this entry raised a false alarm on the owner's list, and the
+  limit as worded here was wrong. Corrected in WHY§65 (TL01§10).
+
+### 65. The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm
+
+`2026-11-21` · FACT · `#tools #steps #xedit #process` · refs: MT17, DESIGN§6.3, DESIGN§14, XE02, TL01§9, TL01§10, WHY§61, WHY§63, WHY§64
+
+- FACT (the owner's session file): the whole demaster went through again from a clean start, in one go: five
+  plugins demastered and verified, twelve patches deactivated, two mods disabled, the check clean. Four of the
+  five lost exactly the one master. The fifth, the editor-made one, went from 113 masters to 54: xEdit's Clean
+  Masters takes off every master the plugin does not use, not only the trapped one (the guide's own step does
+  the same). A master nothing in the plugin uses does nothing in the game; the owner is told.
+- The owner, with a picture of the tool steps: "dyndolod is still there with evidence, I am surpised SDA has
+  anything to do with occulsions and the like. can you double check the logic?"
+- FACT: the logic was wrong, in the way TL01§10 describes. Comparing bytes across plugins that number their
+  masters differently made untouched fields look changed and unrelated copies look carried. WHY§64's stated
+  limit ("can miss, does not invent") was false.
+- METHOD: fields are compared with each plugin's numbering in mind (TL01§10), with tests that rebuild the false
+  alarm on invented plugins: an untouched patch no longer counts, a real change written in other bytes is found,
+  and the mod's own bytes pointing elsewhere are not taken for it. What each verdict rests on is also written
+  into the log, so a saved session shows it. For a tool whose need depends on what kind of thing changed (the
+  distant-view generator: only what is seen from afar), the step now says that.
+- Not claimed: that the comparison is exact. It is made without knowing what each field means (TL01§10's limit).
+  If a verdict still looks wrong to the owner, the log now holds the records to settle it with.

@@ -95,8 +95,8 @@ Nothing of them is copied: ModTrap keeps only names and marks, as data (`modtrap
      to run the tool.
 - **Limit, stated on the page's own terms.** Fields are compared as bytes. A field that points at another record
   is written with that record's place among the plugin's own masters, so the same value can be written
-  differently in two plugins: equal bytes are taken as the same value; unequal bytes are not proof of a
-  different one. The count can therefore miss a carried change of that kind; it does not invent one.
+  differently in two plugins. (An earlier wording here, that plain comparison of bytes "can miss a carried change
+  but does not invent one", was wrong: it invented both a change and its carrying on the owner's list. §10.)
 - **METHOD.** Each tool has one verdict, from all the evidence together: the kinds of file the mod carries that
   the tool feeds on, the changes its plugins carry, the files of its output mod at the mod's own paths. Any of
   them: run again, with what speaks against it said beside it. None: the tool is named as needing no run. The
@@ -105,3 +105,23 @@ Nothing of them is copied: ModTrap keeps only names and marks, as data (`modtrap
   sentence, is in ModTrap's tools data ('does') and is shown with the verdict: the patcher, the Bashed Patch,
   the model patcher and the distant-view generator from §2 to §5, and the behaviour engines, the body builder,
   and the distant-view generator's two companions, which have no plugin of their own to be known by.
+
+## 10. The same pointer is written differently by different plugins (the owner's list, 2026-11-21)
+
+- **FACT (the owner's list).** With §9's comparison of bytes, the distant-view generator still came out as
+  carrying changes of a dialogue mod in eleven records. The owner doubted it, rightly.
+- **FACT.** A pointer to a record is four bytes: the record's id, then the place of the record's plugin among
+  the writing plugin's own masters (XE02). Two plugins with different master lists write the same pointer with
+  a different last byte, and can write different pointers with the same bytes.
+- **FACT (how the false alarm came about).** A patch made for the mod listed its masters in another order than
+  the plugin it patches. Every field of an untouched record that held a pointer therefore differed in bytes from
+  the earlier version: "changed". The generator's plugin happened to number the same masters as the patch did,
+  so its untouched copy of the same field matched the patch's bytes: "carried". Neither had anything of the mod.
+- **METHOD.** Fields are now compared with each plugin's own numbering in mind (`plugin.same_field`): a byte
+  that differs is let pass only where it names the same plugin in both numberings and the three bytes before it
+  agree; and where the numberings differ, equal bytes that would be a pointer in both plugins, to different
+  plugins, are not the same. Written text (names, paths) is compared as written.
+- **Limit.** ModTrap does not know what each field of each record type means; xEdit does. A number that looks
+  like a pointer in both plugins can still be misread, in either direction. The evidence is therefore shown
+  record by record with the fields named, for the owner to judge, and written into the log; and for a tool whose
+  need depends on what kind of thing was changed, the step says so.
