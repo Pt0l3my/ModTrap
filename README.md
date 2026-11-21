@@ -15,6 +15,10 @@ write demastered copies of the dependants as new files, checks them, and then, w
 own with those copies, switches off the patches made only for the mod and disables the mod. Revert puts everything
 back, and a History tab lists every change. By default nothing ModTrap does changes your modlist.
 
+Before any of that is allowed on a modlist, ModTrap must pass its **probe** there (Tools tab, in a ModTrap started
+with `--allow-changes`): it does its whole work once on three tiny invented plugins in two test mods of its own, and
+removes them again. No mod of yours is touched by it.
+
 ModTrap also helps to **add** a mod: drop the mod's archive on the page. ModTrap unpacks it in its own work folder
 (a .7z or .rar needs 7-Zip installed), asks the mod's own installer questions if it has any, and tells what the mod
 needs, where it should go among the mods and in the load order, which files of which mods it would replace, which

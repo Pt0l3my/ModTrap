@@ -185,11 +185,23 @@ nothing is installed into either.
 
 ## 9. What must be proven on the owner's PC first
 
-Before any real mod is touched, a **probe**: ModTrap writes three tiny invented plugins into a test mod of its own
-(a "bad" one, and two that depend on it in the ways of cases A and B), and runs §6 on them, safe folder and Revert
-included. It proves or disproves WHY§4, WHY§5, WHY§7 and WHY§8, and it is also how ModTrap decides whether the
-owner's xEdit version is one it can work with (MT8, WHY§15). Only when the probe passes does the page allow a real
-job; it runs again when the tools change.
+Before any real mod is touched, a **probe** (built: WHY§47). From the Tools tab, in a ModTrap started with
+`--allow-changes`, one button does ModTrap's whole work once on invented plugins, with the same code real work
+uses, and undoes it:
+
+1. two test mods of ModTrap's own go into MO2, in place and enabled: a "bad" mod with one plugin, and a mod with
+   two plugins that depend on it in the ways of cases A and B (§5);
+2. the dry run through the owner's xEdit must report exactly what those plugins hold;
+3. after MO2 has run, the mod list and both plugin lists must still be as ModTrap wrote them;
+4. the changing script must write a new plugin that no longer names the bad one, and
+5. must have saved nothing over an original;
+6. putting it in place must leave a clean health check with the bad mod disabled;
+7. Revert must leave the lists as before the probe and the test mods gone.
+
+It proves or disproves WHY§4, WHY§5, WHY§7, WHY§8 and WHY§26, and it is how ModTrap decides whether the owner's
+xEdit is one it can work with (MT8, WHY§15). **Only when the probe has passed, on this modlist and with the xEdit
+now set up in MO2, do "Add it for me" and "Demaster Selected" work**; with another xEdit it is run again. A step
+that fails says what the owner's xEdit or MO2 did differently, and whatever the probe changed is put back.
 
 ## 10. Build order (proposed)
 
@@ -215,6 +227,12 @@ can only be tested on the owner's PC (WHY§6); everything around it is tested he
 - Before Revert writes, it checks that each file it would overwrite is still the one ModTrap put there (by hash). A
   file changed since by something else is not overwritten silently: the page shows it and asks.
 - Safe folders are never deleted by ModTrap by itself. The page shows their size and lets the owner delete old ones.
+- **When the lists have changed since** (WHY§47). MO2 writes its lists whenever it runs, and the owner goes on
+  using MO2 after a job. Putting the old files back would then undo their changes too, so Revert does not: it
+  takes back only ModTrap's own changes, line by line. For an add: the lines of the mod and plugins ModTrap put in
+  are taken out (a mod MO2 already had is disabled again and keeps its new place). For a demaster: the mods it
+  disabled are enabled, the plugins it deactivated are activated, the line of ModTrap's own mod is taken out and
+  the plugins it wrote are removed if still as written. Everything else in the lists stays as it is.
 
 ## 12. History
 

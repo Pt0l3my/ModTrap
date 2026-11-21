@@ -69,6 +69,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 44 | 2026-11-21 | "Add it for me" and Revert on the page, behind a switch that is off | DECIDED | #adding #safety #process #page |
 | 45 | 2026-11-21 | The record check and starting the tools: built, and not behind the switch | METHOD | #adding #xedit #tools #process |
 | 46 | 2026-11-21 | "Demaster Selected" on the page behind the same switch, and a History tab | METHOD | #xedit #mo2 #safety #page #process |
+| 47 | 2026-11-21 | The probe is built and gates real work; Revert goes line by line once MO2 has run | METHOD | #safety #mo2 #xedit #process |
 
 ## Entries
 
@@ -895,3 +896,35 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Not proven, unchanged from WHY§39: the changing script in a real xEdit, a plugin written by it, MO2 keeping the
   lists, and telling whether MO2 is open. The order to prove them in on the owner's PC: the dry run; the record
   check; one small add with the switch; then a demaster of a small mod, with Revert at hand.
+
+### 47. The probe is built and gates real work; Revert goes line by line once MO2 has run
+
+`2026-11-21` · METHOD · `#safety #mo2 #xedit #process` · refs: DESIGN§9, DESIGN§11, MT8, MT14, WHY§4, WHY§5, WHY§7, WHY§8, WHY§15, WHY§26, WHY§36, WHY§39, WHY§42, WHY§44, WHY§46, MO01§2
+
+- With everything else built, what stood between the code and the owner's PC was a list of unproven things spread
+  over WHY§39, WHY§42 and WHY§46, to be tried by hand in a set order. DESIGN§9 had named the answer from the start:
+  a probe. It is built (`modtrap/probejob.py`, a card on the Tools tab).
+- METHOD: the probe has no code of its own for changing anything. It calls the add job, the dry run, the demaster
+  and Revert exactly as real work does, on `modtrap/probe.py`'s invented plugins, so each of its seven steps
+  stands for one unproven thing (DESIGN§9). The plugins are in two mods, because a dry run needs a mod to take out
+  and something outside it that depends on it.
+- DECIDED (DESIGN§9's rule, now enforced): `--allow-changes` alone no longer lets a real job run. The probe must
+  have passed in this session's modlist with the xEdit now set up in MO2; the outcome is kept with the session.
+  The two buttons say what is missing. Tests that try the jobs themselves switch the rule off by name.
+- METHOD: a failed step names what differed, as far as it can be told: for the dry run, the value that was not
+  as expected and the name xEdit gave the list (the likeliest first failure: WHY§31's list of safe arrays holds
+  names read in xEdit's definitions, not seen in a report yet).
+- FACT, found by the probe's own test: after MO2 has rewritten a list, the safe folder's Revert refuses, rightly
+  (the file is no longer what ModTrap left), and so the probe could not clean up after "MO2 changed the order".
+  The same would meet the owner in real use: add or demaster, open MO2, later ask for Revert.
+- METHOD (DESIGN§11, added): when the whole files cannot be put back, Revert takes back ModTrap's own changes line
+  by line and leaves the rest of the lists alone. Ruled out: overwriting with the old files after a warning, which
+  would silently undo whatever the owner did in MO2 since.
+- FACT: tested with the stand-ins: the probe passes and leaves the modlist's folder file for file as before; a
+  different list name fails the dry-run step and says the name; a reordered list fails "kept" and ModTrap's lines
+  and mods are taken out while the reordering stays; MO2 open or unknown, the probe does not begin; an earlier
+  probe's mod is named, not overwritten; real work is refused before the probe and allowed after; Revert of an
+  add and of a demaster after the lists changed keeps the change and takes ModTrap's part out. Driven in a
+  browser on an invented list.
+- Not proven: the probe itself is the proof still to come. Its first real run is expected to fail somewhere, and
+  to say where.

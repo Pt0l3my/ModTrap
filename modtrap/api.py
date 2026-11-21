@@ -894,6 +894,7 @@ class Api:
                    "folder": self.folder, "profile": self.profile}
             m = self.model
         out["demaster"] = self.changes.demaster_public() if self.changes is not None else None
+        out["probe"] = self.changes.probe_public() if self.changes is not None else None
         settings = paths.load_settings()
         out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         out["log_epoch"] = self.log_epoch

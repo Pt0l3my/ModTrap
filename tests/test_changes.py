@@ -83,7 +83,7 @@ class Switch(unittest.TestCase):
         self.assertEqual(out.stdout.strip(), "[]")
 
     def test_switched_on_the_plan_says_what_would_be_done(self) -> None:
-        self.api.changes = changes.Changes(self.api)
+        self.api.changes = changes.Changes(self.api, require_probe=False)
         body = self.dropped()
         p = self.api.post("/api/add/plan", body)[1]
         self.assertEqual([(x["name"], x["staged"], x["before"]) for x in p["mods"]],
@@ -93,7 +93,7 @@ class Switch(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)               # a plan changes nothing
 
     def test_add_it_then_revert(self) -> None:
-        self.api.changes = changes.Changes(self.api)
+        self.api.changes = changes.Changes(self.api, require_probe=False)
         body = self.dropped()
         done = self.api.post("/api/add/run", body)[1]
         self.wait_ready()
@@ -113,8 +113,29 @@ class Switch(unittest.TestCase):
         got = self.settled(body)
         self.assertEqual((got["staged"][0]["state"], got["added"][0]["state"]), ("ready", "reverted"))
 
+    def test_taking_it_out_after_mo2_rewrote_the_lists_goes_line_by_line(self) -> None:
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        body = self.dropped()
+        done = self.api.post("/api/add/run", body)[1]
+        self.wait_ready()
+        pdir = self.root / "profiles" / "Default"
+        ml = pdir / "modlist.txt"
+        ml.write_bytes(ml.read_bytes() + b"-Installed Meanwhile\r\n")       # what MO2 or the owner did since
+        back = self.api.post("/api/add/revert", {"job": done["job"]})[1]
+        self.wait_ready()
+        self.assertEqual((back["left"], back["how"]), ([], "by line"))
+        text = ml.read_bytes().decode()
+        self.assertIn("-Installed Meanwhile", text)                          # theirs is kept
+        self.assertNotIn("Heather", text)                                    # ModTrap's own mod is gone
+        self.assertIn("-Thistle", text)                                      # MO2's mod is disabled again
+        self.assertFalse((self.root / "mods" / "Heather").exists())
+        plugins = (pdir / "plugins.txt").read_bytes().decode()
+        self.assertNotIn("Heather.esp", plugins)
+        self.assertIn("\r\nThistle.esp\r\n", plugins)                       # listed, no longer active
+        self.assertEqual(model.build(instance.load(self.root)).issues, [])
+
     def test_mo2_open_or_unknown_changes_nothing(self) -> None:
-        self.api.changes = changes.Changes(self.api)
+        self.api.changes = changes.Changes(self.api, require_probe=False)
         body = self.dropped()
         for state in (True, None):
             self.mo2_running = state
@@ -124,7 +145,7 @@ class Switch(unittest.TestCase):
             self.assertEqual(snapshot(self.root), self.before)
 
     def test_only_this_sessions_own_adds_can_be_reverted(self) -> None:
-        self.api.changes = changes.Changes(self.api)
+        self.api.changes = changes.Changes(self.api, require_probe=False)
         for job in ("../../somewhere", "add-1", "dry-20260101-000000", 7):
             with self.assertRaises(Bad):
                 self.api.post("/api/add/revert", {"job": job})
@@ -147,7 +168,7 @@ class DemasterThroughThePage(unittest.TestCase):
         self.tool = "clean"
         self.api.launcher = lambda cmd, cwd: subprocess.Popen(
             [sys.executable, FAKE, *cmd[1:-1], self.tool, "--mods", str(self.root / "mods")], cwd=cwd)
-        self.api.changes = changes.Changes(self.api)
+        self.api.changes = changes.Changes(self.api, require_probe=False)
         self.api.open(str(self.root), wait=True)
         self.before = snapshot(self.root)
 
@@ -218,6 +239,30 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["state"], "reverted")
         self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "reverted")
+
+    def test_revert_after_mo2_rewrote_the_lists_goes_line_by_line(self) -> None:
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        pdir = self.root / "profiles" / "Default"
+        ml = pdir / "modlist.txt"
+        ml.write_bytes(ml.read_bytes() + b"-Installed Meanwhile\r\n")
+        job = self.api.state()["demaster"]["jobs"][0]["job"]
+        back = self.api.post("/api/demaster/revert", {"job": job})[1]
+        self.ready()
+        self.assertEqual((back["how"], back["left"]), ("by line", []))
+        text = ml.read_bytes().decode()
+        self.assertIn("-Installed Meanwhile", text)
+        self.assertIn("+Bramble\r\n", text)
+        self.assertNotIn("ModTrap - Bramble", text)
+        m = model.build(instance.load(self.root))
+        self.assertEqual(m.issues, [])
+        self.assertTrue(m.row("BrambleLanternPatch.esp").active)
+        self.assertEqual(m.row("Lantern.esp").source, "Lantern")
+        self.assertFalse((self.root / "mods" / "ModTrap - Bramble").exists())
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["state"], "reverted")
 
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()

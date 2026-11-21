@@ -98,6 +98,7 @@ class AddJob:
         self._closed = closed
         self.stage = "planned"
         self.copied: list[dict] = []            # {"name", "folder", "files": {rel: size}}
+        self.how = "whole"                      # how the last Revert went: the whole files, or "by line"
         self._record = work / "copied.json"
         if self._record.is_file():
             try:
@@ -234,8 +235,15 @@ class AddJob:
     def _put_back(self) -> list[str]:
         """The lists as they were; ModTrap's own copies of mods removed where they are still exactly as copied.
         Returns the folders left in place because something else changed them since."""
+        self.how = "whole"
         if self.safe.items:
-            self.safe.revert(overwrite_foreign=False)
+            try:
+                self.safe.revert(overwrite_foreign=False)
+            except safe.Refused:
+                # The lists were changed since by something else, as MO2 does whenever it runs. Putting the old
+                # files back would undo that too; instead only ModTrap's own lines are taken out (DESIGN§11).
+                self._undo_by_line()
+                self.how = "by line"
         left: list[str] = []
         for c in self.copied:
             folder = Path(c["folder"])
@@ -253,6 +261,30 @@ class AddJob:
         self._save_copied()
         return left
 
+    def _undo_by_line(self) -> None:
+        mine = {x["name"] for x in self.copied}                      # mods this job copied in: their lines go
+        try:
+            profile.remove_plugin_lines(self.pdir, [p["name"] for p in self.plan.plugins if p["mod"] in mine])
+        except profile.Refused as e:
+            log.warn("undoing by line: %s", e)
+        back = {p["name"]: False for p in self.plan.plugins if p["mod"] not in mine}
+        for name, on in back.items():                                # plugins of mods MO2 had: inactive again
+            try:
+                profile.set_plugins(self.pdir, {name: on})
+            except profile.Refused as e:
+                log.warn("undoing by line: %s", e)
+        for x in self.plan.mods:
+            if x["enabled"]:
+                continue                                             # was enabled before: not ModTrap's doing
+            try:
+                if x["name"] in mine:
+                    profile.remove_mod_line(self.pdir, x["name"])
+                else:
+                    profile.set_mods(self.pdir, {x["name"]: False})  # disabled again; it keeps its new place
+            except profile.Refused as e:
+                log.warn("undoing by line: %s", e)
+        self.safe.mark_reverted()
+
     def revert(self) -> dict:
         if self.stage not in ("added", "failed"):
             raise Refused("there is nothing of this job to put back")
@@ -263,10 +295,11 @@ class AddJob:
         except safe.Refused as e:
             raise Refused(str(e)) from None
         self.stage = "reverted"
-        self.history.add("reverted", why="the owner asked", mods=[x["name"] for x in self.plan.mods], left=left)
+        self.history.add("reverted", why="the owner asked", mods=[x["name"] for x in self.plan.mods], left=left,
+                         how=self.how)
         paths.write_atomic(self.dir / "reverted.json", (json.dumps(
-            {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "left": left}) + "\n").encode("utf-8"))
-        return {"left": left}
+            {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "left": left, "how": self.how}) + "\n").encode("utf-8"))
+        return {"left": left, "how": self.how}
 
     @classmethod
     def reopen(cls, inst: instance.Instance, m: model.Model, work: Path, session_dir: Path,

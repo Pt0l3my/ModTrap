@@ -1,7 +1,7 @@
 """Invented plugins with real records, for the probe (DESIGN§9): the harmless test that must pass on the owner's
 PC before ModTrap touches a real mod. Every byte here is written by this module; nothing comes from a real mod.
 
-NOT USED YET: groundwork for the demaster step (WHY§36). The record layout below is the Skyrim SE plugin format as
+Used by the probe's run (modtrap/probejob.py, WHY§47). The record layout below is the Skyrim SE plugin format as
 it is widely documented (XE02 covers the header from xEdit's definitions; the records and groups are LIKELY until
 xEdit has loaded these files on the owner's PC, which is the first thing the probe shows).
 

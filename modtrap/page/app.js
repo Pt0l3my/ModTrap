@@ -280,8 +280,8 @@ function updateDemasterButton() {
   const dryDone = job && job.state === "done" && !job.past && sameMods(job.plan.trapped_mods, state.picked);
   const locked = state.session && state.session.locked;
   const going = d && (d.state === "working" || d.state === "verified");
-  b.disabled = !state.changes || !dryDone || !!locked || !!going;
-  b.title = !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC. Until then the Steps tab lists the steps to do by hand." :
+  b.disabled = !state.changes || !dryDone || !!locked || !!going || !!probeReason();
+  b.title = probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC. Until then the Steps tab lists the steps to do by hand." :
     locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : !dryDone ? "Run the dry run for these mods first: the demaster does exactly what the dry run found" :
     going ? "A demaster is already in hand: see below" : "Shows what ModTrap would do, and asks before doing it";
 }
@@ -362,6 +362,63 @@ function renderDemaster(force) {
   }
   box.hidden = !cards.length;
   box.replaceChildren(...cards);
+}
+
+// --- the probe (DESIGN§9): proving ModTrap on this PC with invented plugins, before any real mod is touched ----------
+
+const probeReason = () => (state.changes && state.probe && state.probe.needed ? state.probe.reason || "" : "");
+
+function renderProbe() {
+  const pr = state.probe;
+  const text = JSON.stringify(pr || 0) + state.changes + (state.probeError || "");
+  if (text === state.probeText) return;
+  state.probeText = text;
+  const box = $("probe-box");
+  const what = el("p", { text: "Before ModTrap changes anything real, it proves itself on this PC: it puts two test mods of its own into MO2, holding three tiny invented plugins, and does its whole work on them: a dry run through your xEdit, a demaster, putting the result in place, and Revert. Then it removes them again. No mod of yours is read into them or changed." });
+  if (!state.changes) {
+    box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Prove ModTrap on this PC" }), what,
+      el("p", { class: "dim", text: "The probe changes MO2's lists for its test mods, so it runs only when ModTrap is started with --allow-changes. Until it has passed, “Add it for me” and “Demaster Selected” stay off." })));
+    return;
+  }
+  const working = pr && pr.state === "working";
+  const go = el("button", { type: "button", class: "primary", text: pr && pr.state ? "Run the probe again" : "Run the probe", disabled: !!working || !!(state.session && state.session.locked) });
+  go.addEventListener("click", async () => {
+    go.disabled = true;
+    try { state.probe = await api("/api/probe/start", {}); state.probeError = ""; toast("The probe has started."); }
+    catch (e) { state.probeError = e.message; }
+    state.probeText = "";
+    tick();
+  });
+  const stop = el("button", { type: "button", text: "Stop" });
+  stop.addEventListener("click", async () => { try { await api("/api/probe/stop", {}); } catch (e) { toast(e.message); } tick(); });
+  const marks = { passed: ["✓", "good"], failed: ["✗", "bad"], going: ["…", "warn"], "": ["", ""] };
+  const steps = (pr && pr.steps && pr.steps.length) ? el("ul", { class: "probe-steps" }, ...pr.steps.map((st) => {
+    const [mark, cls] = marks[st.result || ""] || ["", ""];
+    return el("li", { class: st.result === "failed" ? "would-needs" : st.result ? "" : "dim" }, el("span", { class: "tag " + cls, text: mark || "·" }), " " + st.title,
+      st.detail ? el("span", { class: st.result === "failed" ? "" : "dim", text: st.result === "failed" ? ": " + st.detail : "  (" + st.detail + ")" }) : null);
+  })) : null;
+  const kids = [el("h2", {}, "Prove ModTrap on this PC",
+    pr && pr.state === "passed" ? el("span", { class: "tag good", text: "passed" + (pr.when ? " " + pr.when.replace("T", " ") : "") }) :
+    pr && pr.state === "failed" ? el("span", { class: "tag bad", text: "did not pass" }) : working ? el("span", { class: "tag warn", text: "running" }) : el("span", { class: "tag", text: "not run yet" })),
+    what,
+    el("p", { class: "dim", text: "MO2 must be closed when it starts, and stays closed except while ModTrap itself runs xEdit through it. It takes a few minutes; xEdit opens and closes twice by itself." }),
+    steps,
+    pr && pr.message ? el("p", { class: "would-needs", text: pr.message }) : null,
+    state.probeError ? el("p", { class: "would-needs", text: state.probeError }) : null,
+    pr && pr.state === "passed" ? el("p", { class: "would-record", text: "Every step passed" + (pr.xedit ? " with xEdit version number " + pr.xedit : "") + ". “Add it for me” and “Demaster Selected” are now allowed on this modlist. If you change your xEdit, run the probe again." }) : null,
+    pr && pr.state === "failed" ? el("p", { text: "ModTrap will not change real mods on this modlist while a step fails. Press “Copy the log” on the Log tab and send the lines: they say what your xEdit or MO2 did differently." }) : null];
+  if (pr && pr.left_behind && pr.left_behind.length) {
+    const rm = el("button", { type: "button", text: "Remove the test mods" });
+    rm.addEventListener("click", async () => {
+      try { const r = await api("/api/probe/cleanup", {}); toast(r.left.length ? "Still there: " + r.left.join(", ") : "The test mods are gone."); state.probeError = ""; }
+      catch (e) { state.probeError = e.message; }
+      state.probeText = "";
+      tick();
+    });
+    kids.push(el("p", { class: "would-needs" }, "Still in MO2 from the probe: " + pr.left_behind.join(", ") + ". They are invented and safe to remove; close MO2 and press  ", rm));
+  }
+  kids.push(el("div", { class: "actions" }, go, working ? stop : null));
+  box.replaceChildren(el("div", { class: "card" + (working ? " installer" : "") }, ...kids.filter(Boolean)));
 }
 
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
@@ -1345,11 +1402,11 @@ function addActionCard(d) {
         p.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
       el("div", { class: "actions" }, go, closed ? null : again, cancel));
   } else {
-    const b = el("button", { type: "button", class: "primary", text: "Add it for me", disabled: !state.changes || !todo || st("needs").state !== "done" || d.looking });
-    b.title = !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC." :
+    const b = el("button", { type: "button", class: "primary", text: "Add it for me", disabled: !state.changes || !todo || st("needs").state !== "done" || d.looking || !!probeReason() });
+    b.title = probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC." :
       st("needs").state !== "done" ? "First get what the mod needs: see step “Get what the mod needs”." : !todo ? "There is nothing left for ModTrap to do here." : "Shows what ModTrap would do, and asks before doing it";
     b.addEventListener("click", askAddPlan);
-    kids.push(el("div", { class: "actions" }, b, el("span", { class: "dim", text: !state.changes ?
+    kids.push(el("div", { class: "actions" }, b, el("span", { class: "dim", text: probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ?
       "Switched off for now: ModTrap putting the mod in for you waits until it has been proven on your modlist. The steps below say how to do it by hand." :
       "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
       state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null);
@@ -1526,7 +1583,7 @@ async function pollAdd(force) {
     }
     if (infoText !== JSON.stringify(state.stagedInfo || {}) || (d.gone && d.gone.length)) { state.stagedInfo = info; renderAddPicked(); }
     const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length + JSON.stringify(state.installers || {})
-      + JSON.stringify(state.addPlan || 0) + (state.addPlanError || "") + state.changes;
+      + JSON.stringify(state.addPlan || 0) + (state.addPlanError || "") + state.changes + probeReason();
     if (text !== state.addText) { state.addText = text; renderAdd(d); }
   } catch (e) { /* the next round tries again */ }
 }
@@ -1584,6 +1641,7 @@ async function tick() {
   state.status = s.status;
   state.changes = !!s.changes;
   state.demaster = s.demaster || null;
+  state.probe = s.probe || null;
   const toolText = JSON.stringify(s.tool || null);
   if (toolText !== state.toolText) { state.toolText = toolText; state.tool = s.tool || null; state.addText = ""; state.stepsText = ""; state.stepsKey = ""; state.addKeySeen = ""; }
   renderState(s);
@@ -1604,13 +1662,14 @@ async function tick() {
   await pollAdd(false);
   renderDemaster(false);
   updateDemasterButton();
+  renderProbe();
   await pollHistory();
   await pollLog();
 }
 
 function loop() {
   if (state.quit) return;
-  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.demaster && state.demaster.state === "working") || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.demaster && state.demaster.state === "working") || (state.probe && state.probe.state === "working") || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 

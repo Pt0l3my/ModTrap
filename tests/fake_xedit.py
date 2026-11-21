@@ -117,6 +117,21 @@ def main(argv):
         if d not in loaded:
             out.append("M\t" + d)
             continue
+        if d.startswith("ModTrap Probe - "):               # the probe's invented plugins, as xEdit should read them
+            lists = "Odd Name" if mode == "probe-odd" else "FormIDs"
+            if "Override" in d:
+                out.append("F\t%s\t3\t%s" % (d, trap[0]))
+                out.append("R\t%s\tGLOB\t00000800\t%s\t1\tMTP_BadOne" % (d, trap[0]))
+                out.append("R\t%s\tFLST\t01000801\t%s\t0\tMTP_OwnList" % (d, d))
+                out.append("E\t%s\t01000801\tFLST \\ %s \\ LNAM - FormID\t%s\t00000801\t%s" % (d, lists, trap[0], chain(
+                    ("LNAM - FormID", "etSubRecord", "dtFormID", 0, 1), (lists, "etSubRecordArray", "dtSubRecordArray", 2, 1))))
+                out.append("D\t%s\t3\t2" % d)
+            else:
+                out.append("F\t%s\t2\t%s" % (d, trap[0]))
+                out.append("R\t%s\tGLOB\t00000800\t%s\t1\tMTP_BadOne" % (d, trap[0]))
+                out.append("R\t%s\tGLOB\t00000801\t%s\t1\tMTP_BadTwo" % (d, trap[0]))
+                out.append("D\t%s\t2\t2" % d)
+            continue
         if mode == "clean" and "Patch.esp" in d:          # a patch made only for the trapped plugin
             out.append("F\t%s\t1\tSkyrim.esm,%s" % (d, trap[0]))
             out.append("R\t%s\tMISC\t05000801\t%s\t1\tInventedThing" % (d, trap[0]))
