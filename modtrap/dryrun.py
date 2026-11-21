@@ -382,24 +382,41 @@ def close_program(image: str, force: bool = False) -> None:
         pass
 
 
+MO2_GRACE = 8.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
+
+
 def close_xedit(image: str, running: Callable[[str], bool | None], closer: Callable[[str, bool], None],
-                poll: float = 1.0, grace: float = 20.0, changed: bool = False) -> None:
+                poll: float = 1.0, grace: float = 20.0, changed: bool = False,
+                mo2_was_running: bool | None = None, mo2_grace: float = MO2_GRACE) -> None:
     """After the script's end line: xEdit is asked to close, and ended if it has not gone after `grace` seconds.
     Ending it is safe: the script has finished and written what it writes itself, and an xEdit that is ended saves
-    nothing (which, after a changing run, is exactly what is wanted: WHY§4)."""
-    if running(image) is False:
-        return
-    closer(image, False)
-    if running(image) is None:
-        return                                      # cannot be watched here; the request has been made
-    end = time.time() + grace
+    nothing (which, after a changing run, is exactly what is wanted: WHY§4).
+
+    Then MO2. A MO2 that ModTrap's command started only for this run closes by itself once xEdit has gone, unless
+    it stops to show a message: one of its plugins failing at the end of a command-line run does that (MO01§9).
+    Such a MO2 is asked to close, as a click on its window's X does; never ended, and never touched if the owner
+    had it open before (`mo2_was_running`)."""
+    wait = min(max(poll, 0.05), 1.0)
+    if running(image) is not False:
+        closer(image, False)
+        if running(image) is not None:
+            end = time.time() + grace
+            while time.time() < end and running(image) is not False:
+                time.sleep(wait)
+            if running(image) is not False:
+                log.warn("xEdit did not close when asked%s; ModTrap ends it. Nothing is lost: the script had finished.",
+                         " (it may be asking whether to save)" if changed else "")
+                closer(image, True)
+    if mo2_was_running is not False or running(MO2_EXE) is not True:
+        return                                      # the owner's own MO2, or one that cannot be watched, or gone
+    end = time.time() + mo2_grace
     while time.time() < end:
-        if running(image) is False:
+        if running(MO2_EXE) is not True:
             return
-        time.sleep(min(max(poll, 0.05), 1.0))
-    log.warn("xEdit did not close when asked%s; ModTrap ends it. Nothing is lost: the script had finished.",
-             " (it may be asking whether to save)" if changed else "")
-    closer(image, True)
+        time.sleep(wait)
+    log.warn("MO2, started only for this run, did not close by itself: it is probably showing a message (a plugin of "
+             "MO2 failing after a command-line run does that). ModTrap asks it to close; if it stays, close it yourself.")
+    closer(MO2_EXE, False)
 
 
 def launch(cmd: list[str], cwd: str) -> subprocess.Popen:
@@ -492,6 +509,7 @@ class Job:
         if self._running(image):
             raise Refused("%s is already running: close it first, so that ModTrap can tell its own run from yours"
                           % image)
+        mo2_was_running = self._running(MO2_EXE)                 # False: this run's MO2 is ours to see closed
         log.info("starting %s through MO2 (profile '%s'), with ModTrap's script in report mode", p.tool, p.profile)
         log.info("command: ModOrganizer.exe -p \"%s\" run -e -a \"%s\" \"%s\"", p.profile,
                  arguments(self.dir, SCRIPT.name, p.tool_args, p.data_dir).replace('"', "'"), p.tool)
@@ -532,7 +550,7 @@ class Job:
                 raise Refused("the dry run took longer than %d minutes; ModTrap stopped waiting" % (TIME_LIMIT // 60))
         self.state = "checking"
         self.result = parse_report(_read(report))
-        close_xedit(image, self._running, self._closer, self._poll)      # it stays open after a script (XE01§11)
+        close_xedit(image, self._running, self._closer, self._poll, mo2_was_running=mo2_was_running)   # XE01§11
         # The script only read. Prove it: every dependant must still be the file that was copied (DESIGN§8).
         changed = []
         for fd in self.manifest["dependants"]:

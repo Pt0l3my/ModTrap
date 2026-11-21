@@ -72,6 +72,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 47 | 2026-11-21 | The probe is built and gates real work; Revert goes line by line once MO2 has run | METHOD | #safety #mo2 #xedit #process |
 | 48 | 2026-11-21 | "Save this session": the logs cleaned and packed into one .7z, written with Python alone | METHOD | #page #safety #licence #process |
 | 49 | 2026-11-21 | The first real run of the probe: what passed, what failed, and what was changed for it | FACT | #xedit #mo2 #adding #process |
+| 50 | 2026-11-21 | The probe passes on the owner's PC: what that proves, what it does not, and a message of MO2's | FACT | #xedit #mo2 #safety #process |
 
 ## Entries
 
@@ -1002,3 +1003,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   xEdit's own log was in it, which is what showed the wrong Data folder.
 - Not proven still: everything from step 2's reading onward (whether xEdit loads the invented plugins at all, the
   names it gives the list, MO2 keeping the lists, the changing script, Revert on the real list).
+
+### 50. The probe passes on the owner's PC: what that proves, what it does not, and a message of MO2's
+
+`2026-11-21` · FACT · `#xedit #mo2 #safety #process` · refs: DESIGN§9, DESIGN§7, DESIGN§11, DESIGN§16.3, XE01§11, XE01§12, MO01§9, WHY§4, WHY§5, WHY§7, WHY§8, WHY§26, WHY§31, WHY§34, WHY§39, WHY§42, WHY§47, WHY§49
+
+- FACT: after WHY§49's changes the owner ran the probe again and all seven steps passed, on the real modlist with
+  xEdit 4.1.5f, in about four minutes. The saved session shows each step (XE01§12, MO01§9).
+- What that settles, each an open point until now: MO2 takes a mod folder ModTrap made; MO2's command starts xEdit
+  with ModTrap's arguments, the modlist's own carried over; both scripts compile and run in xEdit; xEdit loads
+  invented plugins and names the form list as ModTrap expects (WHY§31, WHY§34); the changing script writes a
+  sound plugin and leaves xEdit nothing to save (WHY§4, WHY§39); a MO2 started by `run` keeps the lists ModTrap
+  wrote (WHY§26, for that case); ModTrap tells whether MO2 is running; closing xEdit by asking works; Revert puts
+  the real lists back whole. The placing rule of WHY§49 put the test mods right before the list's "Outputs"
+  heading and the test plugins before everything under it.
+- What it does not settle. The probe's plugins are three, tiny and tidy. A real dependant has thousands of
+  records and kinds of list the probe has none of; a real job loads far more plugins and takes far longer; what a
+  MO2 opened as a window does to the lists was not tried; nor Revert after the owner has gone on working in MO2
+  (the line-by-line path, WHY§47, tested only here). The first real dry run and the first real demaster are still
+  firsts, and their safeguards are the ones built for them: the dry run only reads, the demaster checks every new
+  plugin and every original, and Revert is at hand.
+- FACT: each time MO2 had finished a run it showed a message, "Failed to run 'xEdit64'", with an error raised by
+  one of the modlist's own MO2 plugins, and stayed open until the owner pressed OK. xEdit had run; the error comes
+  from that plugin's code for "a run has finished" (MO01§9). ModTrap waited, as built, and went on when MO2 had
+  closed.
+- METHOD: a MO2 that ModTrap's own command started, and that has not closed some seconds after xEdit has gone, is
+  now asked to close, as a click on a window's X does, with a line in the log saying so. It is never ended by
+  force, and a MO2 the owner had open before the run is never touched. LIKELY, to be seen on the owner's PC: that
+  the request dismisses the message. Ruled out: ending MO2 by force (it may be writing its settings), and
+  starting MO2's window first so that its plugins are set up (slow on a large list, and more to go wrong).
