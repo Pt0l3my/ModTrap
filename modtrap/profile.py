@@ -1,5 +1,6 @@
 """Changing a profile's lists the way MO2 itself writes them (MO01§2, WHY§16, WHY§26): enabling and disabling mods
-in `modlist.txt`, activating and deactivating plugins in `plugins.txt`, and putting a new mod at the top.
+in `modlist.txt`, activating and deactivating plugins in `plugins.txt`, putting a new mod at the top, and putting
+a mod and its plugins at a chosen place (DESIGN§16.8).
 
 NOT USED YET. Nothing in ModTrap calls this module: it is groundwork for the demaster step (WHY§36), built and tested
 ahead of it. When it is used, the rules are: MO2 must be closed (an open MO2 writes these files from memory); the
@@ -149,6 +150,59 @@ def add_mod_on_top(profile_dir: Path, name: str, enabled: bool = True, expect: s
     return change
 
 
+def place_mod(profile_dir: Path, name: str, before: str = "", enabled: bool = True,
+              expect: str | None = None) -> Change:
+    """Puts a mod at a place in the list and enables it: directly before the mod `before` as MO2 shows the list
+    by priority (one priority lower than it), or with the highest priority when `before` is "". A mod already
+    listed is moved there; one that is not is added (MO2 would add an unlisted folder at the top itself, MO01§2).
+    The file lists the highest priority first, so "before" in MO2's list is the line after `before`'s here."""
+    if not name.strip() or any(c in name for c in "\r\n") or name[0] in "+-*#":
+        raise Refused("that is not a name a mod can have in the list")
+    if before and fold(before) == fold(name):
+        raise Refused("a mod cannot be placed before itself")
+    path = profile_dir / "modlist.txt"
+    old = _read(path)
+    lines = _split(old)
+    end = b"\r\n" if not lines or lines[0].endswith(b"\r\n") else b"\n"
+    if lines and not lines[-1].endswith((b"\n", b"\r")):
+        lines[-1] += end
+
+    def listed() -> list[tuple[int, str, str]]:
+        out = []
+        for i, ln in enumerate(lines):
+            body = _body(ln)
+            if body and not body.startswith(b"#"):
+                sign, nm = (chr(body[0]), body[1:]) if body[:1] in (b"+", b"-", b"*") else ("+", body)
+                out.append((i, sign, _decode(nm).strip()))
+        return out
+
+    was_sign, was_priority = "", None
+    rows = listed()
+    for rank, (i, sign, nm) in enumerate(rows):
+        if fold(nm) == fold(name):
+            if sign == "*":
+                raise Refused("'%s' is not managed by MO2 and cannot be moved here" % name)
+            was_sign, was_priority = sign, len(rows) - 1 - rank
+            del lines[i]
+            break
+    rows = listed()
+    if before:
+        hit = next((i for i, _, nm in rows if fold(nm) == fold(before)), None)
+        if hit is None:
+            raise Refused("'%s' is not in this profile's mod list" % before)
+        at = hit + 1
+    else:
+        at = rows[0][0] if rows else len(lines)
+    lines.insert(at, ("+" if enabled else "-").encode("ascii") + name.encode("utf-8") + end)
+    rows = listed()
+    rank = next(r for r, (i, _, _nm) in enumerate(rows) if i == at)
+    change = Change(file="modlist.txt", before="", after="",
+                    lines=[{"mod": name, "from": was_sign, "to": "+" if enabled else "-",
+                            "priority": len(rows) - 1 - rank, "was": was_priority}])
+    change.before, change.after = _write(path, old, lines, expect)
+    return change
+
+
 def remove_mod_line(profile_dir: Path, name: str, expect: str | None = None) -> Change:
     """Takes a mod's line out of the list: only for a mod ModTrap itself added (Revert). The mod's folder is not
     touched here."""
@@ -205,6 +259,84 @@ def set_plugins(profile_dir: Path, wanted: dict[str, bool], expect: str | None =
         raise Refused("not in this profile's plugin list: %s" % ", ".join(sorted(missing)))
     change.before, change.after = _write(path, old, lines, expect)
     return change
+
+
+def place_plugins(profile_dir: Path, placements: list[tuple[str, str]]) -> list[Change]:
+    """Puts plugins at their places in the load order and activates them: each directly before the plugin named
+    with it, or at the end when that is "". Both of MO2's lists are written, in agreement (MO2 takes the order
+    from the newer one, MO01§2): `loadorder.txt`, which names every plugin, and `plugins.txt`, which leaves the
+    game's own out and marks the active ones. A plugin already listed is moved."""
+    lo_path, pl_path = profile_dir / "loadorder.txt", profile_dir / "plugins.txt"
+    lo_old, pl_old = _read(lo_path), _read(pl_path)
+    lo, pl = _split(lo_old), _split(pl_old)
+
+    def fix_end(lines: list[bytes]) -> bytes:
+        end = b"\r\n" if not lines or lines[0].endswith(b"\r\n") else b"\n"
+        if lines and not lines[-1].endswith((b"\n", b"\r")):
+            lines[-1] += end
+        return end
+
+    lo_end, pl_end = fix_end(lo), fix_end(pl)
+    try:
+        pl_old.decode("utf-8")
+        pl_coding = "utf-8"
+    except UnicodeDecodeError:
+        pl_coding = "cp1252"
+
+    def name_of(line: bytes, starred: bool) -> str | None:
+        body = _body(line)
+        if not body.strip() or body.lstrip().startswith(b"#"):
+            return None
+        if starred and body.startswith(b"*"):
+            body = body[1:]
+        return _decode(body).strip()
+
+    def find(lines: list[bytes], name: str, starred: bool) -> int | None:
+        return next((i for i, ln in enumerate(lines) if (n := name_of(ln, starred)) is not None
+                     and fold(n) == fold(name)), None)
+
+    lo_change = Change(file="loadorder.txt", before="", after="")
+    pl_change = Change(file="plugins.txt", before="", after="")
+    for name, before in placements:
+        if not name.strip() or any(c in name for c in "\r\n") or name[0] in "*#":
+            raise Refused("that is not a name a plugin can have in the list")
+        if before and fold(before) == fold(name):
+            raise Refused("a plugin cannot be placed before itself")
+        try:
+            pl_name = name.encode(pl_coding)
+        except UnicodeEncodeError:
+            raise Refused("the name '%s' cannot be written in the plugin list's text encoding" % name) from None
+        hit = find(lo, name, False)
+        if hit is not None:
+            del lo[hit]
+        if before:
+            at = find(lo, before, False)
+            if at is None:
+                raise Refused("'%s' is not in this profile's load order" % before)
+        else:
+            at = len(lo)
+        lo.insert(at, name.encode("utf-8") + lo_end)
+        hit = find(pl, name, True)
+        was = None
+        if hit is not None:
+            was = "active" if _body(pl[hit]).startswith(b"*") else "inactive"
+            del pl[hit]
+        # In plugins.txt: before the first plugin after it in the load order that this file names.
+        pl_at = len(pl)
+        for ln in lo[at + 1:]:
+            later = name_of(ln, False)
+            if later is not None and (j := find(pl, later, True)) is not None:
+                pl_at = j
+                break
+        pl.insert(pl_at, b"*" + pl_name + pl_end)
+        lo_change.lines.append({"plugin": name, "position": None, "before": before})
+        pl_change.lines.append({"plugin": name, "from": was or "", "to": "active", "before": before})
+    final = [fold(n) for n in (name_of(ln, False) for ln in lo) if n is not None]
+    for ln in lo_change.lines:
+        ln["position"] = final.index(fold(ln["plugin"]))        # where it ended up, once every plugin was placed
+    lo_change.before, lo_change.after = _write(lo_path, lo_old, lo, None)
+    pl_change.before, pl_change.after = _write(pl_path, pl_old, pl, None)
+    return [lo_change, pl_change]
 
 
 def checksum(path: Path) -> str:
