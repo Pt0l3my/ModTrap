@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -97,6 +98,7 @@ class AddJob:
         self._closed = closed
         self.stage = "planned"
         self.copied: list[dict] = []            # {"name", "folder", "files": {rel: size}}
+        self.how = "whole"                      # how the last Revert went: the whole files, or "by line"
         self._record = work / "copied.json"
         if self._record.is_file():
             try:
@@ -142,6 +144,10 @@ class AddJob:
             if profile.checksum(self.pdir / n) != self.plan.lists.get(n):
                 raise Refused("%s changed since this was planned; read the modlist again" % n)
         done: dict = {"mods": [], "plugins": []}
+        self.dir.mkdir(parents=True, exist_ok=True)
+        paths.write_atomic(self.dir / "plan.json", (json.dumps(
+            {"mods": self.plan.mods, "plugins": self.plan.plugins, "lists": self.plan.lists,
+             "when": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
         try:
             for n in LISTS:
                 self.safe.take(self.pdir / n)
@@ -229,8 +235,15 @@ class AddJob:
     def _put_back(self) -> list[str]:
         """The lists as they were; ModTrap's own copies of mods removed where they are still exactly as copied.
         Returns the folders left in place because something else changed them since."""
+        self.how = "whole"
         if self.safe.items:
-            self.safe.revert(overwrite_foreign=False)
+            try:
+                self.safe.revert(overwrite_foreign=False)
+            except safe.Refused:
+                # The lists were changed since by something else, as MO2 does whenever it runs. Putting the old
+                # files back would undo that too; instead only ModTrap's own lines are taken out (DESIGN§11).
+                self._undo_by_line()
+                self.how = "by line"
         left: list[str] = []
         for c in self.copied:
             folder = Path(c["folder"])
@@ -248,6 +261,30 @@ class AddJob:
         self._save_copied()
         return left
 
+    def _undo_by_line(self) -> None:
+        mine = {x["name"] for x in self.copied}                      # mods this job copied in: their lines go
+        try:
+            profile.remove_plugin_lines(self.pdir, [p["name"] for p in self.plan.plugins if p["mod"] in mine])
+        except profile.Refused as e:
+            log.warn("undoing by line: %s", e)
+        back = {p["name"]: False for p in self.plan.plugins if p["mod"] not in mine}
+        for name, on in back.items():                                # plugins of mods MO2 had: inactive again
+            try:
+                profile.set_plugins(self.pdir, {name: on})
+            except profile.Refused as e:
+                log.warn("undoing by line: %s", e)
+        for x in self.plan.mods:
+            if x["enabled"]:
+                continue                                             # was enabled before: not ModTrap's doing
+            try:
+                if x["name"] in mine:
+                    profile.remove_mod_line(self.pdir, x["name"])
+                else:
+                    profile.set_mods(self.pdir, {x["name"]: False})  # disabled again; it keeps its new place
+            except profile.Refused as e:
+                log.warn("undoing by line: %s", e)
+        self.safe.mark_reverted()
+
     def revert(self) -> dict:
         if self.stage not in ("added", "failed"):
             raise Refused("there is nothing of this job to put back")
@@ -258,8 +295,37 @@ class AddJob:
         except safe.Refused as e:
             raise Refused(str(e)) from None
         self.stage = "reverted"
-        self.history.add("reverted", why="the owner asked", mods=[x["name"] for x in self.plan.mods], left=left)
-        return {"left": left}
+        self.history.add("reverted", why="the owner asked", mods=[x["name"] for x in self.plan.mods], left=left,
+                         how=self.how)
+        paths.write_atomic(self.dir / "reverted.json", (json.dumps(
+            {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "left": left, "how": self.how}) + "\n").encode("utf-8"))
+        return {"left": left, "how": self.how}
+
+    @classmethod
+    def reopen(cls, inst: instance.Instance, m: model.Model, work: Path, session_dir: Path,
+               closed: Callable[[], bool | None]) -> "AddJob":
+        """A job that ran earlier, from its folder: for Revert."""
+        try:
+            with open(work / "plan.json", "rb") as f:
+                data = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+            the_plan = Plan(mods=list(data["mods"]), plugins=list(data["plugins"]), lists=dict(data["lists"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            raise Refused("this job's record cannot be read") from None
+        job = cls(inst, m, the_plan, work, session_dir, closed)
+        job.stage = "added" if (work / "added.json").is_file() and not (work / "reverted.json").is_file() else "reverted"
+        return job
+
+    @staticmethod
+    def summary(work: Path) -> dict | None:
+        """What a job's folder says of it, for the page: when, which mods and plugins, and whether it stands."""
+        try:
+            with open(work / "plan.json", "rb") as f:
+                data = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+        except (OSError, ValueError):
+            return None
+        state = "reverted" if (work / "reverted.json").is_file() else "added" if (work / "added.json").is_file() else "failed"
+        return {"job": work.name, "when": data.get("when", ""), "state": state,
+                "mods": [x["name"] for x in data.get("mods", [])], "plugins": [x["name"] for x in data.get("plugins", [])]}
 
 
 __all__ = ["AddJob", "Plan", "plan", "Refused"]

@@ -1,7 +1,7 @@
 # Design 0001: ModTrap
 
 *2026-11-20 · Adopted as the working design under MT17; revised the same day after the owner's answers (MT4 to
-MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), the dry run (WHY§31), sessions (WHY§33), the Steps tab (WHY§35). The demaster itself is written and tested against a stand-in for xEdit but switched off (WHY§36, WHY§39): nothing the page can do writes to an instance. Adding mods (§16, MT21) is built as far as it only reads (WHY§40). Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
+MT11, MT14, MT15, MT17, MT18). Built so far: the reader and the page (WHY§29), the dry run (WHY§31), sessions (WHY§33), the Steps tab (WHY§35). The demaster itself and the adding of a mod are written, tested against stand-ins, and on the page behind a switch that is off: only a ModTrap started with `--allow-changes` can write to an instance (WHY§39, WHY§44, WHY§46). A History tab shows what was changed (§12). Adding mods (§16, MT21) is built as far as it only reads (WHY§40). Open choices are in [DECISIONS.md](../DECISIONS.md); findings are cited by code: `WHY§n` is
 [REASONING.md](../REASONING.md), `MO01` and `XE01` are [the research notes](../research/README.md).*
 
 ## 1. What ModTrap does
@@ -185,11 +185,23 @@ nothing is installed into either.
 
 ## 9. What must be proven on the owner's PC first
 
-Before any real mod is touched, a **probe**: ModTrap writes three tiny invented plugins into a test mod of its own
-(a "bad" one, and two that depend on it in the ways of cases A and B), and runs §6 on them, safe folder and Revert
-included. It proves or disproves WHY§4, WHY§5, WHY§7 and WHY§8, and it is also how ModTrap decides whether the
-owner's xEdit version is one it can work with (MT8, WHY§15). Only when the probe passes does the page allow a real
-job; it runs again when the tools change.
+Before any real mod is touched, a **probe** (built: WHY§47). From the Tools tab, in a ModTrap started with
+`--allow-changes`, one button does ModTrap's whole work once on invented plugins, with the same code real work
+uses, and undoes it:
+
+1. two test mods of ModTrap's own go into MO2, in place and enabled: a "bad" mod with one plugin, and a mod with
+   two plugins that depend on it in the ways of cases A and B (§5);
+2. the dry run through the owner's xEdit must report exactly what those plugins hold;
+3. after MO2 has run, the mod list and both plugin lists must still be as ModTrap wrote them;
+4. the changing script must write a new plugin that no longer names the bad one, and
+5. must have saved nothing over an original;
+6. putting it in place must leave a clean health check with the bad mod disabled;
+7. Revert must leave the lists as before the probe and the test mods gone.
+
+It proves or disproves WHY§4, WHY§5, WHY§7, WHY§8 and WHY§26, and it is how ModTrap decides whether the owner's
+xEdit is one it can work with (MT8, WHY§15). **Only when the probe has passed, on this modlist and with the xEdit
+now set up in MO2, do "Add it for me" and "Demaster Selected" work**; with another xEdit it is run again. A step
+that fails says what the owner's xEdit or MO2 did differently, and whatever the probe changed is put back.
 
 ## 10. Build order (proposed)
 
@@ -215,6 +227,12 @@ can only be tested on the owner's PC (WHY§6); everything around it is tested he
 - Before Revert writes, it checks that each file it would overwrite is still the one ModTrap put there (by hash). A
   file changed since by something else is not overwritten silently: the page shows it and asks.
 - Safe folders are never deleted by ModTrap by itself. The page shows their size and lets the owner delete old ones.
+- **When the lists have changed since** (WHY§47). MO2 writes its lists whenever it runs, and the owner goes on
+  using MO2 after a job. Putting the old files back would then undo their changes too, so Revert does not: it
+  takes back only ModTrap's own changes, line by line. For an add: the lines of the mod and plugins ModTrap put in
+  are taken out (a mod MO2 already had is disabled again and keeps its new place). For a demaster: the mods it
+  disabled are enabled, the plugins it deactivated are activated, the line of ModTrap's own mod is taken out and
+  the plugins it wrote are removed if still as written. Everything else in the lists stays as it is.
 
 ## 12. History
 
@@ -311,8 +329,8 @@ history (§12).
 Beside taking mods out, ModTrap helps to put extra mods in. The owner's own way is to add a mod last and its plugin
 last; that works until the new files or records land after something that was meant to stay last, or the plugin
 needs something that is not there. This section is what ModTrap does about it. Built so far: §16.1 to §16.4, §16.6
-and §16.7, none of which changes a modlist (WHY§40, WHY§41). §16.8 is written in part and switched off (WHY§42). Not
-built: §16.5.
+and §16.7, none of which changes a modlist (WHY§40, WHY§41). §16.8's changing part is behind a switch that is off (WHY§42, WHY§44); the record check
+(§16.5) and starting the tools are built (WHY§45). None of it has run on a real modlist.
 
 ### 16.1 What is dropped
 
@@ -327,9 +345,12 @@ built: §16.5.
 - ModTrap then finds the folder in it that would become the mod: through wrapping folders and a `Data` folder, to
   the one that holds plugins or the game's usual folders. The mod's name is the archive's, without the numbers a
   download site adds.
-- **An installer that asks questions.** An archive with a `fomod` installer, or with several folders to choose
-  from, is said so and handed to MO2 for now: the owner installs it there, and ModTrap carries on from the
-  installed mod. ModTrap asking those questions on its own page is the next piece (§16.8).
+- **An installer that asks questions** (MO02). An archive with a `fomod` installer file, or with several folders
+  to choose from, is not taken as it is: ModTrap shows the installer's own questions on the Add mods tab, every
+  step that applies on one card, with what the installer recommends already chosen and the options that do not
+  suit the load order marked. The answers build the mod's folder in the session's folder, in the installer's own
+  order of files; the owner can change the answers and build it again. An installer ModTrap cannot read (an older
+  script-based one, or a damaged file) is handed to MO2: the owner installs it there and finds it by name.
 - The unpacked mod is analysed where it lies (§16.2 to §16.7), exactly as it would be once in MO2.
 - A mod MO2 has already installed is found by name, or by dropping its folder or the archive it was installed from
   (MO01§7): a page learns only the name of what was dropped, so the name is matched.
@@ -371,13 +392,20 @@ built: §16.5.
   listing of its top folder; the search has a time limit and says when it was cut short.
 - Not compared: files packed inside archives (`.bsa`). A loose file always wins over a packed one.
 
-### 16.5 Records (not built)
+### 16.5 Records
 
-- Which records the new plugin overrides, and which other plugins change the same records, only xEdit can read. It
-  can tell a script whether a record is in conflict (XE01§10). ModTrap is to read this through the same read-only
-  run as the dry run (§7) and list, for each record the new plugin takes from a patch of the modlist, what is lost;
-  from that, whether a patch is needed and for which records.
-- Until then the step list says how to look in xEdit by hand.
+- Which records the new plugin overrides, and which other plugins change the same records, only xEdit can read.
+  ModTrap starts the owner's xEdit through MO2 with a script of its own that only reports (as the dry run does, §7;
+  XE01§10), with the whole active load order loaded, since a conflict is between all plugins that hold a record.
+  The plugin must be active, so this comes after the mod is in.
+- For each overriding record the script reports xEdit's own conflict level and every plugin that holds the record,
+  in load order. ModTrap sorts them: records only the new plugin changes (or where the changes agree); records it
+  wins that other plugins also change, whose change is then lost, by plugin; records a later plugin wins; and
+  records identical to what they override.
+- "Needs a look" means: it takes records from a plugin made by hand (a patch of the modlist had settled them), or
+  loses records to one. What a tool made is settled by running the tool again (§16.6). ModTrap names the records
+  and says how a patch is made; it does not write the patch.
+- Nothing is changed: the plugins looked at are hashed before and after.
 
 ### 16.6 Tools that must run again
 
@@ -393,24 +421,27 @@ needs; enable it in its place; activate its plugins in their place; look at the 
 check the records in xEdit; run the tools again; the health check (§3); play. `python -m modtrap add FOLDER --mod
 NAME` prints the same report.
 
-### 16.8 Carrying the steps out (steps 1 to 3 written, switched off)
+### 16.8 Carrying the steps out
 
-What "Add it" is to do on its own, in order, each step in the history (§12) and undone by Revert (§11). Steps 1
-to 3 and Revert are written and tested against invented lists, and nothing the page can call reaches them
-(WHY§42); steps 4 and 5 are not built.
+What "Add it for me" does on its own, in order, each step in the history (§12) and undone by "Take it out again"
+(§11). It exists only when ModTrap is started with `--allow-changes` (WHY§42, WHY§44); the page shows the plan and
+asks before anything is done.
 
 1. With MO2 closed (§8): copy the unpacked mod into MO2's mods folder under its name, with a `meta.ini` naming the
    archive (MO01§7), so that MO2 knows it as an installed mod.
 2. Put it in its place in the mod list and enable it; put its plugins in their place and activate them (§16.3).
 3. The health check (§3).
-4. Start xEdit through MO2 for the read-only record check (§16.5), and list what it finds.
-5. For each tool that must run again (§16.6): start it through MO2 for the owner, who works it; ModTrap waits and
-   checks the tool's output afterwards.
 
-Left to the owner: an installer's questions (asked on ModTrap's own page, once that is built: the installer's
-description file names the choices and what each installs), the tools themselves, a patch where the record check
-shows one is needed, and playing. "Take it out again" disables the mod and deactivates its plugins; nothing is
-deleted (MT9).
+Then, each from its own step and without the switch, since ModTrap itself changes nothing in them (WHY§45):
+
+4. The record check (§16.5).
+5. For each tool that must run again (§16.6): "Start it through MO2" starts the tool the way MO2's own Run button
+   does (MO01§3). The owner works it; ModTrap waits for it to close, says which files in the tool's output mod, in
+   `overwrite` and among the plugins that tool made were written, and reads the modlist again.
+
+Left to the owner: an installer's questions (§16.1), working the tools, a patch where the record check shows one is
+needed, and playing. "Take it out again" disables the mod and deactivates its plugins by putting the lists back;
+nothing but ModTrap's own copy of the mod is removed (MT9, WHY§42).
 
 Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting tool's
 rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.

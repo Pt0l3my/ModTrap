@@ -1,8 +1,9 @@
 """The demaster itself (DESIGN§6.3 to DESIGN§6.5): from a finished dry run to a modlist in which the ticked mods are
 disabled and nothing misses a master, and back again with Revert.
 
-SWITCHED OFF. Nothing the page can call reaches this module (WHY§39). It is built and tested ahead, against a
-stand-in for xEdit; before it is switched on, ModTrap's read-only script must have run on a real modlist, and this
+BEHIND A SWITCH THAT IS OFF. The page reaches this module only through modtrap/changes.py, which is loaded only
+when ModTrap is started with --allow-changes (WHY§39, WHY§46). It is built and tested against a stand-in for
+xEdit; before the switch is used for real, ModTrap's read-only script must have run on a real modlist, and this
 module's own script (ModTrapApply.pas) on the probe's invented plugins.
 
 The order, and what each step may touch:
@@ -312,12 +313,45 @@ class Demaster:
             raise Refused("MO2 must be closed while ModTrap puts the mod list back")
         try:
             what = self.safe.revert(overwrite_foreign)
-        except safe.Refused as e:
-            raise Refused(str(e)) from None
+        except safe.Refused:
+            try:
+                with open(self.dir / "installed.json", "rb") as f:
+                    done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
+            except (OSError, ValueError):
+                raise Refused("the lists changed since, and this job's record cannot be read") from None
+            what = undo_by_line(self.pdir, self.safe, done)
         self.history.add("reverted", restored=[Path(p).name for p in what["restore"]],
                          removed=[Path(p).name for p in what["remove"]])
         self.stage = "reverted"
         return what
+
+
+def undo_by_line(profile_dir: Path, the_safe: safe.Safe, done: dict) -> dict:
+    """Revert for a demaster whose lists were changed since by something else, as MO2 does whenever it runs
+    (DESIGN§11): instead of putting the old files back, which would undo that too, only ModTrap's own changes are
+    taken back: the mods it disabled are enabled, the plugins it deactivated are activated, its own mod's line is
+    taken out of the list, and the plugins it wrote are removed if they are still as written. `done` is what the
+    install recorded."""
+    notes = []
+    for name in done.get("disabled", []):
+        try:
+            profile.set_mods(profile_dir, {name: True})
+        except profile.Refused as e:
+            notes.append(str(e))
+    for name in done.get("deactivated", []):
+        try:
+            profile.set_plugins(profile_dir, {name: True})
+        except profile.Refused as e:
+            notes.append(str(e))
+    if done.get("mod"):
+        try:
+            profile.remove_mod_line(profile_dir, done["mod"])
+        except profile.Refused as e:
+            notes.append(str(e))
+    left = the_safe.remove_added()
+    the_safe.mark_reverted()
+    return {"restore": [], "remove": [a["path"] for a in the_safe.added if a["path"] not in left], "left": left,
+            "notes": notes, "how": "by line"}
 
 
 def parse_report(text: str) -> dict:

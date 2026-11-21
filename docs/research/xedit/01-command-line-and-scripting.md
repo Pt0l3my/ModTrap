@@ -95,5 +95,13 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   `ConflictThisForMainRecord(record)` are answered by xEdit's script host (`xEdit/JvI/xejviScriptHost.pas:293,
   301`), and xEdit ships a script that uses them (`Build/Edit Scripts/Detect conflict between elements.pas`; read
   for what it shows of the interface, not copied).
-- **METHOD.** For DESIGN§16.5, not used yet. What the answers are worth with a load order cut down by `-P:` is to
-  be tried on the owner's PC before anything is built on them.
+- **FACT.** Both answer with a level. Over all plugins (`TConflictAll`, `Core/wbInterface.pas:449-457`): unknown,
+  only one, no conflict, benign conflict, override, conflict, critical conflict, numbered from 0. For the one
+  plugin's copy (`TConflictThis`, `:464-477`): unknown, ignored, not defined, identical to master, only one, hidden
+  by mod group, master, benign conflict, override, identical to master but wins a conflict, wins a conflict, loses
+  a conflict. The names are also given to scripts as constants (`xEdit/JvI/xejviScriptAdapter.pas:2032-2048`).
+- **FACT.** A script can walk a record's copies: `IsMaster`, `MasterOrSelf`, `OverrideCount` and `OverrideByIndex`
+  (`xEdit/JvI/xejviScriptAdapter.pas:2173-2182`).
+- **METHOD.** Used by ModTrap's record check (DESIGN§16.5, `modtrap/xedit/ModTrapRecords.pas`), which loads the
+  whole active load order. The script takes the levels as numbers and guards each call. LIKELY that the levels are
+  worked out when a script asks in an xEdit started with `-autoexit`; to be seen on the owner's PC.

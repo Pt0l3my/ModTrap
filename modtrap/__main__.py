@@ -164,6 +164,11 @@ def serve(a: argparse.Namespace) -> int:
     log.info("the page is at %s (this PC only)", url)
     # Quit (MT20): the answer is sent first, then the server stops and this program ends.
     api.on_quit = lambda: threading.Thread(target=httpd.shutdown, name="quit", daemon=True).start()
+    if a.allow_changes:
+        from . import changes                     # never imported otherwise: nothing can then change a modlist
+        api.changes = changes.Changes(api)
+        log.warn("started with --allow-changes: ModTrap may now put mods into this modlist when you press "
+                 "“Add it for me”. Every change goes through the safe folder and can be reverted.")
     if a.folder:
         api.open(a.folder, a.profile or None)
     elif not api.restore():                       # the session ModTrap was closed in comes back
@@ -194,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--no-browser", action="store_true", help="do not open the browser")
         p.add_argument("--folder", help="open this modlist folder at start")
         p.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
+        p.add_argument("--allow-changes", action="store_true",
+                       help="let ModTrap change the modlist when asked to (adding a mod, Revert); off by default")
     s = sub.add_parser("scan", help="read an instance and print a summary; writes nothing")
     s.add_argument("folder", help="the modlist's folder (the one holding ModOrganizer.ini)")
     s.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")

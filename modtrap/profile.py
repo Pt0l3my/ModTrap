@@ -339,5 +339,28 @@ def place_plugins(profile_dir: Path, placements: list[tuple[str, str]]) -> list[
     return [lo_change, pl_change]
 
 
+def remove_plugin_lines(profile_dir: Path, names: list[str]) -> list[Change]:
+    """Takes plugins out of both plugin lists: only for plugins ModTrap itself put there (undoing an add). A name
+    a list does not have is passed over."""
+    out = []
+    want = {fold(n) for n in names}
+    for fname, starred in (("loadorder.txt", False), ("plugins.txt", True)):
+        path = profile_dir / fname
+        old = _read(path)
+        lines = _split(old)
+        change = Change(file=fname, before="", after="")
+        keep = []
+        for ln in lines:
+            body = _body(ln)
+            name = body[1:] if starred and body.startswith(b"*") else body
+            if body.strip() and not body.lstrip().startswith(b"#") and fold(_decode(name).strip()) in want:
+                change.lines.append({"plugin": _decode(name).strip(), "to": ""})
+                continue
+            keep.append(ln)
+        change.before, change.after = _write(path, old, keep, None)
+        out.append(change)
+    return out
+
+
 def checksum(path: Path) -> str:
     return _sha(_read(path))

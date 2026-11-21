@@ -490,8 +490,8 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
         step("install", "ModTrap", "Put the unpacked mod%s into MO2" % ("s" if len(unpacked) > 1 else ""),
              "ModTrap has unpacked %s in its own work folder and read %s there; MO2 does not have %s yet. Putting "
              "a mod into MO2's mods folder, disabled, is the first thing ModTrap does once its part that changes a "
-             "modlist is switched on. Until then: install the same archive in MO2 yourself and leave it disabled; "
-             "everything below already holds for it." % (("them", "them", "them") if len(unpacked) > 1 else ("it", "it", "it")),
+             "modlist is switched on (“Add it for me”, above). By hand: install the same archive in MO2 yourself and "
+             "leave it disabled; everything below already holds for it." % (("them", "them", "them") if len(unpacked) > 1 else ("it", "it", "it")),
              "to do", [{"text": "%s: unpacked, %d file(s)" % (x["name"], x["files"]), "tag": "not in MO2 yet"} for x in unpacked])
 
     # 1. What the mods need.
@@ -535,8 +535,8 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
     step("enable", "you", "Enable %s in MO2, in the right place" % ("the mods" if several else "the mod"),
          "After every ordinary mod in MO2's list (so a higher priority than all of them: it wins the files it "
          "shares with them), and before what the modlist's tools made, which is made again afterwards. In MO2, "
-         "with the list sorted by priority: drag the mod %s, then tick it. ModTrap will do this itself once that "
-         "part is switched on." % where,
+         "with the list sorted by priority: drag the mod %s, then tick it. “Add it for me”, above, does this for "
+         "you when it is switched on." % where,
          "done" if not off else "waiting" if needs or unpacked else "to do", items,
          note=("Taken as tools' output, staying after it: " + ", ".join("%s (%s)" % (o["mod"], o["why"])
                                                                        for o in place["outputs"][:6])) if place["outputs"] else
@@ -562,7 +562,7 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
              "After every master it names, and before the plugins the modlist's tools made: those are built from "
              "everything above them and are meant to stay last. Placed there, the new plugin wins over the plugins "
              "made by hand, as it does when you put it last; the step on records below shows what that overrides. In "
-             "MO2: Plugins tab, tick the plugin and drag it to its place.",
+             "MO2: Plugins tab, tick the plugin and drag it to its place. “Add it for me”, above, does this too.",
              "done" if not inactive else "waiting" if off or needs else "to do", items)
 
     # 4. Files shared with other mods.
@@ -602,14 +602,15 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
 
     # 5. Records.
     if plugs:
-        step("records", "you", "Check in xEdit what the new plugin%s" % ("s override" if len(plugs) > 1 else " overrides"),
+        step("records", "ModTrap", "Check what the new plugin%s in other plugins' records" % (
+            "s override" if len(plugs) > 1 else " overrides"),
              "Two plugins that change the same record do not add up: the later one wins the whole record, and the "
              "earlier one's change to it is lost. A curated modlist carries patches that settle this between its own "
-             "mods; a new plugin placed after them takes those records back. Which records, only xEdit can read: "
-             "load the load order in xEdit, right-click the new plugin and choose “Apply Filter to show Conflicts”. "
-             "A later version of ModTrap will read this itself, through the same read-only run as the dry run, and "
-             "list the records that need a patch.",
-             "to do", note="Only you can tell when this is done: tick it off.", manual=True)
+             "mods; a new plugin placed after them takes those records back. Only xEdit can read which records: "
+             "ModTrap starts yours through MO2 with a script that only reads, and lists the records the new plugin "
+             "takes from others and those it loses. The plugin must be active first.",
+             "to do" if all(p["active"] for _, p in plugs) else "waiting",
+             note="A judgement on what it finds is yours: tick it off when you have looked.", manual=True)
 
     # 6. Tools to run again.
     for t in rep["tools"]:
@@ -623,7 +624,7 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
                      "these mods" if several else "this mod",
                      ("It applies " + t["if"] + ".") if t["if"] else
                      "Run it after the mod is enabled and its plugins are in place, so that its output takes them in."),
-                 "to do", [{"text": "“%s” in MO2's list of tools" % n} for n in names],
+                 "to do", [{"text": "“%s” in MO2's list of tools" % n, "start": n} for n in names],
                  note="Only you can tell when this is done: tick it off." if names else
                  "It is not in this MO2's list of tools; run it the way the modlist's own guide says.", manual=True)
         else:
@@ -632,7 +633,7 @@ def compile_steps(m: model.Model, rep: dict) -> list[dict]:
                  "%s %d file(s) of %s. A tool builds its output from all such files in the modlist, and that output "
                  "does not have the new ones in it until the tool runs again." % (
                      "The mods bring" if several else "The mod brings", t["count"], t["kind"]),
-                 "to do", [{"text": "“%s” in MO2's list of tools" % n} for n in names],
+                 "to do", [{"text": "“%s” in MO2's list of tools" % n, "start": n} for n in names],
                  note="Only you can tell when this is done: tick it off." if names else
                  "No tool of that kind is set up in this MO2; if you use one outside MO2, run it.", manual=True)
 

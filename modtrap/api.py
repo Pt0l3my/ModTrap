@@ -14,8 +14,8 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import (NAME, VERSION, adding, browse, dryrun, instance, locate, logbook, model, paths, plugin, sessions, steps,
-               unpack)
+from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
+               sessions, steps, toolrun, tools, unpack)
 from .server import Bad
 
 log = logbook.get("app")
@@ -97,6 +97,9 @@ class Api:
         self.session: sessions.Session | None = None
         self.log_epoch = 0                     # goes up when the log is replaced: the page then reads it afresh
         self.on_quit: Callable[[], None] | None = None
+        self.changes = None                    # the endpoints that change a modlist; None: switched off (WHY§44)
+        self.tooljob: toolrun.ToolJob | None = None
+        self.recjob: records.Job | None = None
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
 
@@ -387,7 +390,109 @@ class Api:
         return mods
 
     def _busy(self) -> bool:
+        if self.tooljob is not None and self.tooljob.state in ("starting", "running"):
+            return True
+        if self.recjob is not None and self.recjob.state not in ("done", "failed", "stopped"):
+            return True
+        if self.changes is not None and self.changes.busy():
+            return True
         return self.job is not None and self.job.state not in ("done", "failed", "stopped")
+
+    # --- starting one of the modlist's tools through MO2 (DESIGN§16.8 step 5) ----------------------------------------
+
+    def tool_start(self, body: dict) -> dict:
+        m = self._need()
+        title = body.get("title")
+        if not isinstance(title, str) or not title or len(title) > 300:
+            raise Bad("which tool to start did not arrive")
+        with self._lock:
+            if self._busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            if self._locked():
+                raise Bad(self._locked())
+            inst = m.instance
+            exe = next((e for e in inst.executables if e.title == title), None)
+            if exe is None:
+                raise Bad("“%s” is not in this MO2's list of tools" % title)
+            name, _kind = tools.of_executable(exe.title, exe.binary)
+            memo: dict = {}
+            made = [r.path for r in m.plugins.values() if r.path is not None
+                    and any(e.tool == name for e in adding.generated(m, r, memo))]
+            try:
+                job = toolrun.ToolJob(inst, title, made, launcher=self.launcher, running=self.running, poll=self.poll)
+            except toolrun.Refused as e:
+                raise Bad(str(e)) from None
+
+            def ended() -> None:
+                self.save_log()
+                if job.state == "done" and self.folder and self.status == "ready":
+                    self.open(self.folder, self.profile or None, session=self.session)   # its output, read again
+            job.on_end = ended
+            self.tooljob = job
+        job.start()
+        return job.public()
+
+    # --- the record check (DESIGN§16.5): xEdit, read-only ----------------------------------------------------------
+
+    def records_start(self, body: dict) -> dict:
+        m = self._need()
+        mods = body.get("mods")
+        if not isinstance(mods, list) or not mods or len(mods) > 20 or not all(isinstance(x, str) and x for x in mods):
+            raise Bad("which mods to check did not arrive")
+        with self._lock:
+            if self._busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            if self._locked():
+                raise Bad(self._locked())
+            s = self.session
+            try:
+                p = records.plan(m, mods)
+                base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
+                job = records.Job(m, p, records.new_job_dir(base), launcher=self.launcher, running=self.running,
+                                  poll=self.poll)
+            except (records.Refused, dryrun.Refused) as e:
+                raise Bad(str(e)) from None
+            job.on_end = self.save_log
+            self.recjob = job
+        logbook.set_masks({"<modlist>": self.folder, "<game>": str(m.instance.game_dir) if m.instance.game_dir else None,
+                           "<mods>": str(m.instance.mods_dir), "<job>": str(job.dir), "<modtrap>": str(paths.home())})
+        job.start()
+        return job.public()
+
+    def records_stop(self) -> dict:
+        if self.recjob is None:
+            raise Bad("no record check is going")
+        self.recjob.stop()
+        return self.recjob.public()
+
+    def history_events(self) -> dict:
+        """Everything ModTrap changed in this session's modlist (MT15, DESIGN§12), newest first. Read only: the
+        file is written by the jobs that change things."""
+        s = self.session
+        events: list = []
+        if s is not None:
+            try:
+                with open(self.store.dir(s.id) / "history.jsonl", "rb") as f:
+                    for ln in f.read(64 * 1024 * 1024).decode("utf-8", "replace").splitlines():
+                        try:
+                            e = json.loads(ln)
+                        except ValueError:
+                            continue
+                        if isinstance(e, dict):
+                            events.append(e)
+            except OSError:
+                pass
+        return {"events": events[::-1][:2000], "total": len(events)}
+
+    def tool_stop(self) -> dict:
+        if self.tooljob is None:
+            raise Bad("no tool was started from here")
+        self.tooljob.stop()
+        return self.tooljob.public()
 
     def dry_plan(self, body: dict) -> dict:
         if self._locked():
@@ -485,7 +590,8 @@ class Api:
     def _save_staged(self, rec: dict) -> None:
         try:
             paths.write_atomic(Path(rec["dir"]) / "staged.json", json.dumps(
-                {k: rec[k] for k in ("id", "archive", "name", "state", "note", "root", "files", "kind", "source")},
+                {k: rec.get(k, "") for k in ("id", "archive", "name", "state", "note", "root", "files", "kind", "source",
+                                             "installer", "options", "raw", "picks")},
                 ensure_ascii=False).encode("utf-8"))
         except OSError:
             pass
@@ -526,7 +632,7 @@ class Api:
         while instance.fold(name) in taken:
             name, n = "%s (%d)" % (stem, n), n + 1
         rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
-               "kind": "", "source": source, "dir": str(d)}
+               "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {}}
         self._staged[sid] = rec
         self._save_staged(rec)
         return rec
@@ -538,15 +644,19 @@ class Api:
             got = unpack.unpack(src, d / "files", self.seven_zip)
             lay = unpack.layout(d / "files")
             rec.update(kind=got["kind"], files=got["files"], root=str(lay["root"]))
-            if lay["installer"] == "fomod":
-                rec.update(state="installer", note="This mod comes with an installer that asks which parts to install. "
-                           "ModTrap cannot ask those questions yet: install it in MO2 (drag the same file onto MO2's "
-                           "Downloads tab and double-click it), leave it disabled, press Rescan here, and find it in "
-                           "the box above.")
-            elif lay["installer"] == "options":
-                rec.update(state="installer", note="This archive holds several folders to choose from (%s). ModTrap "
-                           "cannot choose for you: install it in MO2, leave it disabled, press Rescan here, and find "
-                           "it in the box above." % ", ".join(lay.get("options", [])[:6]))
+            if lay["installer"]:
+                # An installer that asks which parts to install (DESIGN§16.1): the questions are asked on the
+                # page; the answers build the mod's folder. One ModTrap cannot read is handed to MO2.
+                rec.update(state="installer", raw=str(lay["root"]), root="", picks={},
+                           installer="fomod" if lay["installer"] == "fomod" else "folders",
+                           options=list(lay.get("options", []))[:200],
+                           note="This mod asks which parts to install. Answer below; ModTrap then builds the mod "
+                                "from your answers.")
+                try:
+                    self._installer_of(rec)
+                except fomod.Unreadable as e:
+                    rec.update(installer="", note="This mod comes with an installer ModTrap cannot read (%s) Install "
+                               "it in MO2, leave it disabled, press Rescan here, and find it in the box above." % e)
             else:
                 rec.update(state="ready", note="" if lay["sure"] else
                            "ModTrap did not find the usual game folders in this archive and took it as it is. If it "
@@ -560,6 +670,76 @@ class Api:
             log.warn("add: unpacking “%s” failed: %s", rec["archive"], logbook.why(e))
         finally:
             self._save_staged(rec)
+
+    def _installer_of(self, rec: dict) -> fomod.Installer:
+        if rec.get("installer") == "fomod":
+            path = fomod.find(Path(rec["raw"]))
+            if path is None:
+                raise fomod.Unreadable("its installer file is no longer there.")
+            return fomod.read(path)
+        if rec.get("installer") == "folders":
+            return fomod.from_folders([str(x) for x in rec.get("options", [])])
+        raise fomod.Unreadable("it has no installer ModTrap can read.")
+
+    def _plugin_state(self, name: str) -> str:
+        """A plugin's standing in the load order, in an installer's words (MO02§5)."""
+        m = self.model
+        r = m.row(name) if m is not None else None
+        if r is None or r.source is None:
+            return "Missing"
+        return "Active" if r.active else "Inactive"
+
+    def _installer_rec(self, body: dict) -> tuple[dict, dict]:
+        sid = body.get("id")
+        rec = self._staged.get(sid) if isinstance(sid, str) else None
+        if rec is None or not rec.get("installer"):
+            raise Bad("that mod has no questions to answer")
+        picks = body.get("picks", {})
+        if not isinstance(picks, dict) or len(picks) > 2000 or not all(
+                isinstance(k, str) and len(k) < 20 and isinstance(v, list) and len(v) < 2000 for k, v in picks.items()):
+            raise Bad("the answers did not arrive")
+        return rec, picks
+
+    def add_installer(self, body: dict) -> dict:
+        """The installer's questions as they stand for the answers so far (DESIGN§16.1)."""
+        rec, picks = self._installer_rec(body)
+        try:
+            v = fomod.view(self._installer_of(rec), picks, self._plugin_state)
+        except fomod.Unreadable as e:
+            raise Bad(str(e)) from None
+        return {"id": rec["id"], "name": v["name"] or rec["name"], "steps": v["steps"], "problems": v["problems"],
+                "files": len(v["files"]), "state": rec["state"]}
+
+    def add_choose(self, body: dict) -> dict:
+        """Builds the mod's folder from the answers, in the session's folder; it is then analysed like any other."""
+        rec, picks = self._installer_rec(body)
+        if rec["state"] not in ("installer", "ready"):
+            raise Bad("it is not ready to be answered")
+        try:
+            v = fomod.view(self._installer_of(rec), picks, self._plugin_state)
+            if v["problems"]:
+                raise Bad(" ".join(v["problems"]))
+            d = Path(rec["dir"])
+            n = 1
+            while (d / ("built-%d" % n)).exists():
+                n += 1
+            got = fomod.build(v["files"], Path(rec["raw"]), d / ("built-%d" % n))
+        except fomod.Unreadable as e:
+            raise Bad(str(e)) from None
+        except OSError as e:
+            raise Bad("the mod could not be built from the answers: %s" % logbook.why(e)) from None
+        if not got["copied"]:
+            shutil.rmtree(d / ("built-%d" % n), ignore_errors=True)
+            raise Bad("these answers install nothing")
+        old = rec.get("root")
+        rec.update(state="ready", root=str(d / ("built-%d" % n)), picks=picks, files=got["copied"],
+                   note=("The installer names %d file(s) or folder(s) the archive does not have: %s. The mod may not "
+                         "work as meant." % (len(got["missing"]), ", ".join(got["missing"][:5]))) if got["missing"] else "")
+        if old and Path(old).parent == d and Path(old).name.startswith("built-"):
+            shutil.rmtree(old, ignore_errors=True)
+        self._save_staged(rec)
+        log.info("add: built “%s” from its installer's answers (%d files)", rec["name"], got["copied"])
+        return self._staged_public(rec)
 
     @staticmethod
     def _archive_name(name: object) -> str:
@@ -644,7 +824,10 @@ class Api:
 
     @staticmethod
     def _staged_public(rec: dict) -> dict:
-        return {k: rec[k] for k in ("id", "archive", "name", "state", "note", "files", "kind")}
+        out = {k: rec[k] for k in ("id", "archive", "name", "state", "note", "files", "kind")}
+        out["installer"] = bool(rec.get("installer"))
+        out["picks"] = rec.get("picks") or {}
+        return out
 
     def add(self, body: dict) -> dict:
         """The analysis for the mods to add (DESIGN§16). It lists file names in many folders, which takes
@@ -663,7 +846,8 @@ class Api:
         busy = any(r["state"] in ("copying", "unpacking") for r in recs)
         if not mods and not ready:
             return {"looking": False, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
-                    "summary": "Nothing to analyse yet."}
+                    "summary": "Nothing to analyse yet.",
+                    "added": self.changes.jobs() if self.changes is not None else []}
         key = (id(m), tuple(mods), tuple(r["id"] for r in ready))
         with self._lock:
             started = key in self._adding
@@ -684,9 +868,12 @@ class Api:
                     self._adding[key] = found
             threading.Thread(target=work, name="adding", daemon=True).start()
         got = self._adding.get(key)
+        added = self.changes.jobs() if self.changes is not None else []
+        rec = self.recjob.public() if self.recjob is not None else None
         if got is None:
-            return {"looking": True, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone}
-        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone)
+            return {"looking": True, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
+                    "added": added, "records": rec}
+        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone, added=added, records=rec)
 
     def job_state(self) -> dict:
         return {"job": self.job.public() if self.job else None}
@@ -702,8 +889,12 @@ class Api:
     def state(self) -> dict:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
+                   "changes": self.changes is not None,
+                   "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
+        out["demaster"] = self.changes.demaster_public() if self.changes is not None else None
+        out["probe"] = self.changes.probe_public() if self.changes is not None else None
         settings = paths.load_settings()
         out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         out["log_epoch"] = self.log_epoch
@@ -817,6 +1008,8 @@ class Api:
             return 200, self.mod(query.get("name", ""))
         if path == "/api/job":
             return 200, self.job_state()
+        if path == "/api/history":
+            return 200, self.history_events()
         if path == "/api/log":
             try:
                 after = int(query.get("after", "0"))
@@ -860,6 +1053,18 @@ class Api:
             return 200, self.add_take(body), None
         if path == "/api/add/forget":
             return 200, self.add_forget(body), None
+        if path == "/api/add/installer":
+            return 200, self.add_installer(body), None
+        if path == "/api/add/choose":
+            return 200, self.add_choose(body), None
+        if path == "/api/records/start":
+            return 200, self.records_start(body), None
+        if path == "/api/records/stop":
+            return 200, self.records_stop(), None
+        if path == "/api/tool/start":
+            return 200, self.tool_start(body), None
+        if path == "/api/tool/stop":
+            return 200, self.tool_stop(), None
         if path == "/api/job/stop":
             if self.job is None:
                 raise Bad("no dry run is going")
@@ -878,6 +1083,8 @@ class Api:
         if path == "/api/quit":
             answer, after = self.quit(body)
             return 200, answer, after
+        if self.changes is not None and path in self.changes.PATHS:
+            return 200, self.changes.post(path, body), None
         if path == "/api/rescan":
             if not self.folder:
                 raise Bad("no modlist is open")

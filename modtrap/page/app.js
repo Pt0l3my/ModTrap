@@ -269,6 +269,199 @@ function updateDryButton() {
   b.title = locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : "";
 }
 
+// --- the demaster itself (DESIGN§6.3 to §6.5), behind the switch (WHY§46) -------------------------------------------
+
+function sameMods(a, b) { return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort()); }
+
+function updateDemasterButton() {
+  const b = $("demaster");
+  const d = state.demaster;
+  const job = state.job;
+  const dryDone = job && job.state === "done" && !job.past && sameMods(job.plan.trapped_mods, state.picked);
+  const locked = state.session && state.session.locked;
+  const going = d && (d.state === "working" || d.state === "verified");
+  b.disabled = !state.changes || !dryDone || !!locked || !!going || !!probeReason();
+  b.title = probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC. Until then the Steps tab lists the steps to do by hand." :
+    locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : !dryDone ? "Run the dry run for these mods first: the demaster does exactly what the dry run found" :
+    going ? "A demaster is already in hand: see below" : "Shows what ModTrap would do, and asks before doing it";
+}
+
+async function askDemasterPlan() {
+  try { state.dmPlan = await api("/api/demaster/plan", {}); state.dmError = ""; }
+  catch (e) { state.dmPlan = null; state.dmError = e.message; }
+  renderDemaster(true);
+}
+
+async function demasterCall(path, body, done) {
+  try { await api(path, body || {}); state.dmError = ""; if (done) toast(done); }
+  catch (e) { state.dmError = e.message; }
+  state.dmPlan = null;
+  state.gen = (state.gen || 0) + 1;
+  await tick();
+  renderDemaster(true);
+}
+
+function renderDemaster(force) {
+  const d = state.demaster;
+  const text = JSON.stringify(d || 0) + JSON.stringify(state.dmPlan || 0) + (state.dmError || "");
+  if (!force && text === state.dmText) return;
+  state.dmText = text;
+  const box = $("demaster-box");
+  const cards = [];
+  const planList = (p) => el("dl", { class: "kv" },
+    el("dt", { text: "Taking out" }), el("dd", {}, p.mods.join(", "), el("span", { class: "dim mono", text: "  " + p.trapped.join(", ") })),
+    el("dt", { text: "Demastered" }), el("dd", {}, p.demaster.length ? p.demaster.map((x) => x.plugin + " (" + x.actions + ")").join(", ") : "none"),
+    el("dt", { text: "Switched off" }), el("dd", { text: p.switch_off.length ? p.switch_off.join(", ") + "  (patches made only for the mod: deactivated, not changed)" : "none" }),
+    el("dt", { text: "Left to you" }), el("dd", { class: p.needs_you.length ? "would-needs" : "", text: p.needs_you.length ? p.needs_you.join(", ") : "none" }),
+    el("dt", { text: "New mod" }), el("dd", { text: "“" + p.mod_name + "”, with the highest priority: it holds the demastered copies; the originals stay untouched in their own mods" }));
+  if (state.dmPlan) {
+    const p = state.dmPlan;
+    const go = el("button", { type: "button", class: "primary", text: "Go ahead" });
+    go.addEventListener("click", () => { go.disabled = true; demasterCall("/api/demaster/start", {}, "The demaster has started: xEdit opens through MO2."); });
+    const cancel = el("button", { type: "button", text: "Not now" });
+    cancel.addEventListener("click", () => { state.dmPlan = null; renderDemaster(true); });
+    cards.push(el("div", { class: "card installer" }, el("h2", { text: "What the demaster is about to do" }), planList(p),
+      el("p", { text: "First: copies of every plugin above and of the profile's three lists go into the job's safe folder. Then xEdit opens through MO2 with ModTrap's script, takes out of each plugin exactly what the dry run listed, in memory only, and writes each finished plugin as a new file in ModTrap's own folder. ModTrap checks every new file. Nothing in your modlist has changed by then: putting them in place is a second step that asks again and needs MO2 closed." }),
+      p.blocked ? el("p", { class: "would-needs", text: "Some plugins are left to you, so the mod itself will stay enabled until those no longer need it." }) : null,
+      ...p.notes.map((n) => el("p", { class: "dim", text: n })),
+      el("div", { class: "actions" }, go, cancel)));
+  }
+  if (state.dmError) cards.push(el("div", { class: "card" }, el("p", { class: "would-needs", text: state.dmError })));
+  if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
+    el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone; the Log tab shows its lines. Nothing in your modlist is changed in this step." })));
+  if (d && d.state === "failed") cards.push(el("div", { class: "card" }, el("h2", { text: "The demaster stopped" }),
+    el("p", { class: "would-needs", text: d.message }), el("p", { class: "dim", text: "Nothing in your modlist was changed. The Log tab has the lines, to copy when asking for help." })));
+  if (d && d.state === "verified") {
+    const closed = d.mo2_closed === true;
+    const put = el("button", { type: "button", class: "primary", text: "Put them in place", disabled: !closed });
+    put.addEventListener("click", () => {
+      if (!window.confirm("Add the mod “" + d.plan.mod_name + "” with the demastered plugins, deactivate the patches made only for the mod" + (d.plan.blocked ? "" : ", and disable " + d.plan.mods.join(", ")) + "? Revert undoes it.")) return;
+      put.disabled = true;
+      demasterCall("/api/demaster/install", {}, "In place. ModTrap is reading the modlist again.");
+    });
+    cards.push(el("div", { class: "card installer" }, el("h2", { text: "The new plugins are ready and verified" }),
+      el("p", {}, plural(d.written.length, "plugin") + " no longer need the mod: ", el("span", { class: "mono", text: d.written.join(", ") })),
+      d.plan.needs_you.length ? el("p", { class: "would-needs", text: "Left to you: " + d.plan.needs_you.join(", ") + ". " + d.plan.notes.join(" ") }) : null,
+      el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
+        d.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
+      el("div", { class: "actions" }, put)));
+  }
+  if (d && d.state === "installed" && d.check) cards.push(el("div", { class: "card" }, el("h2", { text: d.check.ok ? "The demaster is in place, and the load order is clean" : "The demaster is in place, with something to look at" }),
+    d.check.new_problems.length ? el("ul", {}, ...d.check.new_problems.map((x) => el("li", { class: "would-needs", text: x[0] + " needs " + x[1] + ", which is " + (x[2] === "inactive" ? "not active" : "missing") }))) : null,
+    d.check.needs_you.length ? el("p", { class: "would-needs", text: "Still to do by you, before the mod can be disabled: " + d.check.needs_you.join(", ") }) : null,
+    el("p", { class: "dim", text: "Open MO2 and look: the new mod is at the end of the list, the patches are unticked" + (d.check.disabled ? ", and the mod is disabled" : "") + ". The Steps tab shows what is left, such as tools to run again." })));
+  for (const j of ((d && d.jobs) || []).slice(0, 12)) {
+    const undo = el("button", { type: "button", text: "Revert" });
+    undo.addEventListener("click", () => {
+      if (!window.confirm("Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed? MO2 must be closed.")) return;
+      demasterCall("/api/demaster/revert", { job: j.job }, "Put back as it was.");
+    });
+    cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
+      " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
+      el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." })));
+  }
+  box.hidden = !cards.length;
+  box.replaceChildren(...cards);
+}
+
+// --- the probe (DESIGN§9): proving ModTrap on this PC with invented plugins, before any real mod is touched ----------
+
+const probeReason = () => (state.changes && state.probe && state.probe.needed ? state.probe.reason || "" : "");
+
+function renderProbe() {
+  const pr = state.probe;
+  const text = JSON.stringify(pr || 0) + state.changes + (state.probeError || "");
+  if (text === state.probeText) return;
+  state.probeText = text;
+  const box = $("probe-box");
+  const what = el("p", { text: "Before ModTrap changes anything real, it proves itself on this PC: it puts two test mods of its own into MO2, holding three tiny invented plugins, and does its whole work on them: a dry run through your xEdit, a demaster, putting the result in place, and Revert. Then it removes them again. No mod of yours is read into them or changed." });
+  if (!state.changes) {
+    box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Prove ModTrap on this PC" }), what,
+      el("p", { class: "dim", text: "The probe changes MO2's lists for its test mods, so it runs only when ModTrap is started with --allow-changes. Until it has passed, “Add it for me” and “Demaster Selected” stay off." })));
+    return;
+  }
+  const working = pr && pr.state === "working";
+  const go = el("button", { type: "button", class: "primary", text: pr && pr.state ? "Run the probe again" : "Run the probe", disabled: !!working || !!(state.session && state.session.locked) });
+  go.addEventListener("click", async () => {
+    go.disabled = true;
+    try { state.probe = await api("/api/probe/start", {}); state.probeError = ""; toast("The probe has started."); }
+    catch (e) { state.probeError = e.message; }
+    state.probeText = "";
+    tick();
+  });
+  const stop = el("button", { type: "button", text: "Stop" });
+  stop.addEventListener("click", async () => { try { await api("/api/probe/stop", {}); } catch (e) { toast(e.message); } tick(); });
+  const marks = { passed: ["✓", "good"], failed: ["✗", "bad"], going: ["…", "warn"], "": ["", ""] };
+  const steps = (pr && pr.steps && pr.steps.length) ? el("ul", { class: "probe-steps" }, ...pr.steps.map((st) => {
+    const [mark, cls] = marks[st.result || ""] || ["", ""];
+    return el("li", { class: st.result === "failed" ? "would-needs" : st.result ? "" : "dim" }, el("span", { class: "tag " + cls, text: mark || "·" }), " " + st.title,
+      st.detail ? el("span", { class: st.result === "failed" ? "" : "dim", text: st.result === "failed" ? ": " + st.detail : "  (" + st.detail + ")" }) : null);
+  })) : null;
+  const kids = [el("h2", {}, "Prove ModTrap on this PC",
+    pr && pr.state === "passed" ? el("span", { class: "tag good", text: "passed" + (pr.when ? " " + pr.when.replace("T", " ") : "") }) :
+    pr && pr.state === "failed" ? el("span", { class: "tag bad", text: "did not pass" }) : working ? el("span", { class: "tag warn", text: "running" }) : el("span", { class: "tag", text: "not run yet" })),
+    what,
+    el("p", { class: "dim", text: "MO2 must be closed when it starts, and stays closed except while ModTrap itself runs xEdit through it. It takes a few minutes; xEdit opens and closes twice by itself." }),
+    steps,
+    pr && pr.message ? el("p", { class: "would-needs", text: pr.message }) : null,
+    state.probeError ? el("p", { class: "would-needs", text: state.probeError }) : null,
+    pr && pr.state === "passed" ? el("p", { class: "would-record", text: "Every step passed" + (pr.xedit ? " with xEdit version number " + pr.xedit : "") + ". “Add it for me” and “Demaster Selected” are now allowed on this modlist. If you change your xEdit, run the probe again." }) : null,
+    pr && pr.state === "failed" ? el("p", { text: "ModTrap will not change real mods on this modlist while a step fails. Press “Copy the log” on the Log tab and send the lines: they say what your xEdit or MO2 did differently." }) : null];
+  if (pr && pr.left_behind && pr.left_behind.length) {
+    const rm = el("button", { type: "button", text: "Remove the test mods" });
+    rm.addEventListener("click", async () => {
+      try { const r = await api("/api/probe/cleanup", {}); toast(r.left.length ? "Still there: " + r.left.join(", ") : "The test mods are gone."); state.probeError = ""; }
+      catch (e) { state.probeError = e.message; }
+      state.probeText = "";
+      tick();
+    });
+    kids.push(el("p", { class: "would-needs" }, "Still in MO2 from the probe: " + pr.left_behind.join(", ") + ". They are invented and safe to remove; close MO2 and press  ", rm));
+  }
+  kids.push(el("div", { class: "actions" }, go, working ? stop : null));
+  box.replaceChildren(el("div", { class: "card" + (working ? " installer" : "") }, ...kids.filter(Boolean)));
+}
+
+// --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
+
+const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
+  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "verified": "Checked" };
+
+function historyLine(e) {
+  const bits = [];
+  if (e.mod) bits.push("“" + e.mod + "”" + (e.priority != null ? ", priority " + e.priority : "") + (e.priority_before != null ? " (was " + e.priority_before + ")" : ""));
+  if (e.plugin) bits.push(e.plugin + (e.position != null ? ", position " + e.position : "") + (e.plugin_kind ? " [" + e.plugin_kind + "]" : "") + (e.mod && !bits.length ? "" : ""));
+  if (e.now_in) bits.push("new copy in “" + e.now_in + "”");
+  if (e.masters_before) bits.push("masters " + e.masters_before.join(", ") + " → " + (e.masters_after || []).join(", "));
+  if (e.before) bits.push("placed directly before " + e.before);
+  if (e.archive) bits.push("from " + e.archive);
+  if (Array.isArray(e.plugins) && e.plugins.length) bits.push("plugins: " + e.plugins.map((p) => p.name + (p.position != null ? " at " + p.position : "")).join(", "));
+  if (e.why) bits.push(e.why);
+  if (e.kind === "verified") bits.push(e.ok === false ? "something to look at" : "as planned" + (e.what ? " (" + e.what + ")" : ""));
+  if (Array.isArray(e.restored) && e.restored.length) bits.push("put back: " + e.restored.join(", "));
+  if (Array.isArray(e.left) && e.left.length) bits.push("left in place: " + e.left.join(", "));
+  return bits.join(" · ");
+}
+
+async function pollHistory() {
+  if (state.status !== "ready" || state.tab !== "history") return;
+  try {
+    const d = await api("/api/history");
+    const text = JSON.stringify(d);
+    if (text === state.historyText) return;
+    state.historyText = text;
+    const box = $("history");
+    if (!d.events.length) {
+      box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Nothing yet" }),
+        el("p", { class: "dim", text: "ModTrap has changed nothing in this modlist in this session. When it adds a mod or demasters one, every change is listed here with its date and time, the mod's priority and each plugin's place in the load order." })));
+      return;
+    }
+    box.replaceChildren(...[el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "What" }), el("th", { text: "Details" }))),
+      el("tbody", {}, ...d.events.map((e) => el("tr", {}, el("td", { class: "c-num", text: String(e.when || "").replace("T", " ") }),
+        el("td", { text: HISTORY_WORDS[e.kind] || e.kind }), el("td", { text: historyLine(e) }))))),
+      d.total > d.events.length ? el("p", { class: "dim", text: "Showing the newest " + d.events.length + " of " + d.total + "." }) : null].filter(Boolean));
+  } catch (e) { /* the next round tries again */ }
+}
+
 async function sessionCall(path, body, done) {
   try { await api(path, body); if (done) toast(done); } catch (e) { problem(e.message); }
   $("session-panel").hidden = true;
@@ -803,8 +996,42 @@ const STEP_STATE = {
 
 function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
 
+// Starting one of the modlist's tools through MO2 (DESIGN§16.8): the button, and what came of it.
+function toolButton(title) {
+  const t = state.tool;
+  const going = t && (t.state === "starting" || t.state === "running");
+  const b = el("button", { type: "button", text: going && t.title === title ? "Running…" : "Start it through MO2", disabled: !!going || !!(state.session && state.session.locked),
+    title: "Starts “" + title + "” the way MO2's own Run button does. It is yours to work; ModTrap waits for it to close and then says which of its output files changed." });
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { state.tool = await api("/api/tool/start", { title: title }); toast("Starting “" + title + "” through MO2…"); }
+    catch (e) { toast(e.message); }
+    state.addText = ""; state.stepsText = "";
+    tick();
+  });
+  return b;
+}
+
+function toolCard() {
+  const t = state.tool;
+  if (!t) return null;
+  const going = t.state === "starting" || t.state === "running";
+  const stop = el("button", { type: "button", text: "Stop waiting" });
+  stop.addEventListener("click", async () => { try { state.tool = await api("/api/tool/stop", {}); } catch (e) { toast(e.message); } tick(); });
+  const mins = Math.floor(t.seconds / 60), secs = t.seconds % 60;
+  return el("div", { class: "card" + (going ? " installer" : "") },
+    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? " “" + t.title + "” is open: work it, then close it" :
+      t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
+    going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago. ModTrap is waiting, and changes nothing meanwhile." }) : null,
+    t.state === "done" ? el("p", { class: t.changed_count ? "would-record" : "would-needs", text: t.changed_count ?
+      plural(t.changed_count, "file") + " of its output " + (t.changed_count === 1 ? "was" : "were") + " written" + (t.output_mod ? " (its output goes to “" + t.output_mod + "”)" : "") + ". ModTrap has read the modlist again." :
+      "None of its output files changed. If you meant it to build its output, it may not have been run to the end." }) : null,
+    t.changed_count ? el("details", {}, el("summary", { text: "The files" }), el("ul", {}, ...t.changed.map((c) => el("li", { class: "mono", text: c })))) : null,
+    going ? el("div", { class: "actions" }, stop) : null);
+}
+
 function stepItem(it) {
-  if (it.tool) return el("li", { text: "“" + it.tool + "” in MO2's list of tools" });
+  if (it.tool) return el("li", {}, "“" + it.tool + "” in MO2's list of tools  ", toolButton(it.tool));
   if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
     el("span", { class: "tag " + (it.what === "missing" ? "bad" : "warn"), text: it.what === "missing" ? "missing" : "not active" }));
@@ -868,7 +1095,7 @@ function renderSteps2(d) {
   const intro = el("div", { class: "card" },
     el("p", { text: "Everything it takes to get " + (d.mods.length === 1 ? "this mod" : "these mods") + " out of the modlist, in order. ModTrap cannot change your modlist yet, so the steps marked “You” are done by hand in MO2 and xEdit for now; ModTrap checks them against the modlist's files each time it is read." }),
     el("p", { class: "dim", text: "Plugins to take out: " + d.trapped.join(", ") }));
-  box.replaceChildren(intro, ...cards);
+  box.replaceChildren(...[toolCard(), intro, ...cards].filter(Boolean));
 }
 
 async function pollSteps(force) {
@@ -900,8 +1127,8 @@ function addCandidate(name) {
   return true;
 }
 
-const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"],
-  installer: ["has an installer", "warn"], failed: ["not taken in", "bad"] };
+const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"], installed: ["now in MO2", "good"],
+  installer: ["waiting for your answers", "warn"], failed: ["not taken in", "bad"] };
 
 function renderAddPicked() {
   const box = $("add-picked");
@@ -1036,7 +1263,7 @@ function shareTable(title, list, word) {
     list.length > 300 ? el("p", { class: "dim", text: "Showing the first 300 mods." }) : null);
 }
 
-function addModCard(x, place) {
+function addModCard(x, place, built) {
   const where = place.before ? "directly before “" + place.before + "” in MO2's list" : "last in MO2's list (the highest priority)";
   const plugs = x.plugins.map((p) => {
     if (p.unreadable) return el("div", { class: "plug" }, el("p", {}, el("span", { class: "mono", text: p.name }), el("span", { class: "tag bad", text: "could not be read" })), el("p", { class: "dim", text: p.unreadable }));
@@ -1056,7 +1283,12 @@ function addModCard(x, place) {
   const carries = Object.keys(x.kinds).length ? kindsText(x.kinds) : "no files";
   return el("div", { class: "card" },
     el("div", { class: "card-head" }, el("h2", {}, modLink(x.name),
-      el("span", { class: "tag " + (x.enabled ? "good" : x.staged ? "warn" : ""), text: x.enabled ? "enabled, priority " + x.priority : x.staged ? "unpacked by ModTrap, not in MO2 yet" : "installed, not enabled" }))),
+      el("span", { class: "tag " + (x.enabled ? "good" : x.staged ? "warn" : ""), text: x.enabled ? "enabled, priority " + x.priority : x.staged ? "unpacked by ModTrap, not in MO2 yet" : "installed, not enabled" })),
+      built ? (() => {
+        const b = el("button", { type: "button", text: "Change the installer's answers", title: "Show this mod's installer questions again" });
+        b.addEventListener("click", () => { state.installers = state.installers || {}; state.installers[built.id] = { picks: null, open: true }; loadInstaller(built.id); });
+        return b;
+      })() : null),
     el("p", { class: "dim", text: "Brings " + carries + (x.cut ? " (the listing was cut short: it is a very large mod)" : "") + "." }),
     x.enabled ? null : el("p", {}, "Its place among the mods: " + where + "."),
     ...plugs,
@@ -1064,6 +1296,185 @@ function addModCard(x, place) {
     shareTable(x.enabled ? "It replaces" : "There it would replace", x.wins, "of"),
     shareTable(x.enabled ? "It loses" : "There it would lose", x.loses, "to"),
     !x.wins.length && !x.loses.length ? el("p", { class: "dim", text: "It shares no loose file with any enabled mod." }) : null);
+}
+
+// An installer's questions (DESIGN§16.1): every step that shows for the answers so far, on one card.
+const OPTION_WORDS = { Required: ["required", "good"], Recommended: ["recommended", "good"], NotUsable: ["not usable here", "bad"], CouldBeUsable: ["may not suit your modlist", "warn"] };
+
+async function loadInstaller(id) {
+  state.installers = state.installers || {};
+  const cur = state.installers[id] || { picks: null };
+  if (cur.picks === null) cur.picks = Object.assign({}, ((state.stagedInfo || {})[id] || {}).picks || {});
+  state.installers[id] = cur;
+  try { cur.view = await api("/api/add/installer", { id: id, picks: cur.picks }); cur.error = ""; }
+  catch (e) { cur.error = e.message; }
+  state.addText = "";
+  pollAdd(true);
+}
+
+function installerCard(info) {
+  const cur = (state.installers || {})[info.id];
+  if (!cur || (!cur.view && !cur.error)) { loadInstaller(info.id); return el("div", { class: "card" }, el("h2", { text: info.name }), el("p", { class: "dim", text: "Reading its installer…" })); }
+  if (cur.error) return el("div", { class: "card" }, el("h2", { text: info.name }), el("p", { class: "would-needs", text: cur.error }));
+  const v = cur.view;
+  const steps = v.steps.map((st) => el("div", { class: "istep" }, st.name ? el("h3", { text: st.name }) : null, ...st.groups.map((g) => {
+    const name = "inst-" + info.id + "-" + g.key;
+    const set = (list) => { cur.picks[g.key] = list; loadInstaller(info.id); };
+    const rows = g.options.map((o) => {
+      const box = el("input", { type: g.single ? "radio" : "checkbox", name: name, checked: o.chosen, disabled: o.locked });
+      box.addEventListener("change", () => {
+        if (g.single) set([o.n]);
+        else set(g.options.filter((x) => (x.n === o.n ? box.checked : x.chosen)).map((x) => x.n));
+      });
+      const [word, cls] = OPTION_WORDS[o.type] || ["", ""];
+      return el("label", { class: "iopt" + (o.locked && !o.chosen ? " off" : "") }, box, el("span", {}, el("strong", { text: o.name }),
+        word ? el("span", { class: "tag " + cls, text: word }) : null, o.description ? el("span", { class: "dim idesc", text: o.description }) : null));
+    });
+    if (g.none_allowed) {
+      const none = el("input", { type: "radio", name: name, checked: !g.options.some((o) => o.chosen) });
+      none.addEventListener("change", () => set([]));
+      rows.push(el("label", { class: "iopt" }, none, el("span", {}, el("strong", { text: "None" }))));
+    }
+    const rule = { SelectExactlyOne: "choose one", SelectAtMostOne: "choose one or none", SelectAtLeastOne: "choose at least one", SelectAny: "choose any", SelectAll: "all of these are installed" }[g.type] || "";
+    return el("fieldset", { class: "igroup" }, el("legend", {}, g.name || "Options", el("span", { class: "dim", text: "  " + rule })), ...rows);
+  })));
+  const go = el("button", { type: "button", class: "primary", text: info.state === "ready" ? "Build it again with these answers" : "Use these answers", disabled: v.problems.length > 0 });
+  go.addEventListener("click", async () => {
+    go.disabled = true;
+    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; toast("Built “" + info.name + "” from your answers."); }
+    catch (e) { cur.error = e.message; }
+    state.addText = "";
+    pollAdd(true);
+  });
+  return el("div", { class: "card installer" }, el("h2", {}, v.name || info.name, el("span", { class: "tag warn", text: "asks which parts to install" })),
+    el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder and analyses it." }),
+    ...steps, ...v.problems.map((t) => el("p", { class: "would-needs", text: t })),
+    v.steps.length ? null : el("p", { class: "dim", text: "It asks nothing: everything it installs is fixed." }),
+    el("div", { class: "actions" }, go, el("span", { class: "dim", text: plural(v.files, "file entry", "file entries") + " would be installed" })));
+}
+
+// "Add it for me" (DESIGN§16.8): the plan first, then the go-ahead; and the adds already carried out, with Revert.
+const addBody = () => ({ mods: (state.adding || []).slice(), staged: (state.staged || []).slice() });
+
+async function askAddPlan() {
+  try { state.addPlan = await api("/api/add/plan", addBody()); state.addPlanError = ""; }
+  catch (e) { state.addPlan = null; state.addPlanError = e.message; }
+  state.addText = "";
+  pollAdd(true);
+}
+
+function addActionCard(d) {
+  const st = (k) => (d.steps || []).find((x) => x.key === k) || { state: "done" };
+  const todo = ["install", "enable", "activate"].some((k) => (d.steps || []).some((x) => x.key === k && x.state !== "done"));
+  const kids = [];
+  if (state.addPlan) {
+    const p = state.addPlan;
+    const lines = [];
+    for (const x of p.mods) {
+      if (x.staged) lines.push("Copy “" + x.name + "” from ModTrap's work folder into MO2's mods folder.");
+      if (!x.enabled) lines.push("Put “" + x.name + "” " + (x.before ? "directly before “" + x.before + "”" : "last") + " in MO2's mod list, and enable it.");
+    }
+    for (const x of p.plugins) lines.push("Put " + x.name + " " + (x.before ? "directly before " + x.before : "at the end") + " in the load order, and activate it.");
+    const closed = p.mo2_closed === true;
+    const go = el("button", { type: "button", class: "primary", text: "Go ahead", disabled: !closed || p.nothing });
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try {
+        await api("/api/add/run", addBody());
+        const names = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id) && r.state === "ready").map((r) => r.name);
+        state.addPlan = null;
+        toast("Added. ModTrap is reading the modlist again.");
+        for (const n of names) if (!(state.adding || []).includes(n)) state.adding.push(n);
+        saveUi();
+      } catch (e) { state.addPlanError = e.message; state.addPlan = null; }
+      state.addText = "";
+      state.gen = (state.gen || 0) + 1;
+      tick();
+    });
+    const again = el("button", { type: "button", text: "Check again" });
+    again.addEventListener("click", askAddPlan);
+    const cancel = el("button", { type: "button", text: "Not now" });
+    cancel.addEventListener("click", () => { state.addPlan = null; state.addText = ""; pollAdd(true); });
+    kids.push(el("h2", { text: "What ModTrap is about to do" }),
+      p.nothing ? el("p", { text: "Nothing: every mod is enabled and every plugin active already." }) : el("ol", {}, ...lines.map((t) => el("li", { text: t }))),
+      el("p", { class: "dim", text: "First the three list files of the profile are copied into the job's safe folder. Afterwards ModTrap reads the modlist again and checks it; if anything is not as planned, everything is put back. “Take it out again” undoes it later." }),
+      el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
+        p.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
+      el("div", { class: "actions" }, go, closed ? null : again, cancel));
+  } else {
+    const b = el("button", { type: "button", class: "primary", text: "Add it for me", disabled: !state.changes || !todo || st("needs").state !== "done" || d.looking || !!probeReason() });
+    b.title = probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC." :
+      st("needs").state !== "done" ? "First get what the mod needs: see step “Get what the mod needs”." : !todo ? "There is nothing left for ModTrap to do here." : "Shows what ModTrap would do, and asks before doing it";
+    b.addEventListener("click", askAddPlan);
+    kids.push(el("div", { class: "actions" }, b, el("span", { class: "dim", text: probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ?
+      "Switched off for now: ModTrap putting the mod in for you waits until it has been proven on your modlist. The steps below say how to do it by hand." :
+      "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
+      state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null);
+  }
+  for (const j of (d.added || []).slice(0, 12)) {
+    const undo = el("button", { type: "button", text: "Take it out again" });
+    undo.addEventListener("click", async () => {
+      if (!window.confirm("Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder? MO2 must be closed.")) return;
+      try {
+        const r = await api("/api/add/revert", { job: j.job });
+        for (const x of r.restored || []) {                // a dropped mod is back in ModTrap's folder only
+          state.adding = (state.adding || []).filter((n) => n !== x.name);
+          if (!(state.staged || []).includes(x.id)) state.staged = (state.staged || []).concat(x.id);
+        }
+        renderAddPicked();
+        saveUi();
+        toast(r.left.length ? "Put back. Left in place, because it changed since: " + r.left.join(", ") : "Put back as it was.");
+        state.addPlanError = "";
+      }
+      catch (e) { state.addPlanError = e.message; }
+      state.addText = "";
+      state.gen = (state.gen || 0) + 1;
+      tick();
+    });
+    kids.push(el("p", {}, el("span", { class: "tag " + (j.state === "added" ? "good" : ""), text: j.state === "added" ? "added by ModTrap" : j.state === "reverted" ? "taken out again" : "did not go through" }),
+      " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + (j.plugins.length ? "  (" + j.plugins.join(", ") + ")" : "") + "  ", j.state === "added" && state.changes ? undo : null));
+  }
+  return el("div", { class: "card" }, ...kids.filter(Boolean));
+}
+
+// The record check (DESIGN§16.5): start it from its step, and show what xEdit reported.
+const REC_WORDS = { preparing: "preparing…", starting: "starting xEdit through MO2…", loading: "xEdit is loading the whole load order…", reading: "xEdit is reading the records…", checking: "checking…" };
+
+function recordsBlock(d) {
+  const r = d.records;
+  const active = (d.mods || []).filter((x) => x.enabled && x.plugins.some((p) => p.active)).map((x) => x.name);
+  const going = r && !["done", "failed", "stopped"].includes(r.state);
+  const start = el("button", { type: "button", class: "primary", text: r && r.state === "done" ? "Check again through xEdit" : "Check through xEdit", disabled: !active.length || going || !!(state.session && state.session.locked),
+    title: active.length ? "Starts your xEdit through MO2 with ModTrap's script, which only reads. The whole load order is loaded, so on a large modlist it takes many minutes." : "The plugin must be active first: xEdit can only read what is in the load order." });
+  start.addEventListener("click", async () => {
+    start.disabled = true;
+    try { await api("/api/records/start", { mods: active }); toast("Starting xEdit through MO2…"); } catch (e) { toast(e.message); }
+    state.addText = "";
+    pollAdd(true);
+  });
+  const kids = [el("div", { class: "actions" }, start, going ? (() => {
+    const b = el("button", { type: "button", text: "Stop waiting" });
+    b.addEventListener("click", async () => { try { await api("/api/records/stop", {}); } catch (e) { toast(e.message); } pollAdd(true); });
+    return b;
+  })() : null, going ? el("span", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " " + (REC_WORDS[r.state] || r.state) + " The Log tab shows its lines.") : null)];
+  if (r && (r.state === "failed" || r.state === "stopped")) kids.push(el("p", { class: "would-needs", text: "The check did not finish: " + (r.message || r.state) + "." }));
+  if (r && r.state === "done" && r.result) {
+    for (const f of r.result.files) {
+      const names = (list) => list.slice(0, 8).map(([n, c, tool]) => n + " (" + c + (tool ? ", made by a tool" : "") + ")").join(", ") + (list.length > 8 ? " and " + (list.length - 8) + " more" : "");
+      const recList = (list, how) => el("details", {}, el("summary", { text: "The records" + (list.length >= 400 ? " (the first 400)" : "") }),
+        el("ul", {}, ...list.map((x) => el("li", { class: "mono", text: x.sig + " " + x.form + " " + x.edid + "   " + how(x) }))));
+      kids.push(el("div", { class: "plug" },
+        el("p", {}, pluginLink(f.name), el("span", { class: "tag " + (f.reading === "clean" ? "good" : "warn"), text: f.reading === "clean" ? "nothing that needs a patch" : "needs a look" })),
+        el("p", { class: "dim", text: plural(f.own, "record") + " of its own, " + f.overrides + " that override another plugin's: " + f.alone + " that only it changes or that agree, " + f.same + " identical to what they override." }),
+        f.takes_count ? el("p", { class: f.needs_patch ? "would-needs" : "" }, f.takes_count + " record(s) it wins that other plugins also change: their change to those records is lost. From: " + names(f.from) + ".") : null,
+        f.takes_count ? recList(f.takes, (x) => "also changed by " + x.from.join(", ")) : null,
+        f.loses_count ? el("p", { class: f.lost_to_hand ? "would-needs" : "" }, f.loses_count + " record(s) a later plugin wins, so its own change to them does not show. To: " + names(f.to) + ".") : null,
+        f.loses_count ? recList(f.loses, (x) => "won by " + x.to) : null,
+        f.needs_patch || f.lost_to_hand ? el("p", { text: "Where both changes matter, a small patch that carries both is the fix: in xEdit, copy the record as override into a new plugin loaded after both and merge the fields. What a tool made is settled by running the tool again." }) : null));
+    }
+    for (const n of r.result.missing) kids.push(el("p", { class: "would-needs", text: n + " was not loaded by xEdit." }));
+  }
+  return el("div", {}, ...kids.filter(Boolean));
 }
 
 function addStepCard(st, d) {
@@ -1079,11 +1490,13 @@ function addStepCard(st, d) {
     st.note ? el("p", { text: st.note }) : null,
     st.items.length ? el("ul", {}, ...st.items.map((it) => el("li", {}, it.text,
       it.tag ? el("span", { class: "tag " + (it.cls || ""), text: it.tag }) : null,
+      it.start ? el("span", {}, "  ", toolButton(it.start)) : null,
       it.add && findMod(it.add) ? (() => {
         const b = el("button", { type: "button", class: "linkish", text: "  add it too" });
         b.addEventListener("click", () => addCandidate(it.add));
         return b;
       })() : null))) : null);
+  if (st.key === "records") body.append(recordsBlock(d));
   if (st.manual) {
     const box = el("input", { type: "checkbox", checked: ticked });
     box.addEventListener("change", () => {
@@ -1115,9 +1528,11 @@ function renderAdd(d) {
       el("p", { class: "dim", text: "Nothing in MO2 changes yet. Putting the mod into MO2 and in its place for you, with a safe folder and Revert, is the part that is still switched off." }))].filter(Boolean));
     return;
   }
+  const asking = (d.staged || []).filter((r) => r.installer && (r.state === "installer" || ((state.installers || {})[r.id] || {}).open));
+  const askCards = asking.map(installerCard);
   if (!d.looking && !(d.mods || []).length && !d.failed) {
-    $("add-summary").textContent = d.unpacking || (state.uploads || []).length ? "Unpacking…" : "";
-    box.replaceChildren(...[noteCard, d.unpacking || (state.uploads || []).length ? el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Taking the archive in…"),
+    $("add-summary").textContent = d.unpacking || (state.uploads || []).length ? "Unpacking…" : asking.length ? "Waiting for your answers" : "";
+    box.replaceChildren(...[noteCard, ...askCards, d.unpacking || (state.uploads || []).length ? el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Taking the archive in…"),
       el("p", { class: "dim", text: "It is copied into ModTrap's own work folder and unpacked there. A large mod takes a while; nothing in your modlist is being changed." })) : null].filter(Boolean));
     return;
   }
@@ -1136,10 +1551,12 @@ function renderAdd(d) {
     text: "Room in the load order: full plugins " + s.full.now + (s.full.after !== s.full.now ? " → " + s.full.after : "") + " of " + s.full.limit +
       ", light plugins " + s.light.now + (s.light.after !== s.light.now ? " → " + s.light.after : "") + " of " + s.light.limit + "." });
   box.replaceChildren(...[noteCard,
-    el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files, without xEdit. Nothing in MO2 has been changed: the steps marked “You” are done by hand in MO2 for now, and ModTrap checks them each time the modlist is read." }), room,
+    el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files; what is inside the plugins' records is read through xEdit in its own step. ModTrap checks every step against the modlist's files each time the modlist is read." }), room,
       d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
       d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
-    ...d.mods.map((x) => addModCard(x, d.place)),
+    toolCard(), addActionCard(d),
+    ...askCards,
+    ...d.mods.map((x) => addModCard(x, d.place, (d.staged || []).find((r) => r.installer && r.state === "ready" && r.name === x.name))),
     el("h2", { text: "The steps, in order" }), ...cards].filter(Boolean));
 }
 
@@ -1148,17 +1565,25 @@ async function pollAdd(force) {
   const mods = (state.adding || []).slice();
   const staged = (state.staged || []).slice();
   const key = mods.join("|") + "#" + staged.join("|") + "#" + state.loaded;
-  if (!force && key === state.addKeySeen && !state.addLooking) return;
+  if (!force && key === state.addKeySeen && !state.addLooking && !state.recGoing) return;
   try {
     const d = mods.length || staged.length ? await api("/api/add", { mods: mods, staged: staged }) : { looking: false, mods: [], steps: [] };
     state.addKeySeen = key;
     state.addLooking = d.looking || d.unpacking;
+    state.recGoing = !!(d.records && !["done", "failed", "stopped"].includes(d.records.state));
     const info = {};
     for (const r of d.staged || []) info[r.id] = r;
     const infoText = JSON.stringify(info);
     if (d.gone && d.gone.length) { state.staged = state.staged.filter((id) => !d.gone.includes(id)); saveUi(); }
+    for (const r of d.staged || []) {
+      if (r.state !== "installed") continue;
+      state.staged = state.staged.filter((id) => id !== r.id);
+      if (findMod(r.name) && !(state.adding || []).includes(r.name)) state.adding.push(r.name);
+      saveUi();
+    }
     if (infoText !== JSON.stringify(state.stagedInfo || {}) || (d.gone && d.gone.length)) { state.stagedInfo = info; renderAddPicked(); }
-    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length;
+    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length + JSON.stringify(state.installers || {})
+      + JSON.stringify(state.addPlan || 0) + (state.addPlanError || "") + state.changes + probeReason();
     if (text !== state.addText) { state.addText = text; renderAdd(d); }
   } catch (e) { /* the next round tries again */ }
 }
@@ -1171,6 +1596,7 @@ function showTab(name) {
   state.tab = name;
   updateTray();
   saveUi();
+  if (name === "history") { state.historyText = ""; pollHistory(); }
 }
 
 async function pollLog() {
@@ -1213,6 +1639,11 @@ async function tick() {
   try { s = await api("/api/state"); } catch (e) { showMessage("ModTrap is not answering: " + e.message, true); return; }
   const was = state.status;
   state.status = s.status;
+  state.changes = !!s.changes;
+  state.demaster = s.demaster || null;
+  state.probe = s.probe || null;
+  const toolText = JSON.stringify(s.tool || null);
+  if (toolText !== state.toolText) { state.toolText = toolText; state.tool = s.tool || null; state.addText = ""; state.stepsText = ""; state.stepsKey = ""; state.addKeySeen = ""; }
   renderState(s);
   if (s.log_epoch !== state.logEpoch) {             // another session's log: read it from the start
     state.logEpoch = s.log_epoch;
@@ -1229,12 +1660,16 @@ async function tick() {
   await pollJob();
   await pollSteps(false);
   await pollAdd(false);
+  renderDemaster(false);
+  updateDemasterButton();
+  renderProbe();
+  await pollHistory();
   await pollLog();
 }
 
 function loop() {
   if (state.quit) return;
-  const busy = state.status === "reading" || state.addLooking || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
+  const busy = state.status === "reading" || state.addLooking || state.recGoing || (state.demaster && state.demaster.state === "working") || (state.probe && state.probe.state === "working") || (state.tool && (state.tool.state === "starting" || state.tool.state === "running")) || (state.job && !["done", "failed", "stopped"].includes(state.job.state));
   tick().finally(() => setTimeout(loop, busy ? 800 : 2500));
 }
 
@@ -1386,6 +1821,7 @@ $("rescan").addEventListener("click", async () => {
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("dry-run").addEventListener("click", showPlan);
+$("demaster").addEventListener("click", askDemasterPlan);
 $("job-stop").addEventListener("click", async () => {
   if (!window.confirm("Stop waiting for this dry run? xEdit itself stays open for you to close; it has changed nothing.")) return;
   try { await api("/api/job/stop", {}); } catch (e) { problem(e.message); }

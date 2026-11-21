@@ -4,16 +4,29 @@ A local tool for Mod Organizer 2 and Skyrim that takes a mod out of a modlist th
 body: it removes the mod as a master from every plugin that depends on it, so that the mod can be disabled without
 "missing master" errors.
 
-**Status: in the making. Nothing ModTrap does changes your modlist yet.** ModTrap opens a page in your browser
-that shows an MO2 modlist as MO2 has it: every mod with its priority, every plugin with its place in the load order,
-each plugin's masters and what needs it, and, for the mods you tick, everything that depends on them. A **dry run**
-then starts your own xEdit through MO2 with ModTrap's script, which only reads, and lists what a demaster would take
-out of each dependant plugin. A Steps tab lists everything the demaster takes, to do by hand for now. The step in which ModTrap does it for you ("Demaster Selected") is written but switched off until it has been proven on a real modlist.
+**Status: in the making, and not yet proven on a real modlist.** ModTrap opens a page in your browser that shows an
+MO2 modlist as MO2 has it: every mod with its priority, every plugin with its place in the load order, each plugin's
+masters and what needs it, and, for the mods you tick, everything that depends on them. A **dry run** then starts
+your own xEdit through MO2 with ModTrap's script, which only reads, and lists what a demaster would take out of each
+dependant plugin. A Steps tab lists everything the demaster takes, and checks each step against the modlist's files.
+
+The demaster itself ("Demaster Selected") is built but switched off: it makes copies in a safe folder, has xEdit
+write demastered copies of the dependants as new files, checks them, and then, with MO2 closed, adds a mod of its
+own with those copies, switches off the patches made only for the mod and disables the mod. Revert puts everything
+back, and a History tab lists every change. By default nothing ModTrap does changes your modlist.
+
+Before any of that is allowed on a modlist, ModTrap must pass its **probe** there (Tools tab, in a ModTrap started
+with `--allow-changes`): it does its whole work once on three tiny invented plugins in two test mods of its own, and
+removes them again. No mod of yours is touched by it.
 
 ModTrap also helps to **add** a mod: drop the mod's archive on the page. ModTrap unpacks it in its own work folder
-(a .7z or .rar needs 7-Zip installed), and tells what the mod needs, where it should go among the mods and in the
-load order, which files of which mods it would replace, which tools must run again, and the steps in order. Putting
-the mod into MO2 for you is written into the design but not built: for now nothing in your modlist changes.
+(a .7z or .rar needs 7-Zip installed), asks the mod's own installer questions if it has any, and tells what the mod
+needs, where it should go among the mods and in the load order, which files of which mods it would replace, which
+tools must run again, and the steps in order. From the steps it can start your xEdit, read-only, to list the records
+the new plugin takes from other plugins, and start the modlist's tools through MO2 for you to work.
+
+Putting the mod into MO2 for you ("Add it for me", with "Take it out again") is built but switched off: it exists
+only when ModTrap is started with `--allow-changes`, and that is meant for once it has been proven on a real modlist.
 
 To try it (Windows, Python 3.10 or newer): download this repository, then double-click `ModTrap.cmd`, or run
 

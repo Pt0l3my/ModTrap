@@ -127,7 +127,7 @@ class Adding(unittest.TestCase):
         j = self.job(["Thistle"])
         j.run()
         self.assertNotEqual(snapshot(self.root), self.before)
-        self.assertEqual(j.revert(), {"left": []})
+        self.assertEqual(j.revert(), {"left": [], "how": "whole"})
         self.assertEqual(snapshot(self.root), self.before)
         self.assertFalse((self.root / "mods" / "Heather").exists())
         self.assertTrue(self.heather.is_dir())                      # ModTrap's unpacked copy is still there
@@ -136,7 +136,7 @@ class Adding(unittest.TestCase):
         j = self.job([])
         j.run()
         write(self.root / "mods" / "Heather" / "notes of mine.txt", b"kept")
-        self.assertEqual(j.revert(), {"left": ["Heather"]})
+        self.assertEqual(j.revert(), {"left": ["Heather"], "how": "whole"})
         self.assertTrue((self.root / "mods" / "Heather" / "notes of mine.txt").is_file())
         for n in addjob.LISTS:
             self.assertEqual((self.root / "profiles" / "Default" / n).read_bytes(), self.before["profiles/Default/" + n])

@@ -65,6 +65,11 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 40 | 2026-11-21 | Adding mods: what is built, the placing rule, and what was ruled out | METHOD | #adding #mo2 #page #tools |
 | 41 | 2026-11-21 | A dropped archive is unpacked by ModTrap itself, in its own folder | METHOD | #adding #mo2 #safety #licence |
 | 42 | 2026-11-21 | Carrying out an add: written and tested against invented lists, switched off | METHOD | #adding #mo2 #safety #process |
+| 43 | 2026-11-21 | An installer's questions are asked on ModTrap's own page | METHOD | #adding #page #safety #licence |
+| 44 | 2026-11-21 | "Add it for me" and Revert on the page, behind a switch that is off | DECIDED | #adding #safety #process #page |
+| 45 | 2026-11-21 | The record check and starting the tools: built, and not behind the switch | METHOD | #adding #xedit #tools #process |
+| 46 | 2026-11-21 | "Demaster Selected" on the page behind the same switch, and a History tab | METHOD | #xedit #mo2 #safety #page #process |
+| 47 | 2026-11-21 | The probe is built and gates real work; Revert goes line by line once MO2 has run | METHOD | #safety #mo2 #xedit #process |
 
 ## Entries
 
@@ -795,3 +800,131 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Not proven, and why it stays switched off: whether MO2 keeps the mod order and the load order exactly as
   written when it next starts (WHY§26), and whether it takes a mod folder with only that one line in `meta.ini`
   as an installed mod (LIKELY, MO01§7). Both are for the probe on the owner's PC.
+
+### 43. An installer's questions are asked on ModTrap's own page
+
+`2026-11-21` · METHOD · `#adding #page #safety #licence` · refs: MT21, DESIGN§16.1, MO02§2, MO02§3, MO02§4, MO02§5, MO02§6, WHY§41
+
+- WHY§41 handed a mod with an installer to MO2 and named this as the next piece. Built: `modtrap/fomod.py`, the
+  questions on the Add mods tab, and the build of the mod's folder from the answers.
+- METHOD: the format's meaning was read in MO2's own installer (MO02), which has no licence file, so nothing of it
+  is copied: ModTrap's reader is its own code over Python's XML reader. Where the format leaves a choice, ModTrap
+  does what MO2 does, so that a mod built by ModTrap is the mod MO2 would have installed for the same answers:
+  the fallback encodings, the order of options, what is chosen to begin with, the order files are copied in.
+- METHOD: all steps that apply are shown on one card, not as pages. The answers are sent as a whole each time and
+  the card is worked out afresh, so a step that depends on an earlier answer appears or goes as that answer
+  changes. A group the owner has not touched keeps what the installer recommends.
+- METHOD (safety): the file is another person's. It is size-capped; a file that declares its own document rules
+  (the way such a file can be made to swell without end) is refused, in any encoding; every source must lie in
+  the archive and every destination in the mod being built, by the same name check as unpacking (WHY§41).
+- METHOD: an archive that only holds several folders to choose from gets one question made for it: which of the
+  folders, a later one winning a shared file.
+- Left out, and said: images; the game's version (a version condition is taken as met); `alwaysInstall` and
+  `installIfUsable`, which MO2 does not act on either (MO02§4); and the older script-based installers.
+- FACT: tested with an invented installer (steps that depend on a flag, an option that depends on the load order,
+  priorities, a conditional file), and driven in a browser from the drop to the analysed mod. Not proven: real
+  mods' installers, which are often untidy; the first few on the owner's PC will show what is missing.
+
+### 44. "Add it for me" and Revert on the page, behind a switch that is off
+
+`2026-11-21` · DECIDED · `#adding #safety #process #page` · refs: MT21, MT14, DESIGN§8, DESIGN§9, DESIGN§16.8, WHY§36, WHY§39, WHY§42
+
+- The owner asked for the rest to be built. The job of WHY§42 is now reachable from the page: `modtrap/changes.py`
+  holds the three endpoints (the plan, carrying it out, Revert), and the Add mods tab has "Add it for me", the
+  plan with its go-ahead, and "Take it out again" for each add the session carried out.
+- DECIDED (mine, for the owner to overrule): it is switched off unless ModTrap is started with `--allow-changes`.
+  Without the flag the module is never imported, its paths do not exist, and the button is greyed out with the
+  reason. WHY§36's rule stands: nothing changes a modlist until the owner's PC has shown that MO2 keeps what
+  ModTrap writes. The flag is how that is shown: the owner starts ModTrap with it for the probe, on purpose.
+- METHOD: the plan is made twice, once to show and once more at the go-ahead, and the job refuses if the lists
+  changed in between. The plan card says whether MO2 is closed; open or not known, the go-ahead is greyed out and
+  the job would refuse anyway (WHY§42). After an add or a Revert the modlist is read again from disk.
+- METHOD: a dropped mod that was added becomes one of MO2's mods on the page; after Revert it is again the
+  unpacked mod in ModTrap's folder, so it can be added again.
+- FACT: tested through the same calls the page makes, and driven in a browser on an invented list from the drop
+  to the added mods and back: after Revert the modlist's folder is as before. Tests also check that without the
+  flag a fresh start loads none of the writing modules.
+- Not proven: all of WHY§42's open points, and telling whether MO2 is open on a real PC.
+
+### 45. The record check and starting the tools: built, and not behind the switch
+
+`2026-11-21` · METHOD · `#adding #xedit #tools #process` · refs: MT18, MT21, DESIGN§16.5, DESIGN§16.6, DESIGN§16.8, DESIGN§7, XE01§10, MO01§3, WHY§31, WHY§34, WHY§40, WHY§44
+
+- The last two pieces of DESIGN§16.8. Neither changes a modlist by ModTrap's own hand, so neither is behind
+  WHY§44's switch: the record check is a read-only xEdit run like the dry run (WHY§31), and starting a tool is
+  what MO2's own Run button does.
+- METHOD (record check): a third script in its own file, `ModTrapRecords.pas`, report-only, with the same job
+  file, progress file and end line as the first. For each record of the new plugin that is not its own it writes
+  xEdit's two conflict levels and the plugins that hold the record. Its names were checked against the script
+  engine's (WHY§34). ModTrap loads the whole active load order for it, not a cut-down list: who else changes a
+  record cannot be known from the new plugin's masters. On a large list that is a long load, and the page says so.
+- METHOD (reading it): "takes" needs both another overriding plugin before it and xEdit's level "conflict" or
+  higher; where plugins override the same record without a conflict, nothing is lost. Whether the plugin taken
+  from or lost to was made by a tool is told by the same marks as DESIGN§13. ModTrap lists and explains; it does
+  not write a patch. Ruled out for now: merging records automatically, which is what the patchers exist for and
+  goes wrong quietly when done blindly.
+- METHOD (tools): before the start ModTrap notes size and time of the files in the tool's output mod, in
+  `overwrite`, and of the plugins that tool made; after the tool has closed it says which were written, and reads
+  the modlist again. "None changed" is said plainly: the tool may have been closed without running.
+- LIKELY: MO2's command waits for the tool (MO01§3), and where ModTrap can see running programs it also waits for
+  the tool's own program to be gone. Not proven on a real PC, like every start through MO2 so far.
+- FACT: tested with the stand-ins (the record report read and sorted; a run through the stand-in xEdit with the
+  plugin unchanged; a tool that writes, one that does not, one at a time, stopping), and the whole flow driven in
+  a browser on an invented list: drop, add, record check, start the tool.
+
+### 46. "Demaster Selected" on the page behind the same switch, and a History tab
+
+`2026-11-21` · METHOD · `#xedit #mo2 #safety #page #process` · refs: MT1, MT2, MT9, MT14, MT15, DESIGN§6.3, DESIGN§6.4, DESIGN§6.5, DESIGN§8, DESIGN§11, DESIGN§12, WHY§36, WHY§39, WHY§44
+
+- The owner said to carry on. WHY§39's demaster is now reachable from the page, through `modtrap/changes.py` and so
+  only with `--allow-changes` (WHY§44). Without the flag the button is greyed out and says why.
+- METHOD: the page takes it in two go-aheads, because the two halves need opposite things of MO2. First
+  "Demaster Selected" shows the plan from the finished dry run; "Go ahead" makes the safe folder, runs xEdit
+  through MO2 with the changing script, and verifies the new plugins: MO2 is in use, and nothing in the modlist
+  has changed. Then "Put them in place" asks again and needs MO2 closed: ModTrap's mod with the new plugins, the
+  patch-only plugins deactivated, the ticked mods disabled, the health check. A failure in either half says why;
+  the first changes nothing, the second puts everything back (WHY§39).
+- METHOD: the plan is only made from a dry run of the modlist as it was last read, by this start of ModTrap; after
+  a restart or a rescan the dry run is run again first. The demaster does exactly what that dry run listed.
+- METHOD: each demaster the session put in place is listed with "Revert", which works from the job's safe folder
+  alone, so also after ModTrap was closed and started again.
+- METHOD: a History tab shows the session's history file (MT15), newest first: what, when, priorities and
+  positions. Reading it needs no switch; the page's own code only reads the file.
+- FACT: tested through the page's calls with the stand-in xEdit (plan, run, verified with the modlist untouched,
+  refused while MO2 is open, put in place, the history, Revert back to byte for byte; a run that alters an
+  original stops with nothing changed), and driven in a browser on an invented list.
+- Not proven, unchanged from WHY§39: the changing script in a real xEdit, a plugin written by it, MO2 keeping the
+  lists, and telling whether MO2 is open. The order to prove them in on the owner's PC: the dry run; the record
+  check; one small add with the switch; then a demaster of a small mod, with Revert at hand.
+
+### 47. The probe is built and gates real work; Revert goes line by line once MO2 has run
+
+`2026-11-21` · METHOD · `#safety #mo2 #xedit #process` · refs: DESIGN§9, DESIGN§11, MT8, MT14, WHY§4, WHY§5, WHY§7, WHY§8, WHY§15, WHY§26, WHY§36, WHY§39, WHY§42, WHY§44, WHY§46, MO01§2
+
+- With everything else built, what stood between the code and the owner's PC was a list of unproven things spread
+  over WHY§39, WHY§42 and WHY§46, to be tried by hand in a set order. DESIGN§9 had named the answer from the start:
+  a probe. It is built (`modtrap/probejob.py`, a card on the Tools tab).
+- METHOD: the probe has no code of its own for changing anything. It calls the add job, the dry run, the demaster
+  and Revert exactly as real work does, on `modtrap/probe.py`'s invented plugins, so each of its seven steps
+  stands for one unproven thing (DESIGN§9). The plugins are in two mods, because a dry run needs a mod to take out
+  and something outside it that depends on it.
+- DECIDED (DESIGN§9's rule, now enforced): `--allow-changes` alone no longer lets a real job run. The probe must
+  have passed in this session's modlist with the xEdit now set up in MO2; the outcome is kept with the session.
+  The two buttons say what is missing. Tests that try the jobs themselves switch the rule off by name.
+- METHOD: a failed step names what differed, as far as it can be told: for the dry run, the value that was not
+  as expected and the name xEdit gave the list (the likeliest first failure: WHY§31's list of safe arrays holds
+  names read in xEdit's definitions, not seen in a report yet).
+- FACT, found by the probe's own test: after MO2 has rewritten a list, the safe folder's Revert refuses, rightly
+  (the file is no longer what ModTrap left), and so the probe could not clean up after "MO2 changed the order".
+  The same would meet the owner in real use: add or demaster, open MO2, later ask for Revert.
+- METHOD (DESIGN§11, added): when the whole files cannot be put back, Revert takes back ModTrap's own changes line
+  by line and leaves the rest of the lists alone. Ruled out: overwriting with the old files after a warning, which
+  would silently undo whatever the owner did in MO2 since.
+- FACT: tested with the stand-ins: the probe passes and leaves the modlist's folder file for file as before; a
+  different list name fails the dry-run step and says the name; a reordered list fails "kept" and ModTrap's lines
+  and mods are taken out while the reordering stays; MO2 open or unknown, the probe does not begin; an earlier
+  probe's mod is named, not overwritten; real work is refused before the probe and allowed after; Revert of an
+  add and of a demaster after the lists changed keeps the change and takes ModTrap's part out. Driven in a
+  browser on an invented list.
+- Not proven: the probe itself is the proof still to come. Its first real run is expected to fail somewhere, and
+  to say where.

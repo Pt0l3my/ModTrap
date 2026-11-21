@@ -101,6 +101,28 @@ class Safe:
         self.added.append({"path": str(path), "sha256": sha256(path)})
         self._save()
 
+    def mark_reverted(self) -> None:
+        """Notes that the job was undone another way (line by line, DESIGN§11), so that it is not offered again."""
+        self.reverted = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self._save()
+
+    def remove_added(self) -> list[str]:
+        """Removes the files ModTrap made that are still as made; returns the ones left because they changed."""
+        left = []
+        for a in self.added:
+            p = Path(a["path"])
+            if not p.is_file():
+                continue
+            if sha256(p) != a["sha256"]:
+                left.append(a["path"])
+                continue
+            p.unlink()
+            try:
+                p.parent.rmdir()
+            except OSError:
+                pass
+        return left
+
     def check(self) -> dict:
         """What Revert would do, without doing it: per kept file "unchanged" (nothing to do), "ours" (ModTrap's
         change: put the original back), "foreign" (changed by something else since) or "gone"; and the same for
