@@ -13,6 +13,11 @@ from tests import _fixtures as fx
 FAKE = str(Path(__file__).with_name("fake_xedit.py"))
 
 
+def fake_chain(*steps):
+    """The chain the script writes for an element: its steps from the element up to its record."""
+    return "\x1e".join("\x1f".join(str(x) for x in st) for st in steps)
+
+
 def fake_launcher(extra=()):
     def start(cmd, cwd):
         return subprocess.Popen([sys.executable, FAKE, *cmd[1:], *extra], cwd=cwd)
@@ -248,6 +253,64 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((r["end"], r["held_changed"]), ("ok", ["Other.esp"]))
         e = r["files"][1]["items"][0]["elements"][0]
         self.assertEqual((e["kind"], e["entry"], e["array"], e["array_length"]), ("entry", "Alias", "Aliases", 3))
+
+    def test_a_patch_named_for_the_mod_is_switched_off_whatever_it_holds(self):
+        # Invented names. A patch says in its name what it is for: the mod's or the plugin's whole name, or their
+        # initials as a word of its own (WHY§52).
+        for name in ("Inn - Thorn Hedge Addon Patch.esp", "ThornHedgeAddon - Inn.esp", "THA_Inn.esp",
+                     "Inn - THA patch.esp", "Inns Wear Hats - THA Patch.esp"):
+            self.assertTrue(dryrun.named_for(name, ["ThornHedgeAddon.esp"], ["Thorn Hedge Add-On"]), name)
+        for name in ("Big Patch - Gameplay.esp", "Thatch.esp", "Hedge Inn.esp", "PG_1.esp"):
+            self.assertFalse(dryrun.named_for(name, ["ThornHedgeAddon.esp"], ["Thorn Hedge Add-On"]), name)
+        self.assertFalse(dryrun.named_for("A - B.esp", ["B.esp"], ["B"]))          # too short a name to go by
+
+        def report(name, masters):
+            return "\r\n".join(["H\tmodtrap-report/3\treport\t1", "F\t%s\t9\t%s" % (name, ",".join(masters)),
+                                 "R\t%s\tNPC_\t00054321\tSkyrim.esm\t0\tInventedPerson" % name,
+                                 "E\t%s\t00054321\tNPC_ \\ RNAM - Race\tThornHedgeAddon.esp\t05000802\t%s" % (
+                                     name, fake_chain(("RNAM - Race", "etSubRecord", "dtFormID", 0, 9))),
+                                 "D\t%s\t9\t1" % name, "X\tok\t"])
+
+        def read(name, masters):
+            return dryrun.parse_report(report(name, masters), ["ThornHedgeAddon.esp"], ["Thorn Hedge Add-On"],
+                                       ["Skyrim.esm", "Update.esm"])["files"][0]
+
+        few = ["Skyrim.esm", "Update.esm", "Inn.esp", "ThornHedgeAddon.esp"]
+        f = read("Inn - THA Patch.esp", few)
+        self.assertEqual((f["reading"], f["why"], f["made_for"]), ("patch only", "named for the mod", True))
+        # The same name on a plugin with many masters is one of the list's big patches: it is not switched off.
+        f = read("Everything - THA Merge.esp", few + ["One.esp", "Two.esp", "Three.esp"])
+        self.assertEqual((f["reading"], f["made_for"]), ("needs you", False))
+        # And few masters without the name is a plugin that must go on working.
+        self.assertEqual(read("Inn Overhaul.esp", few)["reading"], "needs you")
+        # Without the trapped names (an old report read again) nothing is guessed.
+        self.assertEqual(dryrun.parse_report(report("Inn - THA Patch.esp", few))["files"][0]["reading"], "needs you")
+
+    def test_where_a_part_that_needs_the_owner_came_from(self):
+        head = ["H\tmodtrap-report/3\treport\t1", "F\tBig Patch.esp\t9\tSkyrim.esm,Fixes.esp,Bad.esp,Other.esp"]
+        rec = lambda form: "R\tBig Patch.esp\tINFO\t%s\tSkyrim.esm\t0\t" % form        # noqa: E731
+        el = lambda form: "E\tBig Patch.esp\t%s\tINFO \\ Conditions \\ Condition \\ CTDA \\ Parameter #1\tBad.esp\t05000802\t%s" % (   # noqa: E731
+            form, fake_chain(("Parameter #1", "etValue", "dtInteger", 0, 3), ("CTDA", "etSubRecord", "dtStruct", 9, 0),
+                             ("Condition", "etSubRecordStruct", "dtStruct", 1, 2), ("Conditions", "etSubRecordArray", "dtSubRecordArray", 3, 4)))
+        part = lambda form, same, prev, state, rest: "C\tBig Patch.esp\t%s\tConditions\tetSubRecordArray\t%s\t%s\t%s\t1\t%s" % (   # noqa: E731
+            form, same, prev, state, rest)
+        lines = head + [
+            rec("00000A01"), el("00000A01"), part("00000A01", "Bad.esp", "Fixes.esp", "present", "0"),    # carried on
+            rec("00000A02"), el("00000A02"), part("00000A02", "", "Fixes.esp", "present", "1"),           # added on top
+            rec("00000A03"), el("00000A03"), part("00000A03", "", "Fixes.esp", "present", "0"),           # its own doing
+            rec("00000A04"), el("00000A04"), part("00000A04", "Bad.esp", "", "", "0"),                    # nothing to go back to
+            rec("00000A05"), el("00000A05"), part("00000A05", "Bad.esp", "Fixes.esp", "needs Elsewhere.esp", "0"),
+            rec("00000A06"), el("00000A06"), part("00000A06", "Fixes.esp", "Skyrim.esm", "absent", "0"),  # same as a plugin that stays
+            rec("00000A07"), el("00000A07"),                                                              # an older script: no C line
+            "D\tBig Patch.esp\t9\t7", "X\tok\t"]
+        f = dryrun.parse_report("\r\n".join(lines), ["Bad.esp"], ["Bad"], ["Skyrim.esm"])["files"][0]
+        came = {it["form"]: (it["elements"][0]["came"], it["carried"]) for it in f["items"]}
+        self.assertEqual(came, {"00000A01": ("carried", True), "00000A02": ("added", True), "00000A03": ("", False),
+                                "00000A04": ("", False), "00000A05": ("", False), "00000A06": ("", False),
+                                "00000A07": ("", False)})
+        self.assertEqual((f["reading"], f["needs_you"], f["carried"]), ("needs you", 7, 2))   # reported, not yet acted on
+        e = f["items"][0]["elements"][0]
+        self.assertEqual((e["part"], e["same_as"], e["without"], e["without_state"]), ("Conditions", "Bad.esp", "Fixes.esp", "present"))
 
     def test_chains(self):
         ch = lambda *steps: "\x1e".join("\x1f".join(str(x) for x in st) for st in steps)   # noqa: E731

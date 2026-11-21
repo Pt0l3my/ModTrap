@@ -104,6 +104,7 @@ class Api:
         self.recjob: records.Job | None = None
         self.saver = savelog.SaveJob()         # "Save this session" (WHY§48)
         self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
+        self.presser = dryrun.winauto.press_module_selection_ok   # presses OK in xEdit's module selection (XE01§13)
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
 
@@ -457,7 +458,7 @@ class Api:
                 p = records.plan(m, mods)
                 base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
                 job = records.Job(m, p, records.new_job_dir(base), launcher=self.launcher, running=self.running,
-                                  poll=self.poll, closer=self.closer)
+                                  poll=self.poll, closer=self.closer, presser=self.presser)
             except (records.Refused, dryrun.Refused) as e:
                 raise Bad(str(e)) from None
             job.on_end = self.save_log
@@ -577,7 +578,7 @@ class Api:
                 p = dryrun.plan(m, self._mods(body))
                 base = self.store.dir(s.id) / "jobs" if s is not None else None
                 job = dryrun.Job(m, p, dryrun.new_job_dir(base), launcher=self.launcher, running=self.running,
-                                 poll=self.poll, closer=self.closer)
+                                 poll=self.poll, closer=self.closer, presser=self.presser)
             except dryrun.Refused as e:
                 raise Bad(str(e)) from None
             job.on_end = self.save_log

@@ -164,6 +164,15 @@ class Probing(unittest.TestCase):
         p = again.state()["probe"]
         self.assertEqual((p["state"], p["reason"]), ("passed", ""))
 
+    def test_a_pass_counts_only_for_the_scripts_it_ran(self) -> None:
+        from unittest import mock
+        self.run_probe()
+        self.assertEqual(self.api.state()["probe"]["reason"], "")
+        with mock.patch.object(probejob, "scripts_mark", lambda: "another version of the scripts"):
+            self.assertIn("scripts have changed", self.api.state()["probe"]["reason"])
+            with self.assertRaises(Bad):
+                self.api.post("/api/demaster/plan", {})
+
 
 if __name__ == "__main__":
     unittest.main()

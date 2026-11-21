@@ -111,7 +111,8 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **FACT.** With `-script:` xEdit is in its script tool mode: the script's file ending decides it
   (`xEdit/xeInit.pas:612-631`). The window's title is then "SSEScript".
 - **FACT.** `-autoload` and `-autoexit` are read only in edit mode (`xEdit/xeInit.pas:1063-1079`). In script mode
-  the plugins of the plugins file are loaded without asking anyway, and after the script xEdit writes "You can
+  xEdit asks which plugins to load (§13; an earlier wording here, "loaded without asking anyway", was wrong), and
+  after the script xEdit writes "You can
   close this application now." and stays open (`xEdit/xeMainForm.pas:4923`): the timer that would close it runs
   only when `-autoexit` was read (`:17268-17281`), which in script mode it never is. Seen on the owner's PC with
   xEdit 4.1.5f: xEdit stayed open and MO2 waited for it.
@@ -146,3 +147,56 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   the plugin written through `FileWriteToStream` reads, by ModTrap's own reader, as a plugin with no master.
 - **FACT.** After the changing script had taken the "changed" marks off, xEdit closed when asked, without a
   question, and every original was byte for byte unchanged. §9's open point on `esUnsaved` holds for this case.
+
+## 13. The "Module Selection" window in script mode (source, and the owner's PC, 2026-11-21)
+
+- **FACT.** xEdit loads without asking only in its plugin modes (quick clean and the like) or when `-autoload` was
+  read; otherwise it opens its module selection window, preset to the active plugins, and loads what is ticked
+  when OK is pressed; closing the window any other way ends xEdit (`xEdit/xeMainForm.pas:5296-5330`). `-autoload`
+  is read only in edit mode (§11), and script mode is not a plugin mode, so a run with `-script:` always shows
+  the window. Seen on the owner's PC: the window appeared on every run, with the plugins of the plugins file
+  ModTrap had passed already ticked, and the owner pressed OK each time.
+- **FACT.** The window is a form of class `TfrmModuleSelect` with the caption "Module Selection"; its OK is a
+  `TButton` with the caption "OK" (`xEdit/xeModuleSelectForm.dfm:1-39`). xEdit opens the same form for other
+  things the user asks for in its window (adding masters, comparing), which no ModTrap run does.
+- **METHOD.** For a run ModTrap started, the ticked list is ModTrap's own list, so nothing is to be chosen.
+  ModTrap presses that OK itself (`modtrap/winauto.py`): a visible top window of that class and caption, owned by
+  the xEdit program the run started, and in it an enabled button named OK; it looks every few seconds only until
+  the script's first line arrives, and presses a limited number of times. LIKELY until seen on the owner's PC:
+  that the press, sent as a message from another program, is taken (it is not when xEdit runs with higher
+  rights than ModTrap). If it is not, the owner presses OK as before; the page and the log say so.
+
+## 14. Telling where a part of a record comes from (source; unproven on a real list until the next dry run)
+
+- **FACT.** A script can walk every version of a record: `MasterOrSelf` gives the first, `OverrideCount` and
+  `OverrideByIndex` the rest (`xEdit/JvI/xejviScriptAdapter.pas:2173-2180`), and `GetLoadOrder` of each version's
+  file says where it loads (`:2207`). `ElementByName` finds a named part of a version (`:2133`), and
+  `GetEditValue` gives a value as text (`:2093`).
+- **FACT.** There is a ready-made comparison (`SortKey`, `:2090`), but a container's key is built from its
+  members' keys (`Core/wbImplementation.pas:7090-7103`) and a definition may give a member a key of its own, so
+  two different parts could share a key. **METHOD.** ModTrap's script therefore compares its own text of a part:
+  every element's name and value, all the way down.
+- **FACT.** A script can also copy a part from one version of a record into another (`wbCopyElementToRecord`,
+  `:2113`) and take an element out (`RemoveElement`, `:2145`): what putting a part back would use. Not used yet.
+- **METHOD.** For a record of another plugin that the dependant overrides, and each direct part of it that needs
+  a trapped plugin, the reading script writes one line (`C`): the last plugin before the dependant whose version
+  of the part is the same as the dependant's; the dependant's last master, not trapped, whose version needs no
+  trapped plugin, and whether that version is present, absent, or would need a master the dependant lacks; and,
+  for a list, whether the list without the entries that need a trapped plugin is exactly that master's list.
+  The script only reads.
+
+## 15. A script's file writes fail while another program has the file open (the owner's PC, 2026-11-21)
+
+- **FACT (the owner's PC).** The second real dry run stopped part-way: the script's write of its progress file
+  failed with "Cannot create file … The process cannot access the file because it is being used by another
+  process", raised at the line that saves the list. Nothing had been changed; the run was read-only.
+- **LIKELY.** A string list saved to a file creates the file anew and asks for it alone, so the write fails
+  while any other program holds the file open, however that program opened it. The script wrote the file twice
+  within the same second; the other holder was ModTrap reading it, or a virus scanner looking at a file just
+  written. The first real run did the same writes and was lucky.
+- **FACT.** The script engine has no `Sleep`; `Now` is there (the engine's own SysUtils unit is registered,
+  `xEdit/JvI/xejviScriptAdapter.pas:2289`), and `try … except` catches the failure (the run's own handler caught
+  it and reported it).
+- **METHOD.** In all three scripts a missed write of the progress file is let go (the next line writes the whole
+  list again, and the end is told by the report), and the report's write is tried again for some seconds before
+  it counts as a failure. ModTrap reads only the last bytes of the report when it looks for the end line.

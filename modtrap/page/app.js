@@ -312,6 +312,7 @@ function renderDemaster(force) {
     el("dt", { text: "Taking out" }), el("dd", {}, p.mods.join(", "), el("span", { class: "dim mono", text: "  " + p.trapped.join(", ") })),
     el("dt", { text: "Demastered" }), el("dd", {}, p.demaster.length ? p.demaster.map((x) => x.plugin + " (" + x.actions + ")").join(", ") : "none"),
     el("dt", { text: "Switched off" }), el("dd", { text: p.switch_off.length ? p.switch_off.join(", ") + "  (patches made only for the mod: deactivated, not changed)" : "none" }),
+    ...((p.disable_mods || []).length ? [el("dt", { text: "Disabled too" }), el("dd", { text: p.disable_mods.join(", ") + "  (mods that are patches for the mod: disabled whole, never removed)" })] : []),
     el("dt", { text: "Left to you" }), el("dd", { class: p.needs_you.length ? "would-needs" : "", text: p.needs_you.length ? p.needs_you.join(", ") : "none" }),
     el("dt", { text: "New mod" }), el("dd", { text: "“" + p.mod_name + "”, with the highest priority: it holds the demastered copies; the originals stay untouched in their own mods" }));
   if (state.dmPlan) {
@@ -912,7 +913,7 @@ async function renderSelection() {
 // --- the dry run (DESIGN§6.1, DESIGN§6.2) ---------------------------------------------------------------------------
 
 const JOB_WORDS = {
-  preparing: "Preparing", starting: "Starting xEdit through MO2", loading: "xEdit is loading the plugins",
+  preparing: "Preparing", starting: "Starting xEdit through MO2", loading: "xEdit is loading the plugins (if its “Module Selection” window stays open, press OK: nothing needs choosing)",
   reading: "xEdit is reading the dependants", checking: "Checking the result", done: "Dry run done",
   failed: "The dry run failed", stopped: "Stopped",
 };
@@ -922,11 +923,18 @@ const WOULD = {
   "needs you": ["needs you", "would-needs", "ModTrap would not change this by itself."],
 };
 const FILE_READING = {
-  "patch only": ["patch only: would be switched off", "good", "Every record in it belongs to the trapped mod: nothing of it would remain."],
+  "patch only": ["patch only: would be switched off", "good", "A patch made for the trapped mod: without the mod it has no purpose."],
   "can be demastered": ["can be demastered", "good", "Everything in it that needs the trapped mod can be taken out automatically."],
   "needs you": ["needs you", "warn", "Some of what needs the trapped mod is not something ModTrap takes out by itself."],
   "not finished": ["not read to the end", "bad", ""],
 };
+
+// Where a part that needs the owner came from, as the dry run found it (reported only, for now: MT4).
+function cameFrom(e) {
+  if (e.came === "carried") return "  · carried on from " + e.same_as + "; without the mod this part is " + (e.without_state === "absent" ? "absent, as in " : "as in ") + e.without;
+  if (e.came === "added") return "  · added on top of what " + e.without + " has";
+  return "";
+}
 
 async function showPlan() {
   const box = $("plan");
@@ -1002,9 +1010,12 @@ function renderJob(job) {
       const [label, cls, hint] = FILE_READING[f.reading] || [f.reading, "", ""];
       const card = el("div", { class: "card" },
         el("div", { class: "card-head" }, el("h2", { class: "mono", text: f.name }), el("span", { class: "tag " + cls, text: label })),
-        el("p", { class: "dim", text: hint }),
+        el("p", { class: "dim", text: f.reading === "patch only" ? (f.why === "named for the mod"
+          ? "A patch for the trapped mod, by its name and its few masters: without the mod it has no purpose, so it would be switched off, not changed."
+          : "Every record in it belongs to the trapped mod: nothing of it would remain.") : hint }),
         el("p", { text: f.records + " records; " + f.needing + " need the trapped mod: " + f.own + " of its own records, " +
-          plural(f.entries, "list entry", "list entries") + ", " + f.needs_you + " that need you." }));
+          plural(f.entries, "list entry", "list entries") + ", " + f.needs_you + " that need you" +
+          (f.carried ? " (" + f.carried + " of them only carried on from the mod: see the records)." : ".") }));
       const shown = f.items.slice(0, 400);
       const list = el("ul");
       for (const it of shown) {
@@ -1013,7 +1024,7 @@ function renderJob(job) {
           el("span", { class: "tag " + wc, title: wh, text: w }));
         if (!it.own && it.elements.length) {
           li.append(el("ul", {}, ...it.elements.slice(0, 40).map((e) => el("li", { class: "mono dim",
-            text: (e.kind === "entry" ? "entry of " + e.array + " (" + e.array_length + " long)" : "field " + e.path) + " → " + e.target_file + " " + e.target_form }))));
+            text: (e.kind === "entry" ? "entry of " + e.array + " (" + e.array_length + " long)" : "field " + e.path) + " → " + e.target_file + " " + e.target_form + cameFrom(e) }))));
         }
         list.append(li);
       }

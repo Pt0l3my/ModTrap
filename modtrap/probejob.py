@@ -18,6 +18,7 @@ Each step answers one thing that could not be shown without the owner's PC:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -68,11 +69,12 @@ def _lists(root: Path, profile: str) -> dict:
 class Probe:
     def __init__(self, m: model.Model, work: Path, session_dir: Path, *, launcher: Callable, running: Callable,
                  closed: Callable[[], bool | None], poll: float = 1.0, read=plugin.read,
-                 closer: Callable[[str, bool], None] = dryrun.close_program):
+                 closer: Callable[[str, bool], None] = dryrun.close_program,
+                 presser: Callable[[str], bool] = dryrun.winauto.press_module_selection_ok):
         self.model, self.dir, self.session_dir = m, work, session_dir
         self.inst = m.instance
         self._launcher, self._running, self._closed, self._poll, self._read = launcher, running, closed, poll, read
-        self._closer = closer
+        self._closer, self._presser = closer, presser
         self.state = "new"              # new, working, passed, failed
         self.now = ""
         self.results: dict[str, dict] = {}
@@ -152,6 +154,7 @@ class Probe:
         try:
             paths.write_atomic(self.session_dir / "probe.json", (json.dumps(
                 {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "ok": self.state == "passed", "xedit": self.xedit,
+                 "scripts": scripts_mark(),
                  "tool": self._tool_binary(), "result": self.public()}, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
         except (OSError, TypeError, ValueError) as e:
             log.warn("the probe's outcome could not be kept: %s", logbook.why(e))
@@ -229,7 +232,7 @@ class Probe:
         except dryrun.Refused as e:
             raise Failed("dry", str(e)) from None
         job = dryrun.Job(m2, dp, self.dir / "dry", launcher=self._launcher, running=self._running, poll=self._poll,
-                         closer=self._closer)
+                         closer=self._closer, presser=self._presser)
         (self.dir / "dry").mkdir(parents=True, exist_ok=True)
         job.start()
         while job.state not in ("done", "failed", "stopped"):
@@ -285,7 +288,8 @@ class Probe:
         if sorted(dpl.demaster) != [probe.OVERRIDE] or dpl.switch_off != [probe.PATCH] or dpl.needs_you:
             raise Failed("apply", "the plan from the dry run is not the expected one")
         self._dm = demaster.Demaster(m2, dp, dpl, self.dir / "demaster", self.session_dir, launcher=self._launcher,
-                                     running=self._running, closed=self._closed, poll=self._poll, closer=self._closer)
+                                     running=self._running, closed=self._closed, poll=self._poll, closer=self._closer,
+                                     presser=self._presser)
         (self.dir / "demaster").mkdir(parents=True, exist_ok=True)
         try:
             self._dm.make_safe()
@@ -330,8 +334,18 @@ class Probe:
         self._ok("revert")
 
 
+def scripts_mark() -> str:
+    """A mark of ModTrap's own xEdit scripts as they are now. The probe proves these scripts on the owner's xEdit,
+    so a pass counts only for the scripts it ran (WHY§53)."""
+    h = hashlib.sha256()
+    for f in sorted((Path(__file__).parent / "xedit").glob("*.pas")):
+        h.update(f.name.encode("utf-8") + b"\0" + f.read_bytes().replace(b"\r\n", b"\n") + b"\0")
+    return h.hexdigest()[:16]
+
+
 def passed(session_dir: Path, inst: instance.Instance) -> str:
-    """Why real work is not allowed yet, or "" when the probe has passed for this modlist with this xEdit."""
+    """Why real work is not allowed yet, or "" when the probe has passed for this modlist with this xEdit and
+    these scripts."""
     try:
         with open(session_dir / "probe.json", "rb") as f:
             data = json.loads(f.read(4 * 1024 * 1024).decode("utf-8"))
@@ -345,6 +359,8 @@ def passed(session_dir: Path, inst: instance.Instance) -> str:
         tool = ""
     if data.get("tool") != tool:
         return "the xEdit set up in MO2 is not the one the probe passed with: run the probe again"
+    if data.get("scripts") != scripts_mark():
+        return "ModTrap's xEdit scripts have changed since the probe passed: run the probe again (Tools tab)"
     return ""
 
 
