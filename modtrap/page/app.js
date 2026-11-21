@@ -359,7 +359,8 @@ function renderDemaster(force) {
     });
     cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
       " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
-      el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." })));
+      el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
+      ...((j.stale || []).length ? [el("p", { class: "message bad", text: "Made again since: " + j.stale.join(", ") + ". The original changed after ModTrap demastered it (a tool has probably made it again), and ModTrap’s older copy in “" + j.mod_name + "” still wins over it. Delete ModTrap’s copy of " + (j.stale.length > 1 ? "these plugins" : "this plugin") + " from that mod’s folder, then press Rescan and look at Health." })] : [])));
   }
   box.hidden = !cards.length;
   box.replaceChildren(...cards);

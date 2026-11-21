@@ -78,6 +78,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 53 | 2026-11-21 | The second real dry run stopped at a file held by another program; the scripts now bear it, and a probe pass counts only for the scripts it ran | FACT | #xedit #mo2 #safety #process |
 | 54 | 2026-11-21 | The probe and the dry run pass again with the changed scripts; MO2's message is closed the moment it shows | FACT | #xedit #mo2 #process |
 | 55 | 2026-11-21 | What the big patch files carry on from the mod, as the evidence run showed it; MT4's case C becomes automatic, and the probe proves it first | DECIDED | #procedure #xedit #safety #process |
+| 56 | 2026-11-21 | The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out | FACT | #xedit #mo2 #tools #safety #process |
 
 ## Entries
 
@@ -1176,3 +1177,25 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   changed, so the probe must pass again before real work (WHY§53).
 - Unproven: the put-back of a script attachment and the removal of a condition, on real plugins. Both are
   guarded by the checks above; the first real demaster shows them.
+
+### 56. The probe proves the put-back on the owner's xEdit; all five big files read as demasterable; a copy that hides a remade original is called out
+
+`2026-11-21` · FACT · `#xedit #mo2 #tools #safety #process` · refs: MT4, MT5, MT14, DESIGN§5, DESIGN§9, DESIGN§13, XE01§16, MO01§9, WHY§28, WHY§54, WHY§55
+
+- FACT (the owner's session): with WHY§55's scripts the probe passed every step. xEdit read the carried-on part
+  of the invented plugin as "put back", the changing script put it back, and the new plugin holds the base's
+  value. XE01§16's LIKELY holds for a single link.
+- FACT: the real dry run then read all five big files as "can be demastered", with nothing left for the owner:
+  7 keyword entries; 7 + 7 + 2 condition entries, each also found in a patch for the mod or in the mod itself,
+  none ending a run of "or"; 9 condition lists and 3 single fields put back from the files' own masters; 5
+  script attachments put back from the game's own file; 45 copies of the mod's own records taken out. The
+  twelve patches are switched off. This is the guide's whole list, and the two files the guide does not name.
+- FACT: closing MO2's message worked, but MO2 then took some seconds to leave, and ModTrap's fallback asked it
+  again with a warning in the log. METHOD: once the message is closed MO2 gets twelve seconds before that.
+- METHOD: ModTrap's demastered copy lies in ModTrap's own mod, above the original (MT5). If a tool later makes
+  the original again (one of the five is a generator's output, WHY§28), the copy would hide the newer file and
+  nothing would say so. An installed job now compares each original with what the safe folder knows of it, and
+  the job's card names any that changed since, with what to do. Hashing is done again only when a file's size
+  or time changed.
+- Still a first: the demaster of real plugins. The put-back of a script attachment and the removal of a
+  condition run there for the first time, each checked by the script against its source (XE01§16).

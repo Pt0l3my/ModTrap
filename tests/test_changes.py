@@ -232,6 +232,15 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual([(j["state"], j["disabled"], j["deactivated"]) for j in jobs],
                          [("installed", ["Bramble - Lantern Patch", "Bramble"],
                            ["BrambleLanternPatch.esp", "Collection - Bramble.esp"])])
+        # A tool making an original again after the demaster: ModTrap's copy would hide the newer file. It says so.
+        original = self.root / "mods" / "Lantern" / "Lantern.esp"
+        keep, times = original.read_bytes(), original.stat()
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], [])
+        original.write_bytes(keep + b" made again by a tool")
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], ["Lantern.esp"])
+        original.write_bytes(keep)
+        os.utime(original, ns=(times.st_atime_ns, times.st_mtime_ns))
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["stale"], [])
         events = self.api.get("/api/history", {})[1]
         self.assertEqual(events["events"][0]["kind"], "verified")
         self.assertIn("mod disabled", [e["kind"] for e in events["events"]])

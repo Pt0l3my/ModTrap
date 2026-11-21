@@ -504,6 +504,7 @@ def close_program(image: str, force: bool = False) -> None:
         pass
 
 
+MO2_LEAVING = 12.0             # seconds MO2 gets to close once its message has been closed (the owner's PC: 4 to 8)
 MO2_GRACE = 4.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
 PRESS_EVERY = 3.0              # seconds between looks for xEdit's "Module Selection" window
 PRESS_LIMIT = 8                # presses of its OK in one run, at most
@@ -574,6 +575,7 @@ def close_xedit(image: str, running: Callable[[str], bool | None], closer: Calla
             if dismissed == 1:
                 log.info("MO2 showed a message once the run was over (one of its own plugins failing after a "
                          "command-line run: nothing of ModTrap's). ModTrap closed the message.")
+                end = max(end, time.time() + MO2_LEAVING)    # with its message closed, MO2 takes some seconds to go
         time.sleep(min(wait, 0.2))
     log.warn("MO2, started only for this run, did not close by itself: it is probably showing a message (a plugin of "
              "MO2 failing after a command-line run does that). ModTrap asks it to close; if it stays, close it yourself.")
