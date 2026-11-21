@@ -86,6 +86,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 61 | 2026-11-21 | Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date | FACT | #xedit #page #steps #safety #process |
 | 62 | 2026-11-21 | New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed | METHOD | #page #safety #process |
 | 63 | 2026-11-21 | The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds | FACT | #xedit #tools #steps #process |
+| 64 | 2026-11-21 | Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold | METHOD | #tools #steps #page #process |
 
 ## Entries
 
@@ -1382,3 +1383,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   there (their masters would pull most of a large list in; reading record headers with ModTrap's own reader
   takes about half a second for a million records).
 - Unproven: the counts on the owner's list; they show at the owner's next look at the Steps tab.
+- Later, 2026-11-21: counting shared records proved too coarse on the owner's list, and showing two verdicts for
+  one tool was wrong. Both are replaced in WHY§64 (TL01§9).
+
+### 64. Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold
+
+`2026-11-21` · METHOD · `#tools #steps #page #process` · refs: MT17, MT18, DESIGN§13, DESIGN§14, TL01§8, TL01§9, WHY§52, WHY§63
+
+- The owner, with a picture of WHY§63's steps on the real list: three tools told to run again and the same three
+  named as needing no run; "So which one is it? also, what is the logic for suggesting those tools in the first
+  place? Does ModTrap know what each tool actually is for and what they need to do? How does it know they are
+  really needed for demastering a mod? when evidence is shown, I would like to see details (could be a
+  fold/unfold type field within each step)".
+- FACT: both faults were ModTrap's. The two lists came from judging a tool by records and by files apart and
+  showing both. And the record count of WHY§63 took "holds the same record" for "was built from the mod", which
+  on a dialogue mod sent the owner towards running the distant-view generator.
+- METHOD (TL01§9): a record counts only if the mod changes it, by comparing its fields with what the mod's
+  author had before them; a tool's plugin counts only if it holds one of those changed fields. Each tool gets
+  one verdict from all the evidence, with a sentence on what the tool is for, the reasons for, the reasons
+  against, and the records and files themselves in a fold.
+- Ruled out: knowing each tool by a list of record types it "cares about" (the tools change, and a list is a
+  guess the owner cannot check); comparing in xEdit, which knows what every field means (its load of the tools'
+  plugins and all their masters would turn a three-minute dry run into a long one); always advising a run "to be
+  safe" (it costs the owner hours and teaches them to ignore the step).
+- The limit is said where it applies: the comparison is of bytes, and can miss a change in a field that points
+  at another record when the two plugins' master lists differ (TL01§9). A tool whose plugin could not be read to
+  the end is still advised, and says that this is why.
+- Shown in a browser on invented plugins: a tool whose plugin carries the mod's value is to run, one that holds
+  the record with another value is named beside it as speaking against, one that holds only what the mod does
+  not change is cleared; the folds open to the records. The owner's list shows what it gives there.

@@ -56,14 +56,16 @@ class StepsTests(unittest.TestCase):
         s = steps.compile_steps(m, ["Bramble"], None, deep)
         by = {x["key"]: x for x in s["steps"]}
         self.assertEqual([x["key"] for x in s["steps"]],
-                         ["dry", "switch-off", "demaster", "regenerate", "disable", "tool:animations", "tools-clear",
-                          "mentions", "health", "play"])
+                         ["dry", "switch-off", "demaster", "regenerate", "disable", "tool:Pandora Behaviour Engine",
+                          "tools-clear", "mentions", "health", "play"])
         self.assertEqual((by["dry"]["state"], by["demaster"]["state"], by["disable"]["state"]),
                          ("to do", "waiting for the dry run", "waiting"))
         self.assertEqual([i["plugin"] for i in by["regenerate"]["items"]], ["Generated.esp"])
         self.assertEqual([(d["mod"], d["why"][:6]) for d in by["disable"]["items"]],
                          [("Bramble", "ticked"), ("Bramble Hotfix", "2 of i")])
-        self.assertIn("Invented Behaviour Engine", by["tool:animations"]["title"])
+        engine = by["tool:Pandora Behaviour Engine"]                    # named by what the tool is, with its start button
+        self.assertEqual([i["tool"] for i in engine["items"] if "tool" in i], ["Invented Behaviour Engine"])
+        self.assertIn("the mod carries 1 file(s) of animations", engine["why"])
         self.assertIn("compiled script", by["play"]["why"])
         self.assertFalse(s["complete"])
         # A dry run's verdicts sort the dependants.
@@ -140,31 +142,37 @@ if __name__ == "__main__":
 
 
 class ToolEvidence(unittest.TestCase):
-    """WHY§63: a tool is to run again where its output holds records, or files, of the mod being taken out; and
-    is said to need no run where it holds none. Invented plugins with real records."""
+    """WHY§63, WHY§64: a tool is to run again only where its output carries what the mod changed, or files made
+    from the mod's; holding the same record is not enough. Each tool gets one verdict. Invented plugins with real
+    records: a few global variables, told apart by their value."""
 
     def setUp(self):
         from modtrap import probe
         logbook.set_console(False)
         self.tmp = tempfile.TemporaryDirectory()
         os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
-        g = lambda *forms: probe.group(b"GLOB", [probe.glob(f, "MT_%X" % f, 1.0) for f in forms])   # noqa: E731
-        pf = lambda masters, *forms: probe.plugin_file(list(masters), [g(*forms)], len(forms), 0x900, "invented")   # noqa: E731
-        sky = ("Skyrim.esm",)
+
+        def pf(masters, *globs):
+            recs = [probe.glob(form, "MT_%X" % (form & 0xFFFFFF), value) for form, value in globs]
+            return probe.plugin_file(list(masters), [probe.group(b"GLOB", recs)], len(recs), 0x900, "invented")
+
+        core = ("Core.esp",)
+        A, B, C, D = 0x00000A00, 0x00000B00, 0x00000C00, 0x00000D00          # Core's own; 00 is Core in the others
         self.root = fx.make_instance(Path(self.tmp.name) / "List", [
-            ("+", "PG Output", {"PGPatcher.esp": pf(sky, 0x00000F00)}),
+            ("+", "PG Output", {"PGPatcher.esp": pf(core, (D, 1.0))}),
             ("+", "Patcher Output", {
-                # holds a record the mod changes
-                "Synthesis.esp": pf(sky, 0x00000ABC, 0x00000DEF),
-                # holds a record that a patch made for the mod changes
-                "Synthesis Gameplay.esp": pf(sky, 0x00000111),
-                # holds nothing the mod or its patch touch
-                "Bashed Patch, 0.esp": pf(sky, 0x00000DEF, 0x00000222)}),
-            ("+", "Inn Patches", {"Inn - Bramble Patch.esp": pf(sky + ("Bramble.esp",), 0x00000111)}),
-            ("+", "Quill", {"Quill.esp": pf(sky, 0x00000333)}),
-            # the mod: it changes one of the game's records and has one of its own
-            ("+", "Bramble", {"Bramble.esp": pf(sky, 0x00000ABC, 0x01000800)}),
-        ], load_order=["Bramble.esp", "Quill.esp", "Inn - Bramble Patch.esp", "Synthesis.esp", "Synthesis Gameplay.esp",
+                # carries the mod's change to A (the mod's value, 7), and Core's own B
+                "Synthesis.esp": pf(core, (A, 7.0), (B, 1.0)),
+                # holds A, but with a value of its own: not the mod's change
+                "Synthesis Gameplay.esp": pf(core, (A, 3.0)),
+                # holds B, which the mod holds too but does not change; and C with the patch's change (9)
+                "Bashed Patch, 0.esp": pf(core, (B, 1.0), (C, 9.0))}),
+            # a patch made for the mod: it changes C
+            ("+", "Inn Patches", {"Inn - Bramble Patch.esp": pf(core + ("Bramble.esp",), (C, 9.0))}),
+            # the mod: it changes A, holds B unchanged, and has a record of its own
+            ("+", "Bramble", {"Bramble.esp": pf(core, (A, 7.0), (B, 1.0), (0x01000800, 5.0))}),
+            ("+", "Core", {"Core.esp": pf((), (A, 1.0), (B, 1.0), (C, 1.0), (D, 1.0))}),
+        ], load_order=["Core.esp", "Bramble.esp", "Inn - Bramble Patch.esp", "Synthesis.esp", "Synthesis Gameplay.esp",
                        "Bashed Patch, 0.esp", "PGPatcher.esp"],
             profile_settings="[custom_overwrites]\r\nParallaxGen=PG Output\r\n")
         mods = self.root / "mods"
@@ -177,28 +185,61 @@ class ToolEvidence(unittest.TestCase):
         self.tmp.cleanup()
         logbook.set_console(True)
 
-    def test_record_ids_name_the_owner_and_the_id(self):
-        ids, cut = plugin.record_ids(self.root / "mods" / "Bramble" / "Bramble.esp")
-        self.assertEqual((ids, cut), ({("skyrim.esm", 0xABC), ("bramble.esp", 0x800)}, False))
+    def test_the_reader_finds_records_and_their_fields(self):
+        path = self.root / "mods" / "Bramble" / "Bramble.esp"
+        ids, cut = plugin.record_ids(path)
+        self.assertEqual((ids, cut), ({("core.esp", 0xA00), ("core.esp", 0xB00), ("bramble.esp", 0x800)}, False))
+        with plugin.Records(path) as r:
+            self.assertEqual([t for t, _ in r.fields(("core.esp", 0xA00))], ["EDID", "FNAM", "FLTV"])
+            self.assertEqual((r.kind_of(("core.esp", 0xA00)), r.fields(("core.esp", 0x999))), ("GLOB", None))
 
-    def test_a_tool_runs_again_only_where_its_output_holds_something_of_the_mod(self):
+    def test_a_tool_runs_again_only_where_its_output_carries_the_mods_changes(self):
         m = model.build(instance.load(self.root))
         deep = steps.look_deeper(m, ["Bramble"])
-        got = {o["plugin"]: (o["tool"], o["shared"]) for o in deep["outputs"]}
-        self.assertEqual(got, {"Synthesis.esp": ("Synthesis", 1), "Synthesis Gameplay.esp": ("Synthesis", 1),
-                               "Bashed Patch, 0.esp": ("Wrye Bash", 0)})        # the file generator is judged by files
-        self.assertEqual([(o["tool"], o["mod"], o["files"], o["shared"]) for o in deep["output_files"]],
-                         [("ParallaxGen (PGPatcher)", "PG Output", 3, 1)])
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
-        self.assertIn("Synthesis.esp (1 record), Synthesis Gameplay.esp (1 record)", by["tool:Synthesis"]["why"])
-        self.assertEqual((by["tool:Synthesis"]["state"], by["tool:Synthesis"]["manual"]), ("to do", True))
-        self.assertIn("holds 1 file(s) at the path of a file of this mod", by["tool:ParallaxGen (PGPatcher)"]["why"])
-        self.assertNotIn("tool:Wrye Bash", by)
-        clear = by["tools-clear"]
-        self.assertEqual((clear["state"], clear["who"], len(clear["items"])), ("not needed", "ModTrap", 1))
-        self.assertIn("Wrye Bash: its output (Bashed Patch, 0.esp) holds no record", clear["items"][0]["text"])
-        # A mod nothing of which is in any output: every tool is cleared, none is to run.
-        deep = steps.look_deeper(m, ["Quill"])
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Quill"], None, deep, auto=True)["steps"]}
+        got = {o["plugin"]: (o["tool"], o["shared"], o["carried"]) for o in deep["outputs"]}
+        self.assertEqual(got, {"Synthesis.esp": ("Synthesis", 1, 1),            # A, with the mod's value
+                               "Synthesis Gameplay.esp": ("Synthesis", 1, 0),   # A, with another value
+                               "Bashed Patch, 0.esp": ("Wrye Bash", 1, 1)})     # C, with the patch's value; B does not count
+        detail = next(o for o in deep["outputs"] if o["plugin"] == "Synthesis.esp")["details"]
+        self.assertEqual(detail, [{"kind": "GLOB", "owner": "core.esp", "id": "000A00", "by": ["Bramble.esp"],
+                                   "carried": ["FLTV"], "changed": ["FLTV"]}])
+        self.assertEqual([(o["tool"], o["mod"], o["files"], o["shared"], o["examples"]) for o in deep["output_files"]],
+                         [("ParallaxGen (PGPatcher)", "PG Output", 3, 1, ["meshes/bramble/leaf.nif"])])
+        st = steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]
+        by = {x["key"]: x for x in st}
+        # One verdict for each tool: none is both to run and cleared.
+        cleared = {i["text"].split(":")[0] for i in by.get("tools-clear", {"items": []})["items"]}
+        running = {k[5:] for k in by if k.startswith("tool:")}
+        self.assertEqual((running, cleared), ({"Synthesis", "Wrye Bash", "ParallaxGen (PGPatcher)"}, set()))
+        syn = by["tool:Synthesis"]
+        self.assertIn("Synthesis runs its patchers", syn["why"])                # what the tool is for
+        self.assertIn("Synthesis.esp carries what the mod changed in 1 record(s)", syn["why"])
+        self.assertIn("What speaks against it: Synthesis Gameplay.esp holds 1 record(s) the mod changes, but none of "
+                      "the mod's changes", syn["why"])
+        folds = [i["details"] for i in syn["items"] if "details" in i]
+        self.assertEqual(len(folds), 2)
+        self.assertIn("GLOB 000A00 of core.esp · changed by Bramble.esp in FLTV · this plugin holds the same FLTV",
+                      folds[0]["lines"])
+        self.assertIn("this plugin holds none of those changes", folds[1]["lines"][0])
+        self.assertIn("holds 1 file(s) at the path of a file of the mod", by["tool:ParallaxGen (PGPatcher)"]["why"])
+
+    def test_a_mod_whose_changes_no_output_carries_clears_every_tool(self):
+        # Take Core's own D out of the picture: a mod that only holds a record unchanged, and changes nothing else.
+        from modtrap import probe
+        still = probe.plugin_file(["Core.esp"], [probe.group(b"GLOB", [probe.glob(0x00000B00, "MT_B00", 1.0)])], 1, 0x900, "invented")
+        fx.write(self.root / "mods" / "Still" / "Still.esp", still)
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Core", b"+Still\r\n+Core"))
+        for name in ("plugins.txt", "loadorder.txt"):
+            f = self.root / "profiles" / "Default" / name
+            f.write_bytes(f.read_bytes().replace(b"Bramble.esp", b"Still.esp\r\n" + (b"*" if name == "plugins.txt" else b"") + b"Bramble.esp", 1))
+        m = model.build(instance.load(self.root))
+        deep = steps.look_deeper(m, ["Still"])
+        self.assertEqual({o["plugin"]: (o["shared"], o["carried"]) for o in deep["outputs"]},
+                         {"Synthesis.esp": (0, 0), "Synthesis Gameplay.esp": (0, 0), "Bashed Patch, 0.esp": (0, 0)})
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Still"], None, deep, auto=True)["steps"]}
         self.assertEqual([k for k in by if k.startswith("tool:")], [])
-        self.assertEqual(len(by["tools-clear"]["items"]), 3)
+        clear = by["tools-clear"]
+        self.assertEqual((clear["state"], sorted(i["text"].split(":")[0] for i in clear["items"])),
+                         ("not needed", ["ParallaxGen (PGPatcher)", "Synthesis", "Wrye Bash"]))
+        self.assertTrue(all(i["evidence"] for i in clear["items"]))

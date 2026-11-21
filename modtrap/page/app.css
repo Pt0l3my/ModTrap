@@ -267,3 +267,9 @@ body.dragging .welcome-box { outline: none; }
 .modal p { margin: 0 0 10px; line-height: 1.45; }
 .modal input[type=text] { width: 100%; margin: 2px 0 10px; }
 .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+details.evidence { margin: 4px 0 6px; }
+details.evidence summary { cursor: pointer; color: var(--dim); }
+details.evidence summary:hover { color: var(--text); }
+details.evidence ul { margin: 4px 0 2px 18px; padding: 0; }
+details.evidence li { list-style: none; overflow-wrap: anywhere; }
+.step li.plain { list-style: none; margin-left: -18px; }

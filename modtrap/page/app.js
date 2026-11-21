@@ -1347,8 +1347,15 @@ function toolCard() {
     going ? el("div", { class: "actions" }, stop) : null);
 }
 
+// The evidence behind a step, folded away until asked for (WHY§64).
+function evidenceFold(d) {
+  return el("details", { class: "evidence" }, el("summary", { text: "Evidence: " + d.summary }),
+    el("ul", {}, ...d.lines.map((l) => el("li", { class: "mono dim", text: l }))));
+}
+
 function stepItem(it) {
-  if (it.text) return el("li", { text: it.text });
+  if (it.details) return el("li", { class: "plain" }, evidenceFold(it.details));
+  if (it.text) return el("li", {}, it.text, ...(it.evidence || []).map(evidenceFold));
   if (it.tool) return el("li", {}, "“" + it.tool + "” in MO2's list of tools  ", toolButton(it.tool));
   if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),

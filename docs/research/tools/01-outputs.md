@@ -74,3 +74,34 @@ Nothing of them is copied: ModTrap keeps only names and marks, as data (`modtrap
   examples. It is not a standing reminder: without such files in the mod, the step is not there.
 - Not judged: what lies inside a mod's archives (.bsa), which ModTrap does not open; and a tool that keeps its
   output outside MO2's mods, of which MO2 records nothing.
+
+## 9. Holding the same record is not carrying the mod's change (the owner's list, 2026-11-21)
+
+- **FACT (the owner's list).** By §8's count, the distant-view generator's three plugins and one of the patcher's
+  shared a handful of records with a dialogue mod and its patches, and the page told the owner to run both again,
+  hours of work, while a second list on the same page said the same tools needed no run (they had been judged
+  once by records and once by files, and both answers were shown). The owner: "So which one is it? … Does
+  ModTrap know what each tool actually is for and what they need to do? How does it know they are really needed".
+- **LIKELY.** A mod holds records it does not change: a cell or worldspace it only puts things into is written
+  into the plugin as it stood. A tool holds records for its own reasons: the generator writes its own data into
+  the same cells. Sharing such a record says nothing about the mod.
+- **METHOD.** §8's count is replaced by two questions, answered with ModTrap's own reader, which now reads a
+  record's fields (compressed ones too):
+  1. What does the mod change? Its version of a record it does not own is compared, field by field, with the
+     version in the last of that plugin's own masters that holds the record. No differing field: the mod does
+     not change the record, and it is left out. The differing fields are the mod's changes.
+  2. Does the tool's plugin carry one of those changed fields, byte for byte? Then it carries the mod's change,
+     and the tool is to run again. If it holds the record without any of them, that is said, and is not a reason
+     to run the tool.
+- **Limit, stated on the page's own terms.** Fields are compared as bytes. A field that points at another record
+  is written with that record's place among the plugin's own masters, so the same value can be written
+  differently in two plugins: equal bytes are taken as the same value; unequal bytes are not proof of a
+  different one. The count can therefore miss a carried change of that kind; it does not invent one.
+- **METHOD.** Each tool has one verdict, from all the evidence together: the kinds of file the mod carries that
+  the tool feeds on, the changes its plugins carry, the files of its output mod at the mod's own paths. Any of
+  them: run again, with what speaks against it said beside it. None: the tool is named as needing no run. The
+  records and files behind each verdict are shown, folded away until asked for.
+- **LIKELY (the tools' own public descriptions; not read in their source).** What each tool is for, in a
+  sentence, is in ModTrap's tools data ('does') and is shown with the verdict: the patcher, the Bashed Patch,
+  the model patcher and the distant-view generator from §2 to §5, and the behaviour engines, the body builder,
+  and the distant-view generator's two companions, which have no plugin of their own to be known by.
