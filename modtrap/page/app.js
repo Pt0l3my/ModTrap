@@ -23,6 +23,16 @@ async function call(path, body) {
   }
   const r = await fetch(path, opt);
   const data = await r.json().catch(() => ({}));
+  if (r.status === 403 && data.error === "no token") {
+    // Another start of ModTrap answers at this address now (WHY§68): this page belongs to the one that closed.
+    let last = 0;
+    try { last = Number(sessionStorage.getItem("modtrap-reloaded") || 0); } catch (e) { /* no storage: no reload */ last = Date.now(); }
+    if (Date.now() - last > 15000) {
+      try { sessionStorage.setItem("modtrap-reloaded", String(Date.now())); } catch (e) { /* as above */ }
+      location.reload();
+    }
+    throw new Error("ModTrap was started again; this page is the earlier one's. Reload it.");
+  }
   if (!r.ok) throw new Error(data.error || ("the request failed (" + r.status + ")"));
   return data;
 }
@@ -210,7 +220,8 @@ function renderTools(s) {
 function renderState(s) {
   state.session = s.session;
   renderSessions(s);
-  $("version").textContent = s.version ? "version " + s.version : "";
+  $("version").textContent = s.version ? "version " + s.version + (s.version_differs ? " · files differ" : "") : "";
+  $("version").title = s.version_differs ? "The files in ModTrap's folder are not exactly those of this version: an update unpacked over an older folder, a copy cut short, or files changed by hand. Best unpack an update into an empty folder." : "";
   if (document.activeElement !== $("folder") && s.folder && (!$("folder").value || s.status === "ready")) $("folder").value = s.folder;
   const ready = s.status === "ready";
   $("summary").hidden = !ready;
@@ -2031,10 +2042,12 @@ async function tick() {
   renderMo2();
   const up = $("updated");
   up.hidden = !s.updated_on_disk;
-  if (s.updated_on_disk && !up.textContent) {
+  const onDisk = s.updated_on_disk ? (s.updated_on_disk.version || "?") : "";
+  if (s.updated_on_disk && up.dataset.v !== onDisk) {
+    up.dataset.v = onDisk;
     const quit = el("button", { type: "button", text: "Quit ModTrap" });
     quit.addEventListener("click", quitModTrap);
-    up.replaceChildren("ModTrap's own files have changed since this ModTrap was started (an update). Quit it and start it again: until then the program in memory and the scripts on disk are of different versions, and ModTrap starts nothing.  ", quit);
+    up.replaceChildren("This is ModTrap " + s.version + ", still running, but the files in its folder have changed since it was started" + (onDisk && onDisk !== s.version ? ": they are version " + onDisk + " now" : "") + ". Quit it and start it again: until then the program in memory and the scripts on disk are of different versions, and ModTrap starts nothing.  ", quit);
   }
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;

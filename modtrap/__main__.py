@@ -146,6 +146,23 @@ DEFAULT_PORT = 8737
 def serve(a: argparse.Namespace) -> int:
     from . import api as api_mod, server          # imported here so that `scan` needs neither
 
+    from . import handover, version
+
+    # One ModTrap at a time (WHY§68): one that is still running, of whatever version, saves its session and closes.
+    took, was, where = handover.take_over()
+    if took == "busy":
+        print("%s %s is already running, in the middle of a job, so it was left alone. Its page is at %s\n"
+              "Let the job end, press Quit there, then start %s again." % (NAME, was or "(an earlier version)", where, NAME))
+        if not a.no_browser:
+            webbrowser.open(where)
+        return 1
+    if took == "quit":
+        print("%s %s was still running: it saved its session and closed. This is %s %s."
+              % (NAME, was or "(an earlier version)", NAME, VERSION), file=sys.stderr)
+    elif took == "stays":
+        print("%s %s is still running and did not close. Close its window, then start %s again."
+              % (NAME, was or "(an earlier version)", NAME))
+        return 1
     api = api_mod.Api()
     app = server.App(api)
     try:
@@ -161,6 +178,13 @@ def serve(a: argparse.Namespace) -> int:
     url = "http://127.0.0.1:%d/" % httpd.port
     log = logbook.get("app")
     log.info("%s %s, Python %s on %s", NAME, VERSION, sys.version.split()[0], sys.platform)
+    if version.DIFFERS:
+        log.warn("the files in ModTrap's folder are not exactly those of version %s: an update unpacked over an "
+                 "older folder, a copy cut short, or files changed by hand. Best unpack an update into an empty "
+                 "folder", VERSION)
+    if took == "quit":
+        log.info("%s %s was still running when this one started: it saved its session and closed", NAME, was or "(earlier)")
+    handover.note(httpd.port, app.handover)
     log.info("the page is at %s (this PC only)", url)
     # Quit (MT20): the answer is sent first, then the server stops and this program ends.
     api.on_quit = lambda: threading.Thread(target=httpd.shutdown, name="quit", daemon=True).start()
@@ -177,7 +201,7 @@ def serve(a: argparse.Namespace) -> int:
             api.open(folder, paths.load_settings().get("profile") or None)
     if not a.no_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
-    print("%s is running. Leave this window open; press Ctrl+C here to stop it." % NAME, file=sys.stderr)
+    print("%s %s is running. Leave this window open; press Ctrl+C here to stop it." % (NAME, VERSION), file=sys.stderr)
     try:
         httpd.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
@@ -185,6 +209,7 @@ def serve(a: argparse.Namespace) -> int:
     finally:
         api.save_log()
         httpd.server_close()
+        handover.clear(app.handover)
     print("%s has closed. Your session is saved; start %s again to carry on where you were." % (NAME, NAME),
           file=sys.stderr)
     return 0

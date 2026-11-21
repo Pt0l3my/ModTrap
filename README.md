@@ -35,7 +35,15 @@ python -m modtrap
 ```
 
 in its folder. Drop your modlist's folder (the one MO2 itself is in) on the page, or paste its path and press Open. Your work is kept in a session: press Quit, start ModTrap again, and you are back where you were. The page is served on your
-own PC only (127.0.0.1), and nothing is sent anywhere. For a quick look without the page:
+own PC only (127.0.0.1), and nothing is sent anywhere. 
+
+**Updating.** Download the repository again, unpack it into an empty folder (not over the old one) and start
+`ModTrap.cmd` there. A ModTrap that is still running saves its session and closes by itself, and the new one takes
+its place; your sessions are kept outside ModTrap's folder and come back. The version is at the top of the page and
+in ModTrap's window. If you replace the files of a running ModTrap instead, it notices, starts nothing more, and
+asks to be quit and started again.
+
+For a quick look without the page:
 
 ```
 python -m modtrap scan "C:\Modlists\Example" --mod "Some Mod"

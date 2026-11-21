@@ -19,6 +19,7 @@ import tempfile
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
+from . import version
 from .server import Bad
 
 log = logbook.get("app")
@@ -76,23 +77,6 @@ class HeaderCache:
         return got  # type: ignore[return-value]
 
 
-def code_mark() -> str:
-    """A mark of ModTrap's own files as they are on disk now: the program, the page, the scripts, the data. The
-    program is read once, at the start; the scripts and the page are read from disk each time. After an update of
-    the files without a restart the two are of different versions (WHY§67): this mark tells."""
-    root = Path(__file__).parent
-    h = hashlib.sha256()
-    for f in sorted(root.rglob("*")):
-        if f.is_file() and f.suffix.lower() in (".py", ".pas", ".js", ".html", ".css", ".json") and "__pycache__" not in f.parts:
-            try:
-                st = f.stat()
-            except OSError:
-                continue
-            h.update(("%s|%d|%d\n" % (f.relative_to(root).as_posix(), st.st_size, st.st_mtime_ns)).encode("utf-8"))
-    return h.hexdigest()[:16]
-
-
-STARTED_WITH = code_mark()
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
                                 "/api/demaster/install", "/api/add/run", "/api/probe/start"))
 
@@ -120,7 +104,7 @@ class Api:
         self.ask_close = dryrun.winauto.ask_to_close          # asks this modlist's MO2 to close; replaced in tests
         self._mo2_seen: tuple[float, dict] = (0.0, {})
         self._mo2_ours = False                  # the MO2 that is running was started by ModTrap for a run (WHY§67)
-        self._code_seen: tuple[float, bool] = (0.0, False)
+        self._code_seen: tuple[float, dict | None] = (0.0, None)
         self.poll = 1.0
         self.store = sessions.Store()
         self.session: sessions.Session | None = None
@@ -285,6 +269,16 @@ class Api:
         log.info("ModTrap is closing; the session is saved")
         self.save_log()
         return {"quit": True}, self.on_quit
+
+    def handover(self) -> tuple[dict, Callable[[], None] | None]:
+        """Another start of ModTrap on this PC takes over (WHY§68): this one saves and closes, unless it is in the
+        middle of something."""
+        if self._busy() or (self.changes is not None and self.changes.busy()) or \
+                (self.tooljob is not None and self.tooljob.state in ("starting", "running")):
+            raise Bad("in the middle of a job")
+        log.info("ModTrap was started again on this PC: this one (%s) saves its session and closes", VERSION)
+        answer, after = self.quit({})
+        return dict(answer, version=VERSION), after
 
     def _locked(self) -> str:
         """Why the session in use may not start a job, or "" when it may."""
@@ -1024,11 +1018,12 @@ class Api:
 
     # --- MO2: open or closed, for this modlist (WHY§58) ---------------------------------------------------------------
 
-    def updated_on_disk(self) -> bool:
-        """Have ModTrap's own files changed since this ModTrap started? Looked at every few seconds."""
+    def updated_on_disk(self) -> dict | None:
+        """Have ModTrap's own files changed since this ModTrap started (WHY§67)? Then: the version now on disk
+        (WHY§68). Looked at every few seconds."""
         when, was = self._code_seen
-        if time.time() - when > 5:
-            was = code_mark() != STARTED_WITH
+        if time.time() - when > 3:
+            was = {"version": version.recorded()[0]} if version.code_mark() != version.STARTED else None
             self._code_seen = (time.time(), was)
         return was
 
@@ -1140,6 +1135,7 @@ class Api:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "changes": self.changes is not None,
                    "updated_on_disk": self.updated_on_disk(),
+                   "version_differs": version.DIFFERS,
                    "save": self.saver.public(),
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
                    "folder": self.folder, "profile": self.profile}
@@ -1291,9 +1287,13 @@ class Api:
 
     def post(self, path: str, body: dict) -> tuple[int, object, Callable[[], None] | None]:
         if path in NEEDS_SAME_VERSION and self.updated_on_disk():
-            raise Bad("ModTrap's own files have changed since it was started (an update). Quit ModTrap and start it "
-                      "again first: until then the program in memory and the scripts on disk are of different "
-                      "versions, and nothing is started.")
+            on_disk = (self.updated_on_disk() or {}).get("version", "")
+            raise Bad("This is ModTrap %s, still running, but the files in its folder have changed since it was "
+                      "started%s. Quit ModTrap and start it again first: until then the program in memory and the "
+                      "scripts on disk are of different versions, and nothing is started."
+                      % (VERSION, " (they are version %s now)" % on_disk if on_disk and on_disk != VERSION else ""))
+        if path in NEEDS_SAME_VERSION:
+            log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":
             folder, profile = body.get("folder"), body.get("profile")
             if not isinstance(folder, str) or len(folder) > 1000:

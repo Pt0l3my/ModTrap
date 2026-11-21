@@ -90,6 +90,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 65 | 2026-11-21 | The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm | FACT | #tools #steps #xedit #process |
 | 66 | 2026-11-21 | Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all | DECIDED | #tools #steps #xedit #process |
 | 67 | 2026-11-21 | "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared | DECIDED | #process #page #mo2 #history |
+| 68 | 2026-11-21 | A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running | DECIDED | #process #version #server #page |
 
 ## Entries
 
@@ -1499,3 +1500,49 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests for the mark, the waiting, and the clearing; in a browser on an invented list, with MO2 shown as
   open: the one go asked nothing, the job was listed, reverted from the History tab and cleared.
 - Not checked: any of it on the owner's PC.
+- Later, 2026-11-21: the mark of names, sizes and times is replaced by a mark of contents, and the notice names
+  the versions: see WHY§68.
+
+### 68. A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running
+
+`2026-11-21` · DECIDED · `#process #version #server #page` · refs: MT22, MT11, MT17, MT20, DESIGN§2, DESIGN§17, WHY§9, WHY§67
+
+- The owner, on the update that ran without a restart (WHY§67): "that's an issue, we need to start involving
+  version updates to prevent that error".
+- FACT: the version had stood at one placeholder since the first day. A session file therefore could not tell
+  which ModTrap had made it, and neither the owner nor the page could tell an old ModTrap from a new one.
+- FACT (read in ModTrap's own start-up code): a ModTrap started while another still runs found its port taken
+  and quietly took another. Two pages were then open, of two versions, and nothing said which was which. The
+  mark of WHY§67 does not catch this when the update was unpacked into a new folder: the older one's files do
+  not change.
+- FACT: the mark of WHY§67 used the files' dates. Unpacking the same version again changes the dates, and would
+  have raised the notice for nothing.
+- DECIDED (MT22): the version is `0.3.n`, in `modtrap/version.json`, with a mark of the contents of ModTrap's
+  files (line endings left out; the record itself and Python's own caches left out). `tools/bump.py` raises the
+  number once for each commit and writes the mark; a test fails while the files and the mark disagree. So every
+  state of the files that is pushed has a number of its own, and the owner is told that number with each change.
+- DECIDED: the version is shown on the page, in the window ModTrap runs in, at the start of its log, in every
+  saved session file, and in the log line of each job that is started.
+- DECIDED: the notice of WHY§67 now compares contents, and names both versions: the one running and the one on
+  disk. Where the files a ModTrap started from are not those its version was written for (an update unpacked
+  over an older folder leaves the older one's files; a copy cut short; a file edited), the page says "files
+  differ" beside the version and the log says why. It is a warning, not a refusal: the tests cannot know which
+  file is at fault.
+- DECIDED: one ModTrap at a time. A running ModTrap leaves a note in its own work folder: its port, its version
+  and a key made for that start. A new start asks the running one, with that key, to save its session and
+  close, waits for its port, and takes its place; the owner's session comes back as after any Quit (MT20). One
+  that is in the middle of a job is left alone: the new start says so, opens the running one's page and ends.
+- METHOD: the key is not the page's token, and the request is not open to a page. It must carry the key, the
+  right Host, no Origin and no body; a browser cannot send it without the key, and the key is in a folder no
+  web page can read. It opens that one request only. A program of the same user on the same PC could read it,
+  as it could already end ModTrap's process.
+- METHOD: a page left open from the ModTrap that closed is refused by the new one (its token is of another
+  start). It now loads itself again, once, and is then the new one's page.
+- REJECTED for now: ModTrap fetching its own updates. It would be the first time ModTrap reaches the network,
+  and the first time it runs code it has just downloaded. MT11 leaves an updater for later; it is the owner's
+  to ask for.
+- LIMIT: a ModTrap older than 0.3.1 leaves no note and cannot be asked. Going from such a one to this version,
+  it has to be quit by hand once.
+- Checked: tests for the mark, the bump, the refusals of the request and the three outcomes of a take-over; two
+  real starts one after the other on one port here: the first saved and ended, the second took the port.
+- Not checked: on the owner's PC, where a port is released under Windows' rules.

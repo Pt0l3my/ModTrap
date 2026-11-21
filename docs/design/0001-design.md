@@ -36,6 +36,7 @@ reminds the owner which of the instance's tools may need a re-run (§13).
 - A job is data: the instance, the profile, the trapped plugins, the dependants and what to do with each. The
   script that xEdit runs is one fixed file of ours; it reads the job from a small file beside it (XE01§2, WHY§11).
 - ModTrap contains no part of MO2 or xEdit. It finds and calls the owner's installed copies.
+- One ModTrap runs at a time, and it knows its version (§17).
 
 ## 3. Reading the instance (no xEdit needed)
 
@@ -473,3 +474,24 @@ nothing but ModTrap's own copy of the mod is removed (MT9, WHY§42).
 
 Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting tool's
 rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.
+
+## 17. Versions, and one ModTrap at a time (MT22)
+
+1. **The version** is `0.3.n`, kept in `modtrap/version.json` with a mark of the contents of ModTrap's own files.
+   `n` rises with every change (`tools/bump.py`; a test fails while the files and the mark disagree). It is shown
+   on the page, in ModTrap's window, at the start of its log, in the log line of each job, and in every saved
+   session file (WHY§68).
+2. **The program and the files.** A running ModTrap is the program as read at its start; the scripts for xEdit are
+   read from disk at each use. Before a dry run, a probe, a demaster, an add or a tool is started, ModTrap compares
+   the mark of the files on disk with the one it started from. If they differ it starts nothing and says which
+   version is running and which is on disk, with Quit beside it. Looking goes on (WHY§67).
+3. **Files that do not belong.** If the files ModTrap started from are not those its version was written for, the
+   page says "files differ" beside the version and the log says what that means. An update is best unpacked into an
+   empty folder.
+4. **One at a time.** A running ModTrap leaves a note in its work folder (port, version, a key of that start). A new
+   start asks the running one, with the key, to save its session and close, and takes its place on the same
+   address; the session comes back as after Quit (§15). One in the middle of a job is not interrupted: the new start
+   says so, shows the running one's page, and ends. The request is not open to a web page: it needs the key, which
+   only a program on this PC can read, and it does nothing but this.
+5. **A page of the one that closed** is refused by the new one and loads itself again.
+6. ModTrap does not fetch updates. The owner replaces the folder; the steps above make sure the new one is what runs.

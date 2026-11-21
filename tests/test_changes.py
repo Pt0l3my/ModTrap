@@ -280,12 +280,13 @@ class DemasterThroughThePage(unittest.TestCase):
     def test_an_update_without_a_restart_is_noticed_and_nothing_is_started(self) -> None:
         """WHY§67: the program in memory and the scripts on disk must be of one version."""
         self.assertFalse(self.api.state()["updated_on_disk"])
-        self.api._code_seen = (time.time(), True)               # as if ModTrap's files had changed on disk
+        self.api._code_seen = (time.time(), {"version": "9.9.9"})   # as if ModTrap's files had changed on disk
         self.assertTrue(self.api.state()["updated_on_disk"])
         for path in ("/api/dryrun/start", "/api/probe/start", "/api/demaster/start"):
             with self.assertRaises(Bad) as c:
                 self.api.post(path, {"mods": ["Bramble"]})
             self.assertIn("Quit ModTrap and start it again", str(c.exception))
+            self.assertIn("they are version 9.9.9 now", str(c.exception))
         self.assertEqual(snapshot(self.root), self.before)
 
     def test_new_plugins_that_wait_are_dropped_when_the_modlist_moves_on(self) -> None:
