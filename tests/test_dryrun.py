@@ -62,8 +62,11 @@ class DryRunTests(unittest.TestCase):
         cmd = dryrun.command(p, job_dir)
         self.assertEqual(cmd[1:6], ["-p", "Default", "run", "-e", "-a"])
         self.assertEqual(cmd[-1], "xEdit")
-        for part in ("-sse", '-script:"', '-P:"', "-autoload", "-autoexit", "-nobuildrefs", '-B:"', '-R:"'):
+        for part in ("-sse", '-script:"', '-P:"', "-nobuildrefs", '-B:"', '-R:"'):
             self.assertIn(part, cmd[6])
+        # Where MO2 puts the modlist's files: without it xEdit looks the game up in the registry (XE01§11).
+        self.assertIn('-D:"%s"' % (self.root / "Game" / "Data"), cmd[6])
+        self.assertNotIn("-auto", cmd[6])                           # neither switch does anything with a script
         raw = (job_dir / "script" / "modtrap-job.txt").read_bytes()
         self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))             # so that xEdit reads it as UTF-8
         job = raw.decode("utf-8-sig")
@@ -78,6 +81,63 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual((job_dir / "safe" / "Lantern.esp").read_bytes(),
                          (self.root / "mods" / "Lantern" / "Lantern.esp").read_bytes())
         self.assertTrue((job_dir / "script" / "ModTrap.pas").is_file())
+
+    def test_the_executables_own_arguments_are_carried_over(self):
+        """MO2's -a replaces an executable's arguments, so what the modlist set for its xEdit must come along:
+        its data folder above all. What would put xEdit into another mode, or clash with ModTrap's own, does not."""
+        j = Path("C:/Work/job")
+        own = '-D:"C:\\Modlists\\Example List\\Stock Game\\Data" -IgnoreESL -quickautoclean -autoexit -P:"other.txt" "Loose.esp" -cp:utf-8'
+        got = dryrun.arguments(j, "ModTrap.pas", own, "C:\\Somewhere Else\\Data")
+        parts = dryrun.split_arguments(got)
+        self.assertEqual(parts[:3], ['-D:"C:\\Modlists\\Example List\\Stock Game\\Data"', "-IgnoreESL", "-cp:utf-8"])
+        self.assertEqual([x for x in parts if dryrun.switch_name(x) == "d"], parts[:1])      # theirs, and only theirs
+        self.assertEqual(len([x for x in parts if dryrun.switch_name(x) == "p"]), 1)
+        for gone in ("quickautoclean", "autoexit", "Loose.esp", "other.txt"):
+            self.assertNotIn(gone, got)
+        # None of their own: MO2's game folder is named, without a closing slash before the quote.
+        got = dryrun.arguments(j, "ModTrap.pas", "", "C:\\Modlists\\Example List\\Stock Game\\Data\\")
+        self.assertIn('-D:"C:\\Modlists\\Example List\\Stock Game\\Data" ', got)
+        self.assertEqual(dryrun.split_arguments('-x "a b" -D:"c d\\e"  y'), ["-x", '"a b"', '-D:"c d\\e"', "y"])
+        self.assertEqual([dryrun.switch_name(x) for x in ("-D:x", "/IgnoreESL", "-cp=1", "plain", "")], ["d", "ignoreesl", "cp", "", ""])
+
+    def test_of_several_entries_for_xedit_the_plain_one_is_taken(self):
+        ini = self.root / "ModOrganizer.ini"
+        text = ini.read_bytes().decode()
+        head = text.split("[customExecutables]")[0]
+        exe = (self.root / "tools/SSEEdit/SSEEdit64.exe").as_posix()
+        ini.write_bytes((head + "[customExecutables]\r\nsize=3\r\n"
+                         "1\\title=xEdit QAC\r\n1\\binary=%s\r\n1\\arguments=-quickautoclean\r\n1\\workingDirectory=\r\n"
+                         "2\\title=xEdit64\r\n2\\binary=%s\r\n2\\arguments=-IgnoreESL\r\n2\\workingDirectory=\r\n"
+                         "3\\title=xEdit VQSC\r\n3\\binary=%s\r\n3\\arguments=-vqsc\r\n3\\workingDirectory=\r\n" % (exe, exe, exe)).encode())
+        p = dryrun.plan(model.build(instance.load(self.root)), ["Bramble"])
+        self.assertEqual((p.tool, p.tool_args), ("xEdit64", "-IgnoreESL"))
+
+    def test_xedit_is_closed_after_the_script_and_ended_if_it_stays(self):
+        """It stays open after a script (XE01§11): asked to close; ended if it does not go."""
+        calls = []
+        alive = {"n": 3}
+
+        def running(image):
+            alive["n"] -= 1
+            return alive["n"] > 0
+
+        dryrun.close_xedit("SSEEdit64.exe", running, lambda image, force: calls.append((image, force)), poll=0.01, grace=5)
+        self.assertEqual(calls, [("SSEEdit64.exe", False)])                 # it went when asked
+        calls.clear()
+        dryrun.close_xedit("SSEEdit64.exe", lambda image: True, lambda image, force: calls.append((image, force)), poll=0.01, grace=0.2)
+        self.assertEqual(calls, [("SSEEdit64.exe", False), ("SSEEdit64.exe", True)])
+        calls.clear()
+        dryrun.close_xedit("SSEEdit64.exe", lambda image: False, lambda image, force: calls.append((image, force)))
+        self.assertEqual(calls, [])                                         # already gone
+        dryrun.close_xedit("SSEEdit64.exe", lambda image: None, lambda image, force: calls.append((image, force)))
+        self.assertEqual(calls, [("SSEEdit64.exe", False)])                 # cannot be watched: asked once
+
+    def test_xedit_loading_none_of_the_plugins_is_a_failure_that_says_where_it_looked(self):
+        job = self.run_job(tool="absent")
+        self.assertEqual(job.state, "failed")
+        self.assertIn("did not load", job.message)
+        self.assertIn("Elsewhere", job.message)                             # the folder xEdit read
+        self.assertIn("Bramble.esp", job.message)
 
     def run_job(self, extra=(), tool=None):
         p = dryrun.plan(self.m, ["Bramble"])

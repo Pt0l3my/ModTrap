@@ -71,6 +71,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 46 | 2026-11-21 | "Demaster Selected" on the page behind the same switch, and a History tab | METHOD | #xedit #mo2 #safety #page #process |
 | 47 | 2026-11-21 | The probe is built and gates real work; Revert goes line by line once MO2 has run | METHOD | #safety #mo2 #xedit #process |
 | 48 | 2026-11-21 | "Save this session": the logs cleaned and packed into one .7z, written with Python alone | METHOD | #page #safety #licence #process |
+| 49 | 2026-11-21 | The first real run of the probe: what passed, what failed, and what was changed for it | FACT | #xedit #mo2 #adding #process |
 
 ## Entries
 
@@ -967,3 +968,37 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Not proven: 7-Zip on Windows opening the archive, though the format is the same; and what a real session's
   files hold that the cleaning does not expect. The first archive from the owner's PC should be looked through
   by the owner before it is sent.
+
+### 49. The first real run of the probe: what passed, what failed, and what was changed for it
+
+`2026-11-21` · FACT · `#xedit #mo2 #adding #process` · refs: DESIGN§7, DESIGN§9, DESIGN§16.3, XE01§11, MO01§3, WHY§7, WHY§31, WHY§34, WHY§40, WHY§42, WHY§47, WHY§48
+
+- The owner ran the probe on the real modlist (about 3,600 mods and 3,750 plugins; xEdit 4.1.5f; Windows 11) and
+  sent the saved session (WHY§48). It is the first time any of ModTrap's work met MO2 and xEdit.
+- FACT, passed: step 1. ModTrap's two test mods were copied into MO2's mods folder, listed, enabled, and their
+  three plugins placed and activated in both plugin lists; ModTrap's re-reading of the lists agreed. In the first
+  of two runs the lists were then put back whole: about a minute after MO2 had been started on them they were
+  still byte for byte what ModTrap had written. LIKELY, not shown: that MO2 had already closed by then; the
+  saved session does not say whether MO2 was found closed or could not be found at all, and the log now says
+  which.
+- FACT, passed: MO2's command started xEdit; the quoting of the arguments held; xEdit took the plugins file, the
+  backup folder and the log file from them; the script compiled and ran in xEdit's interpreter, read its job file,
+  wrote its progress and its report, and ModTrap read the report (WHY§31 and WHY§34's open points, for the
+  reading script).
+- FACT, failed: step 2, for two reasons, both ModTrap's (XE01§11). xEdit read another installation's Data folder,
+  because MO2's `-a` replaces the arguments the modlist had set for its xEdit; and xEdit does not close after a
+  script, whatever `-autoexit` says, so MO2 stayed open, waiting, and the probe could not clean up after itself.
+  XE01's earlier reading of `-autoexit` was wrong and is corrected there.
+- METHOD, changed: the executable's own arguments are carried over and the game folder MO2 manages is named to
+  xEdit; ModTrap closes the xEdit it started; the script reports where xEdit looks; a run that loads nothing fails
+  and says so (before, it "finished" with nothing read); the probe's clean-up waits for MO2 to go.
+- FACT, also seen in the saved lists: the placing rule of WHY§40 did not fit this list. Its outputs are under an
+  "Outputs" separator in the middle of the list, with sections of options after it, so ModTrap found no output at
+  the end and put the test mods last, in a section for mods not yet installed; and one plugin of unknown making
+  among the outputs ended the run of tool-made plugins early, so the test plugins landed after the patcher's
+  output instead of before it. METHOD: a separator named for outputs now decides both (DESIGN§16.3), and a
+  couple of unknown plugins among the outputs no longer end the run.
+- FACT: the saved session was clean: the owner's folders came as placeholders, and no file of a mod was in it.
+  xEdit's own log was in it, which is what showed the wrong Data folder.
+- Not proven still: everything from step 2's reading onward (whether xEdit loads the invented plugins at all, the
+  names it gives the list, MO2 keeping the lists, the changing script, Revert on the real list).

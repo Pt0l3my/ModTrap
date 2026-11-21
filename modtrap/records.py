@@ -42,6 +42,8 @@ class Plan:
     tool: str
     tool_binary: str
     warnings: list[str] = field(default_factory=list)
+    tool_args: str = ""
+    data_dir: str = ""
 
     def public(self) -> dict:
         return {"new": self.new, "load": len(self.load), "profile": self.profile, "tool": self.tool,
@@ -69,9 +71,10 @@ def plan(m: model.Model, mod_names: list[str]) -> Plan:
     if missing:
         raise Refused("the load order has plugins with missing or inactive masters (%s): xEdit would stop at them. "
                       "See the Health tab." % ", ".join(missing[:4]))
-    title, binary = dryrun.find_xedit(inst)
+    exe = dryrun.find_xedit_exe(inst)
     return Plan(new=[r.name for r in rows if fold(r.name) in new], load=[r.name for r in rows],
-                mo2=str(inst.root / dryrun.MO2_EXE), profile=inst.profile, tool=title, tool_binary=binary)
+                mo2=str(inst.root / dryrun.MO2_EXE), profile=inst.profile, tool=exe.title, tool_binary=exe.binary,
+                tool_args=exe.arguments, data_dir=dryrun.data_dir_of(inst))
 
 
 def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
@@ -100,7 +103,8 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
 
 
 def command(p: Plan, job_dir: Path) -> list[str]:
-    return [p.mo2, "-p", p.profile, "run", "-e", "-a", dryrun.arguments(job_dir, SCRIPT.name), p.tool]
+    return [p.mo2, "-p", p.profile, "run", "-e", "-a",
+            dryrun.arguments(job_dir, SCRIPT.name, p.tool_args, p.data_dir), p.tool]
 
 
 # --- the report -------------------------------------------------------------------------------------------------------
@@ -110,7 +114,8 @@ def parse_report(text: str, m: model.Model | None = None) -> dict:
     alone (only it changes the record), takes (it wins a record that other plugins also change: their change to it
     is lost), loses (a later plugin wins it), same (identical to what it overrides: it changes nothing)."""
     files: dict[str, dict] = {}
-    out = {"format": "", "xedit": "", "files": [], "missing": [], "held_changed": [], "end": "", "reason": ""}
+    out = {"format": "", "xedit": "", "files": [], "missing": [], "held_changed": [], "end": "", "reason": "",
+           "data_path": ""}
     memo: dict = {}
 
     def made_by_tool(name: str) -> bool:
@@ -162,6 +167,8 @@ def parse_report(text: str, m: model.Model | None = None) -> dict:
             f["own"], f["overrides"], f["done"] = int(parts[3] or 0), int(parts[4] or 0), True
         elif kind == "M" and len(parts) >= 2:
             out["missing"].append(parts[1])
+        elif kind == "P" and len(parts) >= 2:
+            out["data_path"] = parts[1]
         elif kind == "U" and len(parts) >= 2:
             out["held_changed"].append(parts[1])
         elif kind == "X" and len(parts) >= 2:
@@ -184,10 +191,11 @@ class Job:
     """One record check. Its state is read by the page; its lines go to the log."""
 
     def __init__(self, m: model.Model, p: Plan, job_dir: Path, *, launcher: Callable = dryrun.launch,
-                 running: Callable[[str], bool | None] = dryrun.image_running, poll: float = 1.0):
+                 running: Callable[[str], bool | None] = dryrun.image_running, poll: float = 1.0,
+                 closer: Callable[[str, bool], None] = dryrun.close_program):
         self.model, self.plan, self.dir = m, p, job_dir
         self.id = job_dir.name
-        self._launcher, self._running, self._poll = launcher, running, poll
+        self._launcher, self._running, self._poll, self._closer = launcher, running, poll, closer
         self.state = "preparing"       # preparing, starting, loading, reading, checking, done, failed, stopped
         self.message = ""
         self.started = time.time()
@@ -281,6 +289,7 @@ class Job:
                               % (dryrun.TIME_LIMIT * 2 // 60))
         self.state = "checking"
         self.result = parse_report(dryrun._read(report), self.model)
+        dryrun.close_xedit(image, self._running, self._closer, self._poll)
         changed = []
         for name, digest in manifest["sha256"].items():
             r = self.model.plugins[fold(name)]
@@ -294,6 +303,9 @@ class Job:
             raise Refused("these plugins are not the files they were before the check: %s" % ", ".join(changed))
         if self.result["end"] != "ok":
             raise Refused("the script reported a failure: " + (self.result["reason"] or "no reason given"))
+        if self.result["missing"]:
+            raise Refused("xEdit did not load %s. It looked for plugins in %s." % (
+                ", ".join(self.result["missing"][:6]), self.result.get("data_path") or "the folder it reads"))
         paths.write_atomic(self.dir / "result.json", (json.dumps(self.result, indent=1) + "\n").encode("utf-8"))
         self.state = "done"
         for f in self.result["files"]:

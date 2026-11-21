@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import logbook, model, paths
-from .instance import GAME, Instance, fold
+from .instance import GAME, Executable, Instance, fold
 
 SCRIPT = Path(__file__).resolve().parent / "xedit" / "ModTrap.pas"
 MO2_EXE = "ModOrganizer.exe"
@@ -53,6 +54,8 @@ class Plan:
     tool: str                       # the executable's title in MO2
     tool_binary: str
     warnings: list[str] = field(default_factory=list)
+    tool_args: str = ""             # the arguments MO2 has for this executable: kept, since `-a` replaces them
+    data_dir: str = ""              # the game's Data folder as MO2 manages it: where xEdit must look (XE01§11)
 
     def public(self) -> dict:
         return {"trapped_mods": self.trapped_mods, "trapped": self.trapped, "dependants": self.dependants,
@@ -60,17 +63,63 @@ class Plan:
                 "tool_file": Path(self.tool_binary.replace("\\", "/")).name, "warnings": self.warnings}
 
 
-def find_xedit(inst: Instance) -> tuple[str, str]:
-    """The xEdit set up in MO2: (its title, its program file). The 64-bit one first."""
-    by_name: dict[str, tuple[str, str]] = {}
+# Switches of an executable's own arguments that ModTrap's run must not inherit (XE01§2, XE01§11): the ones it sets
+# itself, and the ones that put xEdit into another mode.
+OWN_SWITCHES = frozenset(("script", "p", "b", "r", "autoload", "autoexit", "quickclean", "qc", "quickautoclean", "qac",
+                          "quickshowconflicts", "qsc", "veryquickshowconflicts", "vqsc", "autogamelink", "agl",
+                          "quickedit", "nobuildrefs"))
+_MODE_WORDS = ("quickautoclean", "quickclean", "qac", "quickshowconflicts", "qsc", "vqsc", "autogamelink")
+
+
+def split_arguments(text: str) -> list[str]:
+    """An argument string as its parts: split at spaces that are not inside double quotes; the quotes are kept."""
+    out, cur, quoted = [], "", False
+    for ch in text:
+        if ch == '"':
+            quoted = not quoted
+        if ch.isspace() and not quoted:
+            if cur:
+                out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
+def switch_name(part: str) -> str:
+    """The name of a switch such as -D:"..." or /IgnoreESL, lower case; "" for something that is not a switch."""
+    if not part or part[0] not in "-/":
+        return ""
+    return re.split(r"[:=]", part[1:], maxsplit=1)[0].strip().lower()
+
+
+def find_xedit_exe(inst: Instance) -> Executable:
+    """The xEdit set up in MO2, as MO2 has it. The 64-bit one first; of several entries for the same program, one
+    whose own arguments or title do not put xEdit into a cleaning or comparing mode."""
+    by_name: dict[str, list[Executable]] = {}
     for e in inst.executables:
-        base = fold(Path(e.binary.replace("\\", "/")).name)
-        by_name.setdefault(base, (e.title, e.binary))
+        by_name.setdefault(fold(Path(e.binary.replace("\\", "/")).name), []).append(e)
     for name in XEDIT_NAMES:
-        if name in by_name:
-            return by_name[name]
+        found = by_name.get(name)
+        if found:
+            plain = [e for e in found if not any(w in (e.arguments + " " + e.title).lower().replace(" ", "") for w in _MODE_WORDS)
+                     and not any(switch_name(x) in _MODE_WORDS for x in split_arguments(e.arguments))]
+            return (plain or found)[0]
     raise Refused("no xEdit is set up as an executable in this MO2 (looked for SSEEdit64.exe, xEdit64.exe, "
                   "SSEEdit.exe and xEdit.exe)")
+
+
+def find_xedit(inst: Instance) -> tuple[str, str]:
+    """The xEdit set up in MO2: (its title, its program file)."""
+    e = find_xedit_exe(inst)
+    return e.title, e.binary
+
+
+def data_dir_of(inst: Instance) -> str:
+    """The game's Data folder as MO2 manages it, or "" when MO2's settings do not name the game's folder."""
+    return str(inst.game_dir / "Data") if inst.game_dir is not None else ""
 
 
 def plan(m: model.Model, mod_names: list[str]) -> Plan:
@@ -122,11 +171,12 @@ def plan(m: model.Model, mod_names: list[str]) -> Plan:
                               % (r.name, name))
             stack.append(mr)
     order = [m.plugins[f] for f in m.order if f in need]
-    title, binary = find_xedit(inst)
+    exe = find_xedit_exe(inst)
     mo2 = inst.root / MO2_EXE
     return Plan(trapped_mods=mods, trapped=[r.name for r in order if fold(r.name) in trapped],
                 dependants=[r.name for r in order if fold(r.name) in deps], load=[r.name for r in order],
-                mo2=str(mo2), profile=inst.profile, tool=title, tool_binary=binary, warnings=warnings)
+                mo2=str(mo2), profile=inst.profile, tool=exe.title, tool_binary=exe.binary, warnings=warnings,
+                tool_args=exe.arguments, data_dir=data_dir_of(inst))
 
 
 # --- the job's folder ---------------------------------------------------------------------------------------------
@@ -180,18 +230,28 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
     return manifest
 
 
-def arguments(job_dir: Path, script: str = SCRIPT.name) -> str:
-    """xEdit's arguments (XE01§2 to XE01§6): our script, our plugin list, no questions, close at the end; backups
-    and a log in the job's folder; no reference building, which the report does not need."""
+def arguments(job_dir: Path, script: str = SCRIPT.name, own: str = "", data_dir: str = "") -> str:
+    """xEdit's arguments (XE01§2 to XE01§6, XE01§11). MO2's `-a` replaces the executable's own arguments, so those
+    are carried over, less the switches ModTrap sets itself and the ones that would put xEdit into another mode.
+    Then: the game's Data folder as MO2 manages it, unless the executable's own arguments already name one (without
+    it xEdit looks up the game in the registry, which need not be the folder MO2 fills); our script, our plugin
+    list, backups and a log in the job's folder; no reference building, which a report does not need."""
     q = lambda p: '"%s"' % p                                   # noqa: E731
-    return " ".join(["-sse", "-script:" + q(job_dir / "script" / script), "-P:" + q(job_dir / "plugins.txt"),
-                     "-autoload", "-autoexit", "-nobuildrefs", "-B:" + q(job_dir / "xedit-backups"),
-                     "-R:" + q(job_dir / "xedit-log.txt")])
+    kept = [x for x in split_arguments(own) if switch_name(x) not in OWN_SWITCHES and switch_name(x) != ""]
+    names = {switch_name(x) for x in kept}
+    parts = list(kept)
+    if not (names & {"sse", "tes5", "tes5vr", "enderal", "enderalse", "fo4", "fo4vr", "fnv", "fo3", "tes4", "sf1"}):
+        parts.append("-sse")
+    if "d" not in names and data_dir:
+        parts.append("-D:" + q(str(data_dir).rstrip("\\/")))     # no closing slash: before a quote it would escape it
+    parts += ["-script:" + q(job_dir / "script" / script), "-P:" + q(job_dir / "plugins.txt"), "-nobuildrefs",
+              "-B:" + q(job_dir / "xedit-backups"), "-R:" + q(job_dir / "xedit-log.txt")]
+    return " ".join(parts)
 
 
 def command(p: Plan, job_dir: Path, script: str = SCRIPT.name) -> list[str]:
     """MO2's command to run a configured executable in its virtual file system with our arguments (MO01§3)."""
-    return [p.mo2, "-p", p.profile, "run", "-e", "-a", arguments(job_dir, script), p.tool]
+    return [p.mo2, "-p", p.profile, "run", "-e", "-a", arguments(job_dir, script, p.tool_args, p.data_dir), p.tool]
 
 
 # --- the report ---------------------------------------------------------------------------------------------------
@@ -229,7 +289,8 @@ def parse_report(text: str) -> dict:
     """The script's report as the page shows it: per dependant, what needs a trapped plugin and what ModTrap would
     do about each (MT4): "record" (the dependant's copy of a trapped plugin's own record: taken out), "entry" (an
     entry of a list that is safe to shorten: taken out), "needs you" (anything else)."""
-    out: dict = {"format": "", "xedit": "", "end": "", "reason": "", "files": [], "not_loaded": [], "held_changed": []}
+    out: dict = {"format": "", "xedit": "", "end": "", "reason": "", "files": [], "not_loaded": [], "held_changed": [],
+                 "data_path": "", "trap_missing": [], "loaded": 0}
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
     for line in text.split("\n"):              # not splitlines(): the chain's separators would count as line ends
@@ -260,6 +321,11 @@ def parse_report(text: str) -> dict:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:
             out["not_loaded"].append(f[1])
+        elif kind == "N" and len(f) >= 2:
+            out["trap_missing"].append(f[1])
+        elif kind == "P" and len(f) >= 2:
+            out["data_path"] = f[1]
+            out["loaded"] = int(f[2]) if len(f) > 2 and f[2].isdigit() else 0
         elif kind == "U" and len(f) >= 2:
             out["held_changed"].append(f[1])
         elif kind == "X" and len(f) >= 2:
@@ -304,6 +370,38 @@ def image_running(image: str) -> bool | None:
     return fold(image) in fold(r.stdout)
 
 
+def close_program(image: str, force: bool = False) -> None:
+    """Asks every running program of this file name to close, as a click on its window's X does; with `force`,
+    ends it. xEdit stays open after a script (XE01§11), so ModTrap closes the one it started."""
+    if os.name != "nt":
+        return
+    try:
+        subprocess.run(["taskkill", "/IM", image] + (["/F"] if force else []), capture_output=True, text=True,
+                       timeout=30, **_no_window())
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def close_xedit(image: str, running: Callable[[str], bool | None], closer: Callable[[str, bool], None],
+                poll: float = 1.0, grace: float = 20.0, changed: bool = False) -> None:
+    """After the script's end line: xEdit is asked to close, and ended if it has not gone after `grace` seconds.
+    Ending it is safe: the script has finished and written what it writes itself, and an xEdit that is ended saves
+    nothing (which, after a changing run, is exactly what is wanted: WHY§4)."""
+    if running(image) is False:
+        return
+    closer(image, False)
+    if running(image) is None:
+        return                                      # cannot be watched here; the request has been made
+    end = time.time() + grace
+    while time.time() < end:
+        if running(image) is False:
+            return
+        time.sleep(min(max(poll, 0.05), 1.0))
+    log.warn("xEdit did not close when asked%s; ModTrap ends it. Nothing is lost: the script had finished.",
+             " (it may be asking whether to save)" if changed else "")
+    closer(image, True)
+
+
 def launch(cmd: list[str], cwd: str) -> subprocess.Popen:
     """Starts MO2's command: an argument list, never a shell (WHY§9)."""
     return subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -314,10 +412,11 @@ class Job:
     """One dry run. Its state is read by the page; its lines go to the log (the page's terminal)."""
 
     def __init__(self, m: model.Model, p: Plan, job_dir: Path, *, launcher: Callable = launch,
-                 running: Callable[[str], bool | None] = image_running, poll: float = 1.0):
+                 running: Callable[[str], bool | None] = image_running, poll: float = 1.0,
+                 closer: Callable[[str, bool], None] = close_program):
         self.model, self.plan, self.dir = m, p, job_dir
         self.id = job_dir.name
-        self._launcher, self._running, self._poll = launcher, running, poll
+        self._launcher, self._running, self._poll, self._closer = launcher, running, poll, closer
         self.state = "preparing"       # preparing, starting, loading, reading, checking, done, failed, stopped
         self.message = ""
         self.started = time.time()
@@ -395,7 +494,7 @@ class Job:
                           % image)
         log.info("starting %s through MO2 (profile '%s'), with ModTrap's script in report mode", p.tool, p.profile)
         log.info("command: ModOrganizer.exe -p \"%s\" run -e -a \"%s\" \"%s\"", p.profile,
-                 arguments(self.dir).replace('"', "'"), p.tool)
+                 arguments(self.dir, SCRIPT.name, p.tool_args, p.data_dir).replace('"', "'"), p.tool)
         self.state = "starting"
         try:
             proc = self._launcher(cmd, str(Path(p.mo2).parent))
@@ -433,6 +532,7 @@ class Job:
                 raise Refused("the dry run took longer than %d minutes; ModTrap stopped waiting" % (TIME_LIMIT // 60))
         self.state = "checking"
         self.result = parse_report(_read(report))
+        close_xedit(image, self._running, self._closer, self._poll)      # it stays open after a script (XE01§11)
         # The script only read. Prove it: every dependant must still be the file that was copied (DESIGN§8).
         changed = []
         for fd in self.manifest["dependants"]:
@@ -452,6 +552,15 @@ class Job:
             return
         if self.result["end"] != "ok":
             self._fail("the script reported a failure: " + (self.result["reason"] or "no reason given"))
+            return
+        absent = self.result["trap_missing"] + self.result["not_loaded"]
+        if absent:
+            where = self.result.get("data_path") or "the folder it reads"
+            self._fail("xEdit did not load %s. It looked for plugins in %s%s. Nothing was read, and nothing was "
+                       "changed." % (", ".join(absent[:6]) + (" and %d more" % (len(absent) - 6) if len(absent) > 6 else ""),
+                                     where, (", while MO2 puts this modlist's files into %s" % p.data_dir)
+                                     if p.data_dir and self.result.get("data_path") and
+                                     fold(self.result["data_path"].rstrip("\\/")) != fold(p.data_dir.rstrip("\\/")) else ""))
             return
         if self.result["held_changed"]:
             log.warn("xEdit held %d plugin(s) as changed although the script changed nothing; the marks were cleared "

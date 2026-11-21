@@ -103,6 +103,7 @@ class Api:
         self.tooljob: toolrun.ToolJob | None = None
         self.recjob: records.Job | None = None
         self.saver = savelog.SaveJob()         # "Save this session" (WHY§48)
+        self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
 
@@ -456,7 +457,7 @@ class Api:
                 p = records.plan(m, mods)
                 base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
                 job = records.Job(m, p, records.new_job_dir(base), launcher=self.launcher, running=self.running,
-                                  poll=self.poll)
+                                  poll=self.poll, closer=self.closer)
             except (records.Refused, dryrun.Refused) as e:
                 raise Bad(str(e)) from None
             job.on_end = self.save_log
@@ -496,11 +497,19 @@ class Api:
                                 "<downloads>": str(inst.downloads_dir) if inst.downloads_dir else None})
                 profile_dir = inst.profiles_dir / inst.profile
                 real = [x for x in inst.mods if x.kind == "mod"]
+                try:
+                    xe = dryrun.find_xedit_exe(inst)
+                except dryrun.Refused:
+                    xe = None
                 about["modlist"] = {
                     "game": inst.game_name, "profile": inst.profile, "mods": len(real),
                     "mods_enabled": sum(x.enabled for x in real),
                     "plugins_active": sum(1 for r in m.plugins.values() if r.active),
                     "problems": len(m.issues), "notes": list(inst.notes),
+                    "game_folder": (inst.game_dir.name if inst.game_dir else ""),
+                    "game_folder_inside_modlist": bool(inst.game_dir and str(inst.game_dir).lower().startswith(
+                        str(inst.root).lower())),
+                    "xedit": {"title": xe.title, "own_arguments": xe.arguments} if xe else None,
                     "tools": [{"title": e.title, "program": Path(e.binary.replace("\\", "/")).name,
                                "output_mod": inst.output_mods.get(e.title, "")} for e in inst.executables]}
             if self.changes is not None:
@@ -568,7 +577,7 @@ class Api:
                 p = dryrun.plan(m, self._mods(body))
                 base = self.store.dir(s.id) / "jobs" if s is not None else None
                 job = dryrun.Job(m, p, dryrun.new_job_dir(base), launcher=self.launcher, running=self.running,
-                                 poll=self.poll)
+                                 poll=self.poll, closer=self.closer)
             except dryrun.Refused as e:
                 raise Bad(str(e)) from None
             job.on_end = self.save_log

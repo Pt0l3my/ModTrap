@@ -30,7 +30,7 @@ written from scratch.
 ## 4. Running and closing
 
 - **FACT.** When loading ends, script mode runs the script by itself (`xeMainForm.pas:20427-20431`,
-  `:17277-17278`), with every loaded file selected (`:4915`). `-autoexit` then closes xEdit (`:17280`, `:16980`).
+  `:17277-17278`), with every loaded file selected (`:4915`). (Corrected 2026-11-21, §11: an earlier reading here said `-autoexit` then closes xEdit. It does not in script mode.)
 - **FACT.** `Initialize`, `Process` and `Finalize` are each called only if the script has them
   (`xeMainForm.pas:8434-8459`); a script may do all its work in `Initialize`.
 - **LIKELY.** There is no hidden or headless mode: none of the switches read in `xeInit.pas` hides the window.
@@ -105,3 +105,28 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **METHOD.** Used by ModTrap's record check (DESIGN§16.5, `modtrap/xedit/ModTrapRecords.pas`), which loads the
   whole active load order. The script takes the levels as numbers and guards each call. LIKELY that the levels are
   worked out when a script asks in an xEdit started with `-autoexit`; to be seen on the owner's PC.
+
+## 11. What the first real run showed (2026-11-21), and the source behind it
+
+- **FACT.** With `-script:` xEdit is in its script tool mode: the script's file ending decides it
+  (`xEdit/xeInit.pas:612-631`). The window's title is then "SSEScript".
+- **FACT.** `-autoload` and `-autoexit` are read only in edit mode (`xEdit/xeInit.pas:1063-1079`). In script mode
+  the plugins of the plugins file are loaded without asking anyway, and after the script xEdit writes "You can
+  close this application now." and stays open (`xEdit/xeMainForm.pas:4923`): the timer that would close it runs
+  only when `-autoexit` was read (`:17268-17281`), which in script mode it never is. Seen on the owner's PC with
+  xEdit 4.1.5f: xEdit stayed open and MO2 waited for it.
+- **METHOD.** So ModTrap closes the xEdit it started, once the script's end line is in the report: it asks it to
+  close as a click on the window's X does, and ends it if it has not gone after a short while. Ending it loses
+  nothing: the script has written what it writes itself.
+- **FACT.** Without `-D:` xEdit works out the game's Data folder itself: a folder beside its own program, else the
+  game's installation as the shop's client or the registry names it (`xEdit/xeInit.pas:360-420`). It then drops
+  from the plugins file every plugin that is not in that folder.
+- **FACT (the owner's PC).** MO2's `-a` replaces the executable's own arguments (MO01§3). The modlist's xEdit
+  entry carries its own arguments; with them replaced by ModTrap's, xEdit read the Data folder of another
+  installation of the game, not the one MO2 fills, found none of the three plugins it was told to load, and
+  loaded the game's own 81 files. Its log names the folder it used.
+- **METHOD.** ModTrap now carries the executable's own arguments over, less the switches it sets itself and those
+  that put xEdit into another mode, and adds `-D:` with the game folder MO2 manages when the executable's own
+  arguments name none. The script reports xEdit's data path and file count (`DataPath`,
+  `xEdit/JvI/xejviScriptHost.pas:131-132`), and a run in which xEdit did not load a plugin it was told to is a
+  failure that says where xEdit looked.

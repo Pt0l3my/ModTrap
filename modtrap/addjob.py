@@ -140,6 +140,7 @@ class AddJob:
         if self._closed() is not True:
             raise Refused("MO2 must be closed while ModTrap changes the mod list: an open MO2 would write its own "
                           "copy back over it. Close MO2, then go on.")
+        log.info("MO2 is closed (no ModOrganizer.exe is running); changing the lists")
         for n in LISTS:
             if profile.checksum(self.pdir / n) != self.plan.lists.get(n):
                 raise Refused("%s changed since this was planned; read the modlist again" % n)

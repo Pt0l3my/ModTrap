@@ -17,6 +17,8 @@
     D  a dependant is done: file, records, records needing a trapped plugin
     M  a dependant named in the job is not loaded: file
     U  a loaded plugin xEdit holds as changed although this script changed nothing: file
+    P  where xEdit looks for plugins (its data path), and how many files it has loaded
+    N  a trapped plugin named in the job is not loaded: file
     X  the end: "ok" or "failed", and a reason
 }
 unit ModTrap;
@@ -185,6 +187,12 @@ begin
   for i := 0 to Pred(n) do
     slTrap.Add(slJob.Values['trap.' + IntToStr(i)]);
   Say('xEdit has loaded ' + IntToStr(FileCount) + ' files; ' + IntToStr(slTrap.Count) + ' trapped plugin(s)');
+  slOut.Add('P' + #9 + DataPath + #9 + IntToStr(FileCount));
+  for i := 0 to Pred(slTrap.Count) do
+    if not Assigned(FindFile(slTrap[i])) then begin
+      slOut.Add('N' + #9 + slTrap[i]);
+      Say('not loaded: ' + slTrap[i]);
+    end;
   n := StrToInt(slJob.Values['dep.count']);
   for i := 0 to Pred(n) do begin
     depName := slJob.Values['dep.' + IntToStr(i)];

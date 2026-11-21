@@ -14,6 +14,7 @@
        then the overriding ones in load order, separated by character 31
     D  a plugin is done: file, records, records of its own, overriding records
     M  a plugin named in the job is not loaded: file
+    P  where xEdit looks for plugins (its data path), and how many files it has loaded
     U  a loaded plugin xEdit holds as changed although this script changed nothing: file
     X  the end: "ok" or "failed", and a reason
 }
@@ -121,6 +122,7 @@ var
 begin
   slOut.Add('H' + #9 + 'modtrap-records/1' + #9 + slJob.Values['mode'] + #9 + IntToStr(wbVersionNumber));
   Say('xEdit has loaded ' + IntToStr(FileCount) + ' files');
+  slOut.Add('P' + #9 + DataPath + #9 + IntToStr(FileCount));
   cnt := StrToInt(slJob.Values['new.count']);
   for idx := 0 to Pred(cnt) do begin
     wantName := slJob.Values['new.' + IntToStr(idx)];

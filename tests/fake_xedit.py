@@ -113,6 +113,12 @@ def main(argv):
     if mode == "crash":
         return 3
     out.append("H\tmodtrap-report/2\treport\t67175680")
+    if mode == "absent":                # an xEdit that looks in another game folder: none of the plugins is there
+        out.append("P\tC:\\Elsewhere\\Data\\\t81")
+        out += ["N\t" + t for t in trap] + ["M\t" + d for d in deps] + ["X\tok\t"]
+        Path(job["out"]).write_text("\r\n".join(out) + "\r\n")
+        say("finished")
+        return 0
     for d in deps:
         if d not in loaded:
             out.append("M\t" + d)
