@@ -525,6 +525,15 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         elif o["cut"]:
             e["run"].append("%s could not be read to the end in the time ModTrap allows itself, so ModTrap cannot "
                             "say that nothing of the mod is in it" % o["plugin"])
+        elif o["shared"] and known.get(o["tool"], {}).get("kind") == "patcher" \
+                and known.get(o["tool"], {}).get("writes") == "own":
+            # A patcher works its values out from the versions that win, and this one writes records in a form of
+            # its own: neither "the same bytes" nor "other bytes" says where a value came from (WHY§73).
+            e["run"].append("%s holds %d record(s) in which the mod has a stake. A patcher builds its copy of a "
+                            "record from the version that wins, and %s writes records in its own form, so reading "
+                            "them cannot show whether a value in them comes from the mod. ModTrap cannot rule it "
+                            "out" % (o["plugin"], o["shared"], o["tool"]))
+            e["unsure"] = e.get("unsure", 0) + 1
         elif o["shared"]:
             e["clear"].append("%s holds %d record(s) in which the mod has a stake, but none of the mod's values in "
                               "them" % (o["plugin"], o["shared"]))
@@ -567,8 +576,12 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         if e["run"]:
             also = (" What speaks against it: " + "; ".join(e["clear"]) + ".") if e["clear"] else ""
             when = known.get(tool, {}).get("reads_if", "")
-            step("tool:" + tool, "both" if names else "you", "Run %s again" % tool,
+            # Proof, or only "cannot be ruled out"? The title says which (WHY§73).
+            to_be_sure = bool(e.get("unsure")) and e["unsure"] == len(e["run"])
+            step("tool:" + tool, "both" if names else "you", "Run %s again%s" % (tool, ", to be sure" if to_be_sure else ""),
                  (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also + (
+                     " A run of a patcher is short and changes nothing but its own output: when in doubt, run it."
+                     if to_be_sure else "") + (
                      " A new run matters " + when + "; the evidence below shows which records these are."
                      if when else ""),
                  "to do", [{"tool": n} for n in names] + evidence,
@@ -593,7 +606,9 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         step("tools-clear", "ModTrap", "Tools that need no new run for this mod",
              "ModTrap looked at what each of these tools made and found nothing of the mod in it: no file the tool "
              "feeds on, no record with a value only the mod supplies, no file made from the mod's. Each tool has "
-             "one verdict: it is either here or among the steps above, never both." + stake_note, "not needed", clear_items)
+             "one verdict: it is either here or among the steps above, never both. This is evidence, not proof: "
+             "what a tool would make without the mod is only known for certain by running it; a tool that left "
+             "something out because of the mod leaves no trace to find." + stake_note, "not needed", clear_items)
 
     # 7. Settings files of other mods that name a ticked plugin.
     named = deep.get("mentions", [])

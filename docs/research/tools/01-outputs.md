@@ -171,3 +171,23 @@ Read in Pandora Behaviour Engine+'s source (GPL-3.0; facts only, nothing copied)
   folder over otherwise. ModTrap now looks for that file, in the mod and in every enabled mod, and counts a
   list as read by this tool only where it is there. For the older engines, which make that file themselves,
   the list alone counts (LIKELY, as above).
+
+## 13. What reading a tool's plugin can and cannot show (2026-11-21)
+
+- **FACT.** ModTrap compares a field in a tool's plugin with the mod's by bytes (§10, §11). That holds only where
+  both were written the same way. A tool built on xEdit writes a record as xEdit does. A tool with a writer of
+  its own (the patcher framework and its library, the Bashed Patch's builder) reads a record into its own model
+  and writes it out in its own form: the same value can come out as other bytes.
+- **FACT.** A patcher builds its copy of a record from the version that wins in the load order, then works new
+  values into it. A value in its copy can be the winner's, or worked out from the winner's, or the patcher's own.
+- **So:** for a patcher with its own writer, "other bytes than the mod's" does not show "another value than the
+  mod's", and even another value may have been worked out from the mod's. If its plugin holds a record in which
+  the mod has a stake (XE01§19), ModTrap cannot rule out that the copy was built from the mod's version.
+- **METHOD.** Such a patcher is told to run again, "to be sure", with that reason; it is cleared only where its
+  plugins hold no record in which the mod has a stake. Proof (the mod's very bytes in its plugin) is still said as
+  proof. A tool built on xEdit is judged by bytes as before. `tools.json` says for each tool how it writes.
+- **Limit, for every tool.** What a tool would make without the mod is known for certain only by running it. A
+  tool that left a record alone, or left something out, because of the mod leaves no trace in its output.
+- **Could be built later.** Letting xEdit compare, in the dry run, each tool plugin's copy with the mod's version
+  and with the next in line, by meaning: the same as the mod's, the same as the next in line's, or neither. It
+  would clear a patcher whose copies all match the next in line.

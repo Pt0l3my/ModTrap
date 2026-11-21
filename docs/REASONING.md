@@ -95,6 +95,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
 | 71 | 2026-11-21 | The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes | DECIDED | #page #process #steps |
 | 72 | 2026-11-21 | The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list | FACT | #xedit #tools #steps #process |
+| 73 | 2026-11-21 | "Are you 100% sure?" No: the patcher was cleared by comparing bytes it writes in its own form. A patcher is now cleared only where it can be ruled out | DECIDED | #tools #steps #process |
 
 ## Entries
 
@@ -1659,3 +1660,27 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   findings shown.
 - Not checked: the new press on the owner's PC; whether the search of the behaviour output finds names in a
   real output that has them (it has found none so far, in an output that may well have none).
+
+### 73. "Are you 100% sure?" No: the patcher was cleared by comparing bytes it writes in its own form. A patcher is now cleared only where it can be ruled out
+
+`2026-11-21` · DECIDED · `#tools #steps #process` · refs: MT17, DESIGN§13, DESIGN§14, XE01§19, TL01§11, TL01§13, WHY§69, WHY§72
+
+- The owner, on version 0.3.5: "again, still no synthesis to run post demaster, are you 100% sure that's not
+  needed?"
+- The answer is no, and WHY§72 said more than the evidence held. TL01§11 already named the limit ("a tool whose
+  plugin writes it otherwise would be missed"); I cleared the patcher across that limit.
+- FACT: one of the patcher's plugins holds two records in which the mod has a stake. ModTrap found "none of the
+  mod's values" there by bytes. The patcher writes records through a library of its own, in its own form, and
+  works values out from the winning version (TL01§13). Neither fact lets other bytes mean "not from the mod".
+- DECIDED: three kinds of finding, said as such. Proof: the mod's value is in the tool's plugin: run again.
+  Cannot be ruled out: a patcher with its own writer holds a record the mod has a stake in: "run again, to be
+  sure", with the reason; a patcher's run is short and changes only its own output. Cleared: no record with a
+  stake, or, for a tool built on xEdit, such records without the mod's values.
+- DECIDED: the step that lists cleared tools says that it is evidence and not proof, and why: only a run of the
+  tool shows for certain what it would make without the mod.
+- For the owner's mod this gives: patcher, to be sure; behaviour tool, by its list and graph file. That is what
+  the modlist's guide says too. The distant-view generator stays cleared: it is built on xEdit, and its copies
+  hold none of the mod's values.
+- REJECTED: asking for every tool whenever any doubt is left. For a generator that takes hours that would make
+  the steps useless; its evidence is of the kind that can be compared.
+- Not built: xEdit comparing the tools' copies by meaning (TL01§13), which could clear a patcher with evidence.

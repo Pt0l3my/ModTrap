@@ -1,6 +1,6 @@
 {
  "format": "modtrap-tools/1",
- "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner.",
+ "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes.",
  "tools": [
   {
    "tool": "Wrye Bash",
@@ -21,7 +21,8 @@
    "reads": [
     "plugins"
    ],
-   "does": "Wrye Bash builds the Bashed Patch from the whole load order: merged levelled lists and the tweaks chosen in it."
+   "does": "Wrye Bash builds the Bashed Patch from the whole load order: merged levelled lists and the tweaks chosen in it.",
+   "writes": "own"
   },
   {
    "tool": "Synthesis",
@@ -40,7 +41,8 @@
    "reads": [
     "plugins"
    ],
-   "does": "Synthesis runs its patchers over the whole load order; each writes records it has worked out from the versions of those records in the load order."
+   "does": "Synthesis runs its patchers over the whole load order; each writes records it has worked out from the versions of those records in the load order.",
+   "writes": "own"
   },
   {
    "tool": "ParallaxGen (PGPatcher)",
@@ -60,7 +62,8 @@
     "meshes",
     "textures"
    ],
-   "does": "ParallaxGen patches the modlist's models to suit the textures that are there, and writes a plugin for the records whose models it changed."
+   "does": "ParallaxGen patches the modlist's models to suit the textures that are there, and writes a plugin for the records whose models it changed.",
+   "writes": "own"
   },
   {
    "tool": "TexGen",
@@ -74,7 +77,8 @@
    ],
    "does": "TexGen makes the textures DynDOLOD uses for distant objects from the modlist's own textures.",
    "label": "LIKELY (the tool's own public description; not read in its source)",
-   "source": "TL01§9"
+   "source": "TL01§9",
+   "writes": "xedit"
   },
   {
    "tool": "DynDOLOD",
@@ -95,7 +99,8 @@
     "lod"
    ],
    "reads_if": "if the mod changes anything seen from afar: buildings, trees, landscape, or their models and textures",
-   "does": "DynDOLOD builds what is seen from afar (distant objects, trees and occlusion) from the worldspaces of the load order and their models and textures."
+   "does": "DynDOLOD builds what is seen from afar (distant objects, trees and occlusion) from the worldspaces of the load order and their models and textures.",
+   "writes": "xedit"
   },
   {
    "tool": "xLODGen",
@@ -111,7 +116,8 @@
    ],
    "does": "xLODGen builds distant terrain from the worldspaces of the load order.",
    "label": "LIKELY (the tool's own public description; not read in its source)",
-   "source": "TL01§9"
+   "source": "TL01§9",
+   "writes": "xedit"
   },
   {
    "tool": "xEdit",

@@ -292,14 +292,45 @@ class ToolEvidence(unittest.TestCase):
         syn = by["tool:Synthesis"]
         self.assertIn("Synthesis runs its patchers", syn["why"])                # what the tool is for
         self.assertIn("Synthesis.esp holds, in 1 record(s), a value it has from the mod", syn["why"])
-        self.assertIn("What speaks against it: Synthesis Gameplay.esp holds 1 record(s) in which the mod has a stake, "
-                      "but none of the mod's values", syn["why"])
+        # A patcher's plugin that holds a record the mod has a stake in, without the mod's bytes, is not cleared:
+        # the patcher writes records in its own form, so other bytes do not show another value (WHY§73).
+        self.assertIn("Synthesis Gameplay.esp holds 1 record(s) in which the mod has a stake. A patcher builds its "
+                      "copy of a record from the version that wins", syn["why"])
+        self.assertEqual(syn["title"], "Run Synthesis again")                   # proof in one plugin: no "to be sure"
         folds = [i["details"] for i in syn["items"] if "details" in i]
         self.assertEqual(len(folds), 2)
         self.assertIn("GLOB 000A00 of core.esp · Bramble.esp has a stake in FLTV · this plugin holds the same FLTV",
                       folds[0]["lines"])
         self.assertIn("this plugin holds none of it", folds[1]["lines"][0])
         self.assertIn("holds 1 file(s) at the path of a file of the mod", by["tool:ParallaxGen (PGPatcher)"]["why"])
+
+    def test_a_patcher_is_cleared_only_where_it_can_be_ruled_out(self):
+        """WHY§73: with no proof either way, a patcher that holds a record the mod has a stake in is to run again,
+        to be sure; a tool built on xEdit, whose bytes can be compared, is cleared by the same finding."""
+        m = model.build(instance.load(self.root))
+        # The mod's stake is in A only, with a value (7) no tool's plugin holds: take the proof out of Synthesis.esp.
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        for o in deep["outputs"]:
+            if o["plugin"] == "Synthesis.esp":
+                o["carried"] = 0
+                for d in o["details"]:
+                    d["carried"] = []
+        outputs = [dict(o) for o in deep["outputs"]]
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        syn = by["tool:Synthesis"]
+        self.assertEqual(syn["title"], "Run Synthesis again, to be sure")
+        self.assertIn("ModTrap cannot rule it out", syn["why"])
+        self.assertIn("when in doubt, run it", syn["why"])
+        cleared = [i["text"] for i in by["tools-clear"]["items"]]
+        self.assertTrue(any(t.startswith("Wrye Bash: Bashed Patch, 0.esp holds no record in which the mod has a stake") for t in cleared))
+        self.assertIn("This is evidence, not proof", by["tools-clear"]["why"])
+        # The same finding in the plugin of a tool built on xEdit clears it: its records are written as the mod's are.
+        deep["outputs"] = [dict(o, tool="DynDOLOD") for o in outputs if o["plugin"] != "Bashed Patch, 0.esp"]
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        self.assertNotIn("tool:DynDOLOD", by)
+        self.assertTrue(any(i["text"].startswith("DynDOLOD: Synthesis.esp holds 1 record(s) in which the mod has a stake, but none of the mod's values")
+                            for i in by["tools-clear"]["items"]))
 
     def test_a_mod_whose_changes_no_output_carries_clears_every_tool(self):
         # Take Core's own D out of the picture: a mod that only holds a record unchanged, and changes nothing else.
