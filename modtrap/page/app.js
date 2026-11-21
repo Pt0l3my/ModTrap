@@ -1348,6 +1348,7 @@ function toolCard() {
 }
 
 function stepItem(it) {
+  if (it.text) return el("li", { text: it.text });
   if (it.tool) return el("li", {}, "“" + it.tool + "” in MO2's list of tools  ", toolButton(it.tool));
   if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),

@@ -52,3 +52,25 @@ Nothing of them is copied: ModTrap keeps only names and marks, as data (`modtrap
   go (MO01§2); the header's author field; a file name the tool is known to use; a file name that merely begins like
   one (weak: the page says "probably"). The page shows which it was.
 - **METHOD.** A patcher's or generator's output is proposed for "run the tool again"; an editor's for demastering.
+
+## 8. Which tools must run again when a mod is taken out: by what their output holds (2026-11-21)
+
+- **FACT (the owner's list).** The list's patcher writes three plugins that do not name the demastered mod as a
+  master. The guide ends its steps for that mod with running the patcher and the behaviour tool again all the
+  same. §7's rule (a tool's output that depends on the mod is made again) says nothing about such plugins.
+- **LIKELY.** A patcher builds each record of its output from the versions of that record in the load order. It
+  may copy values from a mod's version without pointing into the mod, so its output can carry what a mod did
+  and still not need the mod as a master. It cannot carry anything of a mod whose records it holds none of.
+- **METHOD.** For every active plugin that a tool made and that does not depend on the mod, ModTrap counts the
+  records it holds that the mod's own plugins, or the patches made for the mod, also hold. It reads only record
+  headers, with its own reader. Some shared: the tool is to run again, and the step names the plugins and the
+  counts. None: the tool is named among those that need no run, with that reason. Not read to the end in time:
+  said so, and running again is called the safe side.
+- **METHOD.** A tool that works on files is judged by files. For every mod that MO2 sends a tool's new files to
+  (MO01§2), known tool or not, and for the mod that holds the plugin of a tool known to work on models or
+  textures, ModTrap counts the files that lie at the path of one of the mod's own loose files. Some: run again.
+- **METHOD (unchanged).** A tool that feeds on a kind of file the mod carries (animations and behaviours, LOD,
+  grass cache, body data) is to run again because the mod carries such files; the step names how many and gives
+  examples. It is not a standing reminder: without such files in the mod, the step is not there.
+- Not judged: what lies inside a mod's archives (.bsa), which ModTrap does not open; and a tool that keeps its
+  output outside MO2's mods, of which MO2 records nothing.

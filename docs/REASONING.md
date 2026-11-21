@@ -85,6 +85,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 60 | 2026-11-21 | A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go | METHOD | #page #safety #process |
 | 61 | 2026-11-21 | Why one big file was kept back: a topic's group outlives the topic; and the page's own question box, steps that follow the work, a dry run that says when it is out of date | FACT | #xedit #page #steps #safety #process |
 | 62 | 2026-11-21 | New plugins that wait to be put in place are dropped once the modlist has moved on; Revert clears what the page still showed | METHOD | #page #safety #process |
+| 63 | 2026-11-21 | The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds | FACT | #xedit #tools #steps #process |
 
 ## Entries
 
@@ -1355,3 +1356,29 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   place at once.
 - Shown in a browser on the invented list: after Revert the page shows "reverted" and nothing else within a
   quarter of a second.
+
+### 63. The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds
+
+`2026-11-21` · FACT · `#xedit #tools #steps #process` · refs: MT17, MT18, DESIGN§13, DESIGN§14, TL01§7, TL01§8, XE01§17, WHY§2, WHY§52, WHY§55, WHY§61
+
+- FACT (the owner's session file): one press, the probe, the dry run, the plan, "Go ahead": all five big files
+  were demastered and verified, among them the one kept back before (its six topics' groups went with them,
+  XE01§17, and sixteen lines had gone with their topics), the twelve patches deactivated, the patch mod and the
+  mod itself disabled, the load order clean. MT17's first part holds for this mod; whether the game plays well
+  is the owner's to see.
+- The owner: "is it now supposed to suggest to run synthesis as well? what logic determines that? can you check
+  if all tools are considered (is pandora run suggestion just a placeholder to run it regerdless of good
+  practice?)".
+- FACT: the behaviour tool was listed for a reason the step states: the mod carries four animation and
+  behaviour files, which that tool builds from. The patcher was not listed, although the guide runs it (WHY§2),
+  because its three plugins do not name the mod as a master and ModTrap looked no further. That was a gap.
+- METHOD (TL01§8): tools are now judged by evidence, in three ways: the records a tool's plugin shares with the
+  mod and its patches; the files a tool's output mod holds at the mod's own paths; the kinds of file the mod
+  carries that a tool feeds on. A tool that must run is a step with the reason and the counts; the tools that
+  need no run are named in a step of their own with why. Nothing is suggested from habit, and nothing is left
+  out in silence.
+- Ruled out: suggesting every patcher after every demaster (true to the guide's habit, but it costs the owner
+  long runs that the evidence can spare); loading the tools' plugins into the dry run's xEdit to compare records
+  there (their masters would pull most of a large list in; reading record headers with ModTrap's own reader
+  takes about half a second for a million records).
+- Unproven: the counts on the owner's list; they show at the owner's next look at the Steps tab.

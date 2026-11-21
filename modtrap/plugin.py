@@ -7,7 +7,9 @@ reported as unreadable, never guessed at.
 
 from __future__ import annotations
 
+import mmap
 import struct
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -146,6 +148,46 @@ def read(path: Path) -> Header:
     except OSError as e:
         raise Unreadable("the file could not be opened (%s)" % type(e).__name__) from None
     return parse(head + body)
+
+
+def record_ids(path: Path, seconds: float = 8.0) -> tuple[set[tuple[str, int]], bool]:
+    """The records a plugin holds, each as (the name, lower case, of the plugin the record belongs to; its id
+    there), and whether the reading was cut short by the time limit. Only the records' headers are read: a
+    record's first id byte counts into the plugin's masters, and past them means the plugin's own (XE02). What
+    the records hold is not looked at. For telling which records two plugins both hold (WHY§63)."""
+    h = read(path)
+    masters = [m.casefold() for m in h.masters]
+    own = path.name.casefold()
+    out: set[tuple[str, int]] = set()
+    until = time.monotonic() + seconds
+    with open(path, "rb") as f:
+        try:
+            data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        except (ValueError, OSError) as e:
+            raise Unreadable("the file could not be read: %s" % e) from None
+        try:
+            size = len(data)
+            if size < 24 or data[:4] != b"TES4":
+                raise Unreadable("not a plugin")
+            pos = 24 + struct.unpack_from("<I", data, 4)[0]
+            n = 0
+            while pos + 24 <= size:
+                length = struct.unpack_from("<I", data, pos + 4)[0]
+                if data[pos:pos + 4] == b"GRUP":
+                    if length < 24:
+                        break
+                    pos += 24                                   # into the group: its records follow
+                    continue
+                form = struct.unpack_from("<I", data, pos + 12)[0]
+                index = form >> 24
+                out.add((masters[index] if index < len(masters) else own, form & 0xFFFFFF))
+                pos += 24 + length
+                n += 1
+                if n % 8192 == 0 and time.monotonic() > until:
+                    return out, True
+        finally:
+            data.close()
+    return out, False
 
 
 def build(masters: tuple[str, ...] | list[str] = (), *, flags: int = 0, author: str = "",

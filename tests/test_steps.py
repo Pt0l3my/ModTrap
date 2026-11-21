@@ -56,8 +56,8 @@ class StepsTests(unittest.TestCase):
         s = steps.compile_steps(m, ["Bramble"], None, deep)
         by = {x["key"]: x for x in s["steps"]}
         self.assertEqual([x["key"] for x in s["steps"]],
-                         ["dry", "switch-off", "demaster", "regenerate", "disable", "tool:animations", "mentions",
-                          "health", "play"])
+                         ["dry", "switch-off", "demaster", "regenerate", "disable", "tool:animations", "tools-clear",
+                          "mentions", "health", "play"])
         self.assertEqual((by["dry"]["state"], by["demaster"]["state"], by["disable"]["state"]),
                          ("to do", "waiting for the dry run", "waiting"))
         self.assertEqual([i["plugin"] for i in by["regenerate"]["items"]], ["Generated.esp"])
@@ -95,7 +95,7 @@ class StepsTests(unittest.TestCase):
         # Every step says truly who does it (WHY§58): ModTrap, the owner, or ModTrap starting a tool the owner runs.
         self.assertEqual({k: v["who"] for k, v in by.items() if not k.startswith("tool:")},
                          {"dry": "ModTrap", "switch-off": "ModTrap", "demaster": "ModTrap", "disable": "ModTrap",
-                          "mentions": "you", "health": "ModTrap", "play": "you"})
+                          "tools-clear": "ModTrap", "mentions": "you", "health": "ModTrap", "play": "you"})
 
     def test_the_modlist_itself_shows_the_steps_done(self):
         b = plugin.build
@@ -137,3 +137,68 @@ class StepsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ToolEvidence(unittest.TestCase):
+    """WHY§63: a tool is to run again where its output holds records, or files, of the mod being taken out; and
+    is said to need no run where it holds none. Invented plugins with real records."""
+
+    def setUp(self):
+        from modtrap import probe
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        g = lambda *forms: probe.group(b"GLOB", [probe.glob(f, "MT_%X" % f, 1.0) for f in forms])   # noqa: E731
+        pf = lambda masters, *forms: probe.plugin_file(list(masters), [g(*forms)], len(forms), 0x900, "invented")   # noqa: E731
+        sky = ("Skyrim.esm",)
+        self.root = fx.make_instance(Path(self.tmp.name) / "List", [
+            ("+", "PG Output", {"PGPatcher.esp": pf(sky, 0x00000F00)}),
+            ("+", "Patcher Output", {
+                # holds a record the mod changes
+                "Synthesis.esp": pf(sky, 0x00000ABC, 0x00000DEF),
+                # holds a record that a patch made for the mod changes
+                "Synthesis Gameplay.esp": pf(sky, 0x00000111),
+                # holds nothing the mod or its patch touch
+                "Bashed Patch, 0.esp": pf(sky, 0x00000DEF, 0x00000222)}),
+            ("+", "Inn Patches", {"Inn - Bramble Patch.esp": pf(sky + ("Bramble.esp",), 0x00000111)}),
+            ("+", "Quill", {"Quill.esp": pf(sky, 0x00000333)}),
+            # the mod: it changes one of the game's records and has one of its own
+            ("+", "Bramble", {"Bramble.esp": pf(sky, 0x00000ABC, 0x01000800)}),
+        ], load_order=["Bramble.esp", "Quill.esp", "Inn - Bramble Patch.esp", "Synthesis.esp", "Synthesis Gameplay.esp",
+                       "Bashed Patch, 0.esp", "PGPatcher.esp"],
+            profile_settings="[custom_overwrites]\r\nParallaxGen=PG Output\r\n")
+        mods = self.root / "mods"
+        fx.write(mods / "Bramble" / "meshes" / "bramble" / "leaf.nif", b"invented")
+        fx.write(mods / "PG Output" / "meshes" / "bramble" / "leaf.nif", b"made from it")
+        fx.write(mods / "PG Output" / "meshes" / "quill" / "nib.nif", b"made from another mod")
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def test_record_ids_name_the_owner_and_the_id(self):
+        ids, cut = plugin.record_ids(self.root / "mods" / "Bramble" / "Bramble.esp")
+        self.assertEqual((ids, cut), ({("skyrim.esm", 0xABC), ("bramble.esp", 0x800)}, False))
+
+    def test_a_tool_runs_again_only_where_its_output_holds_something_of_the_mod(self):
+        m = model.build(instance.load(self.root))
+        deep = steps.look_deeper(m, ["Bramble"])
+        got = {o["plugin"]: (o["tool"], o["shared"]) for o in deep["outputs"]}
+        self.assertEqual(got, {"Synthesis.esp": ("Synthesis", 1), "Synthesis Gameplay.esp": ("Synthesis", 1),
+                               "Bashed Patch, 0.esp": ("Wrye Bash", 0)})        # the file generator is judged by files
+        self.assertEqual([(o["tool"], o["mod"], o["files"], o["shared"]) for o in deep["output_files"]],
+                         [("ParallaxGen (PGPatcher)", "PG Output", 3, 1)])
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        self.assertIn("Synthesis.esp (1 record), Synthesis Gameplay.esp (1 record)", by["tool:Synthesis"]["why"])
+        self.assertEqual((by["tool:Synthesis"]["state"], by["tool:Synthesis"]["manual"]), ("to do", True))
+        self.assertIn("holds 1 file(s) at the path of a file of this mod", by["tool:ParallaxGen (PGPatcher)"]["why"])
+        self.assertNotIn("tool:Wrye Bash", by)
+        clear = by["tools-clear"]
+        self.assertEqual((clear["state"], clear["who"], len(clear["items"])), ("not needed", "ModTrap", 1))
+        self.assertIn("Wrye Bash: its output (Bashed Patch, 0.esp) holds no record", clear["items"][0]["text"])
+        # A mod nothing of which is in any output: every tool is cleared, none is to run.
+        deep = steps.look_deeper(m, ["Quill"])
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Quill"], None, deep, auto=True)["steps"]}
+        self.assertEqual([k for k in by if k.startswith("tool:")], [])
+        self.assertEqual(len(by["tools-clear"]["items"]), 3)

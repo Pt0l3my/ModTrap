@@ -13,7 +13,7 @@ import re
 import time
 from pathlib import Path
 
-from . import model, tools
+from . import dryrun, model, plugin, tools
 from .instance import GAME, OVERWRITE, Instance, Mod, fold
 
 WALK_FILES = 60_000            # file names listed in one mod's folder at most
@@ -321,6 +321,56 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                  "to do", [{"tool": n} for n in names],
                  note="Only you can tell when this is done: tick it off." if names else
                  "No tool of that kind is set up in this MO2; if you use one outside MO2, run it.")
+    # 6b. Tools whose output was built with the mod in view, by what their output holds (WHY§63).
+    def titles_of(tool: str) -> list[str]:
+        return [e.title for e in inst.executables if tools.of_executable(e.title, e.binary)[0] == tool]
+
+    clear: list[dict] = []
+    by_tool: dict[str, list[dict]] = {}
+    for o in deep.get("outputs", []):
+        by_tool.setdefault(o["tool"], []).append(o)
+    for tool, rows in sorted(by_tool.items()):
+        hit = [o for o in rows if o["shared"]]
+        unsure = [o for o in rows if o["cut"] and not o["shared"]]
+        names = titles_of(tool)
+        if hit or unsure:
+            what = ", ".join("%s (%d record%s)" % (o["plugin"], o["shared"], "" if o["shared"] == 1 else "s") for o in hit)
+            step("tool:" + tool, "both" if names else "you", "Run %s again" % tool,
+                 ("%s builds its output from the whole load order. %s also hold%s records that the mod, or a patch "
+                  "made for it, changes: they were built with the mod's version of those records in view, and may "
+                  "still carry what the mod did, though they do not name it as a master. Running the tool again "
+                  "builds them from the modlist without the mod. Do it after the demaster." % (
+                      tool, what, "s" if len(hit) == 1 else "")) if hit else
+                 ("%s builds its output from the whole load order. ModTrap could not read %s to the end in the time "
+                  "it allows itself, so it cannot say that nothing of the mod is in there; running the tool again "
+                  "is the safe side." % (tool, ", ".join(o["plugin"] for o in unsure))),
+                 "to do", [{"tool": n} for n in names],
+                 note="Only you can tell when this is done: tick it off." if names else
+                 "It is not in this MO2's list of tools; run it the way the modlist's own guide says.")
+        else:
+            clear.append({"text": "%s: its output (%s) holds no record that the mod or its patches change, so nothing "
+                                  "of the mod can be in it." % (tool, ", ".join(o["plugin"] for o in rows))})
+    for o in deep.get("output_files", []):
+        names = [o["title"]] if o["title"] else titles_of(o["tool"])
+        if o["shared"]:
+            step("tool:" + o["tool"], "both" if names else "you", "Run %s again" % o["tool"],
+                 "%s makes files from the files of the modlist. Its output mod “%s” holds %d file(s) at the path of a "
+                 "file of this mod: they were made from the mod's files, and stay in the game until the tool has run "
+                 "again." % (o["tool"], o["mod"], o["shared"]),
+                 "to do", [{"tool": n} for n in names], note="Only you can tell when this is done: tick it off.")
+        elif o["cut"]:
+            clear.append({"text": "%s: its output mod “%s” is too large to list whole in the time ModTrap allows "
+                                  "itself; none of the files it did list lies at the path of a file of the mod." % (
+                                      o["tool"], o["mod"])})
+        elif not o["cut"]:
+            clear.append({"text": "%s: none of the %d file(s) in its output mod “%s” lies at the path of a file of the "
+                                  "mod." % (o["tool"], o["files"], o["mod"])})
+    if clear:
+        step("tools-clear", "ModTrap", "Tools that need no new run for this mod",
+             "ModTrap looked at what each of these tools made and found nothing of the mod in it. A tool is listed "
+             "above only where its output shares records or files with the mod, or where the mod carries files the "
+             "tool feeds on.", "not needed", clear)
+
     # 7. Settings files of other mods that name a ticked plugin.
     named = deep.get("mentions", [])
     if named:
@@ -369,8 +419,10 @@ def look_deeper(m: model.Model, mod_names: list[str]) -> dict:
     kinds: dict[str, dict] = {}
     reps: list[dict] = []
     cut = False
+    paths_all: set[str] = set()
     for x in mods:
         c = contents(x.folder)
+        paths_all |= c["paths"]
         cut = cut or c["cut"]
         for k, v in c["kinds"].items():
             e = kinds.setdefault(k, {"count": 0, "examples": []})
@@ -381,7 +433,92 @@ def look_deeper(m: model.Model, mod_names: list[str]) -> dict:
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)
     skip = {fold(x.name) for x in mods} | {fold(r["mod"]) for r in reps}
     named, mcut = mentions(inst, trapped, skip) if trapped else ([], False)
-    return {"kinds": kinds, "replacements": reps, "mentions": named, "mentions_cut": mcut, "cut": cut}
+    outputs, output_files = tool_outputs(m, mods, trapped, paths_all)
+    return {"kinds": kinds, "replacements": reps, "mentions": named, "mentions_cut": mcut, "cut": cut,
+            "outputs": outputs, "output_files": output_files}
+
+
+OUTPUT_SECONDS = 45.0          # all the reading of tool outputs for one look, at most
+OUTPUT_FILE_SECONDS = 12.0     # and of one output plugin
+
+
+def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low: set[str]) -> tuple[list[dict], list[dict]]:
+    """Which tools' outputs hold something of the mods being taken out, by evidence (WHY§63).
+
+    A patcher builds its plugin from the whole load order. Its output need not name the mod as a master to carry
+    what the mod did: it may have copied values from the mod's version of a record. So for every plugin a tool
+    made that does not depend on the mod, this counts the records it holds that the mod's plugins, or the patches
+    made for the mod, also hold. None: the tool's output cannot carry anything of the mod. Some: it was built
+    with the mod's version of those records in view, and is to be made again.
+
+    A generator that works on files (meshes, textures) is judged by files: how many files of its output mod lie
+    at the path of a file of the mod."""
+    inst = m.instance
+    tf = {fold(p) for p in trapped}
+    game = {fold(x) for x in inst.primary}
+    names = [x.name for x in mods]
+    binaries = {e.title: e.binary for e in inst.executables}
+    data = {t["tool"]: t for t in tools.load()}
+    until = time.monotonic() + OUTPUT_SECONDS
+
+    def ids_of(path: Path) -> tuple[set, bool]:
+        left = until - time.monotonic()
+        if left <= 0:
+            return set(), True
+        try:
+            return plugin.record_ids(path, min(left, OUTPUT_FILE_SECONDS))
+        except (plugin.Unreadable, OSError):
+            return set(), True
+
+    touched: set = set()
+    for x in mods:                                           # the mods' own plugins, enabled or not
+        for p in x.plugins:
+            if x.folder is not None and (x.folder / p).is_file():
+                touched |= ids_of(x.folder / p)[0]
+    for f in m.order:                                        # and the patches made for them (WHY§52)
+        r = m.plugins[f]
+        if r.path is None or fold(r.name) in tf or not any(fold(x) in tf for x in r.masters):
+            continue
+        partners = [x for x in r.masters if fold(x) not in game and fold(x) not in tf]
+        if len(partners) <= dryrun.PARTNERS and dryrun.named_for(r.name, trapped, names):
+            touched |= ids_of(r.path)[0]
+
+    outputs = []
+    for f in m.order:
+        r = m.plugins[f]
+        if not r.active or r.source is None or r.path is None or fold(r.name) in tf:
+            continue
+        if any(fold(x) in tf for x in r.masters):
+            continue                                         # a dependant: the demaster itself deals with it
+        ev = [e for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries) if e.kind != "editor"]
+        if not ev or "plugins" not in data.get(ev[0].tool, {}).get("reads", ["plugins"]):
+            continue
+        ids, cut = ids_of(r.path)
+        outputs.append({"plugin": r.name, "mod": r.source, "tool": ev[0].tool, "strong": ev[0].strong,
+                        "records": len(ids), "shared": len(ids & touched), "cut": cut})
+
+    # By files: every mod that MO2 sends a tool's new files to (whatever the tool, known to ModTrap or not),
+    # and the mod that holds the plugin of a tool known to work on files.
+    output_files = []
+    seen: set[str] = set()
+    targets = [(tools.of_executable(title, binaries.get(title, ""))[0], title, target)
+               for title, target in sorted(inst.output_mods.items())]
+    for f in m.order:
+        r = m.plugins[f]
+        if r.source is None:
+            continue
+        for e in tools.identify(r.name, r.author, r.source, {}, binaries):
+            if set(data.get(e.tool, {}).get("reads", [])) & {"meshes", "textures", "lod"}:
+                targets.append((e.tool, "", r.source))
+    for tool, title, target in targets:
+        out_mod = inst.mod(target)
+        if fold(target) in seen or out_mod is None or out_mod.folder is None or not paths_low or target in names:
+            continue
+        seen.add(fold(target))
+        listing, cut = walk(out_mod.folder)
+        output_files.append({"tool": tool, "title": title, "mod": target, "files": len(listing),
+                             "shared": sum(1 for p in listing if "/" in p and p.lower() in paths_low), "cut": cut})
+    return outputs, output_files
 
 
 __all__ = ["compile_steps", "look_deeper", "contents", "replacements", "mentions", "walk"]
