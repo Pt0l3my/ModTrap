@@ -237,3 +237,22 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   children, if it has one. What was in the group cannot live without its record. A record of the job that went
   with such a group counts as done. If a master is still in use although no record needs it, the report now says
   that, in those words.
+
+## 18. What a plugin really changes is xEdit's to say, not a reader of bytes (the owner's list, 2026-11-21)
+
+- **FACT (the owner's list).** ModTrap's own reader, comparing a mod's version of a record with its master's,
+  called several worldspaces and cells "changed" that the mod only holds. The fields named were the
+  worldspace's name and a cell's list of regions.
+- **FACT.** The game's own files keep names in strings files, and a record holds only a number into them; a
+  plugin made later holds the name as text. A list such as a cell's regions is saved in sorted order by xEdit and
+  by tools built on it, and in another order by the game's editor. In both cases the bytes differ and the
+  meaning is the same. Only a program that knows what each field of each record is can tell: xEdit does.
+- **FACT.** A script reads every part of a record as xEdit shows it (`GetEditValue`, §14): a name as its text,
+  whichever way it is stored, and a sorted list in sorted order whichever way it was saved.
+- **METHOD.** In the dry run, the reading script looks through the trapped plugins and the patches made for
+  them, and for each record such a plugin holds but does not own, compares each of its parts with the same part
+  in the last of the plugin's own masters that holds the record. A record with no differing part is not
+  reported. For one that differs it writes a line (`T`) with the record and the four-letter types of the fields
+  that differ, and for each plugin looked through a line (`V`). ModTrap judges tools from these lines alone
+  (TL01§11). Unproven until the owner's next dry run; the probe runs the new lines of the script on the invented
+  plugins first.

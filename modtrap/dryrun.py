@@ -201,6 +201,16 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
              "trap.count=%d" % len(p.trapped)]
     lines += ["trap.%d=%s" % (i, n) for i, n in enumerate(p.trapped)]
     lines += ["dep.count=%d" % len(p.dependants)] + ["dep.%d=%s" % (i, n) for i, n in enumerate(p.dependants)]
+    # The plugins whose own changes the script is to tell: the trapped ones, and the patches made for them
+    # (WHY§52, WHY§66). What a tool's output may carry of the mod is judged from that.
+    game = {fold(x) for x in m.instance.primary} | {fold(x) for x in p.trapped}
+    touch = list(p.trapped)
+    for name in p.dependants:
+        r = m.plugins.get(fold(name))
+        if r is not None and len([x for x in r.masters if fold(x) not in game]) <= PARTNERS \
+                and named_for(name, p.trapped, p.trapped_mods):
+            touch.append(name)
+    lines += ["touch.count=%d" % len(touch)] + ["touch.%d=%s" % (i, n) for i, n in enumerate(touch)]
     # With a byte-order mark: the script's string list then reads the file as UTF-8, whatever the PC's own text
     # encoding, so a folder name with letters outside it still arrives whole (WHY§34).
     paths.write_atomic(script_dir / "modtrap-job.txt", ("\r\n".join(lines) + "\r\n").encode("utf-8-sig"))
@@ -371,7 +381,11 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
     trapped, trapped_mods = list(trapped), list(trapped_mods)
     game = {fold(x) for x in primary} | {fold(x) for x in trapped}
     out: dict = {"format": "", "xedit": "", "end": "", "reason": "", "files": [], "not_loaded": [], "held_changed": [],
-                 "data_path": "", "trap_missing": [], "loaded": 0}
+                 "data_path": "", "trap_missing": [], "loaded": 0,
+                 # what each looked-through plugin really changes, by xEdit's own comparison (XE01§18): plugin ->
+                 # [{"form", "kind", "owner", "fields"}]; a plugin is a key only if the script looked through it
+                 "touched": {}}
+    touched_rows: dict[str, list[dict]] = {}
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
     parts: dict[tuple[str, str, str], dict] = {}
@@ -405,6 +419,11 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
                                          "tainted": int(f[8] or 0), "rest_same": f[9] == "1"}
         elif kind == "G" and len(f) >= 7 and f[4].isdigit():
             entries[(f[1], f[2], f[3], int(f[4]))] = {"src": f[5], "breaks": f[6] == "1"}
+        elif kind == "T" and len(f) >= 6:
+            touched_rows.setdefault(f[1], []).append({"form": f[2], "kind": f[3], "owner": f[4],
+                                                      "fields": sorted({x for x in f[5].split(",") if x})})
+        elif kind == "V" and len(f) >= 2:
+            out["touched"][f[1]] = touched_rows.get(f[1], [])
         elif kind == "D" and len(f) >= 4 and f[1] in files:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:

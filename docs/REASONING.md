@@ -88,6 +88,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 63 | 2026-11-21 | The first whole demaster of a real mod is in place; which tools must run again is now decided by what their output holds | FACT | #xedit #tools #steps #process |
 | 64 | 2026-11-21 | Sharing a record is not carrying the mod's change: one verdict for each tool, from what the mod really changes, with the evidence to unfold | METHOD | #tools #steps #page #process |
 | 65 | 2026-11-21 | The demaster is in place a second time; the tool evidence compared bytes where plugins number their masters differently, and raised a false alarm | FACT | #tools #steps #xedit #process |
+| 66 | 2026-11-21 | Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all | DECIDED | #tools #steps #xedit #process |
 
 ## Entries
 
@@ -1437,3 +1438,26 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   distant-view generator: only what is seen from afar), the step now says that.
 - Not claimed: that the comparison is exact. It is made without knowing what each field means (TL01§10's limit).
   If a verdict still looks wrong to the owner, the log now holds the records to settle it with.
+- Later, 2026-11-21: the false alarm stayed. Its cause lay deeper than the numbering of masters: see WHY§66.
+
+### 66. Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all
+
+`2026-11-21` · DECIDED · `#tools #steps #xedit #process` · refs: MT17, DESIGN§6.2, DESIGN§14, XE01§14, XE01§18, TL01§9, TL01§10, TL01§11, WHY§63, WHY§64, WHY§65
+
+- The owner, with the evidence unfolded: "no changes, dyndolod is still required in steps".
+- FACT: the evidence named, for worldspaces, the field that holds the name, and for a cell its list of regions.
+  The mod changes neither. The game's files keep names in strings files and the mod as text; the list is the
+  same list in another order (XE01§18). Three attempts at reading bytes (WHY§63, WHY§64, WHY§65) each met
+  another way in which the same value is written differently. There will be more.
+- DECIDED (the method is ModTrap's, MT17): ModTrap's own reader no longer says what a mod changes. xEdit says it,
+  in the dry run that is made anyway, for the mod's plugins and the patches made for it (XE01§18). ModTrap then
+  only looks for those changed fields in the plugins that tools made (TL01§11). A tool for which no dry run has
+  told this is not judged by records at all, and the page says so and how to get it judged; it is never told to
+  run on a guess.
+- Ruled out: teaching ModTrap's reader the meaning of each field (xEdit's definitions are its own work and under
+  its own licence, and are thousands of lines); loading the tools' plugins into xEdit as well, to ask both
+  questions there (their masters are most of a large list).
+- The scripts changed, so the probe runs again before real work; its dry run exercises the new lines.
+- For the owner's list as it stands (the mod demastered before this version): the tools wait. The page tells
+  the owner so, and that the modlist's own guide for this mod says to run the behaviour tool and the patcher, and
+  not the distant-view generator.

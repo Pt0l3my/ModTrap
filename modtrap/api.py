@@ -595,6 +595,39 @@ class Api:
         job.start()
         return job.public()
 
+    def _touched_for(self, mods: list[str]) -> tuple[dict | None, str]:
+        """What a dry run of these mods told about the records they really change (XE01§18), and that dry run's
+        id; (None, "") when no dry run at hand told it. The dry run in hand is looked at first, then this
+        session's earlier ones: what a mod changes stays true after the modlist has moved on (WHY§66)."""
+        want = sorted(mods)
+        job = self.job
+        if job is not None:
+            pub = job.public()
+            res = pub.get("result") or {}
+            if pub.get("state") == "done" and sorted(pub.get("plan", {}).get("trapped_mods", [])) == want and res.get("touched"):
+                return res["touched"], str(pub.get("id", ""))
+        s = self.session
+        if s is None:
+            return None, ""
+        try:
+            folders = sorted((p for p in (self.store.dir(s.id) / "jobs").iterdir()
+                              if p.is_dir() and p.name.startswith("dryrun-")), reverse=True)[:12]
+        except OSError:
+            return None, ""
+        for d in folders:
+            try:
+                with open(d / "job.json", "rb") as f:
+                    meta = json.loads(f.read(4 * 1024 * 1024).decode("utf-8"))
+                if sorted(meta.get("plan", {}).get("trapped_mods", [])) != want:
+                    continue
+                with open(d / "result.json", "rb") as f:
+                    res = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+            except (OSError, ValueError, AttributeError):
+                continue
+            if isinstance(res, dict) and res.get("touched"):
+                return res["touched"], d.name
+        return None, ""
+
     def steps(self, body: dict) -> dict:
         """The steps for the ticked mods (DESIGN§14). The part that reads folders takes seconds on a large list:
         it runs once, off the request, and the answer says while it is still going."""
@@ -602,7 +635,8 @@ class Api:
         mods = body.get("mods")
         if not isinstance(mods, list) or len(mods) > 50 or not all(isinstance(x, str) and x for x in mods):
             raise Bad("the ticked mods did not arrive")
-        key = (id(m), tuple(sorted(mods)))
+        touched, told_by = self._touched_for(mods)
+        key = (id(m), tuple(sorted(mods)), told_by)
         with self._lock:
             started = key in self._deep
             if not started and mods:
@@ -611,7 +645,7 @@ class Api:
         if not started and mods:
             def work() -> None:
                 try:
-                    found = steps.look_deeper(m, mods)
+                    found = steps.look_deeper(m, mods, touched)
                 except Exception as e:
                     log.warn("looking into the ticked mods' folders failed: %s", logbook.why(e))
                     found = {}

@@ -125,3 +125,20 @@ Nothing of them is copied: ModTrap keeps only names and marks, as data (`modtrap
   like a pointer in both plugins can still be misread, in either direction. The evidence is therefore shown
   record by record with the fields named, for the owner to judge, and written into the log; and for a tool whose
   need depends on what kind of thing was changed, the step says so.
+
+## 11. What the mod changes comes from xEdit; ModTrap only looks for it in the tools' plugins (2026-11-21)
+
+- **FACT (the owner's list).** With §10's comparison the distant-view generator was still told to run for a
+  dialogue mod. The evidence, now shown, named a worldspace's name and a cell's list of regions: the same
+  values, stored differently (XE01§18). §9's first question, "what does the mod change", cannot be answered by
+  reading bytes, however carefully.
+- **METHOD.** That question is now answered by xEdit in the dry run (XE01§18). ModTrap keeps §9's second
+  question: for each record the mod really changes, does a tool's plugin hold one of the changed fields as the
+  mod wrote it, and not as the mod's own master had it? For that it still reads bytes, with §10's care for how
+  plugins number their masters.
+- **METHOD.** Without a dry run that told what the mod changes, no tool is judged by records. Such tools are
+  named in a step of their own, "Tools ModTrap can judge only from a dry run", which says how to get them
+  judged. Evidence from files (§8) does not wait.
+- **Limit.** The second question is still asked of bytes. A changed name kept as text, or a changed list, is
+  found in a tool's plugin only if that plugin writes it the same way; tools built on xEdit do. A tool whose
+  plugin writes it otherwise would be missed.

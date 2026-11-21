@@ -343,6 +343,9 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                                      if info["count"] > len(info["examples"]) else [])})
     for o in deep.get("outputs", []):                                  # (b) records in a plugin the tool made
         e = entry(o["tool"])
+        if not o.get("judged", True):
+            e.setdefault("wait", []).append(o["plugin"])
+            continue
         lines = ["%s %s of %s · changed by %s in %s · %s" % (
             d["kind"], d["id"], d["owner"], ", ".join(d["by"]), ", ".join(d["changed"][:8]),
             ("this plugin holds the same " + ", ".join(d["carried"][:8])) if d["carried"]
@@ -372,11 +375,18 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             o["mod"], o["files"], o["shared"]), "lines": o["examples"] or ["No file there lies at the path of one of the mod's files."]})
 
     clear_items: list[dict] = []
+    wait_items: list[dict] = []
     for tool in sorted(verdict, key=fold):
         e = verdict[tool]
         names = titles_of(tool)
         does = known.get(tool, {}).get("does", "")
         evidence = [{"details": d} for d in e["details"]]
+        if e.get("wait") and not e["run"]:
+            # Its plugins could carry something of the mod, and only the dry run can say what the mod changes.
+            wait_items.append({"text": "%s: %s %s built from the whole load order and %s not name the mod as a master.%s" % (
+                tool, ", ".join(e["wait"]), "was" if len(e["wait"]) == 1 else "were",
+                "does" if len(e["wait"]) == 1 else "do", (" " + does) if does else ""), "evidence": e["details"]})
+            continue
         if e["run"]:
             also = (" What speaks against it: " + "; ".join(e["clear"]) + ".") if e["clear"] else ""
             when = known.get(tool, {}).get("reads_if", "")
@@ -390,6 +400,18 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         else:
             clear_items.append({"text": "%s: %s.%s" % (tool, "; ".join(e["clear"]), (" (" + does + ")") if does else ""),
                                 "evidence": e["details"]})
+    if wait_items:
+        mod_off = all(not x.enabled for x in mods)
+        step("tools-wait", "ModTrap", "Tools ModTrap can judge only from a dry run",
+             "Whether such a tool's plugin carries anything of the mod depends on which records the mod really "
+             "changes. Only xEdit can tell that (a name kept as text or in a strings file, a list saved in another "
+             "order and the like look like changes to anything that only reads the bytes), and it tells it in the "
+             "dry run. " + ("The mod is disabled now, so no dry run can be made of it: to have these tools judged, "
+                            "Revert the demaster and press “Demaster Selected” again; or go by the modlist's own "
+                            "guide for this mod." if mod_off else
+                            "No dry run made with this version of ModTrap is at hand for this mod: press “Dry run "
+                            "through xEdit”, or “Demaster Selected”, which makes one."),
+             "not needed" if mod_off else "waiting for the dry run", wait_items)
     if clear_items:
         step("tools-clear", "ModTrap", "Tools that need no new run for this mod",
              "ModTrap looked at what each of these tools made and found nothing of the mod in it: no file the tool "
@@ -436,7 +458,7 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                         "%d step(s) to go." % len(open_steps))}
 
 
-def look_deeper(m: model.Model, mod_names: list[str]) -> dict:
+def look_deeper(m: model.Model, mod_names: list[str], touched: dict | None = None) -> dict:
     """The part of the steps that reads folders: what the ticked mods carry, which mods only replace their files,
     and which settings files name their plugins. Seconds on a large list."""
     inst = m.instance
@@ -458,7 +480,7 @@ def look_deeper(m: model.Model, mod_names: list[str]) -> dict:
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)
     skip = {fold(x.name) for x in mods} | {fold(r["mod"]) for r in reps}
     named, mcut = mentions(inst, trapped, skip) if trapped else ([], False)
-    outputs, output_files = tool_outputs(m, mods, trapped, paths_all)
+    outputs, output_files = tool_outputs(m, mods, trapped, paths_all, touched)
     return {"kinds": kinds, "replacements": reps, "mentions": named, "mentions_cut": mcut, "cut": cut,
             "outputs": outputs, "output_files": output_files}
 
@@ -468,28 +490,29 @@ OUTPUT_FILE_SECONDS = 12.0     # and of one plugin
 DETAILS = 40                   # records named in one plugin's evidence, at most
 
 
-def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low: set[str]) -> tuple[list[dict], list[dict]]:
-    """Which tools' outputs carry something of the mods being taken out, by evidence (WHY§63, WHY§64).
+def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low: set[str],
+                 touched: dict | None = None) -> tuple[list[dict], list[dict]]:
+    """Which tools' outputs carry something of the mods being taken out, by evidence (WHY§63 to WHY§66).
 
     A patcher builds its plugin from the whole load order. Its output need not name the mod as a master to carry
     what the mod did: it may have copied a value from the mod's version of a record. Holding the same record is
-    not enough to say so, though: a mod often holds a record it does not change at all (a cell it only puts
-    things into), and a tool may hold a record for a reason of its own. So, with ModTrap's own reader:
+    not enough to say so: a mod often holds a record it does not change (a cell it only puts things into), and
+    how a plugin writes a record says little about what it means (a name kept as text or in a strings file, a
+    list saved in another order, a pointer numbered by the plugin's own masters). So:
 
-    1. What the mod changes. For each record the mod's plugins (and the patches made for the mod) hold but do not
-       own, their version is compared, field by field, with the version in the last of that plugin's own masters
-       that holds the record: what the plugin's author had before them. A record with no differing field is not
-       changed by the mod, and is left out. The differing fields are the mod's changes.
+    1. What the mod changes is not judged here. xEdit, which knows what every field means, tells it in the dry
+       run (`touched`, XE01§18): for each plugin of the mod, and each patch made for it, the records it really
+       changes and the fields that differ from what its author had before them. Without a dry run that told
+       this, no tool is judged by records: each such plugin is returned as not judged.
     2. What a tool's plugin carries. For each plugin a tool made that does not depend on the mod, and each record
-       it holds that the mod changes: does it hold one of the mod's changed fields, byte for byte? Then it
-       carries the mod's change, and the tool is to run again. If it holds the record but none of the mod's
-       changed fields, it was built from another version of the record, or changed other things.
+       it holds that the mod changes: does it hold one of the changed fields as the mod wrote it, and not as the
+       plugin's last master had it? Then it carries the mod's change, and the tool is to run again. Read with
+       ModTrap's own reader, each plugin's numbering of its masters in mind (plugin.same_field).
 
     A generator that works on files is judged by files: how many files of its output mod lie at the path of one
     of the mod's own loose files."""
     inst = m.instance
     tf = {fold(p) for p in trapped}
-    game = {fold(x) for x in inst.primary}
     names = [x.name for x in mods]
     binaries = {e.title: e.binary for e in inst.executables}
     data = {t["tool"]: t for t in tools.load()}
@@ -510,57 +533,52 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
 
     def path_of(plugin_name: str) -> Path | None:
         r = m.plugins.get(fold(plugin_name))
-        return r.path if r is not None else None
-
-    # 1. What the mods' plugins, and the patches made for them, change.
-    sources: list[tuple[str, Path, tuple[str, ...]]] = []
-    for x in mods:
-        for p in x.plugins:
-            if x.folder is not None and (x.folder / p).is_file():
-                try:
-                    sources.append((p, x.folder / p, tuple(plugin.read(x.folder / p).masters)))
-                except (plugin.Unreadable, OSError):
-                    pass
-    for f in m.order:
-        r = m.plugins[f]
-        if r.path is None or fold(r.name) in tf or not any(fold(x) in tf for x in r.masters):
-            continue
-        partners = [x for x in r.masters if fold(x) not in game and fold(x) not in tf]
-        if len(partners) <= dryrun.PARTNERS and dryrun.named_for(r.name, trapped, names):
-            sources.append((r.name, r.path, tuple(r.masters)))
-    # record -> {"by", "kind", "fields": [(type, bytes, the plugin that wrote them so)]}
-    changes: dict[tuple[str, int], dict] = {}
+        if r is not None and r.path is not None:
+            return r.path
+        for x in inst.mods:                               # a plugin of a disabled mod: where its mod keeps it
+            if x.folder is not None and any(fold(p) == fold(plugin_name) for p in x.plugins) \
+                    and (x.folder / plugin_name).is_file():
+                return x.folder / plugin_name
+        return None
 
     def held(field: tuple[str, bytes], src: plugin.Records, others: list[tuple[str, bytes]], there: plugin.Records) -> bool:
         """Is this field, as `src` wrote it, among `others`, as `there` wrote them? (plugin.same_field, WHY§65)"""
         return any(t == field[0] and plugin.same_field(field[1], src, b, there) for t, b in others)
 
+    # 1. What the mods' plugins, and the patches made for them, change: as xEdit told it in the dry run.
+    # record -> {"by", "kind", "fields": [(type, bytes, the plugin that wrote them so)], "named": the fields' types}
+    changes: dict[tuple[str, int], dict] = {}
+    judged = touched is not None and any(fold(k) in tf for k in touched)
     unsure = False
     try:
-        for name, path, masters in sources:
-            src = records_of(path)
+        for name, rows in (touched or {}).items() if judged else ():
+            src = records_of(path_of(name))
             if src is None:
                 unsure = True
                 continue
             unsure = unsure or src.cut
-            for key, (_pos, _len, _flags, kind) in src.index.items():
-                if key[0] == src.own:
-                    continue                             # the plugin's own record: nothing else can hold it unasked
-                mine = src.fields(key) or []
-                before, base = None, None
-                for master in reversed([x for x in masters if fold(x) not in tf]):
-                    base = records_of(path_of(master))
+            masters = [x for x in src.masters if x not in tf]
+            for row in rows:
+                try:
+                    form = int(row["form"], 16)
+                except (KeyError, ValueError):
+                    continue
+                key = (fold(row["owner"]), form & 0xFFF if form >> 24 == 0xFE else form & 0xFFFFFF)
+                mine = src.fields(key)
+                if mine is None:
+                    continue
+                wanted = set(row.get("fields", []))
+                before, base = [], None
+                for master in reversed(masters):          # what the author had before them, to leave untouched
+                    base = records_of(path_of(master))    # fields of a changed list out
                     if base is not None and key in base.index:
-                        before = base.fields(key)
+                        before = base.fields(key) or []
                         break
-                if before is None or base is None:
-                    continue        # what the author had before them cannot be read: nothing can be said of it
-                changed = [fd for fd in mine if not held(fd, src, before, base)]
-                if not changed:
-                    continue                             # held, but not changed (a field taken out carries nothing)
-                entry = changes.setdefault(key, {"by": [], "kind": kind, "fields": []})
+                changed = [fd for fd in mine if fd[0] in wanted and (base is None or not held(fd, src, before, base))]
+                entry = changes.setdefault(key, {"by": [], "kind": row.get("kind", ""), "fields": [], "named": set()})
                 entry["by"].append(name)
                 entry["fields"] += [(t, b, src) for t, b in changed]
+                entry["named"] |= wanted
 
         # 2. What each tool-made plugin carries of that.
         outputs = []
@@ -573,9 +591,13 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
             ev = [e for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries) if e.kind != "editor"]
             if not ev or "plugins" not in data.get(ev[0].tool, {}).get("reads", ["plugins"]):
                 continue
-            out = records_of(r.path)
+            out = records_of(r.path) if judged else None
             row = {"plugin": r.name, "mod": r.source, "tool": ev[0].tool, "strong": ev[0].strong, "how": ev[0].how,
-                   "records": 0, "shared": 0, "carried": 0, "cut": out is None or out.cut or unsure, "details": []}
+                   "records": 0, "shared": 0, "carried": 0, "cut": out is None or out.cut or unsure, "details": [],
+                   "judged": judged}
+            if not judged:
+                outputs.append(row)
+                continue
             if out is not None:
                 row["records"] = len(out.index)
                 for key in out.index.keys() & changes.keys():
@@ -587,7 +609,7 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                     if len(row["details"]) < DETAILS or same:
                         row["details"].append({"kind": ch["kind"], "owner": key[0], "id": "%06X" % key[1],
                                                "by": sorted(set(ch["by"])), "carried": same,
-                                               "changed": sorted({t for (t, _b, _s) in ch["fields"]})})
+                                               "changed": sorted(ch["named"])})
                 row["details"].sort(key=lambda d: (not d["carried"], d["kind"], d["owner"], d["id"]))
                 del row["details"][DETAILS:]
             outputs.append(row)
