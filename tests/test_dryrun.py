@@ -212,6 +212,9 @@ class DryRunTests(unittest.TestCase):
         self.assertEqual(r["touched"], {
             "Bramble.esp": [{"form": "00012345", "kind": "FLST", "owner": "Skyrim.esm", "fields": ["LNAM"]}],
             "BrambleLanternPatch.esp": [], "Collection - Bramble.esp": []})
+        # A record it changes where other plugins say the same is counted, but is no stake (XE01§19, WHY§69).
+        self.assertEqual(r["changes"], {"Bramble.esp": 2, "BrambleLanternPatch.esp": 0, "Collection - Bramble.esp": 0})
+        self.assertIn("made.count=1\nmade.0=Generated.esp", asked.replace("\r\n", "\n"))
         self.assertEqual(json.loads((job.dir / "result.json").read_text(encoding="utf-8"))["touched"], r["touched"])
 
     def test_xedit_closing_early_is_a_failure_that_says_so(self):

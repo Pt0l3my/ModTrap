@@ -16,7 +16,8 @@ class StepsTests(unittest.TestCase):
         self.root = fx.small_list(Path(self.tmp.name) / "Example List")
         mods = self.root / "mods"
         # What Bramble carries beside its plugin, and two mods that exist only because of it.
-        for rel in ("meshes/actors/character/animations/BrambleAnim/wave.hkx", "meshes/bramble/leaf.nif",
+        for rel in ("meshes/actors/character/animations/BrambleAnim/wave.hkx",
+                    "meshes/actors/character/animations/BrambleAnim/FNIS_BrambleAnim_List.txt", "meshes/bramble/leaf.nif",
                     "textures/bramble/leaf.dds", "scripts/bramblequest.pex", "SKSE/Plugins/Bramble.ini"):
             fx.write(mods / "Bramble" / rel, b"invented")
         for rel in ("meshes/bramble/leaf.nif", "textures/bramble/leaf.dds"):
@@ -40,9 +41,51 @@ class StepsTests(unittest.TestCase):
     def test_contents_and_what_they_feed(self):
         c = steps.contents(self.root / "mods" / "Bramble")
         self.assertEqual({k: v["count"] for k, v in c["kinds"].items()},
-                         {"animations": 1, "meshes": 1, "textures": 1, "scripts": 1,
+                         {"animations": 2, "meshes": 1, "textures": 1, "scripts": 1,
                           "settings for a script extender plugin": 1, "other files": 1})
         self.assertEqual(steps.tools_for(self.build().instance, "animations"), ["Invented Behaviour Engine"])
+
+    def test_a_behaviour_tool_is_asked_for_what_it_reads_not_for_any_animation_file(self):
+        """TL01§12, WHY§69: a behaviour tool reads animation lists and patch folders. A mod with plain animation
+        files only gives it nothing to read; its output is searched for the names of the mod's animation folders."""
+        mods = self.root / "mods"
+        (mods / "Bramble" / "meshes/actors/character/animations/BrambleAnim/FNIS_BrambleAnim_List.txt").unlink()
+        m = self.build()
+        deep = steps.look_deeper(m, ["Bramble"])
+        self.assertEqual((deep["animation"]["lists"], deep["animation"]["plain"], deep["animation"]["folders"]),
+                         ([], 1, ["brambleanim"]))
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        self.assertNotIn("tool:Pandora Behaviour Engine", by)
+        cleared = [i["text"] for i in by["tools-clear"]["items"] if i["text"].startswith("Pandora")]
+        self.assertEqual(len(cleared), 1)
+        self.assertIn("plain files: it has no animation list (FNIS_…_List.txt) and no behaviour patch folder", cleared[0])
+        # A patch folder is something the tool reads; so is a list for a creature.
+        fx.write(mods / "Bramble" / "Nemesis_Engine" / "mod" / "brmb" / "info.ini", b"invented")
+        deep = steps.look_deeper(self.build(), ["Bramble"])
+        self.assertEqual(deep["animation"]["nemesis_engine"], ["brmb"])
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        self.assertIn("the mod carries 1 animation list(s) or behaviour patch folder(s)", by["tool:Pandora Behaviour Engine"]["why"])
+
+    def test_a_behaviour_tools_output_that_names_the_mods_animation_folder(self):
+        mods = self.root / "mods"
+        (mods / "Bramble" / "meshes/actors/character/animations/BrambleAnim/FNIS_BrambleAnim_List.txt").unlink()
+        fx.write(mods / "Engine Output" / "meshes/actors/character/characters/defaultmale.hkx",
+                 b"\x00packed\x00Animations\\BrambleAnim\\wave.hkx\x00more")
+        fx.write(mods / "Engine Output" / "meshes/actors/character/behaviors/0_master.hkx", b"\x00nothing of it\x00")
+        p = self.root / "profiles" / "Default" / "modlist.txt"
+        p.write_bytes(p.read_bytes().replace(b"+Tool Output", b"+Engine Output\r\n+Tool Output"))
+        st = self.root / "profiles" / "Default" / "settings.ini"
+        st.write_bytes((st.read_bytes() if st.is_file() else b"") + b"[custom_overwrites]\r\nInvented%20Behaviour%20Engine=Engine Output\r\n")
+        m = self.build()
+        self.assertEqual(m.instance.output_mods.get("Invented Behaviour Engine"), "Engine Output")
+        deep = steps.look_deeper(m, ["Bramble"])
+        got = deep["animation"]["searched"]
+        self.assertEqual([(x["mod"], x["files"], x["hit_count"]) for x in got], [("Engine Output", 2, 1)])
+        self.assertEqual(got[0]["hits"][0]["file"], "meshes/actors/character/characters/defaultmale.hkx")
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        why = by["tool:Pandora Behaviour Engine"]["why"]
+        self.assertIn("1 file(s) of its output in “Engine Output” name a folder of the mod's animations", why)
+        self.assertIn("What speaks against it: the mod's 1 animation file(s) are plain files", why)
 
     def test_a_mod_that_only_replaces_the_ticked_mods_files_is_found(self):
         m = self.build()
@@ -65,7 +108,9 @@ class StepsTests(unittest.TestCase):
                          [("Bramble", "ticked"), ("Bramble Hotfix", "2 of i")])
         engine = by["tool:Pandora Behaviour Engine"]                    # named by what the tool is, with its start button
         self.assertEqual([i["tool"] for i in engine["items"] if "tool" in i], ["Invented Behaviour Engine"])
-        self.assertIn("the mod carries 1 file(s) of animations", engine["why"])
+        self.assertIn("the mod carries 1 animation list(s) or behaviour patch folder(s), which this tool reads", engine["why"])
+        self.assertIn("meshes/actors/character/animations/bramblanim/fnis_bramblanim_list.txt".replace("bramblanim", "brambleanim"),
+                      [ln for i in engine["items"] if "details" in i for ln in i["details"]["lines"]])
         self.assertIn("compiled script", by["play"]["why"])
         self.assertFalse(s["complete"])
         # A dry run's verdicts sort the dependants.
@@ -132,7 +177,7 @@ class StepsTests(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertTrue(first["steps"])
-        self.assertEqual(out["contents"]["animations"], 1)
+        self.assertEqual(out["contents"]["animations"], 2)
         self.assertIn("mentions", [x["key"] for x in out["steps"]])
         self.assertEqual(a.steps({"mods": []})["steps"], [])
 
@@ -226,14 +271,14 @@ class ToolEvidence(unittest.TestCase):
         self.assertEqual((running, cleared), ({"Synthesis", "Wrye Bash", "ParallaxGen (PGPatcher)"}, set()))
         syn = by["tool:Synthesis"]
         self.assertIn("Synthesis runs its patchers", syn["why"])                # what the tool is for
-        self.assertIn("Synthesis.esp carries what the mod changed in 1 record(s)", syn["why"])
-        self.assertIn("What speaks against it: Synthesis Gameplay.esp holds 1 record(s) the mod changes, but none of "
-                      "the mod's changes", syn["why"])
+        self.assertIn("Synthesis.esp holds, in 1 record(s), a value it has from the mod", syn["why"])
+        self.assertIn("What speaks against it: Synthesis Gameplay.esp holds 1 record(s) in which the mod has a stake, "
+                      "but none of the mod's values", syn["why"])
         folds = [i["details"] for i in syn["items"] if "details" in i]
         self.assertEqual(len(folds), 2)
-        self.assertIn("GLOB 000A00 of core.esp · changed by Bramble.esp in FLTV · this plugin holds the same FLTV",
+        self.assertIn("GLOB 000A00 of core.esp · Bramble.esp has a stake in FLTV · this plugin holds the same FLTV",
                       folds[0]["lines"])
-        self.assertIn("this plugin holds none of those changes", folds[1]["lines"][0])
+        self.assertIn("this plugin holds none of it", folds[1]["lines"][0])
         self.assertIn("holds 1 file(s) at the path of a file of the mod", by["tool:ParallaxGen (PGPatcher)"]["why"])
 
     def test_a_mod_whose_changes_no_output_carries_clears_every_tool(self):

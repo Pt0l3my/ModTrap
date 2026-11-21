@@ -49,6 +49,17 @@ TOOLS_FOR = {
     "grass cache": ("grass",),
     "bodyslide data": ("bodyslide",),
 }
+# What a behaviour tool reads of a mod (TL01§12): an animation list beside the mod's animations, with the graph
+# file that goes with it, and a patch folder with its info file. Never a plain animation file: the game, or an
+# animation framework, loads those as they are.
+ANIM_LIST = re.compile(r"(?:^|/)animations/([^/]+)/fnis_([^/]+)_list\.txt$")
+ANIM_GRAPH = re.compile(r"(?:^|/)behaviou?rs/fnis_[^/]+_behavior\.hkx$")
+ANIM_PATCH = re.compile(r"^(nemesis_engine|pandora_engine)/mod/([^/]+)/")
+ANIM_FOLDER = re.compile(r"(?:^|/)animations/([^/]+)/[^/]")
+ANIM_READS = {"Pandora Behaviour Engine": ("lists", "nemesis_engine", "pandora_engine"),
+              "Nemesis": ("lists", "nemesis_engine"), "FNIS": ("lists",)}
+ANIM_SEARCH_SECONDS = 4.0
+ANIM_SEARCH_FILE = 64 * 1024 * 1024
 CONFIG_NAME = re.compile(r"\.(ini|json|toml|yaml|yml|txt)$", re.IGNORECASE)
 
 
@@ -93,6 +104,74 @@ def contents(folder: Path) -> dict:
         if len(entry["examples"]) < 3:
             entry["examples"].append(f)
     return {"files": len(files), "cut": cut, "kinds": kinds, "paths": {f.lower() for f in files}}
+
+
+def animation_feed(inst: Instance, paths_low: set[str], skip_mods: set[str]) -> dict:
+    """What the mods' loose files give a behaviour tool to read (TL01§12), and whether the files such a tool made
+    name one of the mods' own animation folders. Names and a search for those names only."""
+    lists, graphs, plain = [], [], 0
+    patches: dict[str, set[str]] = {"nemesis_engine": set(), "pandora_engine": set()}
+    folders: set[str] = set()
+    for p in sorted(paths_low):
+        kind = next((k for k, rx in KINDS if rx.search(p)), "")
+        if kind != "animations":
+            continue
+        got = ANIM_LIST.search(p)
+        patch = ANIM_PATCH.search(p)
+        if got and (got.group(2) == got.group(1) or got.group(2).startswith(got.group(1) + "_")):
+            lists.append(p)
+            folders.add(got.group(1))
+        elif patch:
+            patches[patch.group(1)].add(patch.group(2))
+        elif ANIM_GRAPH.search(p):
+            graphs.append(p)
+        else:
+            plain += 1
+        own = ANIM_FOLDER.search(p)
+        if own:
+            folders.add(own.group(1))
+    # A folder of animations is named in what a behaviour tool writes only if the tool took the mod's animations
+    # in: as "animations\<folder>\" in a project file, or by the graph file's name.
+    needles = sorted({("animations\\%s\\" % f).encode("utf-8") for f in folders} |
+                     {("animations/%s/" % f).encode("utf-8") for f in folders} |
+                     {g.rsplit("/", 1)[1].encode("utf-8") for g in graphs})
+    searched = []
+    binaries = {e.title: e.binary for e in inst.executables}
+    until = time.monotonic() + ANIM_SEARCH_SECONDS
+    seen: set[str] = set()
+    for title, target in sorted(inst.output_mods.items()):
+        tool = tools.of_executable(title, binaries.get(title, ""))[0]
+        out_mod = inst.mod(target)
+        if tool not in ANIM_READS or out_mod is None or out_mod.folder is None or fold(target) in seen \
+                or fold(target) in skip_mods:
+            continue
+        seen.add(fold(target))
+        listing, cut = walk(out_mod.folder)
+        hits, read = [], 0
+        for rel in sorted(listing):
+            if not needles or not rel.lower().endswith((".hkx", ".txt", ".xml")):
+                continue
+            if time.monotonic() > until:
+                cut = True
+                break
+            try:
+                f = out_mod.folder / rel
+                if f.stat().st_size > ANIM_SEARCH_FILE:
+                    cut = True
+                    continue
+                data = f.read_bytes().lower()
+            except OSError:
+                cut = True
+                continue
+            read += 1
+            found = [n.decode("utf-8") for n in needles if n in data]
+            if found:
+                hits.append({"file": rel, "names": found[:4]})
+        searched.append({"tool": tool, "mod": target, "files": read, "hits": hits[:DETAILS], "hit_count": len(hits),
+                         "cut": cut})
+    return {"lists": lists, "graphs": graphs, "nemesis_engine": sorted(patches["nemesis_engine"]),
+            "pandora_engine": sorted(patches["pandora_engine"]), "folders": sorted(folders), "plain": plain,
+            "searched": searched}
 
 
 def tools_for(inst: Instance, kind: str) -> list[str]:
@@ -326,12 +405,53 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         if kind not in TOOLS_FOR:
             continue
         names = tools_for(inst, kind)
+        if not names and kind == "animations" and deep.get("animation") is not None and not (
+                deep["animation"]["lists"] or deep["animation"]["nemesis_engine"] or deep["animation"]["pandora_engine"]):
+            continue                                   # plain animation files: nothing a behaviour tool reads
         if not names:
             step("tool:" + kind, "you", "Run the tool that handles %s again" % kind,
                  "The mod carries %d file(s) of %s (for example %s). A tool builds its output from all such files in "
                  "the modlist, and that output still has the mod's in it until the tool runs again. No tool of that "
                  "kind is set up in this MO2; if you use one outside MO2, run it." % (
                      info["count"], kind, ", ".join(info["examples"][:2])), "to do")
+            continue
+        feed = deep.get("animation") if kind == "animations" else None
+        if feed is not None:
+            # A behaviour tool reads lists and patch folders, not animation files (TL01§12, WHY§69).
+            for title in names:
+                tool = tools.of_executable(title, binaries.get(title, ""))[0]
+                e = entry(tool)
+                reads = ANIM_READS.get(tool, ("lists", "nemesis_engine", "pandora_engine"))
+                inputs = (feed["lists"] if "lists" in reads else []) + [
+                    "%s/mod/%s" % (eng, code) for eng in ("nemesis_engine", "pandora_engine") if eng in reads
+                    for code in feed[eng]]
+                named_in = [x for x in feed["searched"] if x["tool"] == tool]
+                if inputs:
+                    e["run"].append("the mod carries %d animation list(s) or behaviour patch folder(s), which this "
+                                    "tool reads and builds into its output; they stay in it until the tool runs "
+                                    "again" % len(inputs))
+                    e["details"].append({"summary": "What this tool reads of the mod: %d list(s) or patch folder(s)"
+                                         % len(inputs), "lines": inputs[:DETAILS] + feed["graphs"][:4]})
+                else:
+                    e["clear"].append("the mod's %d animation file(s) are plain files: it has no animation list "
+                                      "(FNIS_…_List.txt) and no behaviour patch folder (Nemesis_Engine or "
+                                      "Pandora_Engine), which is all this tool reads of a mod" % info["count"])
+                    e["details"].append({"summary": "The mod's %d file(s) of animations: none is a list or a patch "
+                                         "folder" % info["count"], "lines": list(info["examples"])})
+                for x in named_in:
+                    if x["hit_count"]:
+                        e["run"].append("%d file(s) of its output in “%s” name a folder of the mod's animations"
+                                        % (x["hit_count"], x["mod"]))
+                    elif feed["folders"] and x["files"] and not x["cut"]:
+                        e["clear"].append("none of the %d file(s) read in its output “%s” names a folder of the "
+                                          "mod's animations" % (x["files"], x["mod"]))
+                    if feed["folders"]:
+                        e["details"].append({
+                            "summary": "Output “%s”: %d file(s) read for the names of the mod's animation folders "
+                                       "(%s), %d naming one%s" % (x["mod"], x["files"], ", ".join(feed["folders"][:4]),
+                                                                  x["hit_count"], "; not all could be read" if x["cut"] else ""),
+                            "lines": ["%s names %s" % (h["file"], ", ".join(h["names"])) for h in x["hits"]]
+                            or ["No file read there names one of them."]})
             continue
         for title in names:
             e = entry(tools.of_executable(title, binaries.get(title, ""))[0])
@@ -346,23 +466,25 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         if not o.get("judged", True):
             e.setdefault("wait", []).append(o["plugin"])
             continue
-        lines = ["%s %s of %s · changed by %s in %s · %s" % (
+        lines = ["%s %s of %s · %s has a stake in %s · %s" % (
             d["kind"], d["id"], d["owner"], ", ".join(d["by"]), ", ".join(d["changed"][:8]),
             ("this plugin holds the same " + ", ".join(d["carried"][:8])) if d["carried"]
-            else "this plugin holds none of those changes") for d in o["details"]]
+            else "this plugin holds none of it") for d in o["details"]]
         if o["carried"]:
-            e["run"].append("%s carries what the mod changed in %d record(s)" % (o["plugin"], o["carried"]))
+            e["run"].append("%s holds, in %d record(s), a value it has from the mod: without the mod the load order "
+                            "says something else there" % (o["plugin"], o["carried"]))
         elif o["cut"]:
             e["run"].append("%s could not be read to the end in the time ModTrap allows itself, so ModTrap cannot "
                             "say that nothing of the mod is in it" % o["plugin"])
         elif o["shared"]:
-            e["clear"].append("%s holds %d record(s) the mod changes, but none of the mod's changes to them" % (
-                o["plugin"], o["shared"]))
+            e["clear"].append("%s holds %d record(s) in which the mod has a stake, but none of the mod's values in "
+                              "them" % (o["plugin"], o["shared"]))
         else:
-            e["clear"].append("%s holds no record the mod changes" % o["plugin"])
-        e["details"].append({"summary": "%s (%s): %d record(s) the mod changes, %d with the mod's changes in them" % (
-            o["plugin"], o["how"], o["shared"], o["carried"]),
-            "lines": lines or ["Of its %d record(s), none is one the mod or its patches change." % o["records"]]})
+            e["clear"].append("%s holds no record in which the mod has a stake" % o["plugin"])
+        e["details"].append({"summary": "%s (%s): %d record(s) in which the mod has a stake, %d with the mod's "
+                                        "value in them" % (o["plugin"], o["how"], o["shared"], o["carried"]),
+            "lines": lines or ["Of its %d record(s), none is one in which the mod or its patches have a stake."
+                               % o["records"]]})
     for o in deep.get("output_files", []):                             # (c) files in the tool's output mod
         e = entry(o["tool"])
         if o["shared"]:
@@ -374,6 +496,12 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         e["details"].append({"summary": "Output mod “%s”: %d file(s), %d at a path of the mod" % (
             o["mod"], o["files"], o["shared"]), "lines": o["examples"] or ["No file there lies at the path of one of the mod's files."]})
 
+    st = deep.get("stakes")
+    stake_note = "" if not st else (
+        " By xEdit's dry run, the mod and the patches made for it change %d record(s) of other plugins and have a "
+        "stake in %d: records where their version wins and the next in line says something else, or where they "
+        "say what no plugin that stays says. Only those can leave a mark in what a tool made."
+        % (st["changed"], st["stake"]))
     clear_items: list[dict] = []
     wait_items: list[dict] = []
     for tool in sorted(verdict, key=fold):
@@ -415,8 +543,8 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
     if clear_items:
         step("tools-clear", "ModTrap", "Tools that need no new run for this mod",
              "ModTrap looked at what each of these tools made and found nothing of the mod in it: no file the tool "
-             "feeds on, no record with the mod's changes, no file made from the mod's. Each tool has one verdict: "
-             "it is either here or among the steps above, never both.", "not needed", clear_items)
+             "feeds on, no record with a value only the mod supplies, no file made from the mod's. Each tool has "
+             "one verdict: it is either here or among the steps above, never both." + stake_note, "not needed", clear_items)
 
     # 7. Settings files of other mods that name a ticked plugin.
     named = deep.get("mentions", [])
@@ -480,9 +608,17 @@ def look_deeper(m: model.Model, mod_names: list[str], touched: dict | None = Non
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)
     skip = {fold(x.name) for x in mods} | {fold(r["mod"]) for r in reps}
     named, mcut = mentions(inst, trapped, skip) if trapped else ([], False)
-    outputs, output_files = tool_outputs(m, mods, trapped, paths_all, touched)
-    return {"kinds": kinds, "replacements": reps, "mentions": named, "mentions_cut": mcut, "cut": cut,
-            "outputs": outputs, "output_files": output_files}
+    counts = (touched or {}).get("")               # how many records each looked-through plugin changes at all
+    told = {k: v for k, v in (touched or {}).items() if k} if touched is not None else None
+    outputs, output_files = tool_outputs(m, mods, trapped, paths_all, told)
+    out = {"kinds": kinds, "replacements": reps, "mentions": named, "mentions_cut": mcut, "cut": cut,
+           "outputs": outputs, "output_files": output_files}
+    if "animations" in kinds:
+        out["animation"] = animation_feed(inst, paths_all, {fold(x.name) for x in mods})
+    if told is not None and isinstance(counts, dict):
+        out["stakes"] = {"changed": sum(int(v) for v in counts.values()), "stake": sum(len(v) for v in told.values()),
+                         "plugins": len(told)}
+    return out
 
 
 OUTPUT_SECONDS = 60.0          # all the reading of plugins for one look at the tools, at most
@@ -614,10 +750,10 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 del row["details"][DETAILS:]
             outputs.append(row)
             # Into the log too, so that a saved session shows what a verdict rests on (WHY§65).
-            log.info("tools: %s (%s): holds %d record(s) the mod changes, %d with the mod's changes in them%s",
+            log.info("tools: %s (%s): holds %d record(s) in which the mod has a stake, %d with the mod's value in them%s",
                      r.name, ev[0].tool, row["shared"], row["carried"], " (not read to the end)" if row["cut"] else "")
             for d in row["details"][:12]:
-                log.info("tools:   %s %s of %s, changed by %s in %s: %s", d["kind"], d["id"], d["owner"],
+                log.info("tools:   %s %s of %s, a stake of %s in %s: %s", d["kind"], d["id"], d["owner"],
                          ", ".join(d["by"]), ", ".join(d["changed"][:8]),
                          ("carries " + ", ".join(d["carried"][:8])) if d["carried"] else "none of it carried")
     finally:

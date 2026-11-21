@@ -626,8 +626,9 @@ class Api:
         if job is not None:
             pub = job.public()
             res = pub.get("result") or {}
-            if pub.get("state") == "done" and sorted(pub.get("plan", {}).get("trapped_mods", [])) == want and res.get("touched"):
-                return res["touched"], str(pub.get("id", ""))
+            if pub.get("state") == "done" and sorted(pub.get("plan", {}).get("trapped_mods", [])) == want \
+                    and res.get("touched") and "changes" in res:     # told by a script that tells stakes (WHY§69)
+                return dict(res["touched"], **{"": res["changes"]}), str(pub.get("id", ""))
         s = self.session
         if s is None:
             return None, ""
@@ -646,8 +647,8 @@ class Api:
                     res = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
             except (OSError, ValueError, AttributeError):
                 continue
-            if isinstance(res, dict) and res.get("touched"):
-                return res["touched"], d.name
+            if isinstance(res, dict) and res.get("touched") and isinstance(res.get("changes"), dict):
+                return dict(res["touched"], **{"": res["changes"]}), d.name
         return None, ""
 
     def steps(self, body: dict) -> dict:

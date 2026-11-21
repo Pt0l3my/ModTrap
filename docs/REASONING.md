@@ -91,6 +91,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 66 | 2026-11-21 | Reading bytes cannot say what a mod changes: xEdit says it in the dry run, and tools are judged from that or not at all | DECIDED | #tools #steps #xedit #process |
 | 67 | 2026-11-21 | "No change" was an update without a restart: ModTrap now notices it; MO2 is closed without a question inside a confirmed demaster; finished jobs go to the History tab and can be cleared | DECIDED | #process #page #mo2 #history |
 | 68 | 2026-11-21 | A version that rises with every change, a mark of contents, and one ModTrap at a time: a new start takes over from one still running | DECIDED | #process #version #server #page |
+| 69 | 2026-11-21 | The other tools checked: a change is not a stake (the patcher was asked for a value many plugins share), and a behaviour tool reads lists and patch folders, not animation files | DECIDED | #tools #steps #xedit #process |
 
 ## Entries
 
@@ -1546,3 +1547,35 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests for the mark, the bump, the refusals of the request and the three outcomes of a take-over; two
   real starts one after the other on one port here: the first saved and ended, the second took the port.
 - Not checked: on the owner's PC, where a port is released under Windows' rules.
+
+### 69. The other tools checked: a change is not a stake, and a behaviour tool reads lists and patch folders, not animation files
+
+`2026-11-21` · DECIDED · `#tools #steps #xedit #process` · refs: MT17, DESIGN§13, DESIGN§14, XE01§18, XE01§19, TL01§8, TL01§11, TL01§12, WHY§66, WHY§67
+
+- The owner, on version 0.3.1 with a new dry run: "dyndolod isn't requested anymore. Can you double check other
+  tools are properly requested by reliable logic?"
+- FACT (the session file): WHY§66's method worked on the owner's list. The distant-view generator is cleared,
+  with its evidence: six records the mod changes, none with the mod's values.
+- FACT: the patcher was asked to run for one record: a worldspace's table of heights, which the mod "changes"
+  and one of the patcher's plugins holds the same. xEdit also reported cells changed in their place on the
+  grid. A dialogue mod has no business with either. LIKELY these are what the game's editor writes into every
+  plugin it saves that holds such a record (XE01§19); then many plugins say the same, and the patcher's copy
+  proves nothing about this mod.
+- FACT: the behaviour tool was asked because the mod carries four files that ModTrap files under animations.
+  Read in that tool's source (TL01§12): it takes a mod's animations in through a list or a patch folder only.
+  Whether those four files include a list, the session file does not say.
+- DECIDED (the method is ModTrap's, MT17): tools are judged by records from **stakes**, told by xEdit
+  (XE01§19): parts where the leaving plugins have the last word and the next in line says something else, or
+  where they say what no plugin that stays says. A dry run made before this version tells no stakes; its
+  tools wait for a new one, as in WHY§66.
+- DECIDED: a behaviour tool is asked for a list or a patch folder it reads, or where its output names one of
+  the mod's animation folders; plain animation files clear it, with the files shown.
+- LOOKED AT, left as it is: the generators that work on files are judged by files of their output at the mod's
+  paths, and by the mod carrying files for distant view (TL01§8). The second is a wide net (it also catches
+  ready-made files that are nobody's input); nothing on the owner's list speaks against it yet, and the source
+  of that tool is not open to read.
+- Not judged, as before: what is packed in archives; tools MO2 has no output mod for.
+- For the owner's mod the modlist's guide says: behaviour tool and patcher. ModTrap now decides both by
+  evidence and shows it; where it differs from the guide, the evidence is there to judge.
+- Checked: tests on invented plugins and folders. Not checked: the new lines on a real xEdit (the probe runs
+  them first), and the search of a real behaviour output.

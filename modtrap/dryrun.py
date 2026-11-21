@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
 
-from . import logbook, model, paths, winauto
+from . import logbook, model, paths, tools, winauto
 from .instance import GAME, Executable, Instance, fold
 
 SCRIPT = Path(__file__).resolve().parent / "xedit" / "ModTrap.pas"
@@ -211,6 +211,13 @@ def prepare(m: model.Model, p: Plan, job_dir: Path) -> dict:
                 and named_for(name, p.trapped, p.trapped_mods):
             touch.append(name)
     lines += ["touch.count=%d" % len(touch)] + ["touch.%d=%s" % (i, n) for i, n in enumerate(touch)]
+    # The plugins a tool made: they have no say in which version of a record wins, so that the script can tell
+    # where the leaving plugins have the last word among the others (XE01§19, WHY§69).
+    binaries = {e.title: e.binary for e in m.instance.executables}
+    made = [r.name for r in (m.plugins[f] for f in m.order)
+            if r.active and r.source is not None and fold(r.name) not in game
+            and any(e.kind != "editor" for e in tools.identify(r.name, r.author, r.source, m.instance.output_mods, binaries))]
+    lines += ["made.count=%d" % len(made)] + ["made.%d=%s" % (i, n) for i, n in enumerate(made)]
     # With a byte-order mark: the script's string list then reads the file as UTF-8, whatever the PC's own text
     # encoding, so a folder name with letters outside it still arrives whole (WHY§34).
     paths.write_atomic(script_dir / "modtrap-job.txt", ("\r\n".join(lines) + "\r\n").encode("utf-8-sig"))
@@ -384,8 +391,11 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
                  "data_path": "", "trap_missing": [], "loaded": 0,
                  # what each looked-through plugin really changes, by xEdit's own comparison (XE01§18): plugin ->
                  # [{"form", "kind", "owner", "fields"}]; a plugin is a key only if the script looked through it
-                 "touched": {}}
+                 "touched": {},
+                 # how many records each looked-through plugin changes at all (a stake is narrower, XE01§19)
+                 "changes": {}}
     touched_rows: dict[str, list[dict]] = {}
+    changed_rows: dict[str, int] = {}
     files: dict[str, dict] = {}
     records: dict[tuple[str, str], dict] = {}
     parts: dict[tuple[str, str, str], dict] = {}
@@ -420,10 +430,15 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
         elif kind == "G" and len(f) >= 7 and f[4].isdigit():
             entries[(f[1], f[2], f[3], int(f[4]))] = {"src": f[5], "breaks": f[6] == "1"}
         elif kind == "T" and len(f) >= 6:
+            changed_rows[f[1]] = changed_rows.get(f[1], 0) + 1
+        elif kind == "W" and len(f) >= 6:
             touched_rows.setdefault(f[1], []).append({"form": f[2], "kind": f[3], "owner": f[4],
                                                       "fields": sorted({x for x in f[5].split(",") if x})})
-        elif kind == "V" and len(f) >= 2:
+        elif kind == "V" and len(f) >= 4:
+            # Only a script that tells stakes (W) is believed: an earlier one told every change, and a tool that
+            # holds a value many plugins share was then asked to run again for nothing (WHY§69).
             out["touched"][f[1]] = touched_rows.get(f[1], [])
+            out["changes"][f[1]] = changed_rows.get(f[1], 0)
         elif kind == "D" and len(f) >= 4 and f[1] in files:
             files[f[1]]["needing"], files[f[1]]["done"] = int(f[3] or 0), True
         elif kind == "M" and len(f) >= 2:
