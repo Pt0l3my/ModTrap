@@ -339,15 +339,40 @@ function updateDemasterButton() {
   const locked = state.session && state.session.locked;
   const going = d && (d.state === "working" || d.state === "verified");
   const dryBusy = job && !["done", "failed", "stopped"].includes(job.state);
-  b.disabled = !state.changes || !state.picked.size || !!locked || !!going || !!dryBusy || !!probeReason();
-  b.title = probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC. Until then the Steps tab lists the steps to do by hand." :
-    locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : dryBusy ? "The dry run is going" :
-    going ? "A demaster is already in hand: see below" : !dryDone ? "Runs the dry run first, then shows what ModTrap would do and asks before doing it" : "Shows what ModTrap would do, and asks before doing it";
+  const probing = state.probe && state.probe.state === "working";
+  const probe = state.changes ? probeReason() : "";
+  b.disabled = !state.changes || !state.picked.size || !!locked || !!going || !!dryBusy || !!probing;
+  b.title = !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC. Until then the Steps tab lists the steps to do by hand." :
+    locked ? "Not now: " + locked : !state.picked.size ? "Tick a mod first" : probing ? "The probe is running; the demaster follows by itself if you started it from here" :
+    dryBusy ? "The dry run is going" : going ? "A demaster is already in hand: see below" :
+    probe ? "First runs the probe (" + probe + "), then goes on by itself" :
+    !dryDone ? "Runs the dry run first, then shows what ModTrap would do and asks before doing it" : "Shows what ModTrap would do, and asks before doing it";
+  // What the button will do first is said in plain sight, not only when the mouse rests on it (WHY§60).
+  const hint = $("demaster-hint");
+  hint.className = probe && state.picked.size ? "would-needs" : "dim";
+  hint.textContent = probing ? "The probe is running (Tools tab)." :
+    probe && state.picked.size ? "“Demaster Selected” will first run the probe again (a few minutes, on invented test plugins, undone afterwards): " + probe + ". Then it goes on by itself." :
+    state.changes ? "“Demaster Selected” does the whole demaster in one go: the dry run if needed, its plan for you to confirm, then everything. “Dry run through xEdit” only looks, and changes nothing." :
+    "The dry run starts your xEdit through MO2 and lists what would be taken out of each dependant. It changes nothing.";
 }
 
 // "Demaster Selected" in one go (WHY§59): the dry run first if there is none of the modlist as it is now, then
 // the plan and one question, then everything ModTrap can do by itself.
 async function demasterGo() {
+  if (!state.changes || !state.picked.size) { showTab("selection"); return; }
+  if (state.probe && state.probe.state === "working") { showTab("tools"); return; }
+  if (probeReason()) {
+    if (!window.confirm("Before ModTrap changes real plugins it proves its scripts on invented test plugins, in your own MO2 and xEdit (the probe).\n\n" +
+        probeReason() + ".\n\nRun the probe now? It takes a few minutes and undoes itself. The demaster then goes on by itself.")) return;
+    try {
+      state.probe = await api("/api/probe/start", {});
+      state.probeError = ""; state.probeText = ""; state.dmChain = "probe";
+      showTab("tools");
+      toast("The probe has started. The demaster follows when it has passed.");
+      tick();
+    } catch (e) { state.dmChain = ""; state.dmError = e.message; showTab("selection"); renderDemaster(true); }
+    return;
+  }
   const job = state.job;
   const dryDone = job && job.state === "done" && !job.past && sameMods(job.plan.trapped_mods, state.picked);
   showTab("selection");
@@ -370,6 +395,10 @@ async function demasterGo() {
 // What follows by itself: the plan after the dry run, and putting the plugins in place once they are verified.
 function demasterChain() {
   const job = state.job, d = state.demaster;
+  if (state.dmChain === "probe" && state.probe) {
+    if (state.probe.state === "passed" && !probeReason()) { state.dmChain = ""; demasterGo(); return; }
+    if (state.probe.state === "failed") { state.dmChain = ""; toast("The probe did not pass: the Tools tab says where. Nothing real was changed."); }
+  }
   if (state.dmChain === "dry" && job && job.id !== state.dmChainFrom) {
     if (job.state === "done") { state.dmChain = ""; showTab("selection"); askDemasterPlan(); }
     else if (["failed", "stopped"].includes(job.state)) state.dmChain = "";
@@ -470,6 +499,20 @@ function renderDemaster(force) {
 // --- the probe (DESIGN§9): proving ModTrap on this PC with invented plugins, before any real mod is touched ----------
 
 const probeReason = () => (state.changes && state.probe && state.probe.needed ? state.probe.reason || "" : "");
+
+// Where something waits for the probe, the button that runs it is right there (WHY§60).
+function probeButton() {
+  if (!probeReason() || (state.probe && state.probe.state === "working")) return null;
+  const b = el("button", { type: "button", text: "Run the probe now" });
+  b.title = "A few minutes, on invented test plugins in your own MO2 and xEdit; it undoes itself";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { state.probe = await api("/api/probe/start", {}); state.probeError = ""; state.probeText = ""; showTab("tools"); toast("The probe has started."); }
+    catch (e) { toast(e.message); b.disabled = false; }
+    tick();
+  });
+  return b;
+}
 
 function renderProbe() {
   const pr = state.probe;
@@ -1637,7 +1680,7 @@ function addActionCard(d) {
     b.title = probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC." :
       st("needs").state !== "done" ? "First get what the mod needs: see step “Get what the mod needs”." : !todo ? "There is nothing left for ModTrap to do here." : "Shows what ModTrap would do, and asks before doing it";
     b.addEventListener("click", askAddPlan);
-    kids.push(el("div", { class: "actions" }, b, el("span", { class: "dim", text: probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ?
+    kids.push(el("div", { class: "actions" }, b, probeButton(), el("span", { class: probeReason() ? "would-needs" : "dim", text: probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ?
       "Switched off for now: ModTrap putting the mod in for you waits until it has been proven on your modlist. The steps below say how to do it by hand." :
       "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
       state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null);
@@ -1874,8 +1917,8 @@ async function tick() {
   state.mo2 = s.mo2 || null;
   renderMo2();
   state.demaster = s.demaster || null;
-  demasterChain();
   state.probe = s.probe || null;
+  demasterChain();
   state.save = s.save || null;
   renderSave();
   const toolText = JSON.stringify(s.tool || null);

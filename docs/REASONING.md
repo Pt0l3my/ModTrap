@@ -82,6 +82,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 57 | 2026-11-21 | The Steps tab still gave ModTrap's own steps to the owner; they are ModTrap's now, with the button | METHOD | #page #steps #process |
 | 58 | 2026-11-21 | ModTrap knows whether this modlist's MO2 is open, and asks before closing it; every step says truly who does it | METHOD | #mo2 #page #steps #safety #process |
 | 59 | 2026-11-21 | The first real demaster: four big files done, one left; "Demaster Selected" now goes in one go; a row click shows a mod and what is tied to it | FACT | #xedit #page #safety #process |
+| 60 | 2026-11-21 | A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go | METHOD | #page #safety #process |
 
 ## Entries
 
@@ -1283,3 +1284,22 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   box ticks. The mod list the server sends names, for each mod, the mods that need it and the mods it needs.
 - Shown in a browser on the invented list: the row click, the marks, the box, and a demaster from a bare tick to
   "in place" with one "Go ahead".
+
+### 60. A button that waits for the probe says so in plain sight and runs it; "Demaster Selected" takes the probe into its one go
+
+`2026-11-21` · METHOD · `#page #safety #process` · refs: DESIGN§9, MT17, WHY§47, WHY§53, WHY§57, WHY§59
+
+- The owner, with pictures: "Demaster selected is greyed out, I had to click on demaster selected in steps page".
+  The scripts had changed (WHY§59), so the probe had to pass again (WHY§53). The Selection tab's button was
+  greyed out and said why only when the mouse rested on it; the Steps tab's button was not greyed out and showed
+  a plan whose "Go ahead" the server would then have refused.
+- METHOD: nothing waits for the probe in silence. "Demaster Selected", from either tab, is no longer greyed
+  out for it: the line beside it says in words that the probe runs first and why, and a press asks once ("Run
+  the probe now?"), runs it, and when it has passed goes on by itself to the dry run and the plan (WHY§59's one
+  go, with the probe in front). A probe that fails stops the chain and says where; nothing real is touched.
+  "Add it for me" keeps waiting for the probe, with the reason in plain sight and a "Run the probe now" button
+  beside it.
+- The gate itself is unchanged and stays on the server: no real change without a probe passed for this
+  modlist, this xEdit and these scripts.
+- Shown in a browser on the invented list with the gate on: one press, one question, the probe's seven steps,
+  the dry run, the plan, "Go ahead", in place.
