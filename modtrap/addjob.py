@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -142,6 +143,10 @@ class AddJob:
             if profile.checksum(self.pdir / n) != self.plan.lists.get(n):
                 raise Refused("%s changed since this was planned; read the modlist again" % n)
         done: dict = {"mods": [], "plugins": []}
+        self.dir.mkdir(parents=True, exist_ok=True)
+        paths.write_atomic(self.dir / "plan.json", (json.dumps(
+            {"mods": self.plan.mods, "plugins": self.plan.plugins, "lists": self.plan.lists,
+             "when": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
         try:
             for n in LISTS:
                 self.safe.take(self.pdir / n)
@@ -259,7 +264,35 @@ class AddJob:
             raise Refused(str(e)) from None
         self.stage = "reverted"
         self.history.add("reverted", why="the owner asked", mods=[x["name"] for x in self.plan.mods], left=left)
+        paths.write_atomic(self.dir / "reverted.json", (json.dumps(
+            {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "left": left}) + "\n").encode("utf-8"))
         return {"left": left}
+
+    @classmethod
+    def reopen(cls, inst: instance.Instance, m: model.Model, work: Path, session_dir: Path,
+               closed: Callable[[], bool | None]) -> "AddJob":
+        """A job that ran earlier, from its folder: for Revert."""
+        try:
+            with open(work / "plan.json", "rb") as f:
+                data = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+            the_plan = Plan(mods=list(data["mods"]), plugins=list(data["plugins"]), lists=dict(data["lists"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            raise Refused("this job's record cannot be read") from None
+        job = cls(inst, m, the_plan, work, session_dir, closed)
+        job.stage = "added" if (work / "added.json").is_file() and not (work / "reverted.json").is_file() else "reverted"
+        return job
+
+    @staticmethod
+    def summary(work: Path) -> dict | None:
+        """What a job's folder says of it, for the page: when, which mods and plugins, and whether it stands."""
+        try:
+            with open(work / "plan.json", "rb") as f:
+                data = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+        except (OSError, ValueError):
+            return None
+        state = "reverted" if (work / "reverted.json").is_file() else "added" if (work / "added.json").is_file() else "failed"
+        return {"job": work.name, "when": data.get("when", ""), "state": state,
+                "mods": [x["name"] for x in data.get("mods", [])], "plugins": [x["name"] for x in data.get("plugins", [])]}
 
 
 __all__ = ["AddJob", "Plan", "plan", "Refused"]

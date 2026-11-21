@@ -900,7 +900,7 @@ function addCandidate(name) {
   return true;
 }
 
-const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"],
+const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"], installed: ["now in MO2", "good"],
   installer: ["waiting for your answers", "warn"], failed: ["not taken in", "bad"] };
 
 function renderAddPicked() {
@@ -1126,6 +1126,90 @@ function installerCard(info) {
     el("div", { class: "actions" }, go, el("span", { class: "dim", text: plural(v.files, "file entry", "file entries") + " would be installed" })));
 }
 
+// "Add it for me" (DESIGN§16.8): the plan first, then the go-ahead; and the adds already carried out, with Revert.
+const addBody = () => ({ mods: (state.adding || []).slice(), staged: (state.staged || []).slice() });
+
+async function askAddPlan() {
+  try { state.addPlan = await api("/api/add/plan", addBody()); state.addPlanError = ""; }
+  catch (e) { state.addPlan = null; state.addPlanError = e.message; }
+  state.addText = "";
+  pollAdd(true);
+}
+
+function addActionCard(d) {
+  const st = (k) => (d.steps || []).find((x) => x.key === k) || { state: "done" };
+  const todo = ["install", "enable", "activate"].some((k) => (d.steps || []).some((x) => x.key === k && x.state !== "done"));
+  const kids = [];
+  if (state.addPlan) {
+    const p = state.addPlan;
+    const lines = [];
+    for (const x of p.mods) {
+      if (x.staged) lines.push("Copy “" + x.name + "” from ModTrap's work folder into MO2's mods folder.");
+      if (!x.enabled) lines.push("Put “" + x.name + "” " + (x.before ? "directly before “" + x.before + "”" : "last") + " in MO2's mod list, and enable it.");
+    }
+    for (const x of p.plugins) lines.push("Put " + x.name + " " + (x.before ? "directly before " + x.before : "at the end") + " in the load order, and activate it.");
+    const closed = p.mo2_closed === true;
+    const go = el("button", { type: "button", class: "primary", text: "Go ahead", disabled: !closed || p.nothing });
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try {
+        await api("/api/add/run", addBody());
+        const names = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id) && r.state === "ready").map((r) => r.name);
+        state.addPlan = null;
+        toast("Added. ModTrap is reading the modlist again.");
+        for (const n of names) if (!(state.adding || []).includes(n)) state.adding.push(n);
+        saveUi();
+      } catch (e) { state.addPlanError = e.message; state.addPlan = null; }
+      state.addText = "";
+      state.gen = (state.gen || 0) + 1;
+      tick();
+    });
+    const again = el("button", { type: "button", text: "Check again" });
+    again.addEventListener("click", askAddPlan);
+    const cancel = el("button", { type: "button", text: "Not now" });
+    cancel.addEventListener("click", () => { state.addPlan = null; state.addText = ""; pollAdd(true); });
+    kids.push(el("h2", { text: "What ModTrap is about to do" }),
+      p.nothing ? el("p", { text: "Nothing: every mod is enabled and every plugin active already." }) : el("ol", {}, ...lines.map((t) => el("li", { text: t }))),
+      el("p", { class: "dim", text: "First the three list files of the profile are copied into the job's safe folder. Afterwards ModTrap reads the modlist again and checks it; if anything is not as planned, everything is put back. “Take it out again” undoes it later." }),
+      el("p", { class: closed ? "would-record" : "would-needs", text: closed ? "MO2 is closed: good. Keep it closed until this is done." :
+        p.mo2_closed === false ? "MO2 is open. Close it first: an open MO2 writes its own lists back over ModTrap's." : "ModTrap cannot tell whether MO2 is open on this PC, so it will not change the lists." }),
+      el("div", { class: "actions" }, go, closed ? null : again, cancel));
+  } else {
+    const b = el("button", { type: "button", class: "primary", text: "Add it for me", disabled: !state.changes || !todo || st("needs").state !== "done" || d.looking });
+    b.title = !state.changes ? "Switched off. ModTrap changes a modlist only when it is started with --allow-changes, which is for once it has been proven on your PC." :
+      st("needs").state !== "done" ? "First get what the mod needs: see step “Get what the mod needs”." : !todo ? "There is nothing left for ModTrap to do here." : "Shows what ModTrap would do, and asks before doing it";
+    b.addEventListener("click", askAddPlan);
+    kids.push(el("div", { class: "actions" }, b, el("span", { class: "dim", text: !state.changes ?
+      "Switched off for now: ModTrap putting the mod in for you waits until it has been proven on your modlist. The steps below say how to do it by hand." :
+      "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
+      state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null);
+  }
+  for (const j of (d.added || []).slice(0, 12)) {
+    const undo = el("button", { type: "button", text: "Take it out again" });
+    undo.addEventListener("click", async () => {
+      if (!window.confirm("Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder? MO2 must be closed.")) return;
+      try {
+        const r = await api("/api/add/revert", { job: j.job });
+        for (const x of r.restored || []) {                // a dropped mod is back in ModTrap's folder only
+          state.adding = (state.adding || []).filter((n) => n !== x.name);
+          if (!(state.staged || []).includes(x.id)) state.staged = (state.staged || []).concat(x.id);
+        }
+        renderAddPicked();
+        saveUi();
+        toast(r.left.length ? "Put back. Left in place, because it changed since: " + r.left.join(", ") : "Put back as it was.");
+        state.addPlanError = "";
+      }
+      catch (e) { state.addPlanError = e.message; }
+      state.addText = "";
+      state.gen = (state.gen || 0) + 1;
+      tick();
+    });
+    kids.push(el("p", {}, el("span", { class: "tag " + (j.state === "added" ? "good" : ""), text: j.state === "added" ? "added by ModTrap" : j.state === "reverted" ? "taken out again" : "did not go through" }),
+      " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + (j.plugins.length ? "  (" + j.plugins.join(", ") + ")" : "") + "  ", j.state === "added" && state.changes ? undo : null));
+  }
+  return el("div", { class: "card" }, ...kids.filter(Boolean));
+}
+
 function addStepCard(st, d) {
   const done = state.stepsDone || {};
   const ticked = st.manual && !!done[addKey(st.key)];
@@ -1201,6 +1285,7 @@ function renderAdd(d) {
     el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files, without xEdit. Nothing in MO2 has been changed: the steps marked “You” are done by hand in MO2 for now, and ModTrap checks them each time the modlist is read." }), room,
       d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
       d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
+    addActionCard(d),
     ...askCards,
     ...d.mods.map((x) => addModCard(x, d.place, (d.staged || []).find((r) => r.installer && r.state === "ready" && r.name === x.name))),
     el("h2", { text: "The steps, in order" }), ...cards].filter(Boolean));
@@ -1220,8 +1305,15 @@ async function pollAdd(force) {
     for (const r of d.staged || []) info[r.id] = r;
     const infoText = JSON.stringify(info);
     if (d.gone && d.gone.length) { state.staged = state.staged.filter((id) => !d.gone.includes(id)); saveUi(); }
+    for (const r of d.staged || []) {
+      if (r.state !== "installed") continue;
+      state.staged = state.staged.filter((id) => id !== r.id);
+      if (findMod(r.name) && !(state.adding || []).includes(r.name)) state.adding.push(r.name);
+      saveUi();
+    }
     if (infoText !== JSON.stringify(state.stagedInfo || {}) || (d.gone && d.gone.length)) { state.stagedInfo = info; renderAddPicked(); }
-    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length + JSON.stringify(state.installers || {});
+    const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length + JSON.stringify(state.installers || {})
+      + JSON.stringify(state.addPlan || 0) + (state.addPlanError || "") + state.changes;
     if (text !== state.addText) { state.addText = text; renderAdd(d); }
   } catch (e) { /* the next round tries again */ }
 }
@@ -1276,6 +1368,7 @@ async function tick() {
   try { s = await api("/api/state"); } catch (e) { showMessage("ModTrap is not answering: " + e.message, true); return; }
   const was = state.status;
   state.status = s.status;
+  state.changes = !!s.changes;
   renderState(s);
   if (s.log_epoch !== state.logEpoch) {             // another session's log: read it from the start
     state.logEpoch = s.log_epoch;

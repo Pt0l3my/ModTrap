@@ -396,11 +396,12 @@ needs; enable it in its place; activate its plugins in their place; look at the 
 check the records in xEdit; run the tools again; the health check (§3); play. `python -m modtrap add FOLDER --mod
 NAME` prints the same report.
 
-### 16.8 Carrying the steps out (steps 1 to 3 written, switched off)
+### 16.8 Carrying the steps out (behind a switch that is off)
 
-What "Add it" is to do on its own, in order, each step in the history (§12) and undone by Revert (§11). Steps 1
-to 3 and Revert are written and tested against invented lists, and nothing the page can call reaches them
-(WHY§42); steps 4 and 5 are not built.
+What "Add it for me" does on its own, in order, each step in the history (§12) and undone by "Take it out again"
+(§11). Steps 1 to 3 and Revert are written, tested against invented lists, and on the page behind a switch: they
+exist only when ModTrap is started with `--allow-changes` (WHY§42, WHY§44). The page shows the plan and asks
+before anything is done.
 
 1. With MO2 closed (§8): copy the unpacked mod into MO2's mods folder under its name, with a `meta.ini` naming the
    archive (MO01§7), so that MO2 knows it as an installed mod.

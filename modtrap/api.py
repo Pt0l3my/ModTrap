@@ -97,6 +97,7 @@ class Api:
         self.session: sessions.Session | None = None
         self.log_epoch = 0                     # goes up when the log is replaced: the page then reads it afresh
         self.on_quit: Callable[[], None] | None = None
+        self.changes = None                    # the endpoints that change a modlist; None: switched off (WHY§44)
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
 
@@ -741,7 +742,8 @@ class Api:
         busy = any(r["state"] in ("copying", "unpacking") for r in recs)
         if not mods and not ready:
             return {"looking": False, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
-                    "summary": "Nothing to analyse yet."}
+                    "summary": "Nothing to analyse yet.",
+                    "added": self.changes.jobs() if self.changes is not None else []}
         key = (id(m), tuple(mods), tuple(r["id"] for r in ready))
         with self._lock:
             started = key in self._adding
@@ -762,9 +764,11 @@ class Api:
                     self._adding[key] = found
             threading.Thread(target=work, name="adding", daemon=True).start()
         got = self._adding.get(key)
+        added = self.changes.jobs() if self.changes is not None else []
         if got is None:
-            return {"looking": True, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone}
-        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone)
+            return {"looking": True, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
+                    "added": added}
+        return dict(got, looking=False, unpacking=busy, staged=status, gone=gone, added=added)
 
     def job_state(self) -> dict:
         return {"job": self.job.public() if self.job else None}
@@ -780,6 +784,7 @@ class Api:
     def state(self) -> dict:
         with self._lock:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
+                   "changes": self.changes is not None,
                    "folder": self.folder, "profile": self.profile}
             m = self.model
         settings = paths.load_settings()
@@ -960,6 +965,8 @@ class Api:
         if path == "/api/quit":
             answer, after = self.quit(body)
             return 200, answer, after
+        if self.changes is not None and path in self.changes.PATHS:
+            return 200, self.changes.post(path, body), None
         if path == "/api/rescan":
             if not self.folder:
                 raise Bad("no modlist is open")

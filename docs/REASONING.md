@@ -66,6 +66,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 41 | 2026-11-21 | A dropped archive is unpacked by ModTrap itself, in its own folder | METHOD | #adding #mo2 #safety #licence |
 | 42 | 2026-11-21 | Carrying out an add: written and tested against invented lists, switched off | METHOD | #adding #mo2 #safety #process |
 | 43 | 2026-11-21 | An installer's questions are asked on ModTrap's own page | METHOD | #adding #page #safety #licence |
+| 44 | 2026-11-21 | "Add it for me" and Revert on the page, behind a switch that is off | DECIDED | #adding #safety #process #page |
 
 ## Entries
 
@@ -820,3 +821,24 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - FACT: tested with an invented installer (steps that depend on a flag, an option that depends on the load order,
   priorities, a conditional file), and driven in a browser from the drop to the analysed mod. Not proven: real
   mods' installers, which are often untidy; the first few on the owner's PC will show what is missing.
+
+### 44. "Add it for me" and Revert on the page, behind a switch that is off
+
+`2026-11-21` · DECIDED · `#adding #safety #process #page` · refs: MT21, MT14, DESIGN§8, DESIGN§9, DESIGN§16.8, WHY§36, WHY§39, WHY§42
+
+- The owner asked for the rest to be built. The job of WHY§42 is now reachable from the page: `modtrap/changes.py`
+  holds the three endpoints (the plan, carrying it out, Revert), and the Add mods tab has "Add it for me", the
+  plan with its go-ahead, and "Take it out again" for each add the session carried out.
+- DECIDED (mine, for the owner to overrule): it is switched off unless ModTrap is started with `--allow-changes`.
+  Without the flag the module is never imported, its paths do not exist, and the button is greyed out with the
+  reason. WHY§36's rule stands: nothing changes a modlist until the owner's PC has shown that MO2 keeps what
+  ModTrap writes. The flag is how that is shown: the owner starts ModTrap with it for the probe, on purpose.
+- METHOD: the plan is made twice, once to show and once more at the go-ahead, and the job refuses if the lists
+  changed in between. The plan card says whether MO2 is closed; open or not known, the go-ahead is greyed out and
+  the job would refuse anyway (WHY§42). After an add or a Revert the modlist is read again from disk.
+- METHOD: a dropped mod that was added becomes one of MO2's mods on the page; after Revert it is again the
+  unpacked mod in ModTrap's folder, so it can be added again.
+- FACT: tested through the same calls the page makes, and driven in a browser on an invented list from the drop
+  to the added mods and back: after Revert the modlist's folder is as before. Tests also check that without the
+  flag a fresh start loads none of the writing modules.
+- Not proven: all of WHY§42's open points, and telling whether MO2 is open on a real PC.
