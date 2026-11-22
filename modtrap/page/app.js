@@ -1594,11 +1594,13 @@ function afterStage() {
   const ticks = state.stepsDone || {};
   const tasks = [];
   for (const st of d.steps) {
-    if (!(st.key.startsWith("tool:") || ["regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key))) continue;
+    // What ModTrap's own part left open counts here too: a plugin it could not demaster, a mod that stays enabled.
+    const leftOpen = ["demaster", "disable"].includes(st.key) && st.state !== "done" && st.state !== "not needed";
+    if (!(st.key.startsWith("tool:") || ["regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key) || leftOpen)) continue;
     const ticked = st.manual && !!ticks[stepKey(st.key)];
     const done = ticked || st.state === "done";
-    tasks.push({ key: st.key, text: st.title, note: done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? "" : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
-      state: done ? "done" : st.state === "not needed" ? "skipped" : st.state.startsWith("waiting") ? "waiting" : st.who === "ModTrap" ? "waiting" : "yours" });
+    tasks.push({ key: st.key, text: st.title, note: leftOpen ? (st.note || "") : done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? "" : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
+      state: done ? "done" : st.state === "not needed" ? "skipped" : leftOpen && st.key === "demaster" ? "yours" : st.state.startsWith("wait") ? "waiting" : st.who === "ModTrap" ? "waiting" : "yours" });
   }
   if (!tasks.length) return null;
   // Until the demaster is in place these are to come, not yet the owner's turn.
@@ -1666,6 +1668,9 @@ function taskActions(stage, task, first, firstOpen) {
   if (stage.key === "install" && first && d && d.state === "verified" && state.dmChain !== "install") {
     out.push(actButton("Put them in place", putInPlace, true), actButton("Not now", () => demasterCall("/api/demaster/drop", {})),
       navButton("selection", "What is ready, on Selection"));
+  }
+  if (stage.key === "install" && task.key === "left") {
+    out.push(navButton("steps", "What is left, on Steps"), navButton("job", "What it takes from the mod, on Dry run"));
   }
   if (stage.key === "after" && (task.state === "yours" || task.state === "done")) {
     const st = ((state.stepsData || {}).steps || []).find((x) => x.key === task.key);

@@ -185,6 +185,12 @@ class DemasterTests(unittest.TestCase):
                          ([], ["Bramble - Lantern Patch"], ["BrambleLanternPatch.esp", "Collection - Bramble.esp"]))
         self.assertFalse((self.root / "mods" / "ModTrap - Bramble").exists())
         self.assertTrue(model.build(instance.load(self.root)).instance.mod("Bramble").enabled)   # the mod stays on
+        # The Process tab says so where the owner looks (WHY§76): the stage waits for the owner, it is not "done".
+        from modtrap import process
+        tasks = {t["key"]: t for t in d.board.tasks("install")}
+        self.assertEqual((tasks["left"]["state"], tasks["left"]["text"]), ("yours", "Left to you: 2 plugin(s) ModTrap could not demaster"))
+        self.assertIn("Lantern.esp, Generated.esp. The mod stays enabled until they no longer need it", tasks["left"]["note"])
+        self.assertEqual(process.stage_state(list(tasks.values())), "yours")
         self.assertFalse(d.check()["disabled"])
 
     def test_a_refused_action_keeps_that_dependant_out(self):

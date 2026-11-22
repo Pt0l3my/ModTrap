@@ -98,6 +98,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 73 | 2026-11-21 | "Are you 100% sure?" No: the patcher was cleared by comparing bytes it writes in its own form. A patcher is now cleared only where it can be ruled out | DECIDED | #tools #steps #process |
 | 74 | 2026-11-22 | What each tool made, from its own files: the patchers behind each output, what was left out, and every tool-made plugin's records by kind | DECIDED | #tools #steps #page |
 | 75 | 2026-11-22 | The demaster ran clean on 0.3.7; what is proven on one mod only, and what "any mod" still needs | FACT | #process #method |
+| 76 | 2026-11-22 | A second mod: the tool check looked at part of the load order, the Process tab hid what was left to the owner, and a script property is the first new shape | DECIDED | #tools #steps #page #xedit #process |
 
 ## Entries
 
@@ -1737,3 +1738,34 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   session files; what falls under "needs you" there says what to build next.
 - KNOWN GAP: a mod that others lean on without naming it as a master (a script that asks for its plugin by
   name) is found only in settings files today, not in compiled scripts.
+
+### 76. A second mod: the tool check looked at part of the load order, the Process tab hid what was left to the owner, and a script property is the first new shape
+
+`2026-11-22` · DECIDED · `#tools #steps #page #xedit #process` · refs: MT4, MT17, MT23, DESIGN§5, DESIGN§18, XE01§19, XE01§21, TL01§11, WHY§69, WHY§75
+
+- The owner, demastering two mods at once on version 0.3.8: "It's asking for dyndolod in steps again, and the
+  steps page doesn't keep up with the process anymore."
+- FACT (the distant-view generator): its plugins hold one cell where the second mod "has a stake" in the cell's
+  place on the grid, with the same bytes as the mod's. By WHY§69 that is proof. But the stake was told by an xEdit
+  that had loaded 524 plugins of 3,751: the mods, what depends on them, and their masters. "The last word" and
+  "no plugin that stays says the same" were true of those 524 only. Any plugin outside them may win that cell.
+- DECIDED: before "the tool holds the mod's value" counts, ModTrap looks through the whole load order for that
+  record with its own reader, quickly (only groups that can hold that kind of record): the leaving plugin must
+  be the last of the plugins no tool made that holds it, and the last plugin that stays must say something else
+  in that field. Otherwise the finding is dropped, with the plugin named. If the look is cut short, the finding
+  stands.
+- FACT: this narrows only. A stake that is not one can still be counted where bytes differ for the same value;
+  the error is on the side of asking. The exact answer for every record is MT23's.
+- FACT (the pages): the Steps tab was right and the Process tab was not saying it. One plugin could not be
+  demastered, so the mods stayed enabled by design; the Process tab showed every box done.
+- DECIDED: putting in place ends with a task "Left to you" when something still needs the mod; the box then
+  waits for the owner, with ways to the Steps and Dry run tabs; the last box lists the open steps of ModTrap's
+  own part too.
+- FACT (the plugin left over): a settings plugin's own quest carries a script with two properties that are
+  records of the mod. Nothing else of the mod is in it. This is the first shape not met with the first mod.
+- DECIDED (MT4, dated note): a script property that points at the mod is an entry to take out, with the plan
+  saying so (XE01§21). Not in the probe; the run's own checks hold it.
+- FACT: one of the patcher's plugins now names the second mod as a master (it holds a copy of a record of the
+  mod's own). ModTrap demastered it like any dependant; the patcher's run will make it anew, and ModTrap's copy,
+  which has the higher priority, is then the stale one. ModTrap says so when it sees the original remade.
+- Not checked: any of this on the owner's PC.

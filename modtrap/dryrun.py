@@ -34,7 +34,12 @@ GONE_GRACE = 8                  # seconds xEdit must be gone, with no end line i
 # record's signature ("*" for any) and the list's name as xEdit gives it. LIKELY until the first real report shows
 # xEdit's exact names (WHY§31); the report carries every name, so the list can be corrected without a new script.
 SAFE_ARRAYS = (("FLST", "FormIDs"), ("LVLI", "Leveled List Entries"), ("LVLN", "Leveled List Entries"),
-               ("LVSP", "Leveled List Entries"), ("*", "KWDA - Keywords"))
+               ("LVSP", "Leveled List Entries"), ("*", "KWDA - Keywords"),
+               # A script's property that points at a record of the mod, and one object in a property that is a
+               # list of objects (XE01§21): with the property gone the script finds nothing there, as it would
+               # with the mod gone and the property left dangling. Named so in the plan (WHY§76).
+               ("*", "Properties"), ("*", "Array of Object"))
+SCRIPT_ARRAYS = ("Properties", "Array of Object")
 
 log = logbook.get("dryrun")
 

@@ -524,5 +524,7 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    where new plugins wait, a tool's start button and “I have done this” in the last box. Beside each is a way to
    the tab the button comes from, to look before pressing. They are the same actions as on those tabs. A demaster
    started from this tab stays on it.
+8. Where the demaster stopped short (something still needs the mod), putting in place ends with "Left to you",
+   and the box waits for the owner (WHY§76).
 7. A demaster that is in place stays shown as done until Revert, or until a new one starts. A dry run of the modlist
    as it was before it was read again is not shown as this demaster's.
