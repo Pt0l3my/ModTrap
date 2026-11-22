@@ -634,3 +634,9 @@ shown without asking.
 source link…" asks for the web address the mod comes from and keeps it in ModTrap's own folder, before every other
 record. A drop zone, with "Add files…" and "Add a folder…" in its middle, takes the modlist's Wabbajack file, `.meta`
 files of downloads and mods' folders; of a Wabbajack file the page sends only the list. Nothing of a mod is changed.
+
+**The list (MT39, WHY§104).** As the Mods tab: lowest priority first, under the modlist's separators, which fold.
+Columns: Priority, Mod, From, Installed, Notes (what the owner wrote of the mod in MO2), Update (the state by the
+last asking), a button, What is known. The button, an upward arrow shown where a newer file is out, opens that
+file's own page for a download through MO2, or the newest release at GitHub. ModTrap downloads and installs
+nothing; whether it should is open (MT40).

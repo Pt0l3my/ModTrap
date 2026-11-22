@@ -457,7 +457,10 @@ class Api:
         key, added = self._updates_for()
         try:
             if what == "scan":
-                return self.updating.start(m, key, added)
+                only = body.get("mods")
+                if only is not None and (not isinstance(only, list) or not only or len(only) > 50 or not all(isinstance(x, str) for x in only)):
+                    raise Bad("name the mods to ask about")
+                return self.updating.start(m, key, added, only=set(only) if only else None)
             if what == "stop":
                 return self.updating.stop()
             if what == "key":

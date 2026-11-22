@@ -30,6 +30,7 @@ from .instance import Instance, fold, parse_ini
 log = logbook.get("sources")
 
 META_BYTES = 512 * 1024              # a meta file is read no further than this
+NOTE_MAX = 400                       # characters of a mod's comment or note that are shown
 WJ_ENTRY = "modlist"                 # the list itself, inside a Wabbajack file (TL01§27)
 WJ_CHUNK = 1024 * 1024
 WJ_VALUE_MAX = 64 * 1024 * 1024      # one entry of the list larger than this is passed over
@@ -81,8 +82,9 @@ def _number(text: str) -> int:
 
 
 def mod_meta(folder: Path) -> dict:
-    """What a mod's `meta.ini` says of where it came from (MO01§12). {"mod_id", "game", "version", "mo2_newest",
-    "ignored", "archive", "repository", "url", "last_query", "files": [(mod number, file number)]}."""
+    """What a mod's `meta.ini` says of where it came from (MO01§12), and what the owner wrote of it in MO2:
+    {"mod_id", "game", "version", "mo2_newest", "ignored", "archive", "repository", "url", "last_query", "files":
+    [(mod number, file number)], "comments" (MO2's Notes column), "notes" (the longer note, as plain words)}."""
     return mod_meta_of(_ini(folder / "meta.ini"))
 
 
@@ -95,7 +97,11 @@ def mod_meta_of(ini: dict) -> dict:
         if pair[0] and pair[1] and pair not in files:
             files.append(pair)
     url = g.get("url", "") if g.get("hascustomurl", "").lower() == "true" or not _number(g.get("modid", "")) else ""
-    return {"mod_id": _number(g.get("modid", "")), "game": g.get("gamename", ""), "version": g.get("version", ""),
+    notes = re.sub(r"\s+", " ", re.sub(r"<style\b.*?</style>|<[^>]*>", " ", g.get("notes", ""), flags=re.IGNORECASE | re.DOTALL))
+    for ent, ch in (("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"')):
+        notes = notes.replace(ent, ch)
+    return {"comments": g.get("comments", "").strip()[:NOTE_MAX], "notes": notes.strip()[:NOTE_MAX],
+            "mod_id": _number(g.get("modid", "")), "game": g.get("gamename", ""), "version": g.get("version", ""),
             "mo2_newest": g.get("newestversion", ""), "ignored": g.get("ignoredversion", ""),
             "archive": os.path.basename(g.get("installationfile", "").replace("\\", "/")),
             "repository": g.get("repository", ""), "url": url if url.lower().startswith(("http://", "https://")) else "",
@@ -423,7 +429,7 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
     for m in inst.mods:
         if m.kind != "mod" or m.folder is None:
             continue
-        meta = mod_meta(m.folder)
+        meta = own = mod_meta(m.folder)
         handed = g_mods.get(fold(m.name))
         by_meta = "meta.ini"
         if handed and not meta["mod_id"] and not meta["url"]:
@@ -437,7 +443,7 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
             dl, by_dl = g_archives[fold(meta["archive"])], "a download's meta file you gave"
         row = {"mod": m.name, "enabled": m.enabled, "host": "", "game": "", "mod_id": 0, "files": [], "archive": meta["archive"],
                "version": meta["version"], "mo2_newest": meta["mo2_newest"], "url": "", "repo": "", "tag": "", "by": [],
-               "given": links.get(fold(m.name), "")}
+               "given": links.get(fold(m.name), ""), "priority": m.priority, "comments": own.get("comments", ""), "notes": own.get("notes", "")}
         from_list: list[dict] = []
         if wj is not None:
             hashes = list(wj["mods"].get(fold(m.name), []))

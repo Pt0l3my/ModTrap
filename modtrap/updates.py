@@ -174,7 +174,7 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
     if best is not None:
         return {"state": "update", "text": "a newer file replaced the installed one (%s): %s, version %s, of %s" % (
             how, best["name"], best["version"] or "(none given)", _day(best["time"])),
-                "newest": best["version"], "file": best["name"], "when": _day(best["time"]), "asked": asked}
+                "newest": best["version"], "file": best["name"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"]}
     if unsure is not None:
         return {"state": "maybe", "text": "the installed file is marked old or is no longer listed, with no word of what replaced it; a later "
                                           "main file is there: %s, version %s, of %s" % (unsure["name"], unsure["version"] or "(none given)", _day(unsure["time"])),
@@ -221,10 +221,11 @@ def verdict(row: dict, store: dict) -> dict:
 # --- the scan --------------------------------------------------------------------------------------------------------
 
 def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: float | None = None, progress=None,
-         stopped=None, per_scan: int = NEXUS_PER_SCAN) -> dict:
+         stopped=None, per_scan: int = NEXUS_PER_SCAN, force: bool = False) -> dict:
     """Asks Nexus and GitHub about the mods of `rows` that need asking, keeps the answers, and gives an account:
     {"nexus": {"mods", "asked", "left", "month_list", "why_stopped", "day_left", "hour_left"}, "github": {...},
-    "seconds", "when"}. `progress(text)` is told what it is at; `stopped()` ends it early."""
+    "seconds", "when"}. `progress(text)` is told what it is at; `stopped()` ends it early. `force`: every mod of
+    `rows` is asked about now, whatever was kept (the owner asked about these mods by name)."""
     store = load() if store is None else store
     now = time.time() if now is None else now
     started = time.monotonic()
@@ -276,7 +277,7 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
             for (game, mod_id), enabled in wanted.items():
                 prev = store["nexus"].get("%s/%d" % (game, mod_id))
                 newer = updated[game].get(mod_id, 0)
-                if prev is None or prev.get("asked", 0) < now - ASK_AGAIN or newer > prev.get("asked", 0) - 3600:
+                if force or prev is None or prev.get("asked", 0) < now - ASK_AGAIN or newer > prev.get("asked", 0) - 3600:
                     need.append((0 if newer else 1, 0 if enabled else 1, 0 if prev is None else 1, game, mod_id))
                 else:
                     prev["seen"] = int(now)                    # the month's list shows nothing newer: the answer still stands
@@ -329,7 +330,7 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
     gh["repos"] = len(repos)
     for n, repo in enumerate(repos):
         prev = store["github"].get(repo)
-        if prev is not None and prev.get("asked", 0) > now - GITHUB_AGAIN:
+        if prev is not None and prev.get("asked", 0) > now - GITHUB_AGAIN and not force:
             continue
         if halted():
             gh["why_stopped"] = "stopped"
@@ -364,7 +365,8 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
             break
         gh["asked"] += 1
     out["seconds"] = round(time.monotonic() - started, 1)
-    store["last"] = out
+    if not force:
+        store["last"] = out                               # a question about single mods is not "the last scan"
     save(store)
     log.info("scan for updates: Nexus: %d mod(s) with a number, the month's list named %s, %d asked about now, %d left for later%s%s",
              nx["mods"], format(nx["month_list"], ","), nx["asked"], nx["left"], ": " + nx["why_stopped"] if nx["why_stopped"] else "",
@@ -372,6 +374,20 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
     log.info("scan for updates: GitHub: %d repositor(ies), %d asked about now, %d left for later%s; the scan took %.1f s",
              gh["repos"], gh["asked"], gh["left"], ": " + gh["why_stopped"] if gh["why_stopped"] else "", out["seconds"])
     return out
+
+
+def get_of(row: dict, v: dict) -> str:
+    """Where the owner gets the newer file a verdict speaks of: for Nexus the file's own page, opened the way
+    Nexus's "mod manager download" button opens it, so that MO2 takes the download; for GitHub the newest release."""
+    if v["state"] not in ("update", "maybe"):
+        return ""
+    if row["host"] == "nexus":
+        if v.get("file_id"):
+            return "https://www.nexusmods.com/%s/mods/%d?tab=files&file_id=%d&nmm=1" % (row["game"], row["mod_id"], v["file_id"])
+        return "https://www.nexusmods.com/%s/mods/%d?tab=files" % (row["game"], row["mod_id"])
+    if row["host"] == "github" and row.get("repo"):
+        return "https://github.com/%s/releases/latest" % row["repo"]
+    return ""
 
 
 def page_of(row: dict) -> str:
@@ -383,4 +399,4 @@ def page_of(row: dict) -> str:
     return row.get("url", "") if row["host"] == "url" else ""
 
 
-__all__ = ["Net", "Refused", "github_verdict", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]
+__all__ = ["Net", "Refused", "get_of", "github_verdict", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]

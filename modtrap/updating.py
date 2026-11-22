@@ -259,7 +259,8 @@ class Updating:
             hosts[r["host"] or "not known"] = hosts.get(r["host"] or "not known", 0) + 1
             out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": r["version"],
                              "archive": r["archive"], "origin": r["origin"], "by": r["by"], "given": r.get("given", ""), "state": v["state"], "text": v["text"],
-                             "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r)})
+                             "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r),
+                             "get": updates.get_of(r, v), "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", "")})
         place = self._place(modlist_key)
         given = sources.given_load()
         return {"rows": out_rows, "counts": counts, "origins": origins, "hosts": hosts, "key": secret.kept(KEY),
@@ -286,13 +287,18 @@ class Updating:
         return {"key": True}
 
     # --- the scan ----------------------------------------------------------------------------------------------------
-    def start(self, model, modlist_key: str, added: set[str], why: str = "asked for") -> dict:
+    def start(self, model, modlist_key: str, added: set[str], why: str = "asked for", only: set[str] | None = None) -> dict:
+        """A scan, beside everything else. `only`: these mods alone, asked about now whatever is kept."""
         with self._lock:
             if self.work["state"] == "going":
+                if only:
+                    raise Bad("a scan is going: ask again when it has finished")
                 return dict(self.work)
             self.work = {"state": "going", "text": "getting ready", "started": time.time(), "error": ""}
             self._stop.clear()
         rows, _wj = self.rows(model, modlist_key, added)
+        if only:
+            rows, why = [r for r in rows if r["mod"] in only], "about %d mod(s) by name" % len(only)
         key = secret.read(KEY)
         log.info("scan for updates (%s): %d mod(s), %d with a number at Nexus, %d from a GitHub repository%s", why, len(rows),
                  sum(1 for r in rows if r["host"] == "nexus"), sum(1 for r in rows if r["host"] == "github"),
@@ -300,7 +306,8 @@ class Updating:
 
         def run():
             try:
-                updates.scan(rows, key, self.net, self.store, progress=lambda t: self.work.update(text=t), stopped=self._stop.is_set)
+                updates.scan(rows, key, self.net, self.store, progress=lambda t: self.work.update(text=t), stopped=self._stop.is_set,
+                             force=bool(only))
                 with self._lock:
                     self.work = {"state": "idle", "text": "", "started": 0.0, "error": ""}
             except Exception as e:

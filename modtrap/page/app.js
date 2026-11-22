@@ -439,7 +439,7 @@ async function sourceLink(mod, now) {
   try {
     await api("/api/updates/link", { mod, url: url.trim() });
     toast(url.trim() ? "The source link is kept." : "The source link is forgotten.");
-    state.updatesStale = true;
+    state.upSig = "";
     await loadUpdates();
   } catch (e) { toast(e.message); }
 }
@@ -453,6 +453,8 @@ async function modMenu(ev, mod) {
   const rows = [
     { text: r && r.given ? "Change the source link…" : "Add a source link…", run: () => sourceLink(mod, r ? r.given : "") },
     r && r.given ? { text: "Forget my source link", run: async () => { try { await api("/api/updates/link", { mod, url: "" }); toast("The source link is forgotten."); await loadUpdates(); } catch (e) { toast(e.message); } } } : undefined,
+    r && r.get ? { text: r.state === "update" ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") + "…" : "Look at its files for a newer one…", note: r.get, run: () => window.open(r.get, "_blank", "noopener,noreferrer") } : undefined,
+    r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => window.open(page, "_blank", "noopener,noreferrer") },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
     null,
@@ -620,7 +622,9 @@ function renderUpdates(listOnly) {
   if (badge) { badge.hidden = !(d && d.counts.update); badge.textContent = d ? d.counts.update : ""; }
   if (!d) { head.replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: state.updatesError || "Reading where the mods came from…" }))); box.replaceChildren(); return; }
   const f = Object.assign({ state: "", origin: "", on: false, text: "" }, state.upFilter);
-  if (!listOnly) {
+  // What the owner is typing in the head is not wiped by a look at how the scan is getting on.
+  const typing = head.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.value;
+  if (!listOnly && !typing) {
     const going = d.scan.state === "going";
     const scan = el("button", { type: "button", class: "primary", text: going ? "Scanning…" : "Scan for updates", disabled: going });
     scan.addEventListener("click", async () => { try { await api("/api/updates/scan", {}); } catch (e) { toast(e.message); } loadUpdates(); });
@@ -692,49 +696,118 @@ function renderUpdates(listOnly) {
     const drop = d.list.named ? el("button", { type: "button", text: "Forget the Wabbajack list" }) : null;
     if (drop) drop.addEventListener("click", async () => { try { await api("/api/updates/list", { path: "" }); } catch (e) { toast(e.message); } loadUpdates(); });
     kids.push(el("p", {}, pathIn, " ", name, " ", drop));
-    head.replaceChildren(el("div", { class: "card" }, ...kids));
+    // The two parts that are set up once fold away once they are, so that the list is near the top (WHY§104).
+    state.upOpen = state.upOpen || {};
+    const parts = [];
+    let cur = null;
+    for (const k of kids) {
+      if (!k) continue;
+      if (k.tagName === "H3") {
+        const title = k.textContent, isKey = /key/i.test(title);
+        const hint = isKey ? (d.key ? "a key is kept" : "no key: Nexus is not asked") : (have.length ? have.length + " kind" + (have.length === 1 ? "" : "s") + " of record given" : "nothing given yet");
+        cur = el("details", { class: "upfold" }, el("summary", {}, el("b", { text: title }), el("span", { class: "dim", text: " · " + hint })));
+        const wanted = state.upOpen[title] !== undefined ? state.upOpen[title] : (isKey ? !d.key : !have.length) || !!state.updatesTaking || d.list.reading || !!d.list.error;
+        if (wanted) cur.setAttribute("open", "");
+        const mine = cur;
+        cur.addEventListener("toggle", () => { state.upOpen[title] = mine.open; });
+        parts.push(cur);
+      } else if (cur) cur.append(k); else parts.push(k);
+    }
+    head.replaceChildren(el("div", { class: "card" }, ...parts));
   }
-  // The list, with its filters.
+  // The list, as the modlist itself is laid out (WHY§104): lowest priority first, each separator heading its mods.
+  const sig = JSON.stringify([d.rows.map((r) => r.state.charAt(0) + (r.newest || "") + (r.given ? "g" : "") + r.host.charAt(0)).join(""), d.origins, d.given, d.list.named, f, state.loaded, [...(state.upCollapsed || [])]]);
+  const going = d.scan.state === "going";
+  if (state.upSig === sig && box.firstChild) return;
+  if (going && box.firstChild && state.upDrawn && Date.now() - state.upDrawn < 10000 && state.upF === JSON.stringify(f) + [...(state.upCollapsed || [])].join("|")) return;
+  state.upSig = sig; state.upDrawn = Date.now(); state.upF = JSON.stringify(f) + [...(state.upCollapsed || [])].join("|");
+  state.upCollapsed = state.upCollapsed || new Set();
   const pick = (key, value, label, n) => {
     const b = el("button", { type: "button", class: "chip link" + (f[key] === value ? " on" : ""), text: label + (n === undefined ? "" : " " + num(n)) });
     b.addEventListener("click", () => upFilter(key, value));
     return b;
   };
-  const search = el("input", { type: "search", placeholder: "Search by mod", value: f.text, size: "24" });
-  search.addEventListener("input", () => { state.upFilter = Object.assign({}, f, { text: search.value }); clearTimeout(state.upTimer); state.upTimer = setTimeout(() => renderUpdates(true), 250); });
+  const search = el("input", { type: "search", placeholder: "Search by mod or note", value: f.text, size: "26" });
+  search.addEventListener("input", () => { state.upFilter = Object.assign({}, f, { text: search.value }); clearTimeout(state.upTimer); state.upTimer = setTimeout(() => { renderUpdates(true); const again = document.querySelector("#updates-list input[type=search]"); if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); } }, 300); });
   const onlyOn = el("input", { type: "checkbox", id: "up-on" });
   onlyOn.checked = !!f.on;
   onlyOn.addEventListener("change", () => upFilter("on", onlyOn.checked));
+  const foldAll = el("button", { type: "button", text: "Fold all" }), unfoldAll = el("button", { type: "button", text: "Unfold all" });
   const known = d.list.named && d.list.counts;
   const bar = [el("div", { class: "chips" }, el("span", { class: "dim", text: "State:" }), pick("state", "", "All", d.rows.length),
     ...["update", "maybe", "current", "not asked", "none", "gone"].filter((k) => d.counts[k]).map((k) => pick("state", k, UP_STATE[k][0], d.counts[k]))),
     el("div", { class: "chips" }, el("span", { class: "dim", text: "Mods:" }), pick("origin", "", "All"),
       ...(known ? [pick("origin", "list", "The list's own", d.origins.list), pick("origin", "added", "Added afterwards", d.origins.added)] : []),
       pick("origin", "modtrap", "Added by ModTrap", d.origins.modtrap),
-      known ? null : el("span", { class: "dim small", text: "Name the modlist's Wabbajack file above to tell the list's own mods from the ones added afterwards." })),
-    el("div", { class: "chips" }, search, el("label", { for: "up-on" }, onlyOn, " enabled mods only"))];
+      known ? null : el("span", { class: "dim small", text: "Give the modlist's Wabbajack file above to tell the list's own mods from the ones added afterwards." })),
+    el("div", { class: "chips" }, search, el("label", { for: "up-on" }, onlyOn, " enabled mods only"), foldAll, unfoldAll)];
   const text = (f.text || "").trim().toLowerCase();
-  const rows = d.rows.filter((r) => (!f.state || r.state === f.state) && (!f.origin || r.origin === f.origin) && (!f.on || r.enabled) && (!text || r.mod.toLowerCase().includes(text)));
-  const order = { update: 0, maybe: 1, gone: 2, "not asked": 3, current: 4, none: 5 };
-  rows.sort((a, b) => (order[a.state] - order[b.state]) || a.mod.localeCompare(b.mod));
-  const shown = rows.slice(0, 600);
+  const filtering = !!(f.state || f.origin || f.on || text);
+  const fits = (r) => (!f.state || r.state === f.state) && (!f.origin || r.origin === f.origin) && (!f.on || r.enabled)
+    && (!text || r.mod.toLowerCase().includes(text) || (r.comments || "").toLowerCase().includes(text) || (r.notes || "").toLowerCase().includes(text));
+  const byName = new Map(d.rows.map((r) => [r.mod, r]));
+  // The groups, from the modlist as the Mods tab has it: the same order, the same separators.
+  const groups = [{ sep: null, rows: [] }];
+  for (const m of [...(state.mods || [])].reverse()) {
+    if (m.kind === "separator") groups.push({ sep: m, rows: [] });
+    else if (byName.has(m.name)) groups[groups.length - 1].rows.push(byName.get(m.name));
+  }
   const link = (r) => {
     if (!r.page) return null;
     const a = el("a", { target: "_blank", rel: "noopener noreferrer", text: "its page" });
     a.setAttribute("href", r.page);
     return a;
   };
-  const table = el("table", { class: "plain updates" }, el("thead", {}, el("tr", {}, el("th", { text: "Mod" }), el("th", { text: "From" }), el("th", { text: "Installed" }), el("th", { text: "State" }), el("th", { text: "What is known" }))),
-    el("tbody", {}, ...shown.map((r) => el("tr", { class: r.enabled ? "" : "dim", "data-mod": r.mod, title: "Right-click for more: add a source link, open its page" },
-      el("td", {}, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
-      el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null,
-        r.given ? el("div", { class: "dim small", text: "by your link" }) : null),
-      el("td", { text: r.version || "" }),
-      el("td", {}, el("span", { class: "tag " + UP_STATE[r.state][1], text: UP_STATE[r.state][0] }), r.newest ? el("div", { class: "small", text: r.newest + (r.when ? " · " + r.when : "") }) : null),
-      el("td", { class: "small" }, r.text.charAt(0).toUpperCase() + r.text.slice(1) + ".", r.asked ? el("span", { class: "dim", text: " Asked " + r.asked + "." }) : null)))));
+  const getButton = (r) => {
+    if (!r.get) return null;
+    const sure = r.state === "update";
+    const b = el("button", { type: "button", class: "upget" + (sure ? "" : " unsure"), text: "↑", "aria-label": "Get the newer file of " + r.mod,
+      title: (sure ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") : "Unclear whether a newer file is out: look at the mod's files")
+        + ". Opens its page" + (r.host === "nexus" ? " at Nexus, for a download through MO2" : " at GitHub") + ". ModTrap itself downloads nothing." });
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); window.open(r.get, "_blank", "noopener,noreferrer"); });
+    return b;
+  };
+  const COLS = 8;
+  const body = el("tbody", {});
+  let shown = 0;
+  const seps = [];
+  for (const g of groups) {
+    const rows = g.rows.filter(fits);
+    if (g.sep) {
+      if (filtering && !rows.length) continue;
+      seps.push(g.sep.name);
+      const folded = state.upCollapsed.has(g.sep.name) && !filtering;
+      const outs = g.rows.filter((r) => r.state === "update").length;
+      const btn = el("button", { type: "button", class: "gtoggle", "aria-expanded": folded ? "false" : "true" }, el("span", { class: "arrow", text: folded ? "▸" : "▾" }), g.sep.name.replace(/_separator$/i, ""));
+      btn.addEventListener("click", () => { if (state.upCollapsed.has(g.sep.name)) state.upCollapsed.delete(g.sep.name); else state.upCollapsed.add(g.sep.name); renderUpdates(true); });
+      body.append(el("tr", { class: "sep" }, el("td", { colSpan: COLS }, btn,
+        el("span", { class: "dim ginfo", text: (filtering ? rows.length + " of " + g.rows.length + " shown" : plural(g.rows.length, "mod")) }),
+        outs ? el("span", { class: "tag bad", text: plural(outs, "update") + " out" }) : null)));
+      if (folded) continue;
+    } else if (!rows.length) continue;
+    for (const r of rows) {
+      shown++;
+      body.append(el("tr", { class: r.enabled ? "" : "off", "data-mod": r.mod, title: "Right-click for more: add a source link, get the newer file, ask about this mod now" },
+        el("td", { class: "c-num", text: r.priority < 0 ? "" : r.priority }),
+        el("td", { class: "modname" }, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
+        el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null,
+          r.given ? el("div", { class: "dim small", text: "by your link" }) : null),
+        el("td", { text: r.version || "" }),
+        el("td", { class: "small upnote" }, r.comments || "", r.notes ? el("span", { class: "tag", title: r.notes, text: "note" }) : null),
+        el("td", { class: "upstate" }, el("span", { class: "tag " + UP_STATE[r.state][1], text: UP_STATE[r.state][0] }), r.newest ? el("div", { class: "small", text: r.newest + (r.when ? " · " + r.when : "") }) : null),
+        el("td", { class: "c-get" }, getButton(r)),
+        el("td", { class: "small" }, r.text.charAt(0).toUpperCase() + r.text.slice(1) + ".", r.asked ? el("span", { class: "dim", text: " Asked " + r.asked + "." }) : null)));
+    }
+  }
+  foldAll.addEventListener("click", () => { for (const n of seps) state.upCollapsed.add(n); renderUpdates(true); });
+  unfoldAll.addEventListener("click", () => { state.upCollapsed.clear(); renderUpdates(true); });
+  const table = el("table", { class: "updates", id: "updates-table" }, el("thead", {}, el("tr", {}, el("th", { class: "c-num", title: "The mod's place in MO2's list: a higher number wins a conflict", text: "Priority" }), el("th", { text: "Mod" }), el("th", { text: "From" }), el("th", { text: "Installed" }),
+    el("th", { title: "What you wrote of the mod in MO2: its Notes column, and a longer note where there is one", text: "Notes" }), el("th", { title: "Whether a newer file of the mod is out, by the last asking", text: "Update" }),
+    el("th", { class: "c-get", title: "Get the newer file: opens the mod's page for it", text: "" }), el("th", { text: "What is known" }))), body);
   table.addEventListener("contextmenu", (ev) => { const tr = ev.target.closest("tr[data-mod]"); if (tr) modMenu(ev, tr.dataset.mod); });
-  box.replaceChildren(el("div", { class: "card" }, ...bar, rows.length ? table : el("p", { class: "dim", text: "No mod matches." }),
-    rows.length > shown.length ? el("p", { class: "dim", text: "The first 600 of " + num(rows.length) + " are shown: narrow the list with the filters or the search." }) : null));
+  box.replaceChildren(el("div", { class: "card" }, ...bar,
+    el("p", { class: "dim small", text: num(shown) + " of " + num(d.rows.length) + " mods shown, in the modlist's own order: lowest priority first, under their separators." }),
+    shown || seps.length ? table : el("p", { class: "dim", text: "No mod matches." })));
 }
 
 function renderState(s) {

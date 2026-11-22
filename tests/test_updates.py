@@ -245,6 +245,63 @@ class GivenByHand(Sources):
         self.assertTrue(got["taken"])
 
 
+class TheListAsTheModlist(Sources):
+    """WHY§104: each row carries what the Updates tab needs to lay the mods out as the modlist does."""
+
+    def test_a_row_has_the_mods_priority_and_what_the_owner_wrote_of_it_in_mo2(self):
+        fx.write(self.mods / "Quill" / "meta.ini", meta(comments="keep an eye on this one",
+                                                         notes='"<html><head><style>p { x: y; }</style></head><body><p>A longer note,</p><p>in two &amp; more lines.</p></body></html>"',
+                                                         gameName="SkyrimSE", modid=4321, version="1.2", installationFile="a.7z", files=[(4321, 111)]))
+        inst = instance.load(self.root)
+        r = {x["mod"]: x for x in sources.gather(inst)}
+        self.assertEqual((r["Quill"]["comments"], r["Quill"]["notes"]), ("keep an eye on this one", "A longer note, in two & more lines."))
+        self.assertEqual(r["Quill"]["priority"], next(m.priority for m in inst.mods if m.name == "Quill"))
+        self.assertEqual((r["Bramble"]["comments"], r["Bramble"]["notes"]), ("", ""))
+
+    def test_the_update_button_leads_to_the_newer_file_itself(self):
+        row = Verdicts.row(self)
+        files = [(111, "a.7z", "1.2", 4, 100), (113, "b.7z", "1.4", 1, 300)]
+        v = updates.nexus_verdict(row, {"asked": 1, "files": [list(f) for f in files], "chain": [[111, 113, "a.7z", "b.7z"]]})
+        self.assertEqual(v["file_id"], 113)
+        self.assertEqual(updates.get_of(row, v), "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113&nmm=1")
+        unsure = updates.nexus_verdict(dict(row, files=[], archive="renamed.7z"), {"asked": 1, "files": [list(files[1])], "chain": []})
+        self.assertEqual((unsure["state"], updates.get_of(row, unsure)), ("maybe", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
+        self.assertEqual(updates.get_of(row, {"state": "current"}), "")
+        gh = dict(row, host="github", repo="invented-owner/lantern", tag="v2.0")
+        self.assertEqual(updates.get_of(gh, {"state": "update"}), "https://github.com/invented-owner/lantern/releases/latest")
+
+    def test_single_mods_are_asked_about_now_whatever_is_kept(self):
+        a = api.Api()
+        now = int(time.time())
+        a.updating.net = FakeNet({"/mods/updated?period=1m": (200, {}, []),
+                                  "/mods/4321/files": (200, {}, files_answer([(111, "a.7z", "1.2", 1, 100)]))})
+        a.open(str(self.root), wait=True)
+        a.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
+
+        def wait():
+            for _ in range(300):
+                if a.get("/api/updates", {})[1]["scan"]["state"] != "going":
+                    return
+                time.sleep(0.02)
+
+        a.post("/api/updates/scan", {})
+        wait()
+        first = len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u])
+        a.post("/api/updates/scan", {})                                           # nothing newer: not asked again
+        wait()
+        self.assertEqual(len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u]), first)
+        last = a.get("/api/updates", {})[1]["last"]["when"]
+        a.post("/api/updates/scan", {"mods": ["Quill"]})                          # by name: asked now
+        wait()
+        self.assertEqual(len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u]), first + 1)
+        self.assertEqual([u for u, _h in a.updating.net.asked[-2:] if "/mods/777/" in u], [])   # and only that mod
+        self.assertEqual(a.get("/api/updates", {})[1]["last"]["when"], last)      # it is not "the last scan"
+        row = next(r for r in a.get("/api/updates", {})[1]["rows"] if r["mod"] == "Quill")
+        self.assertEqual((row["state"], row["get"], isinstance(row["priority"], int)), ("current", "", True))
+        with self.assertRaises(api.Bad):
+            a.post("/api/updates/scan", {"mods": []})
+
+
 class Verdicts(unittest.TestCase):
     def row(self, **over):
         r = {"mod": "Quill", "enabled": True, "host": "nexus", "game": "skyrimspecialedition", "mod_id": 4321, "files": [111],

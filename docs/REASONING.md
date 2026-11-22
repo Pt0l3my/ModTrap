@@ -126,6 +126,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 101 | 2026-11-22 | An update check: sources read from MO2's records and a Wabbajack file; Nexus and GitHub asked as MO2 asks; the owner's key kept under Windows' protection; not yet run against the real services | DECIDED | #updates #network #page |
 | 102 | 2026-11-22 | The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything | DECIDED | #page |
 | 103 | 2026-11-22 | A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list | DECIDED | #updates #page |
+| 104 | 2026-11-22 | The Updates tab is laid out as the modlist: priority, separators, MO2's notes; an Update column whose button opens the newer file's own page for a download through MO2; ModTrap still downloads nothing | DECIDED | #updates #page |
 
 ## Entries
 
@@ -2603,3 +2604,31 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests (the kinds of link and what is refused; the link before every record and no file of the mod
   changed; given meta files, and the mod's own record winning; the list's bytes, broken bytes; through the
   requests); in a browser the menu on both tabs, the box, the button's file chooser and a real drop.
+
+### 104. The Updates tab is laid out as the modlist: priority, separators, MO2's notes; an Update column whose button opens the newer file's own page for a download through MO2; ModTrap still downloads nothing
+
+`2026-11-22` · DECIDED · `#updates #page` · refs: MT39, MT40, MT37, MT38, MO01§12, WHY§101, WHY§103, DESIGN§20
+
+- The owner asked for both (MT39).
+- The list was flat, sorted by state, cut at 600 rows. It is now built from the same list of mods the Mods tab
+  has: lowest priority first, a heading for each separator that folds, the state filters hiding what does not
+  match and the headings of groups left empty. A heading says how many updates are out below it.
+- "Comments": MO2 keeps two texts of the owner's for a mod in its `meta.ini` (MO01§12): `comments`, which MO2
+  shows in its Notes column, and `notes`, a longer text kept as HTML. The column shows the first; the second as a
+  mark whose words, with the markup taken out, show under the pointer. The search looks in both.
+- What the button does was the open point. The owner's words say "update button". ModTrap's update check was
+  settled as asking and reading only (MT37), and updating a mod of a tuned modlist is a change with dependants.
+  DECIDED for now: the button leads to the newer file and MO2 does the rest; whether ModTrap should go further is
+  put to the owner as MT40, with a recommendation.
+- LIKELY, not checked against the site: Nexus's own "mod manager download" button opens the file's page with
+  `file_id` and `nmm=1`, on which the site hands the download to the mod manager set up for such links. ModTrap
+  opens that address. If the site takes it otherwise, the page that opens is still the newer file's own.
+- The verdict now carries the newer file's number, so that the address is of that file and not of the mod's
+  list of files. Where the state is unclear, the button is drawn lighter and leads to the mod's files.
+- "Ask about this mod now" asks about the named mods whatever is kept, counts against the same allowance, and
+  is not recorded as "the last scan".
+- METHOD. The list is some 3,500 rows. It is drawn anew only when something it shows has changed (states, newest
+  versions, links, filters, folds), and at most every ten seconds while a scan goes; the head is not redrawn
+  while the owner is typing in it. The key and the sources parts fold away once they are set up.
+- Checked: tests (priority and the two notes; the address the button opens; single mods asked now); in a browser
+  the order, the headings and their folding, the filter, the button and the menu.

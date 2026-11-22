@@ -29,8 +29,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   settings file in force in the modlist, and of the frameworks installed). MT35 (the scanner looks through the animation folders
   too; answered the same day). MT36 (the scanner writes every look to the log, with each failure and its reason). MT37 (an update check: where each mod came
   from, and whether Nexus or GitHub has a newer file; asks and reads only). MT38 (a menu on a mod by the right mouse button, with a
-  source link of the owner's own; a drop zone on the Updates tab for files that name sources).
-- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+  source link of the owner's own; a drop zone on the Updates tab for files that name sources). MT39 (the Updates tab lists the mods as
+  the modlist does, with an Update column and a button that leads to the newer file).
+- **Open.** MT40 (should ModTrap itself fetch and install a mod's newer file). MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -782,3 +783,41 @@ style menu and one of the rows in that should be to add source link, which then 
   folder, for their `meta.ini`). ModTrap only reads them.
 - Of a Wabbajack file only its list is taken: the page cuts it out of the file and sends that alone, so a file
   of some gigabytes is not copied. Only ModTrap's reading of the list is kept.
+
+## MT39
+
+**The Updates tab lists the mods as the modlist does, with an Update column and its button** · *2026-11-22 · Asked by the owner*
+
+**Owner's words.** "Can you make the upate tab list mods as the modlist does with its priorities, separators,
+comments, etc.? Also, can you add another column that show if an update is available and then an update button next
+to it (can be just an update symbol)."
+
+**Settled** (WHY§104; the owner may overrule any of it):
+
+- The list is in the modlist's own order, lowest priority first, each separator heading its mods and folding as
+  on the Mods tab; columns Priority, Mod, From, Installed, Notes, Update, the button, What is known.
+- Notes shows what the owner wrote of the mod in MO2: its Notes column, and a mark for a longer note, whose words
+  show when the pointer rests on it.
+- Update shows the state by the last asking. Beside it, where a newer file is out, a button with an upward arrow.
+- The button opens the newer file's own page: at Nexus the way Nexus's own "mod manager download" opens it, so
+  that MO2 takes the download; at GitHub the newest release. ModTrap itself still downloads and installs nothing
+  (MT37). Whether it should is MT40.
+- The menu on a mod also has "Get the newer file…" and "Ask about this mod now".
+
+## MT40
+
+**Should ModTrap itself fetch and install a mod's newer file** · *Open*
+
+The update button (MT39) opens the newer file's page; the download goes through MO2 and the owner installs it there.
+
+- **A. As now.** ModTrap finds the update and leads to it; MO2 downloads and installs. Nothing new can go wrong
+  in ModTrap. The owner does the install in MO2.
+- **B. ModTrap takes it from there.** Once the newer archive is in MO2's downloads folder (MO2's record beside
+  it names the file's number), ModTrap offers to put it in through its own Add mods (MT21): it shows what the
+  archive needs, what it replaces, and can be reverted. The download itself still goes through MO2 and the
+  owner's browser: Nexus gives a program a download link only for a paying account.
+- **C. ModTrap downloads too.** Only possible for a paying Nexus account, and it makes ModTrap a downloader.
+
+**Recommendation: B**, as a later step: it keeps downloading with MO2 and Nexus's own page, and gives the install
+ModTrap's safe folder and Revert. Updating a mod in a tuned modlist can break what depends on it, so the step
+would show the dependants first, as Add mods does.

@@ -359,8 +359,18 @@ body.unsettled button.gated { opacity: .4; filter: grayscale(1); cursor: progres
 .look { margin: 6px 0 4px 18px; padding: 8px 12px; border-left: 2px solid var(--warn); }
 .look p { margin: 2px 0; }
 .look-line { margin-top: 8px; }
-table.updates { width: 100%; }
-table.updates td { vertical-align: top; }
+table.updates { width: 100%; margin-top: 8px; }
+table.updates td { vertical-align: top; padding: 4px 12px 4px 8px; }
+table.updates th { position: static; background: none; text-align: left; padding: 4px 12px 4px 8px; }
+table.updates th.c-num, table.updates td.c-num { text-align: right; }
+table.updates tr.sep td { padding: 0; border-top: 1px solid var(--line); }
+table.updates tr.off td { color: var(--dim); }
+table.updates td.upnote { max-width: 260px; }
+table.updates td.upstate { white-space: nowrap; }
+table.updates .c-get { width: 34px; padding-left: 0; padding-right: 4px; }
+.upget { width: 28px; height: 26px; padding: 0; border-radius: 6px; font-weight: 700; font-size: 15px; line-height: 1;
+  background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.upget.unsure { background: none; color: var(--warn); border-color: var(--warn); }
 .chip.link.on { border-color: var(--accent); color: var(--accent); }
 /* A menu at the pointer (WHY§103). */
 .ctx { position: fixed; z-index: 60; min-width: 230px; max-width: 420px; padding: 5px; background: var(--panel); border: 1px solid var(--accent);
@@ -375,3 +385,5 @@ table.updates td { vertical-align: top; }
 .upzone.over { border-color: var(--accent); background: var(--sel); }
 .upzone-title { font-weight: 650; margin-bottom: 12px; }
 .upzone-buttons { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
+.upfold { margin: 8px 0 0; }
+.upfold > summary { cursor: pointer; padding: 4px 0; }
