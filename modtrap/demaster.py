@@ -419,30 +419,132 @@ class Demaster:
                     done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
             except (OSError, ValueError):
                 raise Refused("the lists changed since, and this job's record cannot be read") from None
-            what = undo_by_line(self.pdir, self.safe, done)
+            what = undo_by_line(self.pdir, self.safe, done, self.inst)
         self.history.add("reverted", restored=[Path(p).name for p in what["restore"]],
                          removed=[Path(p).name for p in what["remove"]])
         self.stage = "reverted"
         return what
 
 
-def undo_by_line(profile_dir: Path, the_safe: safe.Safe, done: dict) -> dict:
+def _old_lists(profile_dir: Path, the_safe: safe.Safe) -> tuple[list[str], dict[str, bool]] | None:
+    """The load order and which plugins were active before the demaster, from the safe folder's copies of the
+    profile's two plugin lists; None when a copy is not there or is no longer what was taken."""
+    texts = {}
+    for fname in ("loadorder.txt", "plugins.txt"):
+        item = next((i for i in the_safe.items if Path(i["path"]).name == fname
+                     and Path(i["path"]).parent == profile_dir), None)
+        if item is None:
+            continue
+        src = the_safe.files / item["copy"]
+        try:
+            if safe.sha256(src) != item["sha256"]:
+                return None
+            texts[fname] = instance._decode(instance._read_bytes(src))
+        except (OSError, instance.Unusable):
+            return None
+    if "plugins.txt" not in texts:
+        return None
+    listed = instance.parse_plugins(texts["plugins.txt"])
+    order = instance.parse_loadorder(texts["loadorder.txt"]) if "loadorder.txt" in texts else [n for n, _a in listed]
+    return order, {fold(n): a for n, a in listed}
+
+
+def lists_gap(profile_dir: Path, the_safe: safe.Safe, inst, done: dict) -> dict | None:
+    """What the profile's plugin lists lack of how they stood before the demaster, for the plugins the demaster
+    took out of the game: those of the mods it disabled and the ones it deactivated. A MO2 that runs while a mod is
+    disabled drops that mod's plugins from both lists (WHY§83), so enabling the mod again does not bring them back
+    to their places: MO2 would add them at the end, after the plugins that need them.
+
+    Returns {"place": [(plugin, the plugin it stood directly before then, was it active)], "activate": [plugin]}:
+    `place` for a plugin that is no longer listed, or that now stands after the plugin it stood before; `activate`
+    for one that is in its place but not active as it was. None when the safe folder's copies cannot say."""
+    old = _old_lists(profile_dir, the_safe)
+    if old is None:
+        return None
+    order, was_active = old
+    deactivated = {fold(n) for n in done.get("deactivated", []) if isinstance(n, str)}
+    names = set(deactivated)
+    for mod_name in done.get("disabled", []):
+        mod = inst.mod(mod_name) if isinstance(mod_name, str) else None
+        names |= {fold(p) for p in (mod.plugins if mod is not None else ())}
+    try:
+        now_order = instance.parse_loadorder(instance._decode(instance._read_bytes(profile_dir / "loadorder.txt")))
+        now_listed = instance.parse_plugins(instance._decode(instance._read_bytes(profile_dir / "plugins.txt")))
+    except (OSError, instance.Unusable):
+        return None
+    at = {fold(n): i for i, n in enumerate(now_order)}
+    listed_now = {fold(n): a for n, a in now_listed}
+    place = {k for k in names if k not in at or k not in listed_now}
+
+    def stood_before(i: int) -> str:
+        return next((n for n in order[i + 1:] if fold(n) not in place and fold(n) in at), "")
+
+    while True:                   # one that is listed, but after the plugin it stood before, is placed anew as well
+        more = {fold(name) for i, name in enumerate(order) if fold(name) in names and fold(name) not in place
+                and (b := stood_before(i)) and at[fold(name)] > at[fold(b)]}
+        if not more:
+            break
+        place |= more
+    gap: dict = {"place": [], "activate": []}
+    for i, name in enumerate(order):
+        k = fold(name)
+        if k not in names:
+            continue
+        want = was_active.get(k, False)
+        if k in place:
+            gap["place"].append((name, stood_before(i), want))
+        elif want and not listed_now[k]:
+            gap["activate"].append(name)
+    return gap
+
+
+def lists_back(profile_dir: Path, gap: dict) -> tuple[list[str], list[str]]:
+    """Puts back what `lists_gap` found: each plugin directly before the plugin it stood before, in both lists,
+    active or not as it was. Returns the plugins placed and what could not be done, in words."""
+    notes: list[str] = []
+    placed: list[str] = []
+    for name, before, _active in gap["place"]:
+        try:
+            profile.place_plugins(profile_dir, [(name, before)])
+            placed.append(name)
+        except (profile.Refused, OSError) as e:
+            notes.append("%s could not be put back in the load order: %s" % (name, e))
+    off = {n: False for n, _b, a in gap["place"] if not a and n in placed}
+    for wanted in (off, {n: True for n in gap["activate"]}):
+        if wanted:
+            try:
+                profile.set_plugins(profile_dir, wanted)
+            except (profile.Refused, OSError) as e:
+                notes.append(str(e))
+    return placed, notes
+
+
+def undo_by_line(profile_dir: Path, the_safe: safe.Safe, done: dict, inst=None) -> dict:
     """Revert for a demaster whose lists were changed since by something else, as MO2 does whenever it runs
     (DESIGN§11): instead of putting the old files back, which would undo that too, only ModTrap's own changes are
-    taken back: the mods it disabled are enabled, the plugins it deactivated are activated, its own mod's line is
-    taken out of the list, and the plugins it wrote are removed if they are still as written. `done` is what the
-    install recorded."""
+    taken back: the mods it disabled are enabled, their plugins and the ones it deactivated go back to the places
+    they had in the load order (`lists_gap`, WHY§83; `inst` is the modlist as read, for the mods' plugins), its own
+    mod's line is taken out of the list, and the plugins it wrote are removed if they are still as written. `done`
+    is what the install recorded."""
     notes = []
     for name in done.get("disabled", []):
         try:
             profile.set_mods(profile_dir, {name: True})
         except profile.Refused as e:
             notes.append(str(e))
-    for name in done.get("deactivated", []):
-        try:
-            profile.set_plugins(profile_dir, {name: True})
-        except profile.Refused as e:
-            notes.append(str(e))
+    placed: list[str] = []
+    gap = lists_gap(profile_dir, the_safe, inst, done) if inst is not None else None
+    if gap is not None:
+        placed, more = lists_back(profile_dir, gap)
+        notes += more
+        for name in placed:
+            log.info("%s is back at its place in the load order", name)
+    else:
+        for name in done.get("deactivated", []):
+            try:
+                profile.set_plugins(profile_dir, {name: True})
+            except profile.Refused as e:
+                notes.append(str(e))
     if done.get("mod"):
         try:
             profile.remove_mod_line(profile_dir, done["mod"])
@@ -450,8 +552,10 @@ def undo_by_line(profile_dir: Path, the_safe: safe.Safe, done: dict) -> dict:
             notes.append(str(e))
     left = the_safe.remove_added()
     the_safe.mark_reverted()
+    for n in notes:
+        log.warn("Revert: %s", n)
     return {"restore": [], "remove": [a["path"] for a in the_safe.added if a["path"] not in left], "left": left,
-            "notes": notes, "how": "by line"}
+            "notes": notes, "how": "by line", "placed": placed}
 
 
 def parse_report(text: str) -> dict:

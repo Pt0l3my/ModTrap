@@ -9,6 +9,12 @@ from modtrap import api, instance, logbook, model, plugin, steps
 from tests import _fixtures as fx
 
 
+def dry_done(*mods: str) -> dict:
+    """A dry run of these mods that is done, as the page's state has it: the steps after it are stated only then
+    (WHY§86). It read nothing of note; the tests that need a reading give their own."""
+    return {"state": "done", "plan": {"trapped_mods": list(mods)}, "result": {"files": []}}
+
+
 class StepsTests(unittest.TestCase):
     def setUp(self):
         logbook.set_console(False)
@@ -56,7 +62,7 @@ class StepsTests(unittest.TestCase):
         deep = steps.look_deeper(m, ["Bramble"])
         self.assertEqual((deep["animation"]["lists"], deep["animation"]["plain"], deep["animation"]["folders"]),
                          ([], 1, ["brambleanim"]))
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep)["steps"]}
         self.assertNotIn("tool:Pandora Behaviour Engine", by)
         cleared = [i["text"] for i in by["tools-clear"]["items"] if i["text"].startswith("Pandora")]
         self.assertEqual(len(cleared), 1)
@@ -65,7 +71,7 @@ class StepsTests(unittest.TestCase):
         fx.write(mods / "Bramble" / "Nemesis_Engine" / "mod" / "brmb" / "info.ini", b"invented")
         deep = steps.look_deeper(self.build(), ["Bramble"])
         self.assertEqual(deep["animation"]["nemesis_engine"], ["brmb"])
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep)["steps"]}
         self.assertIn("the mod carries 1 animation list(s) or behaviour patch folder(s)", by["tool:Pandora Behaviour Engine"]["why"])
 
     def test_pandora_passes_over_a_list_that_has_no_graph_file(self):
@@ -75,7 +81,7 @@ class StepsTests(unittest.TestCase):
         m = self.build()
         deep = steps.look_deeper(m, ["Bramble"])
         self.assertEqual((len(deep["animation"]["lists_with_graph"]), len(deep["animation"]["lists_without_graph"])), (0, 1))
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep)["steps"]}
         self.assertNotIn("tool:Pandora Behaviour Engine", by)
         cleared = [i["text"] for i in by["tools-clear"]["items"] if i["text"].startswith("Pandora")]
         self.assertIn("have no graph file with them", cleared[0])
@@ -84,7 +90,7 @@ class StepsTests(unittest.TestCase):
         m = self.build()
         deep = steps.look_deeper(m, ["Bramble"])
         self.assertEqual(len(deep["animation"]["lists_with_graph"]), 1)
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep)["steps"]}
         self.assertIn("the mod carries 1 animation list(s) or behaviour patch folder(s)", by["tool:Pandora Behaviour Engine"]["why"])
 
     def test_a_behaviour_tools_output_that_names_the_mods_animation_folder(self):
@@ -103,7 +109,7 @@ class StepsTests(unittest.TestCase):
         got = deep["animation"]["searched"]
         self.assertEqual([(x["mod"], x["files"], x["hit_count"]) for x in got], [("Engine Output", 2, 1)])
         self.assertEqual(got[0]["hits"][0]["file"], "meshes/actors/character/characters/defaultmale.hkx")
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep)["steps"]}
         why = by["tool:Pandora Behaviour Engine"]["why"]
         self.assertIn("1 file(s) of its output in “Engine Output” name a folder of the mod's animations", why)
         self.assertIn("What speaks against it: the mod's 2 animation file(s) are plain files", why)
@@ -117,13 +123,28 @@ class StepsTests(unittest.TestCase):
     def test_steps_before_and_after(self):
         m = self.build()
         deep = steps.look_deeper(m, ["Bramble"])
-        s = steps.compile_steps(m, ["Bramble"], None, deep)
+        # Before the dry run nothing is foretold (WHY§86): the steps say that a dry run comes first, and which
+        # plugins it is to read; what follows is stated once it is done.
+        s = steps.compile_steps(m, ["Bramble"], None, deep, auto=True)
+        self.assertEqual([(x["key"], x["state"], x["action"]) for x in s["steps"]],
+                         [("dry", "to do", "demaster"), ("after-dry", "waiting for the dry run", "")])
+        self.assertEqual(sorted(i["plugin"] for i in s["steps"][1]["items"]),
+                         ["BrambleLanternPatch.esp", "Collection - Bramble.esp", "Generated.esp", "Lantern.esp"])
+        self.assertTrue(s["needs_dry"] and not s["complete"])
+        self.assertIn("does not guess", s["steps"][1]["why"])
+        running = steps.compile_steps(m, ["Bramble"], {"state": "running", "plan": {"trapped_mods": ["Bramble"]}}, deep, auto=True)
+        self.assertEqual([(x["key"], x["state"], x["action"]) for x in running["steps"]],
+                         [("dry", "going", ""), ("after-dry", "waiting for the dry run", "")])
+        s = steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep)
         by = {x["key"]: x for x in s["steps"]}
         self.assertEqual([x["key"] for x in s["steps"]],
-                         ["dry", "switch-off", "demaster", "regenerate", "disable", "tool:Pandora Behaviour Engine",
-                          "tools-clear", "mentions", "health", "play"])
+                         ["dry", "switch-off", "demaster", "regenerate", "disable", "tool:Invented Patcher",
+                          "tool:Pandora Behaviour Engine", "mentions", "health", "play"])
         self.assertEqual((by["dry"]["state"], by["demaster"]["state"], by["disable"]["state"]),
-                         ("to do", "waiting for the dry run", "waiting"))
+                         ("done", "to do", "waiting"))
+        # A plugin a tool made that names the mod as a master: that tool is to run again, and this is said before
+        # the demaster as it is after it (WHY§86), whatever the demaster does with the plugin meanwhile.
+        self.assertIn("Generated.esp, which Invented Patcher made, names Bramble.esp as a master", by["tool:Invented Patcher"]["why"])
         self.assertEqual([i["plugin"] for i in by["regenerate"]["items"]], ["Generated.esp"])
         self.assertEqual([(d["mod"], d["why"][:6]) for d in by["disable"]["items"]],
                          [("Bramble", "ticked"), ("Bramble Hotfix", "2 of i")])
@@ -155,6 +176,7 @@ class StepsTests(unittest.TestCase):
         self.assertEqual((by["switch-off"]["action"], by["demaster"]["action"], by["disable"]["action"]), ("demaster", "demaster", ""))
         self.assertEqual([i["plugin"] for i in by["demaster"]["items"]], ["Lantern.esp", "Generated.esp"])
         self.assertNotIn("regenerate", by)
+        self.assertIn("tool:Invented Patcher", by)                  # demastered with the rest, and its tool still to run
         self.assertIn("Demaster Selected", by["switch-off"]["why"])
         # While a demaster is in hand its steps say so, and offer no second start (WHY§61).
         going = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, going=True)["steps"]}
@@ -163,7 +185,7 @@ class StepsTests(unittest.TestCase):
         # Every step says truly who does it (WHY§58): ModTrap, the owner, or ModTrap starting a tool the owner runs.
         self.assertEqual({k: v["who"] for k, v in by.items() if not k.startswith("tool:")},
                          {"dry": "ModTrap", "switch-off": "ModTrap", "demaster": "ModTrap", "disable": "ModTrap",
-                          "tools-clear": "ModTrap", "mentions": "you", "health": "ModTrap", "play": "you"})
+                          "mentions": "you", "health": "ModTrap", "play": "you"})
 
     def test_the_modlist_itself_shows_the_steps_done(self):
         b = plugin.build
@@ -199,7 +221,7 @@ class StepsTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertTrue(first["steps"])
         self.assertEqual(out["contents"]["animations"], 3)
-        self.assertIn("mentions", [x["key"] for x in out["steps"]])
+        self.assertEqual(([x["key"] for x in out["steps"]], out["needs_dry"]), (["dry", "after-dry"], True))
         self.assertEqual(a.steps({"mods": []})["steps"], [])
 
 
@@ -265,7 +287,7 @@ class ToolEvidence(unittest.TestCase):
         deep = steps.look_deeper(m, ["Bramble"])
         self.assertEqual({o["plugin"]: o["judged"] for o in deep["outputs"]},
                          {"Synthesis.esp": False, "Synthesis Gameplay.esp": False, "Bashed Patch, 0.esp": False})
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         self.assertEqual(sorted(k for k in by if k.startswith("tool")),
                          ["tool:ParallaxGen (PGPatcher)", "tools-wait"])        # judged by files; and the two that wait
         self.assertEqual((by["tools-wait"]["state"], sorted(i["text"].split(":")[0] for i in by["tools-wait"]["items"])),
@@ -285,7 +307,7 @@ class ToolEvidence(unittest.TestCase):
                           "carried": ["FLTV"], "changed": ["FLTV"]})
         self.assertEqual([(o["tool"], o["mod"], o["files"], o["shared"], o["examples"]) for o in deep["output_files"]],
                          [("ParallaxGen (PGPatcher)", "PG Output", 3, 1, ["meshes/bramble/leaf.nif"])])
-        st = steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]
+        st = steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]
         by = {x["key"]: x for x in st}
         # One verdict for each tool: none is both to run and cleared.
         cleared = {i["text"].split(":")[0] for i in by.get("tools-clear", {"items": []})["items"]}
@@ -322,7 +344,7 @@ class ToolEvidence(unittest.TestCase):
                 for d in o["details"]:
                     d["carried"] = []
         outputs = [dict(o) for o in deep["outputs"]]
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         syn = by["tool:Synthesis"]
         self.assertEqual(syn["title"], "Run Synthesis again, to be sure")
         self.assertIn("ModTrap cannot rule it out", syn["why"])
@@ -332,7 +354,7 @@ class ToolEvidence(unittest.TestCase):
         self.assertIn("This is evidence, not proof", by["tools-clear"]["why"])
         # The same finding in the plugin of a tool built on xEdit clears it: its records are written as the mod's are.
         deep["outputs"] = [dict(o, tool="DynDOLOD") for o in outputs if o["plugin"] != "Bashed Patch, 0.esp"]
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         self.assertNotIn("tool:DynDOLOD", by)
         self.assertTrue(any(i["text"].startswith("DynDOLOD: Synthesis.esp holds 1 record(s) in which the mod has a stake, but none of the mod's values")
                             for i in by["tools-clear"]["items"]))
@@ -369,7 +391,7 @@ class ToolEvidence(unittest.TestCase):
         rows = {o["plugin"]: o for o in deep["outputs"]}
         self.assertEqual(rows["Synthesis Gameplay.esp"]["left_out"], ["Bramble.esp"])
         self.assertEqual(deep["tool_settings"], [{"tool": "Synthesis", "file": "Data/Invented/Lantern Lighter/settings.json", "names": ["Bramble.esp"]}])
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         syn = by["tool:Synthesis"]
         self.assertIn("a settings file of one of its patchers names the mod's plugin", syn["why"])
         self.assertIn("Synthesis Gameplay.esp was made with Bramble.esp left out", syn["why"])     # speaks against it
@@ -397,7 +419,7 @@ class ToolEvidence(unittest.TestCase):
         deep = steps.look_deeper(m, ["Still"], {"Still.esp": []})       # xEdit looked through it: it changes nothing
         self.assertEqual({o["plugin"]: (o["shared"], o["carried"]) for o in deep["outputs"]},
                          {"Synthesis.esp": (0, 0), "Synthesis Gameplay.esp": (0, 0), "Bashed Patch, 0.esp": (0, 0)})
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Still"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Still"], dry_done("Still"), deep, auto=True)["steps"]}
         self.assertEqual([k for k in by if k.startswith("tool:")], [])
         clear = by["tools-clear"]
         self.assertEqual((clear["state"], sorted(i["text"].split(":")[0] for i in clear["items"])),
@@ -442,7 +464,7 @@ class ToolEvidence(unittest.TestCase):
         rows = {o["plugin"]: o for o in deep["outputs"]}
         self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (0, 0))
         self.assertIn("the plugin next in line, Earlier.esp, says the same there as the mod", rows["Synthesis.esp"]["no_stake"][0]["why"])
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         self.assertNotIn("tool:Synthesis", by)                                        # nothing of the mod in it: cleared
         syn = next(i for i in by["tools-clear"]["items"] if i["text"].startswith("Synthesis"))
         lines = [ln for d in syn["evidence"] for ln in d["lines"]]
@@ -476,7 +498,7 @@ class ToolEvidence(unittest.TestCase):
         deep = steps.look_deeper(m, ["Bramble"], told)
         vals = next(o for o in deep["outputs"] if o["plugin"] == "Synthesis.esp")["details"][0]["values"]
         self.assertEqual(vals, [{"field": "FLTV", "mod": "00 00 E0 40", "tool": "00 00 E0 40", "next": "00 00 80 3F", "next_by": "Core.esp"}])
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         lines = [ln for i in by["tool:Synthesis"]["items"] if "details" in i for ln in i["details"]["lines"]]
         self.assertIn("    FLTV · the mod: 00 00 E0 40 · this plugin: 00 00 E0 40 · next in line (Core.esp): 00 00 80 3F", lines)
         self.assertEqual(steps.show_field("XCLC", b"\x09\x00\x00\x00\xfc\xff\xff\xff\x05\x11\x22\x33"), "cell (9, -4), land flags 0x05")
@@ -491,7 +513,7 @@ class ToolEvidence(unittest.TestCase):
         deep = steps.look_deeper(m, ["Bramble"], told)
         deep["outputs"] = [dict(o, mod="ModTrap - Bramble", carried=0, shared=0, details=[]) if o["plugin"] == "Synthesis Gameplay.esp"
                            else dict(o, carried=0, shared=0, details=[]) for o in deep["outputs"] if o["tool"] == "Synthesis"]
-        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True)["steps"]}
         syn = by["tool:Synthesis"]
         self.assertEqual(syn["title"], "Run Synthesis again")
         self.assertIn("Synthesis Gameplay.esp named the mod as a master", syn["why"])

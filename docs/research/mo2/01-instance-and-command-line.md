@@ -111,3 +111,20 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
   this way, so MO2 stopped at that message until it was dismissed. LIKELY: that plugin sets itself up when MO2's
   window is ready (`organizercore.cpp:340-343`), which never happens in a `run` without a window. It is not
   ModTrap's to fix; ModTrap asks a MO2 it started itself to close when it does not go by itself (XE01§11).
+
+## 10. What a `run` does to the lists after all, and its `-a` (2026-11-22)
+
+- **FACT (the owner's PC; a session file of ModTrap 0.3.15).** With three mods disabled by a demaster, a tool was
+  started by MO2's `run` command. Afterwards the profile's `plugins.txt` and `loadorder.txt` no longer named the
+  ten plugins of those mods: the modlist read 3,741 plugins where it had read 3,751. So a MO2 started by `run`
+  does write its lists, and drops from them the plugins of mods that are disabled. §9 saw the lists untouched
+  because nothing in them was to be dropped. Enabling such a mod again does not bring its plugins back to where
+  they stood (WHY§83).
+- **FACT (`src/commandline.cpp:712-716` and `:779-781` at commit `4ba22f0`).** The `run` command takes
+  `--arguments` (`-a`), "override arguments": with it the program is started with that argument string in place
+  of the arguments the executable has in MO2's list. They are replaced, not added to.
+- **FACT (`src/uilocker.cpp:220-230`, `src/commandline.cpp:790-805`, same commit).** While the program runs, a
+  `run` without a main window shows a bare dialog made for the purpose, which is given no caption of its own.
+  The message after a failed run is shown by another call, with MO2's message caption. LIKELY: the two can be
+  told apart by caption, which is what ModTrap goes by when it closes only the message (WHY§84).
+

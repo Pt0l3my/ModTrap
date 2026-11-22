@@ -98,6 +98,7 @@ SETTINGS = {
     "script_props": True,      # take script properties that point at the mod out (MT4); off: they are left to the owner
     "retire_copies": True,     # after a tool's run, take ModTrap's own copy of a plugin the tool made anew out of the way
     "auto_tools": False,       # after the demaster, start the tools that are to run again, one after another
+    "tools_self": True,        # a tool with switches of its own to work and close by itself is started with them (WHY§84)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -138,6 +139,7 @@ class Api:
         self.recjob: records.Job | None = None
         self.saver = savelog.SaveJob()         # "Save this session" (WHY§48)
         self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
+        self.dismiss = dryrun.winauto.close_message   # closes a message MO2 stops at after a run (MO01§9); replaced in tests
         self.presser = dryrun.winauto.press_module_selection_ok   # presses OK in xEdit's module selection (XE01§13)
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
@@ -470,7 +472,8 @@ class Api:
             made = [r.path for r in m.plugins.values() if r.path is not None
                     and any(e.tool == name for e in adding.generated(m, r, memo))]
             try:
-                job = toolrun.ToolJob(inst, title, made, launcher=self._launch, running=self.running, poll=self.poll)
+                job = toolrun.ToolJob(inst, title, made, launcher=self._launch, running=self.running, poll=self.poll,
+                                      self_run=self.settings().get("tools_self") is not False, dismiss=self.dismiss)
             except toolrun.Refused as e:
                 raise Bad(str(e)) from None
 
