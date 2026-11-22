@@ -176,7 +176,8 @@ class GivenByHand(Sources):
                          {"host": "nexus", "game": "skyrimspecialedition", "mod_id": 555, "file_id": 5,
                           "url": "https://www.nexusmods.com/skyrimspecialedition/mods/555?tab=files&file_id=5"})
         got = sources.parse_link("https://github.com/invented-owner/reed/releases/tag/v1")
-        self.assertEqual((got["host"], got["repo"], got["tag"]), ("github", "invented-owner/reed", ""))
+        self.assertEqual((got["host"], got["repo"], got["tag"]), ("github", "invented-owner/reed", "v1"))    # a release's page names its tag too
+        self.assertEqual(sources.parse_link("https://github.com/invented-owner/reed")["tag"], "")
         self.assertEqual(sources.parse_link("https://example.invalid/mods/reed")["host"], "url")
         for bad in ("", "reed", "ftp://example.invalid/x", "https://example.invalid/a b", "javascript:alert(1)", "https://x/" + "a" * 600):
             with self.assertRaises(ValueError, msg=bad):
@@ -262,6 +263,52 @@ class GivenByHand(Sources):
         self.assertEqual(a.post("/api/updates/metas", {"files": [{"name": "a.7z.meta", "text": meta(gameName="SkyrimSE", modID=1, fileID=2)}]})[1]["archives"], 1)
         got = a.updates_upload({"name": ["x.wabbajack"], "size": ["5"], "date": ["7"], "method": ["0"]}, 2, io.BytesIO(b"{}"))
         self.assertTrue(got["taken"])
+
+
+class TheBrowsersMark(Sources):
+    """WHY§109: a browser on Windows leaves a mark on a file it downloads, naming the address. Where no record names
+    a mod's source and its archive still lies in MO2's downloads folder, that mark does."""
+
+    MARK = "[ZoneTransfer]\r\nZoneId=3\r\nReferrerUrl=%s\r\nHostUrl=%s\r\n"
+
+    def test_the_mark_names_the_file_and_the_page_and_a_github_address_counts_first(self):
+        m = sources.web_mark(Path("x"), lambda p: self.MARK % ("https://github.com/invented-owner/reed/releases/tag/v1.2",
+                                                               "https://objects.githubusercontent.com/invented/asset?token=1"))
+        self.assertEqual(m, {"page": "https://github.com/invented-owner/reed/releases/tag/v1.2",
+                             "url": "https://objects.githubusercontent.com/invented/asset?token=1"})
+        self.assertEqual(sources.source_of_mark(m), "https://github.com/invented-owner/reed/releases/tag/v1.2")
+        m = sources.web_mark(Path("x"), lambda p: self.MARK % ("https://example.invalid/mods/reed", "https://github.com/invented-owner/reed/releases/download/v3/Reed.zip"))
+        self.assertEqual(sources.source_of_mark(m), "https://github.com/invented-owner/reed/releases/download/v3/Reed.zip")
+        m = sources.web_mark(Path("x"), lambda p: self.MARK % ("https://example.invalid/mods/reed", "https://cdn.example.invalid/reed.zip"))
+        self.assertEqual(sources.source_of_mark(m), "https://example.invalid/mods/reed")       # the page before the file's own address
+        for text in ("", "[ZoneTransfer]\r\nZoneId=3\r\n", "HostUrl=about:internet\r\n", "HostUrl=javascript:alert(1)\r\n", "HostUrl=https://a b/c\r\n"):
+            self.assertEqual(sources.source_of_mark(sources.web_mark(Path("x"), lambda p, t=text: t)), "", text)
+        self.assertEqual(sources.web_mark(self.root / "no such file"), {})                  # no mark, on any system
+
+    def test_a_mod_with_no_record_of_its_source_gets_it_from_its_archives_mark(self):
+        fx.write(self.mods / "Old Lantern" / "meta.ini", meta(installationFile="Old Lantern v1.zip"))
+        fx.write(self.root / "downloads" / "Old Lantern v1.zip", b"an archive")
+        marks = {"Old Lantern v1.zip": self.MARK % ("https://github.com/invented-owner/old-lantern/releases/tag/v1", "https://objects.githubusercontent.com/x"),
+                 "Quill-4321-1-2-1700000000.7z": self.MARK % ("https://example.invalid/elsewhere", "https://example.invalid/q.7z")}
+        reader = lambda p: marks.get(Path(p).name, "")
+        r = {x["mod"]: x for x in sources.gather(instance.load(self.root), mark_reader=reader)}
+        old = r["Old Lantern"]
+        self.assertEqual((old["host"], old["repo"], old["tag"], old["by"]),
+                         ("github", "invented-owner/old-lantern", "v1", ["the mark your browser left on the downloaded archive"]))
+        self.assertEqual((r["Quill"]["host"], r["Quill"]["mod_id"]), ("nexus", 4321))        # a record of its own comes before any mark
+        self.assertEqual(r["Tool Output"]["host"], "")                                       # no archive named: nothing to read
+
+    def test_a_mod_modtrap_adds_carries_its_source_in_its_own_record(self):
+        text = sources.own_record("Quill-4321-1-4.7z", {"game": "SkyrimSE", "mod_id": 4321, "file_id": 113, "version": "1.4"})
+        folder = Path(self.tmp.name) / "new mod"
+        fx.write(folder / "meta.ini", text)
+        got = sources.mod_meta(folder)
+        self.assertEqual((got["mod_id"], got["game"], got["version"], got["files"], got["archive"]), (4321, "SkyrimSE", "1.4", [(4321, 113)], "Quill-4321-1-4.7z"))
+        fx.write(folder / "meta.ini", sources.own_record("Reed.zip", {"url": "https://github.com/invented-owner/reed/releases/download/v3/Reed.zip", "version": 'v3"\r\n[x]'}))
+        got = sources.mod_meta(folder)
+        self.assertEqual((got["url"], got["mod_id"], got["version"]), ("https://github.com/invented-owner/reed/releases/download/v3/Reed.zip", 0, "v3[x]"))
+        self.assertEqual(sources.own_record("a.zip"), "[General]\r\ninstallationFile=a.zip\r\n")
+        self.assertNotIn("url=", sources.own_record("a.zip", {"url": "javascript:alert(1)"}))
 
 
 class TheListAsTheModlist(Sources):
@@ -437,6 +484,8 @@ class FetchingANewerFile(unittest.TestCase):
         x = got["mods"][0]
         self.assertEqual((x["name"], x["updates"], x["updates_enabled"]), ("Quill (1.4)", "Quill", True))
         self.assertEqual(next(r for r in got["staged"] if r["id"] == staged)["updates"], "Quill")
+        # What the new mod's own record will say: the same mod at Nexus, the file that was fetched, its version.
+        self.assertEqual(self.api._staged[staged]["meta"], {"game": "SkyrimSE", "mod_id": 4321, "file_id": 113, "version": "1.4"})
         self.api.post("/api/updates/seen", {"mod": "Quill"})
         self.assertEqual(self.api.get("/api/updates", {})[1]["fetching"], {})
         # A GitHub release: the file named as the installed archive but for its version.

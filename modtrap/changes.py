@@ -184,7 +184,7 @@ class Changes:
             raise Bad("ModTrap is still reading the mods; try again in a moment")
         if got.get("failed"):
             raise Bad(got["failed"])
-        staged = {r["name"]: {"root": r["root"], "archive": r["archive"], "id": r["id"]}
+        staged = {r["name"]: {"root": r["root"], "archive": r["archive"], "id": r["id"], "meta": r.get("meta") or {}}
                   for r in api._staged.values() if r["state"] == "ready" and r["id"] in body.get("staged", [])}
         try:
             return m, addjob.plan(m, got, staged)

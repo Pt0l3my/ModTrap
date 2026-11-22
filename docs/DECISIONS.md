@@ -35,7 +35,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
   MT42 (answered: ModTrap watches the Downloads folders for a file the owner fetched in the browser). MT43 (one press
   all the way: a setting lets a newer file be added without asking where its plan leaves nothing open).
-  MT44 (a scan for updates needs no key).
+  MT44 (a scan for updates needs no key). MT45 (a source without typing: the mark a browser leaves on a download, and
+  a mod ModTrap adds keeps its source).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -945,3 +946,21 @@ without a key (TL01§29).
 - ModTrap names itself to Nexus in every question, asks no faster than five questions a second, at most 800 in a
   scan, and stops when the service asks it to wait.
 - A scan at each start (the setting of MT37) now needs no key either.
+
+## MT45
+
+**A source without typing it** · *2026-11-22 · From the owner's question; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "what would be efficient way to add github source? I suppose downloading the compressed file does
+not provide the source."
+
+**Settled** (WHY§109; the owner may overrule any of it):
+
+- An archive's contents do not name its source, but a browser on Windows leaves a mark on every file it
+  downloads, with the address it came from. Where no record names a mod's source and the archive it was
+  installed from still lies in MO2's downloads folder, ModTrap reads that mark. A GitHub address in it makes the
+  mod a GitHub mod, with the release it came from; any other address is kept as the mod's page.
+- A mod ModTrap adds gets its source written into the record ModTrap creates for it, in MO2's own fields: its
+  numbers at Nexus, or its web address. A newer version takes over the older one's source, and the owner's own
+  source link is kept for it too. So a mod stays askable after ModTrap has updated it.
+- The owner's own link (MT38) still comes before everything; a link to a release's page now records the release.

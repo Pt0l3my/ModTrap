@@ -131,7 +131,8 @@ class Adding(unittest.TestCase):
         inst = instance.load(self.root)
         m = model.build(inst)
         rep = adding.analyse(m, [], staged=[adding.staged_mod("Quill (1.4)", root)], updates={"Quill (1.4)": "Quill"})
-        p = addjob.plan(m, rep, {"Quill (1.4)": {"root": str(root), "archive": "Quill-4321-1-4.7z"}})
+        p = addjob.plan(m, rep, {"Quill (1.4)": {"root": str(root), "archive": "Quill-4321-1-4.7z",
+                                                 "meta": {"game": "SkyrimSE", "mod_id": 4321, "file_id": 113, "version": "1.4"}}})
         return addjob.AddJob(inst, m, p, self.work / "jobs" / "add-2", self.work, lambda: self.closed)
 
     def test_a_newer_version_goes_right_above_the_old_one_which_is_disabled(self) -> None:
@@ -148,6 +149,10 @@ class Adding(unittest.TestCase):
         self.assertEqual(m.row("Quill.esp").source, "Quill (1.4)")
         self.assertEqual(m.issues, [])
         self.assertEqual(done["mods"][0]["replaces"], "Quill")
+        # The new mod's own record names its source, so that it can be asked about for updates like the old one.
+        record = (self.root / "mods" / "Quill (1.4)" / "meta.ini").read_bytes()
+        for line in (b"installationFile=Quill-4321-1-4.7z", b"gameName=SkyrimSE", b"modid=4321", b"1\\fileid=113"):
+            self.assertIn(line, record)
         kinds = [(e["kind"], e.get("mod")) for e in history.History(self.work).all()]
         self.assertEqual(kinds[:2], [("mod added", "Quill (1.4)"), ("mod disabled", "Quill")])
         # Revert: file for file as before, the old version enabled again, the new one gone.

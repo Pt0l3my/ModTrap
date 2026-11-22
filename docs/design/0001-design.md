@@ -660,3 +660,7 @@ installer with questions and lacks nothing. Otherwise it waits on the Add mods t
 had a file uploaded, and a mod's files only where the installed one is not plainly its newest. The owner's key is
 optional: it lets the update button fetch for a Premium account, and serves for scanning only where the public
 service does not answer as expected.
+
+**A source without typing (MT45, WHY§109).** Where no record names a mod's source, ModTrap reads the mark the
+browser left on the archive the mod was installed from, if it still lies in MO2's downloads folder. A mod ModTrap
+adds gets its source written into its own record, so that it can be asked about afterwards like any other.

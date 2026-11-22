@@ -131,6 +131,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 106 | 2026-11-22 | ModTrap watches MO2's and the browser's Downloads folders for a file the owner fetched on a site, and a setting lets a newer file be added without asking: one press where the host lets a program fetch, one more on the site where it does not | DECIDED | #updates #add #page |
 | 107 | 2026-11-22 | On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made | FACT | #updates #page |
 | 108 | 2026-11-22 | The owner was right that a scan needs no key: Nexus's newer public service answers without one; the scan is rebuilt on it, the key kept only for fetching and as a fallback | DECIDED | #updates #network |
+| 109 | 2026-11-22 | A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about | DECIDED | #updates #add |
 
 ## Entries
 
@@ -2768,3 +2769,36 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests with a stand-in for the public service (states by group and by time; no key sent; files asked
   for only where needed; a second scan; fifty and five to a question; the service absent, with and without a
   key; a service that asks to wait; a game's name that is no name); the page in a browser.
+
+### 109. A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about
+
+`2026-11-22` · DECIDED · `#updates #add` · refs: MT45, MT38, MT41, MO01§12, WHY§103, WHY§105
+
+- The owner asked for an efficient way to give a GitHub source, supposing rightly that the archive's contents do
+  not name it.
+- LIKELY, not checked on a Windows PC from here: browsers on Windows write, beside a downloaded file's own bytes,
+  a small text ("Zone.Identifier") with `HostUrl`, the address of the file, and `ReferrerUrl`, the page the
+  download was started on. It stays with the file while the file stays on a disk that keeps such texts, and is
+  lost when the file is copied through a program that does not carry it, or unpacked. For a file from GitHub the
+  file's own address is often that of GitHub's store, and the page is the release's; so both are looked at, and a
+  GitHub address in either counts first.
+- DECIDED. Where meta.ini, the download's meta file, what the owner gave and the Wabbajack file all say nothing,
+  the archive named in the mod's record is looked for in MO2's downloads folder and its mark read. One small read
+  for each mod that has no source; nothing where the archive is gone. On another system, or with no mark, nothing
+  is found and nothing changes.
+- FACT, a gap found while answering. The record ModTrap wrote for a mod it added held the archive's name only. A
+  newer version put in by ModTrap (MT41) therefore had no source of its own unless MO2's downloads folder still
+  held a record beside its archive: after an update fetched by ModTrap, or one taken from the browser's folder,
+  the new mod would have shown "cannot be asked". The record now carries the source in MO2's own fields
+  (MO01§12): the game, the mod's and the file's number, the version; or the web address, with the flag MO2 uses
+  for an address of the owner's. The owner's own link for the older mod is copied to the newer one's name.
+- A new mod taken from MO2's downloads folder gets what MO2's record beside the archive says, else the mark's
+  address.
+- Values written into the record have line ends and quotes taken out; an address that is not a web address is
+  not written.
+- The pattern for a GitHub address now also reads a release's page (`/releases/tag/…`), not only a release's
+  file: a link pasted from the release page records which release is installed.
+- Checked: tests (the mark's two addresses and which counts; texts that are no addresses; a mod with no record
+  getting its source from the mark while a mod with a record keeps its own; the record of a newer version read
+  back by ModTrap's own reader; the hand-over through Add mods). The reading of a real mark on Windows is not
+  checked.

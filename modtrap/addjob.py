@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import history as history_mod, instance, logbook, model, paths, profile, safe
+from . import history as history_mod, instance, logbook, model, paths, profile, safe, sources
 from .instance import fold
 
 log = logbook.get("add")
@@ -70,7 +70,7 @@ def plan(m: model.Model, report: dict, staged: dict[str, dict] | None = None) ->
             if old and inst.mod(old) is None:
                 raise Refused("'%s', which '%s' is a newer version of, is no longer in the modlist" % (old, x["name"]))
             p.mods.append({"name": x["name"], "before": x.get("own_before", "") if old else before, "staged": True, "root": str(src["root"]),
-                           "archive": src.get("archive", ""), "enabled": False, "updates": old,
+                           "archive": src.get("archive", ""), "enabled": False, "meta": src.get("meta") or {}, "updates": old,
                            "replaces": old if old and x.get("updates_enabled") else ""})
         else:
             p.mods.append({"name": x["name"], "before": before, "staged": False, "root": "", "archive": "",
@@ -135,8 +135,9 @@ class AddJob:
             shutil.copyfile(src.joinpath(*rel.split("/")), target)
             if target.stat().st_size != want[rel]:
                 raise Refused("%s did not copy whole into MO2's mods folder" % rel)
-        meta = "[General]\r\n" + ("installationFile=%s\r\n" % x["archive"].replace("\\", "/") if x["archive"] else "")
-        paths.write_atomic(dst / "meta.ini", meta.encode("utf-8"))
+        # The mod's own record: the archive, and where the mod came from when that is known (WHY§109), so that a
+        # mod ModTrap added can be asked about for updates like any other.
+        paths.write_atomic(dst / "meta.ini", sources.own_record(x["archive"], x.get("meta")).encode("utf-8"))
         self.copied[-1]["files"] = _tree(dst)
         self._save_copied()
 

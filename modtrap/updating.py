@@ -338,7 +338,7 @@ class Updating:
     def _expect(self, row: dict, v: dict) -> None:
         self.waiting[row["mod"]] = {"since": time.time(), "host": row["host"], "mod_id": row.get("mod_id") or 0, "file_id": v.get("file_id") or 0,
                                     "name": v.get("file") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
-                                    "installed": list(row.get("files") or [])}
+                                    "installed": list(row.get("files") or []), "url": row.get("url") or ""}
 
     def look(self, model, stage) -> None:
         """Looks into MO2's downloads folder and the browser's for an archive a waiting mod's download has brought, and
@@ -407,7 +407,13 @@ class Updating:
         for mod, path, where in found:
             w = self.waiting.pop(mod)
             try:
-                rec = stage(path, path.name, mod, w["version"])
+                # The new mod's own record gets what is known of the file: its numbers at Nexus, or the address the
+                # browser says it came from, else the older version's address (WHY§109).
+                dl = sources.download_meta(path.parent, path.name) if where.startswith("MO2") else {}
+                meta = {"mod_id": w["mod_id"], "file_id": w["file_id"] or (dl.get("file_id", 0) if dl.get("mod_id") == w["mod_id"] else 0),
+                        "version": w["version"] or dl.get("version", "")} if w["mod_id"] else \
+                       {"version": w["version"], "url": sources.source_of_mark(sources.web_mark(path)) or w.get("url") or ""}
+                rec = stage(path, path.name, mod, w["version"], meta)
                 self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
                 log.info("the download for “%s” is in %s: taken to Add mods as its newer version", mod, where)
             except Exception as e:
@@ -467,7 +473,9 @@ class Updating:
                     self._expect(row, v)
                     self.fetching[mod] = {"state": "open", "open": got["open"], "why": got["why"]}
                     return
-                rec = stage(got["path"], got["name"], mod, got["version"])
+                rec = stage(got["path"], got["name"], mod, got["version"],
+                            {"mod_id": row.get("mod_id") or 0, "file_id": how.get("file_id") or 0, "version": got["version"],
+                             "url": how.get("url") or ""} if row["host"] == "nexus" else {"version": got["version"], "url": how.get("url") or row.get("url") or ""})
                 self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
             except updates.Refused as e:
                 log.warn("the newer file of “%s” was not fetched: %s", mod, e)
