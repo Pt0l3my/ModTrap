@@ -2758,6 +2758,13 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   words, in the log and on the page, and never taken for "no update".
 - NOT YET CHECKED by ModTrap's own code against the live service: the helper asked the questions by hand. The
   owner's next scan is the check, with its lines in the log.
+- Later, 2026-11-22: checked. The helper session ran ModTrap's own scan, unchanged, from the pushed commit
+  `7869d5c` (0.3.37), against the live service with no key, for three invented rows on the two public mods. Three
+  questions, each answered with no error, in 1.2 seconds. An old file of the first mod, named as its archive is
+  named: update, to the mod's current main file, by the group. The same mod's current file, by its number:
+  current. The second mod, by the time in its archive's name alone: current, without its files being asked for.
+  Not yet seen: a scan of some 3,000 mods, fifty to a question and five to a question for files; and how many
+  questions the service allows.
 - Checked: tests with a stand-in for the public service (states by group and by time; no key sent; files asked
   for only where needed; a second scan; fifty and five to a question; the service absent, with and without a
   key; a service that asks to wait; a game's name that is no name); the page in a browser.
