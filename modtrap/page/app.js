@@ -231,6 +231,7 @@ const SETTING_TEXT = [
   ["close_mo2", "Close this modlist's MO2 without asking", "Some steps change MO2's lists and need MO2 closed (putting a demaster in place, Revert, adding a mod). On: ModTrap asks MO2 to close, as a click on its X does, without asking you first. It never ends MO2 by force. The one go closes MO2 for its last step either way: its plan says so."],
   ["open_mo2_after", "Open MO2 again when a demaster is in place", "Starts this modlist's MO2 once the demaster is in place, so that you can look at the result."],
   ["retire_copies", "After a tool's run, retire ModTrap's copy of a plugin the tool made anew", "ModTrap keeps demastered copies in a mod of its own, above the originals. When a tool you start from ModTrap makes such a plugin anew without the mod, ModTrap's copy would hide the new one. On: ModTrap moves its copy into the job's folder by itself (kept, not deleted). Off: it tells you on the Selection tab and waits for the button."],
+  ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and ticks the tool's step off when the tool has written its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
 function renderSettings() {
@@ -585,6 +586,7 @@ function demasterChain() {
     }
     return;
   }
+  if (state.dmChain === "tools") { toolsInARow(); return; }
   if (state.dmChain === "probe" && state.probe) {
     if (state.probe.state === "passed" && !probeReason()) waitThen("modlist", demasterGo, true);   // then the modlist is read again
     if (state.probe.state === "failed") { state.dmChain = ""; toast("The probe did not pass: the Tools tab says where. Nothing real was changed."); }
@@ -597,7 +599,9 @@ function demasterChain() {
     if (d.state === "verified") {
       state.dmChain = "";
       demasterCall("/api/demaster/install", { close_mo2: true }, "In place. ModTrap is reading the modlist again.", true).then(() => {
-        if ((state.settings || {}).open_mo2_after && state.demaster && state.demaster.state === "installed") call("/api/mo2/open", {}).catch((e) => toast(e.message));
+        const set = state.settings || {}, placed = state.demaster && state.demaster.state === "installed";
+        if (placed && set.auto_tools) { state.dmChain = "tools"; state.toolsTried = {}; state.toolsNow = ""; toast("In place. The tools that are to run again are started one after another."); }
+        else if (placed && set.open_mo2_after) call("/api/mo2/open", {}).catch((e) => toast(e.message));
       });
     }
     else if (d.state === "failed") state.dmChain = "";
@@ -624,6 +628,44 @@ function autoGo() {
   if ((p.needs_you || []).length || p.blocked) { toast("The plan leaves something to you, so ModTrap asks before going on."); return; }
   toast("Nothing in the plan is left to you: going ahead, as set in Settings.");
   planGoAhead();
+}
+
+// The owner's setting (DESIGN§19): after the demaster, each tool that is to run again is started through MO2 as soon
+// as the one before it has closed. The owner still works each tool; ModTrap cannot press a tool's own buttons. A tool
+// that closes without having written anything ends the row: something did not go as meant, and that is the owner's.
+function toolsInARow() {
+  const t = state.tool, d = state.stepsData, ticks = state.stepsDone = state.stepsDone || {};
+  if (state.status !== "ready" || state.toolsBusy) return;
+  if (t && (t.state === "starting" || t.state === "running")) return;          // one at a time
+  if (state.toolsNow) {                                                          // the one that has just closed
+    const key = state.toolsNow, title = state.toolsTitle;
+    state.toolsNow = "";
+    if (t && t.title === title && t.state === "done" && t.changed_count > 0) {
+      ticks[stepKey(key)] = true;                                                // it wrote its output: its step is done
+      saveUi(); state.stepsText = ""; state.stepsKey = ""; state.processText = "";
+    } else {
+      state.dmChain = "";
+      toast("“" + title + "” closed without writing anything new, so ModTrap stops here. The tools are yours from the Steps tab.");
+      return;
+    }
+  }
+  if (!d || state.stepsLooking || state.stepsKey === "") return;                 // the steps are being worked out again
+  const next = d.steps.find((st) => st.key.startsWith("tool:") && st.state === "to do" && !ticks[stepKey(st.key)] &&
+    !state.toolsTried[st.key] && (st.items || []).some((i) => i.tool));
+  if (!next) {
+    state.dmChain = "";
+    toast("Every tool that was to run again has had its run. What is left is yours: the Process tab's last box.");
+    if ((state.settings || {}).open_mo2_after) call("/api/mo2/open", {}).catch((e) => toast(e.message));
+    return;
+  }
+  const title = next.items.find((i) => i.tool).tool;
+  state.toolsTried[next.key] = true; state.toolsNow = next.key; state.toolsTitle = title; state.toolsBusy = true;
+  api("/api/tool/start", { title: title }).then((r) => { state.tool = r; toast("Starting “" + title + "” through MO2. Work it, then close it: the next one follows."); })
+    .catch((e) => {
+      state.toolsNow = ""; delete state.toolsTried[next.key];
+      if (OTHER_MO2.test(e.message)) waitThen("mo2", () => { state.dmChain = "tools"; });
+      else { state.dmChain = ""; toast(e.message); }
+    }).finally(() => { state.toolsBusy = false; });
 }
 
 function planNotNow() { state.dmPlan = null; renderDemaster(true); state.processText = ""; renderProcess(); }
@@ -677,6 +719,24 @@ function remadeNote(j) {
   if (cannot.length) out.push(el("p", { class: "message bad", text: "Made again since, but ModTrap’s copy must stay for now: " +
     cannot.map((x) => x.plugin + " (" + x.why + ")").join("; ") + ". Run the tool again with the mod disabled; ModTrap’s copy in “" + j.mod_name + "” keeps the load order whole until then." }));
   return out;
+}
+
+// Revert of a demaster (WHY§81): always back to how things stood before it, whatever came after.
+const REVERT_ASKS = "Put everything back as it was before this demaster?\n\nThe three lists as they were; ModTrap's own mod removed; any plugin a tool has made anew since put back as it was; and the output of each tool that ModTrap started since, as it was kept before the tool ran. What is there now is set aside in the job's folder, not deleted.";
+function revertSaid(r) {
+  return "Put back as it was before the demaster." + ((r.tools || []).length ? " Tool output put back too: " + r.tools.join(", ") + "." : "") +
+    ((r.tools_not_kept || []).length ? " Too large to have been kept, so run again: " + r.tools_not_kept.join(", ") + "." : "") +
+    (r.set_aside ? " What was there (" + plural(r.set_aside, "file") + ") is set aside in the job's folder." : "");
+}
+async function revertDemaster(job) {
+  let said = "";
+  try { said = revertSaid(await api("/api/demaster/revert", { job: job })); state.dmError = ""; }
+  catch (e) { state.dmError = e.message; }
+  if (said) toast(said);
+  state.dmPlan = null; state.dmChain = ""; state.dmWait = null;
+  state.gen = (state.gen || 0) + 1;
+  await tick();
+  renderDemaster(true);
 }
 
 function renderDemaster(force) {
@@ -749,8 +809,8 @@ function renderDemaster(force) {
   for (const j of allJobs.filter((x) => x.state === "installed").slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Revert" });
     undo.addEventListener("click", async () => {
-      if (!await confirmBox("Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed? MO2 must be closed.")) return;
-      demasterCall("/api/demaster/revert", { job: j.job }, "Put back as it was.");
+      if (!await confirmBox(REVERT_ASKS)) return;
+      revertDemaster(j.job);
     });
     cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
       " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
@@ -932,8 +992,8 @@ async function pollHistory() {
         if (stands && d.can_change) {
           const undo = el("button", { type: "button", text: j.what === "add" ? "Take it out again" : "Revert" });
           undo.addEventListener("click", async () => {
-            if (!await confirmBox(j.what === "add" ? "Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder?" : "Put everything back as it was before this demaster: the three lists, and ModTrap's own mod removed?")) return;
-            try { await api(j.what === "add" ? "/api/add/revert" : "/api/demaster/revert", { job: j.job }); toast("Put back as it was."); } catch (e) { toast(e.message); }
+            if (!await confirmBox(j.what === "add" ? "Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder?" : REVERT_ASKS)) return;
+            try { const r = await api(j.what === "add" ? "/api/add/revert" : "/api/demaster/revert", { job: j.job }); toast(j.what === "add" ? "Put back as it was." : revertSaid(r)); } catch (e) { toast(e.message); }
             state.historyText = ""; state.dmText = ""; state.addText = ""; state.gen = (state.gen || 0) + 1;
             await tick(); pollHistory();
           });

@@ -103,6 +103,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 78 | 2026-11-22 | The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run | FACT | #tools #steps #process |
 | 79 | 2026-11-22 | Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself | FACT | #tools #xedit #process |
 | 80 | 2026-11-22 | The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab | DECIDED | #tools #process #page #safety |
+| 81 | 2026-11-22 | The tools in a row, and a Revert that always ends where the demaster began: remade plugins and kept tool output come back, and a job in place is never cleared | DECIDED | #safety #tools #process #page |
 
 ## Entries
 
@@ -1883,3 +1884,36 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   MO2's list, and one to open MO2 itself.
 - Checked: tests on the stand-in (refused when nothing was made anew, when the new original still needs the mod,
   when MO2 is open; done otherwise). Not checked: on the owner's PC, with a real tool's run.
+
+### 81. The tools in a row, and a Revert that always ends where the demaster began: remade plugins and kept tool output come back, and a job in place is never cleared
+
+`2026-11-22` · DECIDED · `#safety #tools #process #page` · refs: MT9, MT14, MT15, MT17, DESIGN§11, DESIGN§12, DESIGN§19, TL01§12, WHY§60, WHY§67, WHY§80
+
+- The owner: "can you also add setting for the tool process to carry on automatically, like the process after dry
+  run? so the user could run the whole demaster process in one go. I would like to ensure that a strong and
+  stable revert option always remains and can be used at any stage of the demaster. The user should always have
+  the revert back to pre-demaster state option (never deleted from job history)."
+- DECIDED (the setting, off by default): once the demaster is in place, each tool its steps name is started
+  through MO2 as soon as the one before it has closed, and its step is ticked off when it has written output. A
+  tool that closes without writing anything ends the row. The owner still works each tool: ModTrap starts a
+  tool's program, it does not press the tool's own buttons.
+- FACT (read in the behaviour tool's source, `Pandora.Skyrim/CLI/CommandLineParser.cs:24-30` at commit `1f26bbc`):
+  that tool has switches to run and to close by itself. Not used yet: each tool would need its own, and a run
+  nobody watches needs its outcome checked. A later step, on the owner's word.
+- FACT (Revert as it was): it put the three lists back (whole, or line by line once MO2 had rewritten them) and
+  removed ModTrap's own mod. It did not touch a plugin a tool had made anew since, nor anything else a tool had
+  written after the demaster. After tools had run, "Revert" was not "as it was before".
+- DECIDED: Revert ends where the demaster began. (1) Every plugin ModTrap copied into the safe folder that is no
+  longer that original is put back from the copy. (2) Before ModTrap starts a tool while a demaster is in
+  place, it keeps a copy of what the tool is about to write over: the files of its output mod and the plugins it
+  made; once for each tool, so that the copy is of the state before the demaster's tools. Revert puts those
+  back and takes out what the run added. (3) What is there at the time of the Revert is set aside in the job's
+  folder first: nothing made since is lost either.
+- LIMIT, said where it applies: an output of more than 5,000 files or one gibibyte is not kept (the
+  distant-view generator's is of that size); the log says so before the tool starts, and Revert names the tool
+  as one to run again. A tool the owner starts outside ModTrap is not seen, so nothing of it is kept.
+- FACT: a job in place cannot be cleared from the job history (WHY§67): only jobs that no longer stand can. Its
+  Revert is on the History tab and the Selection tab for as long as the session exists. A test holds it.
+- Checked: a test in which a tool ran, a copy was retired and MO2 rewrote the lists, and every file ends as it
+  began, dates included; in a browser, one press through the tool's run, then Revert from the History tab.
+- Not checked: on the owner's PC.

@@ -9,6 +9,7 @@ history.
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -24,6 +25,9 @@ from .instance import fold
 from .server import Bad
 
 log = logbook.get("add")
+TOOL_KEEP_FILES = 5000                 # a tool's output is kept for Revert up to this many files
+TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is to be made again after a Revert
+
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
          "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
@@ -558,9 +562,16 @@ class Changes:
                     what = demaster.undo_by_line(m.instance.profiles_dir / m.instance.profile, the_safe, done)
                 except (OSError, ValueError) as e:
                     raise Bad("this demaster's record cannot be read: %s" % logbook.why(e)) from None
+            # Back to how things stood before the demaster, whatever came after it (WHY§81): a plugin ModTrap
+            # demastered that a tool has since made anew gets its original back, and so does a tool's output that
+            # ModTrap kept before it started the tool. What is there now is set aside in the job's folder first.
+            m = api._need()
+            originals = self._originals_back(the_safe, work, m.instance.profiles_dir / m.instance.profile)
+            tools_back = self._tools_back(work)
+            what["restore"] = list(what["restore"]) + originals
             history.History(api.store.dir(api.session.id)).add(
                 "reverted", why="the owner asked", job=name, restored=[Path(p).name for p in what["restore"]],
-                removed=[Path(p).name for p in what["remove"]])
+                removed=[Path(p).name for p in what["remove"]], tools=tools_back["titles"], not_kept=tools_back["not_kept"])
             # Whatever the page still shows of a demaster describes the modlist as it was before this Revert: the
             # one that was reverted, or one still waiting to be put in place (WHY§62). It goes.
             if self.dm is not None and (self.dm.dir.name == name or self.dm_state in ("verified", "failed")):
@@ -570,7 +581,143 @@ class Changes:
         process.BOARD.drop("dry", "change", "install")     # put back: the Process tab shows a demaster still to come
         api.open(api.folder, api.profile or None, session=api.session)
         return {"job": name, "restored": len(what["restore"]), "removed": len(what["remove"]),
-                "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])]}
+                "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])],
+                "tools": tools_back["titles"], "tools_not_kept": tools_back["not_kept"], "set_aside": tools_back["aside"] + len(originals)}
+
+    # --- a strong Revert (WHY§81) ------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _aside(path: Path, folder: Path) -> None:
+        """Moves a file that is about to be replaced into the job's folder, so that nothing made since is lost."""
+        folder.mkdir(parents=True, exist_ok=True)
+        dst, n = folder / path.name, 2
+        while dst.exists():
+            dst, n = folder / ("%s.%d" % (path.name, n)), n + 1
+        shutil.copy2(path, dst)
+
+    def _originals_back(self, the_safe: safe.Safe, work: Path, profile_dir: Path) -> list[str]:
+        """Every plugin whose original ModTrap copied into the safe folder and that is no longer that original (a
+        tool has made it anew, or it is gone) is put back as it was. The profile's lists are not touched here."""
+        back = []
+        for item in the_safe.items:
+            p = Path(item["path"])
+            if p.parent == profile_dir:
+                continue
+            try:
+                if p.is_file() and safe.sha256(p) == item["sha256"]:
+                    continue
+                src = the_safe.files / item["copy"]
+                if safe.sha256(src) != item["sha256"]:
+                    log.warn("the safe folder's copy of %s is no longer what was taken; it was not put back", p.name)
+                    continue
+                if p.is_file():
+                    self._aside(p, work / "set-aside-by-revert")
+                p.parent.mkdir(parents=True, exist_ok=True)
+                tmp = p.with_name(p.name + ".modtrap-revert")
+                shutil.copy2(src, tmp)
+                os.replace(tmp, p)
+                back.append(str(p))
+                log.info("%s is put back as it was before the demaster; what a tool made of it since is kept in the job's folder", p.name)
+            except OSError as e:
+                log.warn("%s could not be put back as it was: %s", p.name, logbook.why(e))
+        return back
+
+    def before_tool(self, title: str, made: list[Path], folder: Path | None) -> None:
+        """Before ModTrap starts a tool while a demaster is in place: a copy of what the tool is about to write over
+        (its output mod's files and the plugins it made) goes into that demaster's folder, once for each tool, so
+        that Revert can bring the modlist back to how it stood before the demaster. Too large an output is not
+        kept, and Revert then says that the tool is to run again. Never raises."""
+        try:
+            job = next((j for j in self.demaster_jobs() if j["state"] == "installed"), None)
+            if job is None:
+                return
+            work = self._jobs_dir() / job["job"] / "tool-before" / re.sub(r"[^A-Za-z0-9._-]+", "_", title)[:60]
+            if (work / "manifest.json").is_file():
+                return                                   # the first copy is the state before the demaster's tools
+            files: list[Path] = []
+            if folder is not None and folder.is_dir():
+                for here, _dirs, names in os.walk(folder):
+                    files += [Path(here) / n for n in names]
+                    if len(files) > TOOL_KEEP_FILES:
+                        break
+            files += [x for x in made if x.is_file() and x not in files]
+            total = 0
+            for f in files:
+                try:
+                    total += f.stat().st_size
+                except OSError:
+                    pass
+            work.mkdir(parents=True, exist_ok=True)
+            record: dict = {"title": title, "folder": str(folder) if folder is not None else "", "files": [],
+                            "when": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            if len(files) > TOOL_KEEP_FILES or total > TOOL_KEEP_BYTES:
+                record["skipped"] = "%d file(s), %d MB: more than ModTrap keeps a copy of" % (len(files), total // (1024 * 1024))
+                log.warn("“%s”: its output is too large to keep a copy of (%s). After a Revert, run it again.", title, record["skipped"])
+            else:
+                for i, f in enumerate(files):
+                    copy = "%05d-%s" % (i + 1, f.name)
+                    (work / "files").mkdir(exist_ok=True)
+                    shutil.copy2(f, work / "files" / copy)
+                    record["files"].append({"path": str(f), "copy": copy, "sha256": safe.sha256(f)})
+                log.info("“%s”: a copy of its output as it is now (%d file(s)) is kept with the demaster, for Revert", title, len(files))
+            paths.write_atomic(work / "manifest.json", (json.dumps(record, indent=1) + "\n").encode("utf-8"))
+        except Exception as e:
+            log.warn("a copy of “%s”'s output could not be kept for Revert: %s", title, logbook.why(e))
+
+    def _tools_back(self, work: Path) -> dict:
+        """Puts back each tool's output that was kept before ModTrap started the tool (`before_tool`): files changed
+        since are replaced by the kept ones, files the run added are set aside. What was too large to keep is named."""
+        out = {"titles": [], "not_kept": [], "aside": 0}
+        base = work / "tool-before"
+        try:
+            kept = sorted((d for d in base.iterdir() if (d / "manifest.json").is_file()), reverse=True)
+        except OSError:
+            return out
+        for d in kept:
+            try:
+                with open(d / "manifest.json", "rb") as f:
+                    rec = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+            except (OSError, ValueError):
+                continue
+            title = str(rec.get("title", d.name))
+            if rec.get("skipped"):
+                out["not_kept"].append(title)
+                continue
+            aside = work / "set-aside-by-revert" / d.name
+            known = set()
+            changed = 0
+            for item in rec.get("files", []):
+                p = Path(item["path"])
+                known.add(str(p))
+                try:
+                    if p.is_file() and safe.sha256(p) == item["sha256"]:
+                        continue
+                    if p.is_file():
+                        self._aside(p, aside)
+                        out["aside"] += 1
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = p.with_name(p.name + ".modtrap-revert")
+                    shutil.copy2(d / "files" / item["copy"], tmp)
+                    os.replace(tmp, p)
+                    changed += 1
+                except OSError as e:
+                    log.warn("%s of “%s” could not be put back: %s", p.name, title, logbook.why(e))
+            folder = Path(rec["folder"]) if rec.get("folder") else None
+            if folder is not None and folder.is_dir():
+                for here, _dirs, names in os.walk(folder):
+                    for n in names:
+                        p = Path(here) / n
+                        if str(p) not in known:               # the run added it: out of the way, kept
+                            try:
+                                self._aside(p, aside)
+                                p.unlink()
+                                out["aside"] += 1
+                                changed += 1
+                            except OSError as e:
+                                log.warn("%s of “%s” could not be set aside: %s", n, title, logbook.why(e))
+            out["titles"].append(title)
+            log.info("“%s”: its output is put back as it was before the demaster (%d file(s) changed back or set aside)", title, changed)
+        return out
 
     def _drop(self, why: str) -> None:
         """Forgets the demaster in hand that was not put in place. Its files stay in its job folder; nothing in
