@@ -1,6 +1,6 @@
 {
  "format": "modtrap-tools/1",
- "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes. 'self_run' names the switches of the tool's own with which it does its work and closes without being touched, where it has such; ModTrap adds them to the arguments MO2 has for the tool when the owner's setting says so (WHY§84). 'wrote_nothing' is what is known about the tool closing without having written anything, said to the owner as a hint when that happens, with its source in the research note. 'log' names the folder beside the tool's program where it keeps logs of its own, and the signs ModTrap looks for in the log of a run it started: a pattern, and the sentence said when it shows (WHY§88).",
+ "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes. 'self_run' names the switches of the tool's own with which it does its work and closes without being touched, where it has such; ModTrap adds them to the arguments MO2 has for the tool when the owner's setting says so (WHY§84). 'wrote_nothing' is what is known about the tool closing without having written anything, said to the owner as a hint when that happens, with its source in the research note. 'log' names the folder beside the tool's program where it keeps logs of its own, and the signs ModTrap looks for in the log of a run it started: a pattern, and the sentence said when it shows (WHY§88). In 'self_run', 'press' names a button of the tool's own window that ModTrap presses when the tool has no switch for it, with the lines of the tool's log that say a run began and ended (WHY§93).",
  "tools": [
   {
    "tool": "Wrye Bash",
@@ -86,14 +86,36 @@
      },
      {
       "find": "Encountered blocking overall error",
-      "level": "error",
-      "says": "{n} time(s) it reported a “Blocking Error”: a group of patchers could not be made ready to run."
+      "level": "note",
+      "says": "{n} time(s) it reported a “Blocking Error” (some pass by themselves while it gets ready; the last lines of its log say how it stood)."
      },
      {
       "find": "Short circuiting .+ compilation because meta matched",
       "says": "{n} time(s) it took a patcher as built already and did not build it again."
+     },
+     {
+      "find": "=+ Starting Pipeline Run =+",
+      "says": "{n} run(s) of its patchers were begun."
+     },
+     {
+      "find": "Finished patcher run",
+      "says": "{n} run(s) of its patchers came to their end."
+     },
+     {
+      "find": "\\] No global error",
+      "says": "It reported itself ready to run (no error over all)."
      }
     ]
+   },
+   "self_run": {
+    "press": {
+     "id": "GoButton"
+    },
+    "began": "================= Starting Pipeline Run =================",
+    "ended": "Finished patcher run",
+    "says": "Synthesis has no switch to run its patchers, only its run button: ModTrap presses that button once Synthesis has it ready, and asks the window to close when Synthesis's own log says the run has finished.",
+    "label": "FACT (the button's name and both log lines read in its source); not yet seen on a PC",
+    "source": "TL01§21"
    }
   },
   {

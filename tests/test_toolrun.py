@@ -185,7 +185,7 @@ class Tools(unittest.TestCase):
         self.assertIn("This is Synthesis 1.2.3.", said)
         self.assertTrue(any("were changed while it was open: Mutagen 0.10.0 with Synthesis 1.2.3, then Mutagen 0.11.0 with Synthesis 1.3.0" in x for x in said))
         self.assertTrue(any(x.startswith("2 line(s) of a library that does not fit, the last: Mutagen.Invented.Synthesis 1.3.0 cannot be used by a patcher built for net8.0") for x in said))
-        self.assertEqual([f["level"] for f in own["findings"]], ["note", "note", "note", "error", "error"])
+        self.assertEqual([f["level"] for f in own["findings"]], ["note", "note", "note", "error", "note"])
         kept = self.api.store.dir(self.api.session.id) / "tool-logs" / "Synthesis" / "this run.log"
         self.assertTrue(kept.is_file())
         self.assertFalse((kept.parent / "an older run.log").exists())             # not of this run: neither read nor kept
@@ -372,6 +372,108 @@ class Tools(unittest.TestCase):
         self.api.post("/api/tool/start", {"title": "Synthesis"})
         t = self.ended()
         self.assertEqual((t["state"], opened, t["before"]), ("done", [], []))
+
+    def _pressing(self, tool_dir: Path, lands: bool = True, finishes: bool = True, ready_after: int = 2):
+        """The framework started through MO2, with ModTrap driving it: a stand-in for the helper that presses its run
+        button (the button is greyed for the first looks), after which the tool logs its run and writes its output;
+        and a stand-in for asking its window to close."""
+        closed = Path(self.tmp.name) / "run window closed"
+        log_file = tool_dir / "logs" / "Current.log"
+        seen = {"looks": 0, "presses": 0, "closes": 0}
+        real = self.launch
+
+        def launch(cmd, cwd):
+            self.commands.append(cmd)
+            log_file.write_text("x [INF] Mutagen version: 0.10.0\nx [INF] Synthesis version: 1.2.3\nx [INF] No global error\n", encoding="utf-8")
+            return subprocess.Popen([sys.executable, FAKE], cwd=cwd, env=dict(os.environ, FAKE_TOOL_UNTIL=str(closed)))
+
+        def presser(image, automation_id):
+            self.assertEqual((image, automation_id), ("Synthesis.exe", "GoButton"))
+            seen["looks"] += 1
+            if seen["looks"] <= ready_after:
+                return {"pressed": False, "enabled": False, "candidates": 4, "why": "the button is there and greyed: the program is not ready to run"}
+            seen["presses"] += 1
+            if lands:
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write("x [INF] ================= Starting Pipeline Run =================\n")
+                    if finishes:
+                        f.write("x [INF] Finished patcher run\n")
+                (instance.load(self.root).overwrite_dir / "Made by the run.esp").write_bytes(b"made by the run " + str(time.time()).encode())
+            return {"pressed": True, "enabled": True, "candidates": 4, "why": ""}
+
+        def ask_close(program):
+            seen["closes"] += 1
+            closed.write_bytes(b"")
+            return True
+
+        self.api.launcher, self.api.button_presser, self.api.ask_close = launch, presser, ask_close
+        self.api.running = lambda image: (None if not self.commands or closed.exists() else True)   # gone: no waiting about
+        self.api.press_times = (0.05, 0.05, 3.0, 0.4, 0.1)
+        return seen, closed
+
+    def test_a_tool_with_only_a_button_is_run_by_pressing_it_and_closed_when_its_log_says_so(self) -> None:
+        """MT31, WHY§93: no switch runs the framework's patchers. ModTrap waits until its run button can be pressed,
+        presses it, reads the tool's own log for the run's beginning and end, and asks the window to close."""
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"), log_lines=["x [INF] Mutagen version: 0.10.0"])
+        seen, _closed = self._pressing(tool_dir)
+        got = self.api.post("/api/tool/start", {"title": "Synthesis"})[1]
+        self.assertTrue(got["by_itself"])
+        t = self.ended()
+        self.assertEqual((t["state"], t["changed_count"], t["drive"]), ("done", 1, "finished"))
+        self.assertEqual((seen["presses"], seen["closes"]), (1, 1))
+        self.assertGreaterEqual(seen["looks"], 3)                          # greyed at first: looked at again, not pressed
+        said = "\n".join(x["text"] for x in logbook.lines_after(0)[0])
+        self.assertIn("ModTrap pressed its run button", said)
+        self.assertIn("its own log says the run has finished", said)
+        self.assertIn("1 run(s) of its patchers came to their end", " ".join(f["text"] for f in t["own_log"]["findings"]))
+
+    def test_a_press_that_starts_no_run_is_made_again_and_then_left_to_the_owner(self) -> None:
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"), log_lines=["x [INF] Mutagen version: 0.10.0"])
+        seen, closed = self._pressing(tool_dir, lands=False)
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        for _ in range(400):
+            if self.api.state()["tool"]["drive"] == "left to the owner":
+                break
+            time.sleep(0.02)
+        t = self.api.state()["tool"]
+        self.assertEqual((t["state"], t["drive"], seen["presses"], seen["closes"]), ("running", "left to the owner", 3, 0))
+        self.assertIn("yours to run", t["drive_note"])
+        closed.write_bytes(b"")                                            # the owner closes it
+        self.assertEqual(self.ended()["state"], "done")
+
+    def test_a_run_that_does_not_end_in_the_log_is_never_closed_by_modtrap(self) -> None:
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"), log_lines=["x [INF] Mutagen version: 0.10.0"])
+        seen, closed = self._pressing(tool_dir, finishes=False)
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        time.sleep(1.2)
+        t = self.api.state()["tool"]
+        self.assertEqual((t["state"], t["drive"], seen["presses"], seen["closes"]), ("running", "pressed", 1, 0))
+        closed.write_bytes(b"")
+        self.ended()
+
+    def test_the_helper_that_presses_answers_in_one_line_and_presses_nothing_where_it_cannot(self) -> None:
+        """WHY§93: the helper is a program of its own. Here (not Windows) it must say so and press nothing; asked the
+        wrong way it must say that; and ModTrap takes whatever it says without failing."""
+        import json
+        helper = str(Path(toolrun.__file__).with_name("uia.py"))
+        got = subprocess.run([sys.executable, "-I", helper, "press", "Synthesis.exe", "GoButton"], capture_output=True, timeout=30)
+        answer = json.loads(got.stdout.decode().strip())
+        self.assertEqual((answer["pressed"], got.returncode), (False, 0))
+        self.assertEqual(json.loads(subprocess.run([sys.executable, "-I", helper], capture_output=True, timeout=30).stdout.decode())["pressed"], False)
+        self.assertEqual(toolrun.press_button("Synthesis.exe", "GoButton")["pressed"], False)
+        self.assertEqual(toolrun.press_spec("Synthesis", "C:/T/Synthesis.exe")["press"]["id"], "GoButton")
+        self.assertIsNone(toolrun.press_spec("Pandora", "C:/T/Pandora.exe"))            # it has switches: no button to press
+
+    def test_the_owner_can_keep_every_tool_theirs_to_work(self) -> None:
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"), log_lines=["x [INF] Mutagen version: 0.10.0"])
+        seen, closed = self._pressing(tool_dir)
+        self.api.post("/api/settings", {"name": "tools_self", "value": False})
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        time.sleep(0.6)
+        t = self.api.state()["tool"]
+        self.assertEqual((t["state"], t["drive"], t["by_itself"], seen["looks"]), ("running", "", False, 0))
+        closed.write_bytes(b"")
+        self.ended()
 
     def test_only_a_tool_of_this_mo2_and_one_at_a_time(self) -> None:
         with self.assertRaises(Bad):

@@ -26,6 +26,43 @@ log = logbook.get("tool")
 TIME_LIMIT = 8 * 60 * 60
 WATCH_FILES = 60_000
 MO2_STAYS = 30                 # seconds a MO2 whose message was closed may take to go, before the run counts as ended
+PRESS_AFTER = 8.0              # seconds a tool's window is given before ModTrap looks for its run button
+PRESS_EVERY = 4.0              # and between two looks
+PRESS_LIMIT = 300.0            # after this long without a button that can be pressed, the tool is left to the owner
+PRESS_AGAIN = 60.0             # a press after which the tool's log shows no run begun is taken as not having landed
+CLOSE_AFTER = 3.0              # seconds after the tool's log says its run has finished, before its window is asked to close
+HELPER_SECONDS = 45
+
+
+def press_button(image: str, automation_id: str) -> dict:
+    """Presses one button in a tool's window, by the helper program `uia.py` (WHY§93): its own process, so that
+    nothing it does wrong can end ModTrap. {"pressed", "enabled", "candidates", "why"}; never raises."""
+    import json
+    import subprocess
+    import sys
+    helper = Path(__file__).with_name("uia.py")
+    try:
+        got = subprocess.run([sys.executable, "-I", str(helper), "press", image, automation_id], capture_output=True,
+                             timeout=HELPER_SECONDS, stdin=subprocess.DEVNULL)
+        line = got.stdout.decode("utf-8", "replace").strip().splitlines()[-1] if got.stdout.strip() else ""
+        data = json.loads(line) if line else {}
+        if isinstance(data, dict) and "pressed" in data:
+            return data
+        return {"pressed": False, "enabled": None, "candidates": 0,
+                "why": "the helper that presses the button ended without an answer (code %d)" % got.returncode}
+    except subprocess.TimeoutExpired:
+        return {"pressed": False, "enabled": None, "candidates": 0, "why": "the helper that presses the button did not answer in time"}
+    except (OSError, ValueError) as e:
+        return {"pressed": False, "enabled": None, "candidates": 0, "why": "the helper that presses the button could not be run: " + logbook.why(e)}
+
+
+def press_spec(title: str, binary: str) -> dict | None:
+    """For a tool that has no switch to run by itself, only a button: which button, and the lines of its own log
+    that say its run began and ended (data, `tools.json`, "self_run" with "press")."""
+    name, _kind = tools.of_executable(title, binary)
+    entry = next((t for t in tools.load() if t["tool"] == name), {})
+    spec = entry.get("self_run")
+    return spec if isinstance(spec, dict) and isinstance(spec.get("press"), dict) and spec["press"].get("id") else None
 
 
 class Refused(Exception):
@@ -74,7 +111,9 @@ class ToolJob:
     def __init__(self, inst: Instance, title: str, watch_files: list[Path], *,
                  launcher: Callable = dryrun.launch, running: Callable[[str], bool | None] = dryrun.image_running,
                  poll: float = 1.0, self_run: bool = False, dismiss: Callable[[str], bool] = winauto.close_message,
-                 grace: float = dryrun.GONE_GRACE, keep_logs: Path | None = None):
+                 grace: float = dryrun.GONE_GRACE, keep_logs: Path | None = None,
+                 presser: Callable[[str, str], dict] = press_button, closer: Callable[[str], bool] | None = None,
+                 press_times: tuple[float, float, float, float, float] = (PRESS_AFTER, PRESS_EVERY, PRESS_LIMIT, PRESS_AGAIN, CLOSE_AFTER)):
         exe = next((e for e in inst.executables if e.title == title), None)
         if exe is None:
             raise Refused("“%s” is not in this MO2's list of tools" % title)
@@ -88,6 +127,15 @@ class ToolJob:
         # words, or raises Refused when the start is not to go on.
         self.prepare: Callable[[Callable[[float], bool]], list[str]] | None = None
         self.arguments, self.switches = self_run_arguments(title, exe.binary, exe.arguments) if self_run else ("", [])
+        # A tool run by pressing its own button, and closed when its own log says the run is over (WHY§93).
+        self._press = press_spec(title, exe.binary) if self_run else None
+        self._presser, self._closer, self._press_times = presser, closer, press_times
+        self.drive = "wait" if self._press else ""           # wait, pressed, finished, left to the owner
+        self.drive_note = ""
+        self._launched = 0.0
+        self._next_look = self._pressed_at = self._finished_at = 0.0
+        self._presses = 0
+        self._close_asked = False
         name, _kind = tools.of_executable(title, exe.binary)
         # What is known about this tool closing without having written anything (data, TL01§16): said then, as a hint.
         self.hint = str(next((t for t in tools.load() if t["tool"] == name), {}).get("wrote_nothing", ""))
@@ -125,8 +173,72 @@ class ToolJob:
     def public(self) -> dict:
         return {"title": self.title, "state": self.state, "message": self.message, "output_mod": self.output_mod,
                 "seconds": int((self.ended or time.time()) - self.started), "changed": self.changed[:200],
-                "changed_count": len(self.changed), "by_itself": bool(self.switches), "profile": self.inst.profile,
+                "changed_count": len(self.changed), "by_itself": bool(self.switches) or self.drive in ("wait", "pressed", "finished"),
+                "drive": self.drive, "drive_note": self.drive_note, "profile": self.inst.profile,
                 "hint": self.hint if self.state == "done" and not self.changed else "", "own_log": self.own_log, "before": list(self.before)}
+
+    def _own_log(self) -> str:
+        spec = toollog.spec_for(self.title, self._binary)
+        if spec is None:
+            return ""
+        folder = Path(self._binary.replace("\\", "/")).parent / str(spec["folder"])
+        path = toollog.newest(folder, str(spec.get("pattern", "*.log")), self._launched)
+        try:
+            return toollog.read(path) if path is not None else ""
+        except OSError:
+            return ""
+
+    def _drive_on(self) -> None:
+        """One step of running a tool by its own button (WHY§93): look for the button and press it once it can be
+        pressed; then read the tool's own log for the lines that say a run began and that it ended; then ask the
+        window to close. Whatever does not go as known leaves the tool open and to the owner: nothing is guessed."""
+        after, every, limit, again, close_after = self._press_times
+        now = time.time()
+        spec = self._press or {}
+        if self.drive == "wait":
+            if now - self._launched < after or now < self._next_look:
+                return
+            self._next_look = now + every
+            got = self._presser(self.image, str(spec["press"]["id"]))
+            if got.get("pressed"):
+                self._presses += 1
+                self.drive, self._pressed_at = "pressed", now
+                self.drive_note = "ModTrap pressed its run button; it closes when its own log says the run has finished"
+                log.info("“%s” was ready: ModTrap pressed its run button%s", self.title,
+                         " again" if self._presses > 1 else "")
+            elif now - self._launched > limit:
+                self.drive = "left to the owner"
+                self.drive_note = "ModTrap did not press its run button (%s). It is yours to run, then close." % (
+                    got.get("why") or "it could not be pressed")
+                log.warn("“%s”: %s", self.title, self.drive_note)
+            else:
+                self.drive_note = "waiting for its run button: " + str(got.get("why") or "not ready yet")
+        elif self.drive == "pressed":
+            text = self._own_log()
+            began = str(spec.get("began", ""))
+            ended = str(spec.get("ended", ""))
+            at = text.rfind(began) if began else -1
+            if at >= 0 and ended and text.find(ended, at) >= 0:
+                self.drive, self._finished_at = "finished", now
+                self.drive_note = "its own log says the run has finished; ModTrap closes it"
+                log.info("“%s”: its own log says the run has finished", self.title)
+            elif at < 0 and now - self._pressed_at > again:
+                if self._presses < 3:
+                    self.drive, self._next_look = "wait", now                # the press did not land: look again
+                else:
+                    self.drive = "left to the owner"
+                    self.drive_note = ("ModTrap pressed its run button %d times and its log shows no run begun. It is "
+                                       "yours to run, then close." % self._presses)
+                    log.warn("“%s”: %s", self.title, self.drive_note)
+        elif self.drive == "finished" and not self._close_asked and now - self._finished_at >= close_after:
+            self._close_asked = True
+            try:
+                asked = bool(self._closer(self._binary)) if self._closer is not None else False
+            except Exception:
+                asked = False
+            if not asked:
+                self.drive_note = "its run has finished; its window did not take ModTrap's asking to close: close it"
+                log.warn("“%s”: %s", self.title, self.drive_note)
 
     def _run(self) -> None:
         try:
@@ -156,7 +268,11 @@ class ToolJob:
                 return
         before = _snapshot(self.places, self.files)
         cmd = [str(self.mo2), "-p", self.inst.profile, "run", "-e"] + (["-a", self.arguments] if self.switches else []) + [self.title]
-        if self.switches:
+        if self._press:
+            log.info("starting “%s” through MO2 (profile '%s'); it has no switch to run by itself, so ModTrap presses its "
+                     "run button once it is ready, and closes it when its own log says the run has finished",
+                     self.title, self.inst.profile)
+        elif self.switches:
             log.info("starting “%s” through MO2 (profile '%s') with its own switches to do its work and close by itself "
                      "(%s); ModTrap waits for it to close", self.title, self.inst.profile, " ".join(self.switches))
         else:
@@ -167,6 +283,7 @@ class ToolJob:
         except OSError as e:
             raise Refused("MO2 could not be started: " + logbook.why(e)) from None
         self.state = "running"
+        self._launched = time.time()
         seen, gone_since, closed_at = False, None, None
         while True:
             if self._stop.wait(self._poll):
@@ -177,6 +294,8 @@ class ToolJob:
             mo2_gone = proc.poll() is not None
             if alive:
                 seen, gone_since = True, None
+                if self.drive in ("wait", "pressed", "finished"):
+                    self._drive_on()
             elif mo2_gone and (alive is None or seen or time.time() - self.started > 30):
                 gone_since = gone_since or time.time()
                 if alive is None or time.time() - gone_since > self._grace:

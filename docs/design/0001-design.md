@@ -574,7 +574,9 @@ starts are refused, and the one go holds its place and takes its step again by i
    MO2 again once a demaster is in place (off); take script properties that point at the mod out (on, MT4);
    after a tool's run, retire ModTrap's copy of a plugin the tool made anew (on, WHY§80); after the demaster, start
    the tools that are to run again one after another (off, WHY§81); let a tool that can do so run and close by
-   itself, by switches of its own that ModTrap knows as data (on, MT25, WHY§84).
+   itself, by switches of its own that ModTrap knows as data, or, where a tool has only a button, by ModTrap
+   pressing it once it is ready and closing the window when the tool's log says the run is over (on, MT25, MT31,
+   WHY§84, WHY§93).
    Before the patcher framework starts, library versions that its own last log proves unfit for the program are
    set to the pair the program was built with, in its settings file, a copy kept first (on, MT27, WHY§89).
    And patchers its last log shows as not built are built first with the program opened by itself, outside MO2,

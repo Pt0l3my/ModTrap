@@ -144,6 +144,8 @@ class Api:
         self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
         self.dismiss = dryrun.winauto.close_message   # closes a message MO2 stops at after a run (MO01§9); replaced in tests
         self.direct_launcher = dryrun.launch   # starts a program by itself, outside MO2 (WHY§90); replaced in tests
+        self.button_presser = toolrun.press_button      # presses a tool's own run button (WHY§93); replaced in tests
+        self.press_times = (toolrun.PRESS_AFTER, toolrun.PRESS_EVERY, toolrun.PRESS_LIMIT, toolrun.PRESS_AGAIN, toolrun.CLOSE_AFTER)
         self.prebuild_times: dict = {}         # shorter waits, in tests
         self.presser = dryrun.winauto.press_module_selection_ok   # presses OK in xEdit's module selection (XE01§13)
 
@@ -509,7 +511,8 @@ class Api:
             try:
                 job = toolrun.ToolJob(inst, title, made, launcher=self._launch, running=self.running, poll=self.poll,
                                       self_run=self.settings().get("tools_self") is not False, dismiss=self.dismiss,
-                                      keep_logs=self.store.dir(self.session.id) / "tool-logs" if self.session else None)
+                                      keep_logs=self.store.dir(self.session.id) / "tool-logs" if self.session else None,
+                                      presser=self.button_presser, closer=self.ask_close, press_times=self.press_times)
             except toolrun.Refused as e:
                 raise Bad(str(e)) from None
 

@@ -23,7 +23,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
 - **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
   right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
-  by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning).
+  by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning). MT31 (a tool with only a button
+  is run by ModTrap pressing it).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -615,4 +616,20 @@ still ongoing."
 **Decision.** ModTrap tells what reading and scanning of its own is going; until all of it has finished, what would
 change the modlist or start a program is greyed on the page and refused by the program, and the one go waits and
 goes on by itself (WHY§92, DESIGN§18).
+
+## MT31
+
+**A tool with no switch, only a button, is run by ModTrap pressing it** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "it done everything until synthesis needed to run (even started, ran and closed Pandora), but it
+did not start synthesis. It seems Synthesis was ready to run (no errors this time)."
+
+**Settled under that freedom** (WHY§93, TL01§21; the owner may overrule any of it):
+
+- ModTrap presses the tool's run button, named as data, once the tool has it ready, and never while it is greyed.
+- It asks the tool's window to close when the tool's own log says the run has come to its end; never because the
+  tool has gone quiet. This amends MT25 as MT28 did.
+- Any doubt (no such button, several, a press that starts nothing, no end in the log) leaves the tool open and
+  the owner's, with the reason said.
+- The same setting as for tools with switches turns it off.
 

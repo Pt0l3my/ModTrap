@@ -342,3 +342,30 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`.
 - **LIKELY.** A patcher built in a start outside MO2 is passed over in the next start through MO2: nothing the
   check looks at differs between the two.
 
+## 21. Running the patcher framework without a hand on it: what there is and is not (2026-11-22)
+
+Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`, and in the owner's log of version 0.35.5.
+
+- **FACT (`Synthesis.Bethesda.GUI/Args/StartCommand.cs`).** The window program's only command opens a profile
+  (§16). No command or switch of it runs the patchers.
+- **FACT (`Synthesis.Bethesda.CLI/Program.cs:17-30`, `Synthesis.Bethesda.Execution/Commands/RunPatcherPipelineCommand.cs:11-52`).**
+  A separate command-line program has `run-pipeline`, which wants an output folder and the settings file's path.
+- **FACT (`.github/workflows/publish.yml:47-55`).** A release is made from the window program alone, packed as
+  one archive. The command-line program is not in it.
+- **FACT (`Synthesis.Bethesda.GUI/Views/Config/MainConfigView.xaml:197-199`,
+  `…/Group/GroupConfigListingView.xaml:309`).** The button that runs every group is named `GoButton` in the
+  window's own description; each group's own run button, inside the list of groups, has the same name. No
+  keyboard shortcut is declared for either.
+- **FACT (`Synthesis.Bethesda.Execution/Running/Runner/PrintRunStart.cs:22`,
+  `Synthesis.Bethesda.GUI/ViewModels/Profiles/Running/RunVm.cs:259-297`).** A run logs
+  "================= Starting Pipeline Run =================" at its start, and "Finished patcher run" when the
+  run has come to its end, whether it went well or not.
+- **FACT (the owner's log, version 0.35.5, started through MO2 after its patchers had been built outside MO2).**
+  For each of thirteen patchers: "Short circuiting … compilation because meta matched". One "Error checking
+  runnability … Access is denied", reported three times as a blocking error within eleven seconds; then
+  "State returned success!" thirteen times and "No global error", and nothing more until it was closed.
+- **LIKELY (Windows' UI Automation, from its published interface; not read in a file here).** A window of this
+  kind exposes each named control under that name as its "automation id", with its kind (button, list item,
+  window) and whether it is enabled, and a button can be pressed through it. ModTrap's helper goes by exactly
+  these, and checks itself before pressing (WHY§93). Not yet seen working on a PC.
+
