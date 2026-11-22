@@ -361,6 +361,12 @@ time limit. The step is there also when no file names the plugin, and states wha
 scanner could not list or read is named, and the step is then the owner's. The Tools tab shows what the scanner
 covers and the frameworks installed.
 
+**Animation replacers, and the log (MT35, MT36, WHY§99).** The scanner also walks all of `meshes` for the folders
+of animation replacers and reads their condition files. Which condition a mention belongs to is read from the
+file's structure: one that does not hold once the mod is gone is ModTrap's; one that can hold then, or one ModTrap
+does not know, is the owner's, with the line and what to do. Every look is written to the log: what was listed
+and read, the time, and each folder or file that failed, with its reason. A scanner that fails is said as failed.
+
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
 plugins concerned. Once it is done the steps are stated from what was read. A verdict on a tool does not change

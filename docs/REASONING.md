@@ -121,6 +121,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 96 | 2026-11-22 | A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press | FACT | #revert #page |
 | 97 | 2026-11-22 | Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open | DECIDED | #steps #page #tools |
 | 98 | 2026-11-22 | A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed | DECIDED | #steps #tools #page |
+| 99 | 2026-11-22 | The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure | DECIDED | #steps #tools #log |
 
 ## Entries
 
@@ -2457,3 +2458,40 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests with invented files (the winner by priority, Overwrite above all, a disabled mod, each place, a
   name across two pieces of a large file, a file read again only when changed, the step when a file was passed
   over and when none names the plugin); the card in a browser.
+
+### 99. The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure
+
+`2026-11-22` · DECIDED · `#steps #tools #log` · refs: MT35, MT36, MT34, TL01§26, WHY§98, WHY§95, DESIGN§14
+
+- The owner, to MT35 and more: "yes, add the animation folders to the scanner, and make sure the scanner reports
+  properly in logs so you can tell if it works and if it doesn't which files failed."
+- FACT (TL01§26). The animation replacer walks the whole of `meshes` for folders of its two names, wherever they
+  lie. So does the scanner now, for every mod in force: folders are found by name, and inside them every settings
+  file is listed to the end. In the older layout a folder named after a plugin is itself a mention; the scanner
+  records it as one.
+- METHOD. The walk of `meshes` lists very many folders. A folder that held no folder when it was last listed, and
+  has not changed since (by its date, which changes when something is added to it or taken from it), is passed
+  by. An invented list of 1,200 mods with 690,000 files under `meshes` is walked in 0.7 s here, and in 0.3 s the
+  second time. The owner's disk will differ; the log states the time.
+- REJECTED: taking every line of a condition file that names the plugin as settled by the replacer. Read
+  condition by condition (TL01§26), 43 of its conditions on a thing do not hold once the thing is gone, which is
+  right: nobody has the thing. But the one on a scene compares with nothing and then holds for everyone who is in
+  no scene, and the one on an enchantment can hold for an enchantment that is built on no other. An animation
+  meant for one case could then be used generally. And a condition of another program's is not known at all.
+- DECIDED. ModTrap reads which condition a mention belongs to from the file's own structure (the JSON tree, also
+  through conditions inside one another; in the older text file, the name at the start of the line). A condition
+  among the 43: settled, ModTrap's. One of the two, or of an unknown name, or a file that is not sound, or a
+  mention outside any condition: the owner's, with the line and what to do. Where several mentions share a line,
+  the least settled counts.
+- The verdict holds only while that replacer's program file is installed: another program that uses the same
+  files was not read, and its files are then the owner's.
+- DECIDED (MT36). The scanner writes to the log, under its own name: sources and folders listed, files by where
+  they lie, files read now and remembered, megabytes, the time of the listing and of the whole look, and
+  "the look is whole" or "NOT whole". Each failure is a line: mod, path inside the mod, reason. It checks that
+  the files in force equal those read plus those not read. A scanner that raises is caught, logged, and shown as
+  failed; the step is then the owner's and the demaster is not called checked.
+- Also: a file that named the plugin when scanned and cannot be opened for its lines is kept as one to look at,
+  where before it would have dropped out in silence.
+- Checked: tests with invented files (folders at any depth, the older layout's folder, conditions nested, on one
+  line, unknown, unsound; the two unsettled; a file and a folder that cannot be opened and what the log says; a
+  second look that fails the same way; a scanner that raises); the card and a whole demaster in a browser.

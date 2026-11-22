@@ -1572,8 +1572,6 @@ class Api:
         finally:
             self._scanning -= 1
         out = census.public(c)
-        log.info("scanner: %d settings file(s) in force, %d framework program(s), %d kind(s) of settings file, in %.1f s",
-                 out["files"], len(out["frameworks"]), len(out["kinds"]), out["seconds"])
         self._lists["scanner"] = (m, out)
         return out
 

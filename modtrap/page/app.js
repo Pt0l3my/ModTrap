@@ -358,21 +358,27 @@ function renderToolsScan() {
     el("p", { class: "dim", text: "Every settings file that is in force in the modlist, the winning copy of each as the game sees it, and the frameworks that read them while the game runs. ModTrap makes this same scan by itself for the steps of a demaster, and again after it; here you can see what it covers." })];
   if (d) {
     if (state.toolsScanFor !== state.loaded) kids.push(el("p", { class: "would-needs", text: "The modlist has been read again since this was made: press “Scan again”." }));
+    if (d.failed) kids.push(el("p", { class: "would-needs", text: "The scanner failed (" + d.failed + ") and looked through nothing. The log says more." }));
+    const places = Object.entries(d.by_place || {}).sort((x, y) => y[1] - x[1]).map(([place, n]) => num(n) + " in " + (place === "top folder" ? "a mod's top folder" : place));
     kids.push(el("p", { text: num(d.files) + " settings file" + (d.files === 1 ? "" : "s") + " in force, in the game's folder, " + plural(Math.max(0, d.mods - 2), "enabled mod") + " and Overwrite"
       + (d.hidden ? ", not counting " + num(d.hidden) + " hidden by a mod of higher priority" : "") + ". " + num(d.read) + " read to the end; " + num(d.naming) + " name a plugin of the modlist. It took " + d.seconds + " s." }));
-    kids.push(el("p", { class: "dim small", text: "Looked through: the top folder of each mod, and to their end the folders " + d.places.join(", ") + ". Files ending in .ini, .json, .toml, .yaml, .yml or .txt." }));
+    if (places.length) kids.push(el("p", { class: "dim small", text: "Where they lie: " + places.join(" · ") + "." + (d.tree_folders ? " " + plural(d.tree_folders, "folder") + " of animation replacers found." : "") }));
+    kids.push(el("p", { class: "dim small", text: "Looked through: the top folder of each mod; to their end the folders " + d.places.join(", ")
+      + (d.trees || []).map((t) => "; and all of " + t.under + " for folders named " + t.folders.join(" or ") + ", wherever they lie").join("")
+      + ". Files ending in .ini, .json, .toml, .yaml, .yml or .txt. Every look is written to the Log, with each folder or file that failed and why." }));
     const missed = [];
-    if (d.cut_mods.length) missed.push("Not listed to the end: " + d.cut_mods.join(", "));
-    if (d.unreadable) missed.push(num(d.unreadable) + " could not be opened: " + d.unreadable_examples.join("; "));
-    if (d.too_large) missed.push(num(d.too_large) + " too large to be a settings file, not read: " + d.too_large_examples.join("; "));
-    kids.push(missed.length ? el("div", { class: "would-needs" }, ...missed.map((t) => el("div", { text: t })))
+    if (d.cut) missed.push(num(d.cut) + " folder" + (d.cut === 1 ? "" : "s") + " not listed to the end: " + d.cut_mods.join("; ") + (d.cut > d.cut_mods.length ? "; … the Log names them all" : ""));
+    if (d.unreadable) missed.push(num(d.unreadable) + " could not be opened: " + d.unreadable_examples.join("; ") + (d.unreadable > d.unreadable_examples.length ? "; … the Log names them all" : ""));
+    if (d.too_large) missed.push(num(d.too_large) + " too large to be a settings file, not read: " + d.too_large_examples.join("; ") + (d.too_large > d.too_large_examples.length ? "; … the Log names them all" : ""));
+    if (!d.failed) kids.push(missed.length ? el("div", { class: "would-needs" }, ...missed.map((t) => el("div", { text: t })))
       : el("p", { class: "would-record", text: "Nothing was passed over: every folder was listed to its end and every file read." }));
     const known = d.frameworks.filter((f) => f.read_by_modtrap), other = d.frameworks.filter((f) => !f.read_by_modtrap);
     kids.push(el("h3", { text: "Settings files by kind" }));
-    if (!d.kinds.length) kids.push(el("p", { class: "dim", text: "No settings file here is named the way a distributor's is (a name ending in _WORD.ini)." }));
+    if (!d.kinds.length) kids.push(el("p", { class: "dim", text: "No settings file here is of a kind with a name of its own (a name ending in _WORD.ini, or a condition file of an animation replacer)." }));
     else kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Files named" }), el("th", { text: "In force" }), el("th", { text: "Read by ModTrap" }))),
-      el("tbody", {}, ...d.kinds.map((k) => el("tr", {}, el("td", {}, el("span", { class: "mono", text: "…" + k.kind })), el("td", { text: num(k.files) }),
-        el("td", { class: k.read_by_modtrap ? "" : "dim", text: k.read_by_modtrap ? "yes, line by line: " + k.framework : "found if it names the plugin, then left to you to judge" }))))));
+      el("tbody", {}, ...d.kinds.map((k) => el("tr", {}, el("td", {}, el("span", { class: /^…/.test(k.kind) ? "mono" : "", text: k.kind })), el("td", { text: num(k.files) }),
+        el("td", { class: k.read_by_modtrap ? "" : "dim", text: k.read_by_modtrap ? "yes, line by line: " + k.framework
+          : "found if it names the plugin, then left to you to judge" + (k.why_not ? " (" + k.framework + ": " + k.why_not + ")" : "") }))))));
     kids.push(el("h3", { text: "Frameworks installed" }));
     kids.push(el("p", { class: "dim small", text: "Programs that work inside the game, by their files in SKSE/Plugins of the enabled mods: " + num(d.frameworks.length) + "." }));
     if (known.length) kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Framework" }), el("th", { text: "Program file" }), el("th", { text: "In mod" }))),
@@ -1862,7 +1868,7 @@ function stepItem(it) {
     (it.look || []).length ? el("div", { class: "look" },
       it.path ? el("p", {}, "The file: ", el("span", { class: "mono", text: it.path }), copyButton(it.path, "The file's path")) : null,
       ...it.look.map((ln) => el("div", { class: "look-line" },
-        el("p", {}, el("b", { text: "Line " + ln.n + ": " }), el("span", { class: "mono", text: ln.text })),
+        el("p", {}, ln.n ? el("b", { text: "Line " + ln.n + ": " }) : null, el("span", { class: ln.n ? "mono" : "", text: ln.text })),
         el("p", { class: "dim", text: "What it means: " + ln.means + "." }),
         ln.todo ? el("p", { text: "What to do: " + ln.todo }) : null))) : null,
     it.evidence ? evidenceFold(it.evidence) : null);
