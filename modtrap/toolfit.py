@@ -152,6 +152,147 @@ def apply(folder: Path, found: list[dict], keep_in: Path) -> list[dict]:
     return [dict(f, kept=kept.name) for f in done]
 
 
+# --- building the patchers outside MO2 (MT28, WHY§90) ------------------------------------------------------------------
+
+_META = re.compile(r"MetaPath = (?P<p>[^,\r\n]+?Build\.meta)")
+_BUILD_ERRORS = (("a library that does not fit (NU1202)", re.compile(r"error NU1202: Package Mutagen\.")),
+                 ("the compiler crashing", re.compile(r"\"csc\.exe\" exited with code -1073741819")),
+                 ("Windows refusing to start the build program", re.compile(r"Win32Exception \(5\): Access is denied")),
+                 ("an error in a patcher's own code or project", re.compile(r"\berror (?:CS|NETSDK)\d+")))
+QUIET_DONE = 10.0            # seconds the log must have stood still, with every patcher built, to count as done
+QUIET_FAILED = 30.0          # and with build errors in it, to count as failed
+QUIET_FEW = 120.0            # and with fewer patchers named than the settings file has, to stop waiting for more
+PREBUILD_LIMIT = 45 * 60
+CLOSE_WAIT = 30.0
+
+
+def build_records(text: str) -> list[str]:
+    """The record file of each patcher build the log names: Synthesis writes it once the patcher is built, and
+    takes the build as done the next time when the record still matches (TL01§20)."""
+    out: list[str] = []
+    for m in _META.finditer(text):
+        p = m.group("p").strip()
+        if p not in out:
+            out.append(p)
+    return out
+
+
+def build_errors(text: str) -> list[str]:
+    out = []
+    for name, rx in _BUILD_ERRORS:
+        n = sum(1 for line in text.split("\n") if rx.search(line[:4000]))
+        if n:
+            out.append("%d line(s) of %s" % (n, name))
+    return out
+
+
+def git_patchers(folder: Path) -> int:
+    """How many patchers the settings file has that Synthesis builds itself and that are switched on, in groups
+    that are switched on: as many builds as a start of Synthesis asks for."""
+    got = _load(folder)
+    n = 0
+    for prof in (got[0]["Profiles"] if got else []):
+        for g in (prof.get("Groups") or [] if isinstance(prof, dict) else []):
+            if not isinstance(g, dict) or g.get("On") is False:
+                continue
+            n += sum(1 for x in g.get("Patchers") or [] if isinstance(x, dict) and x.get("On") is not False
+                     and x.get("RemoteRepoPath"))
+    return n
+
+
+def unbuilt(folder: Path) -> dict | None:
+    """What the program's newest log says is not built: {"log", "named", "missing"} when it names patcher builds
+    whose record file is not there (a failed build leaves none), else None."""
+    spec = toollog.spec_for(TOOL, TOOL.lower() + ".exe")
+    if spec is None:
+        return None
+    path = toollog.newest(folder / str(spec["folder"]), str(spec.get("pattern", "*.log")), 0.0)
+    if path is None:
+        return None
+    try:
+        named = build_records(toollog.read(path))
+    except OSError:
+        return None
+    missing = [p for p in named if not os.path.isfile(p)]
+    return {"log": path.name, "named": len(named), "missing": len(missing)} if missing else None
+
+
+def prebuild(binary: str, *, launcher, closer, stopped, poll: float = 1.0, limit: float = PREBUILD_LIMIT,
+             quiet: tuple[float, float, float] = (QUIET_DONE, QUIET_FAILED, QUIET_FEW), close_wait: float = CLOSE_WAIT,
+             clock=time.time) -> dict:
+    """Opens the program by itself, outside MO2, so that it builds its patchers where nothing stands between it
+    and the compiler; waits until its own log and the build records say every patcher is built, or that a build
+    failed; then asks its window to close, as a click on its X does. Nothing in it is pressed: no patcher is run.
+
+    The program's settings file is the same after as before: if opening it changed the file's content, the file as
+    it was is put back. Returns {"ok", "built", "named", "errors", "log", "seconds", "closed", "settings_put_back",
+    "why"}."""
+    folder = Path(binary.replace("\\", "/")).parent
+    spec = toollog.spec_for(TOOL, TOOL.lower() + ".exe") or {"folder": "logs"}
+    logs = folder / str(spec["folder"])
+    got = _load(folder)
+    before = (got[0], got[1]) if got else None
+    expected = git_patchers(folder)
+    start = clock()
+    out = {"ok": False, "built": 0, "named": 0, "errors": [], "log": "", "seconds": 0, "closed": False,
+           "settings_put_back": False, "why": ""}
+    proc = launcher([binary], str(folder))
+    size, still_since = -1, clock()
+    try:
+        while True:
+            if stopped(poll):
+                out["why"] = "stopped"
+                break
+            path = toollog.newest(logs, str(spec.get("pattern", "*.log")), start)
+            text = ""
+            if path is not None:
+                try:
+                    text = toollog.read(path)
+                    out["log"] = path.name
+                except OSError:
+                    text = ""
+            if len(text) != size:
+                size, still_since = len(text), clock()
+            still = clock() - still_since
+            named = build_records(text)
+            built = [p for p in named if os.path.isfile(p)]
+            out["named"], out["built"], out["errors"] = len(named), len(built), build_errors(text)
+            if named and len(built) == len(named) and still >= quiet[0] and (len(named) >= expected or still >= quiet[2]):
+                out["ok"] = True
+                break
+            if out["errors"] and still >= quiet[1]:
+                out["why"] = "a build failed"
+                break
+            if proc.poll() is not None:
+                out["ok"] = bool(named) and len(built) == len(named)
+                out["why"] = "" if out["ok"] else "it was closed before its patchers were built"
+                break
+            if clock() - start > limit:
+                out["why"] = "its patchers were not built after %d minutes" % (limit // 60)
+                break
+    finally:
+        if proc.poll() is None:
+            try:
+                closer(binary)
+            except Exception:
+                pass
+            end = clock() + close_wait
+            while proc.poll() is None and clock() < end:
+                time.sleep(min(max(poll, 0.02), 0.5))
+        out["closed"] = proc.poll() is not None
+        out["seconds"] = int(clock() - start)
+        # Opening the program must leave its settings as they were: if the file says something else now, it goes back.
+        if before is not None and out["closed"]:
+            now = _load(folder)
+            if now is None or now[0] != before[0]:
+                try:
+                    paths.write_atomic(folder / SETTINGS, before[1])
+                    out["settings_put_back"] = True
+                except OSError:
+                    pass
+    return out
+
+
 def is_tool(title: str, binary: str) -> bool:
     return tools.of_executable(title, binary)[0] == TOOL
 
@@ -164,4 +305,5 @@ def words(f: dict) -> str:
                 f["now"]["mutagen"], f["now"]["synthesis"]))
 
 
-__all__ = ["apply", "check", "is_tool", "log_facts", "profiles", "words"]
+__all__ = ["apply", "build_errors", "build_records", "check", "git_patchers", "is_tool", "log_facts", "prebuild",
+           "profiles", "unbuilt", "words"]

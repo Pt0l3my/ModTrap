@@ -296,7 +296,7 @@ class DemasterThroughThePage(unittest.TestCase):
     def test_the_owners_settings_are_kept_and_only_known_ones(self) -> None:
         self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
                                                         "follow": True, "script_props": True, "retire_copies": True,
-                                                        "auto_tools": False, "tools_self": True, "tool_versions": True})
+                                                        "auto_tools": False, "tools_self": True, "tool_versions": True, "tool_prebuild": True})
         self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
         self.assertTrue(self.api.state()["settings"]["auto_go"])
         for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):
@@ -601,6 +601,59 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual({k: (pdir / k).read_bytes() for k in lists_before}, lists_before)
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["unfinished"], [])
         self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "revert finished")
+
+    def test_a_tools_run_counts_for_the_demaster_in_place_and_no_longer_after_a_revert(self) -> None:
+        """MT29, WHY§91: what makes a tool's step done is ModTrap's own note of the tool's run, kept with the demaster
+        that was in place. No demaster in place, no note; a Revert takes it away; a new demaster starts afresh."""
+        ch = self.api.changes
+        ch.tool_ran("Invented Tool", 3)                                   # nothing in place: nothing to note it with
+        self.assertEqual(ch.tools_run(), {})
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        self.assertEqual(ch.tools_run(), {})
+        ch.tool_ran("Invented Tool", 0)                                   # closed without output: not a run that counts
+        self.assertEqual(ch.tools_run(), {})
+        ch.tool_ran("Invented Tool", 3)
+        self.assertEqual(ch.tools_run()["Invented Tool"]["files"], 3)
+        job = self.api.state()["demaster"]["jobs"][0]["job"]
+        self.api.post("/api/demaster/revert", {"job": job})
+        self.ready()
+        self.assertEqual(ch.tools_run(), {})                              # reverted: every tool is to run again next time
+
+    def test_nothing_is_started_while_modtrap_is_still_reading_or_scanning(self) -> None:
+        """WHY§92: ModTrap's own scans are told in its state, and while one goes every start is refused in words the
+        one go waits on. When it has finished, the same start goes through."""
+        import threading
+        from modtrap import steps
+        hold, real = threading.Event(), steps.look_deeper
+
+        def slow(*args, **kw):
+            hold.wait(10)
+            return real(*args, **kw)
+
+        steps.look_deeper = slow
+        try:
+            self.assertEqual(self.api.state()["working"], [])
+            self.api.post("/api/steps", {"mods": ["Bramble"]})                       # the page asks for the steps: a scan begins
+            self.assertEqual([w["key"] for w in self.api.state()["working"]], ["steps"])
+            self.assertIn("still at work", self.api.unsettled())
+            for path, body in (("/api/dryrun/start", {"mods": ["Bramble"]}), ("/api/demaster/start", {}),
+                               ("/api/tool/start", {"title": "xEdit"}), ("/api/probe/start", {})):
+                with self.assertRaises(Bad) as refused:
+                    self.api.post(path, body)
+                self.assertIn("still at work", str(refused.exception), path)
+        finally:
+            hold.set()
+            steps.look_deeper = real
+        for _ in range(300):
+            if not self.api.state()["working"]:
+                break
+            time.sleep(0.02)
+        self.assertEqual((self.api.state()["working"], self.api.unsettled()), ([], ""))
+        self.dry_run()                                                              # and now it starts
 
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()

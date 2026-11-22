@@ -22,7 +22,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
 - **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
-  right before it starts).
+  right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
+  by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning). MT31 (a tool with only a button
+  is run by ModTrap pressing it).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -568,4 +570,66 @@ to that version?"
   with the session, and records the change in the History.
 - A setting, on by default, turns it off; ModTrap then only says what it found.
 - It is a tool's own file, outside any demaster: Revert does not undo it.
+
+## MT28
+
+**Building the patcher framework's patchers outside MO2** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "can ModTrap also build the patchers outside MO2 automatically? is that safe?"
+
+**Settled under that freedom** (WHY§90, TL01§20; the owner may overrule any of it):
+
+- When the framework's own last log names patchers whose build is not there, ModTrap opens the program by
+  itself, outside MO2, waits until its log and its build records show every patcher built, asks its window to
+  close, and then starts it through MO2.
+- Nothing in the program is pressed; its settings file is put back if opening it changed the file; the program is
+  asked to close, never ended. This amends MT25 for this one case: ModTrap closes this window, because "done"
+  is a fact on disk and nothing was run in it.
+- If the build fails outside MO2 too, ModTrap makes no start through MO2 and says what the log holds.
+- A setting, on by default, turns it off.
+
+## MT29
+
+**A tool's step is done by a record, not by a tick** · *2026-11-22 · Decided by the owner*
+
+**Owner's words.** "it still says that pandora run is complete from previous session, that should be rerun after
+each demaster. since we already made these tool processes automatic, maybe we should remove the manual override, it
+just introduces more error."
+
+**Decision.** A tool's step has no "I have done this". It is done when ModTrap has noted, with the demaster in
+place, a run of that tool that it started and that wrote its output; every Revert and every new demaster asks for
+the tools again (WHY§91). A tick stays only where no such record can exist.
+
+**Note, 2026-11-22.** Asked whether a run the owner makes from MO2 itself should be told from the tool's output
+files and counted: "I don't care, we only want our ModTrap to do its job flawlessly, what the user does outside the
+ModTrap is irrelevant and can't take responsibility." So it is not built: only a run ModTrap started counts, and what
+is done outside ModTrap is neither looked for nor answered for.
+
+## MT30
+
+**Nothing is started while ModTrap is still reading or scanning** · *2026-11-22 · Decided by the owner*
+
+**Owner's words.** "can you also make ModTrap monitor its own loading, checking, scanning processes so the tools and
+features are greyed until those are done? I noticed that after launch I can launch a demaster even though scans are
+still ongoing."
+
+**Decision.** ModTrap tells what reading and scanning of its own is going; until all of it has finished, what would
+change the modlist or start a program is greyed on the page and refused by the program, and the one go waits and
+goes on by itself (WHY§92, DESIGN§18).
+
+## MT31
+
+**A tool with no switch, only a button, is run by ModTrap pressing it** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "it done everything until synthesis needed to run (even started, ran and closed Pandora), but it
+did not start synthesis. It seems Synthesis was ready to run (no errors this time)."
+
+**Settled under that freedom** (WHY§93, TL01§21; the owner may overrule any of it):
+
+- ModTrap presses the tool's run button, named as data, once the tool has it ready, and never while it is greyed.
+- It asks the tool's window to close when the tool's own log says the run has come to its end; never because the
+  tool has gone quiet. This amends MT25 as MT28 did.
+- Any doubt (no such button, several, a press that starts nothing, no end in the log) leaves the tool open and
+  the owner's, with the reason said.
+- The same setting as for tools with switches turns it off.
 

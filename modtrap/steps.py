@@ -295,11 +295,13 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str]) -> tuple[l
 # --- compiling the steps ------------------------------------------------------------------------------------------
 
 def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None, deep: dict | None = None,
-                  auto: bool = False, going: bool = False) -> dict:
+                  auto: bool = False, going: bool = False, tools_run: dict | None = None) -> dict:
     """The steps for taking `mod_names` out. `job` is the dry run's public state for the same mods, if there is
     one; `deep` is what `look_deeper` found (it takes seconds on a large list, so it is worked out once). `auto`
     says that ModTrap may change the modlist (it was started with the switch): the steps that "Demaster Selected"
-    carries out are then ModTrap's, not the owner's (WHY§57)."""
+    carries out are then ModTrap's, not the owner's (WHY§57). `tools_run` names the tools ModTrap has started, with
+    their output written, since the demaster in place was put in place ({title: {"when", "files"}}): that record
+    is what makes a tool's step done (WHY§91); None when ModTrap may not change anything, and so starts no tool."""
     inst = m.instance
     mods = [x for x in (inst.mod(n) for n in mod_names) if x is not None and x.kind == "mod"]
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)            # by file, enabled or not
@@ -630,6 +632,7 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         % (st["changed"], st["stake"]))
     clear_items: list[dict] = []
     wait_items: list[dict] = []
+    seen_by_run: set[str] = set()          # tool steps whose state is a record of ModTrap's, not a tick of the owner's
     for tool in sorted(verdict, key=fold):
         e = verdict[tool]
         names = titles_of(tool)
@@ -646,15 +649,23 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             when = known.get(tool, {}).get("reads_if", "")
             # Proof, or only "cannot be ruled out"? The title says which (WHY§73).
             to_be_sure = bool(e.get("unsure")) and e["unsure"] == len(e["run"])
+            ran = [(n, tools_run[n]) for n in names if n in (tools_run or {})]
             step("tool:" + tool, "both" if names else "you", "Run %s again%s" % (tool, ", to be sure" if to_be_sure else ""),
                  (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also + (
                      " A run of a patcher is short and changes nothing but its own output: when in doubt, run it."
                      if to_be_sure else "") + (
                      " A new run matters " + when + "; the evidence below shows which records these are."
                      if when else ""),
-                 "to do", [{"tool": n} for n in names] + evidence,
-                 note="Run it after the demaster. Only you can tell when this is done: tick it off." if names else
-                 "It is not in this MO2's list of tools; run it the way the modlist's own guide says.")
+                 "done" if ran else "to do", [{"tool": n} for n in names] + evidence,
+                 note=("It ran after this demaster was put in place: “%s”, %s, %d file(s) of its output written." % (
+                           ran[0][0], ran[0][1].get("when", "").replace("T", " "), ran[0][1].get("files", 0))) if ran else
+                 ("Done when a run of it that ModTrap started after the demaster was put in place has written its "
+                  "output. A Revert, or a new demaster, asks for a new run." if names and tools_run is not None else
+                  "Run it after the demaster. ModTrap was started without --allow-changes and starts no tool: tick it "
+                  "off when you have run it." if names else
+                  "It is not in this MO2's list of tools; run it the way the modlist's own guide says, and tick it off."))
+            if names and tools_run is not None:
+                seen_by_run.add("tool:" + tool)
         else:
             clear_items.append({"text": "%s: %s.%s" % (tool, "; ".join(e["clear"]), (" (" + does + ")") if does else ""),
                                 "evidence": e["details"]})
@@ -707,9 +718,10 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         for st in steps:
             if st["key"] in ("switch-off", "demaster", "disable") and st["state"] in ("to do", "waiting"):
                 st["state"], st["action"] = "going", ""
-    manual = {"mentions", "play"} | {s["key"] for s in steps if s["key"].startswith("tool:")}
+    # Ticked off by the owner: only what no record can show. A tool ModTrap starts is not among them (WHY§91).
+    manual = {"mentions", "play"} | {s["key"] for s in steps if s["key"].startswith("tool:") and s["key"] not in seen_by_run}
     for s in steps:
-        s["manual"] = s["key"] in manual           # nothing on disk can prove these: the owner ticks them off
+        s["manual"] = s["key"] in manual
     open_steps = [s for s in steps if s["state"] not in ("done", "not needed") and not s["manual"]]
     return {"mods": [x.name for x in mods], "trapped": trapped, "steps": steps, "complete": not open_steps,
             "deep": bool(deep), "contents": {k: v["count"] for k, v in deep.get("kinds", {}).items()},

@@ -342,8 +342,10 @@ A typical job's steps:
 9. *ModTrap:* verify the instance: the health check (§3), and the load order otherwise as it was.
 10. *You:* open MO2 and confirm it shows no missing-master warning; then play, and report anything odd.
 
-**Ticks.** "I have done this" on a tool's step or on the play test holds for the demaster in place: a Revert, or a
-new demaster, takes those ticks away (WHY§87).
+**Ticks, and a tool's step (MT29, WHY§91).** A tool that ModTrap can start has no tick: its step is done when
+ModTrap has noted a run of it, with its output written, since the demaster in place was put in place; a Revert or a
+new demaster asks for it again. "I have done this" is left for what no record can show (the play test, settings
+files to look at, a tool outside MO2's list), and a play-test tick goes with the demaster it was made for.
 
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
@@ -560,6 +562,10 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
 7. A demaster that is in place stays shown as done until Revert, or until a new one starts. A dry run of the modlist
    as it was before it was read again is not shown as this demaster's.
 
+**ModTrap's own work first (MT30, WHY§92).** The header says whether ModTrap is still reading or scanning, and what.
+Until it has finished, nothing that changes the modlist or starts a program is begun: those buttons are greyed, the
+starts are refused, and the one go holds its place and takes its step again by itself.
+
 ## 19. Settings, sections, and another modlist's MO2
 
 1. **Settings** (a tab of their own; kept in ModTrap's folder for every session; WHY§77). Each is a switch:
@@ -568,9 +574,13 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    MO2 again once a demaster is in place (off); take script properties that point at the mod out (on, MT4);
    after a tool's run, retire ModTrap's copy of a plugin the tool made anew (on, WHY§80); after the demaster, start
    the tools that are to run again one after another (off, WHY§81); let a tool that can do so run and close by
-   itself, by switches of its own that ModTrap knows as data (on, MT25, WHY§84).
+   itself, by switches of its own that ModTrap knows as data, or, where a tool has only a button, by ModTrap
+   pressing it once it is ready and closing the window when the tool's log says the run is over (on, MT25, MT31,
+   WHY§84, WHY§93).
    Before the patcher framework starts, library versions that its own last log proves unfit for the program are
    set to the pair the program was built with, in its settings file, a copy kept first (on, MT27, WHY§89).
+   And patchers its last log shows as not built are built first with the program opened by itself, outside MO2,
+   which ModTrap then closes before the start through MO2 (on, MT28, WHY§90).
    What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
 2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
    tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,

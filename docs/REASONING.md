@@ -112,6 +112,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 87 | 2026-11-22 | 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing | FACT | #revert #page #tools |
 | 88 | 2026-11-22 | A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's | DECIDED | #tools #page #session |
 | 89 | 2026-11-22 | Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof | DECIDED | #tools #safety #settings |
+| 90 | 2026-11-22 | The patcher framework's patchers are built outside MO2 before it is started through MO2, when its log shows them unbuilt; what makes that safe | DECIDED | #tools #safety #mo2 |
+| 91 | 2026-11-22 | A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist | DECIDED | #steps #tools #page |
+| 92 | 2026-11-22 | ModTrap tells its own reading and scanning; while any of it goes, nothing is started: greyed on the page, refused by the server, waited for by the one go | DECIDED | #page #process #safety |
+| 93 | 2026-11-22 | 0.3.21 on the owner's PC: versions set, patchers built outside MO2 and taken as built inside; the framework then waited for its run button, which ModTrap now presses, closing it on its log's word | DECIDED | #tools #mo2 #process |
 
 ## Entries
 
@@ -2146,3 +2150,141 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   kept a number).
 - Not checked: on the owner's PC; against a settings file of the owner's (none was at hand: the field names are
   from the source).
+- **Later (2026-11-22, the session file of 0.3.21).** Checked on the owner's PC: the profile was set from
+  0.54.4 and 0.36.6 to 0.53.1 and 0.35.5 before the start, with the copy kept (WHY§93).
+
+### 90. The patcher framework's patchers are built outside MO2 before it is started through MO2, when its log shows them unbuilt; what makes that safe
+
+`2026-11-22` · DECIDED · `#tools #safety #mo2` · refs: MT28, TL01§16, TL01§18, TL01§20, WHY§88, WHY§89, MT25, DESIGN§19
+
+- The owner: "can ModTrap also build the patchers outside MO2 automatically? is that safe?"
+- FACT (TL01§20). The framework builds a patcher when it is opened, in a folder of its own under the user's
+  temporary folder, not in the modlist. A build that succeeds leaves a record file beside it; a build about to be
+  made anew has its record deleted first. Asked again, the framework takes the build as done when the record
+  matches (the patcher's commit, the two library versions, the program's version, the built program still
+  there). MO2 plays no part in that. Its log names each patcher's record file when it sets out to build.
+- FACT (TL01§18). On the owner's PC building failed inside MO2 and, outside MO2, failed only for the versions.
+- DECIDED. Before ModTrap starts the framework through MO2: if the framework's newest log names patcher builds
+  whose record file is not there, ModTrap opens the program by itself (its program file, no arguments, no MO2),
+  and waits. Done: the new log names builds, every record named is there, the log has stood still for ten
+  seconds, and as many are named as the settings file has patchers switched on (or two minutes have passed
+  without more). Failed: build errors in the log and thirty seconds of stillness; or the window closed early;
+  or forty-five minutes. Then the window is asked to close, as a click on its X does, and only when the program
+  has gone and every patcher is built is it started through MO2. If the build failed outside MO2 too, no start
+  through MO2 is made: it would fail the same way, and the tool's card says what the log holds.
+- What makes it safe. Nothing in the program is pressed: no patcher runs, so nothing is written to the game's
+  folder or to the modlist. What the open program writes is its own: its log, the builds in the temporary
+  folder, and its settings file when it closes. The settings file is compared, by content, with how it was
+  before; if it says anything else, the file as it was is put back. The program is never ended, only asked to
+  close; one that stays is left to the owner. The one thing ModTrap cannot keep from happening is the owner
+  pressing Run in that window: the card says to leave it alone.
+- This is the one tool ModTrap closes (MT25 said none): here "done" is a fact on disk, and a window in which
+  nothing was run has no work to lose.
+- A setting, on by default, turns it off.
+- Not established: that the builds succeed outside MO2 on the owner's PC with the fitting versions (LIKELY,
+  WHY§88), and that version 0.35.5 words its log and keeps its records as the source read here does (its logs
+  show the record's name and its deletion, as the source has them).
+- Checked: the reading of the owner's four logs (13 records named in each, the errors of each); tests (built
+  outside, then started through MO2, the settings file put back after the program had changed it, nothing
+  opened the next time; a build that fails outside ends there with no start through MO2; the setting off).
+- Not checked: on the owner's PC.
+- **Later (2026-11-22, the session file of 0.3.21).** Checked on the owner's PC: 12 of 13 patchers were not
+  built; opened outside MO2, the program built all 13 in 37 seconds and closed when asked; started through MO2 it
+  took every one as built ("Short circuiting … because meta matched", thirteen times) (WHY§93).
+
+### 91. A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist
+
+`2026-11-22` · DECIDED · `#steps #tools #page` · refs: MT29, WHY§87, WHY§86, DESIGN§14, DESIGN§18
+
+- The owner, with a picture of 0.3.20 before a new demaster, the behaviour engine's step ticked "I have done
+  this": "it still says that pandora run is complete from previous session, that should be rerun after each
+  demaster. since we already made these tool processes automatic, maybe we should remove the manual override, it
+  just introduces more error."
+- FACT. WHY§87 took ticks away on a Revert or a new demaster, but only from the moment the page first kept which
+  demaster its ticks were for: a tick from before stayed until the next demaster was put in place. More to the
+  point, a tick is the owner's word, and the steps are to state facts (MT26).
+- DECIDED. When a tool that ModTrap started has closed with its output written, ModTrap notes the run with the
+  demaster that is in place (`tools-run.json` in that demaster's folder) and in the History. A tool's step is
+  done exactly when such a note exists for one of the tool's entries in MO2's list. No demaster in place: no
+  note. A Revert, or a new demaster, therefore asks for every tool again, by construction. The step has no tick
+  box, and the row of tools goes by the steps' own state.
+- Ticks stay only where no record of ModTrap's can exist: the play test, the settings files to look at, a tool
+  that is not in MO2's list (ModTrap cannot start it), and every tool when ModTrap was started without leave to
+  change anything (it starts none then). The page drops play-test and tool ticks whenever the demaster in place
+  is another than the one they were made for, also when it never kept which that was.
+- Not counted: a run the owner makes from MO2 itself. ModTrap does not see it; the step stays to do until the
+  tool is started from ModTrap. Telling such a run from the tool's output files (written after the demaster was
+  put in place) would be a fact too; not built.
+- Checked: tests (the note kept only with a demaster in place and gone with its Revert; the step done from the
+  note and each tool by its own; no tick for a tool ModTrap starts, a tick where it starts none); in a browser,
+  one go with the row of tools, the step done without a tick, to do again after Revert.
+- **Later (2026-11-22).** The owner on runs made outside ModTrap: not ModTrap's business (MT29's note). The
+  "not built" above stays not built, by decision.
+
+### 92. ModTrap tells its own reading and scanning; while any of it goes, nothing is started: greyed on the page, refused by the server, waited for by the one go
+
+`2026-11-22` · DECIDED · `#page #process #safety` · refs: MT30, WHY§71, DESIGN§18, DESIGN§4
+
+- The owner: "can you also make ModTrap monitor its own loading, checking, scanning processes so the tools and
+  features are greyed until those are done? I noticed that after launch I can launch a demaster even though scans
+  are still ongoing."
+- FACT. Only the reading of the modlist held a start back. ModTrap's other work of its own went on unseen: the
+  look into the ticked mods' folders and the tools' plugins for the steps (up to a minute or two on a large
+  list), the reading of what the tools made, the reading of mods to add, the unpacking of a dropped archive.
+  A demaster or a tool could be started in the middle of it.
+- Why it matters beyond tidiness: those scans hold plugin files open for reading; a tool that makes such a
+  plugin anew, or a Revert that puts one back, can be refused the file by Windows while it is held.
+- DECIDED. The server tells what it is at (`working` in its state, each with words). While the list is not empty,
+  or the modlist is being read: every start that changes the modlist or starts a program is refused, in words
+  the one go waits on ("still at work"; "being read" as before): the dry run, the demaster's start and its
+  putting in place, a tool, the probe, the record check, an add and its taking out, Revert and its finishing,
+  retiring a copy by hand. ModTrap's own retiring after a tool's run is not held back.
+- On the page: a chip in the header says "ModTrap is …" with what, or "ModTrap is ready"; the buttons that
+  would start any of the above are greyed and do nothing but say why; they open again by themselves. The one go
+  holds its place at each of its steps (before the dry run, at "Go ahead", before putting in place, before each
+  tool) and takes the step again when ModTrap is ready.
+- Which buttons: told by what they say, where the page makes its buttons, so that one made later is covered too.
+- Checked: a test (a scan held open: told in the state, four kinds of start refused in those words, the same
+  start accepted once it has finished); in a browser, with a scan slowed to five seconds: the chip, the greyed
+  button, a press meanwhile doing nothing, and the whole one go through the tool with scans in between.
+
+### 93. 0.3.21 on the owner's PC: versions set, patchers built outside MO2 and taken as built inside; the framework then waited for its run button, which ModTrap now presses, closing it on its log's word
+
+`2026-11-22` · DECIDED · `#tools #mo2 #process` · refs: MT31, MT25, TL01§21, WHY§84, WHY§89, WHY§90, DESIGN§19
+
+- The owner, with the session file of 0.3.21 and a picture of the framework's window without an error: "it done
+  everything until synthesis needed to run (even started, ran and closed Pandora), but it did not start synthesis.
+  It seems Synthesis was ready to run (no errors this time)."
+- FACT (the session file; the framework's own log is in it now). The behaviour engine ran by its switches and
+  closed. The framework's library versions were set right (WHY§89), its patchers built outside MO2 (WHY§90), and
+  inside MO2 it passed over every build. One check of a patcher was refused by Windows at first ("Access is
+  denied") and went through seconds later; the log then says "State returned success!" thirteen times and "No
+  global error". From there it stood open for six and a half minutes, ready, until the owner closed it. Nothing
+  was run, because nothing pressed its run button: ModTrap's words were "it is yours to work".
+- FACT (TL01§21). The framework's window has no switch that runs the patchers; its separate command-line program
+  has one, and is not part of what the framework's releases hand out. The run button has a name of its own in
+  the window; the log says when a run begins and when it has come to its end.
+- DECIDED (MT31). For a tool with no switch but a button, named as data: once the tool is open, ModTrap looks
+  for that button every few seconds and presses it only when it can be pressed (a greyed button is the tool
+  saying it is not ready). It then reads the tool's own log: when the line for a run's beginning is followed by
+  the line for its end, ModTrap asks the window to close, as a click on its X does. Whether the run did its work
+  is told as for every tool: by its output files, and by what its log holds.
+- Nothing is guessed, so each doubt leaves the tool open and to the owner, with the reason said: no such button
+  outside a list (the same name is on each group's own button, inside the list of groups); more than one; the
+  button greyed for five minutes; a press after which the log shows no run begun, three times over; a run whose
+  end the log never states (ModTrap does not close a tool because it has gone quiet: a long patcher is quiet).
+- How the press is made: through Windows' interface for assistive tools, which reaches a button that has no
+  window handle of its own (XE01§13's messages do not). It is spoken to from a helper program of ModTrap's own,
+  started for one press: a mistake there ends the helper, not ModTrap. The helper checks what it reads against
+  what the window system says (the window's process, that it is a window) before it presses, and otherwise
+  presses nothing. LIKELY right, not yet seen working: it was written from the interface's published layout
+  without a Windows PC to run it on.
+- MT25 ("ModTrap closes no tool") is amended by this as by WHY§90: a window is closed where "done" is a fact the
+  tool itself wrote down.
+- The tool's log reading no longer calls a blocking error at the start of a session an error: some pass by
+  themselves, as this one did. It says how often, and that the log's last lines tell how things stood.
+- Checked: tests with stand-ins (greyed at first and not pressed, then pressed, the run's end read, the window
+  asked to close, the output seen; a press that starts nothing made three times, then left to the owner and never
+  closed; a run without an end in the log never closed; the setting off; the helper answering in one line and
+  pressing nothing where it cannot).
+- Not checked: the press itself, on a PC. The owner's next run is its first.

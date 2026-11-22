@@ -138,8 +138,36 @@ function el(tag, attrs, ...kids) {
     else e[k] = v;
   }
   for (const k of kids) if (k != null) e.append(k);
+  if (tag === "button" && attrs && typeof attrs.text === "string" && GATED.test(attrs.text)) e.classList.add("gated");
   return e;
 }
+
+// ModTrap's own reading and scanning (WHY§92). While any of it goes, nothing that changes the modlist or starts a
+// program can be begun: the buttons that would are greyed and do nothing, and the header says what ModTrap is at.
+// The server refuses the same starts; the one go waits and takes its step again.
+const GATED = /^(Dry run through xEdit|Start the dry run|Demaster Selected|Demaster what is left|Go ahead|Put them in place|Put them back in place|Revert|Take it out again|Start it through MO2|Start the tools one after another|Run the probe|Remove the test mods|Add it for me|Retire ModTrap|Check through xEdit|Check again through xEdit)/;
+function settled() { return state.status === "ready" && !(state.working || []).length; }
+function atWork() {
+  if (state.status === "reading") return "reading the modlist";
+  return (state.working || []).map((w) => w.text).join("; ");
+}
+function showWork() {
+  const open = state.status === "ready" || state.status === "reading";
+  const busy = open && !settled();
+  document.body.classList.toggle("unsettled", busy);
+  const chip = $("s-work");
+  if (!chip) return;
+  chip.hidden = !open;
+  chip.className = "chip " + (busy ? "work" : "good");
+  chip.replaceChildren(...(busy ? [el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + atWork() + "…"] : ["ModTrap is ready"]));
+  chip.title = busy ? "Until this has finished, the buttons that change the modlist or start a program are greyed." : "ModTrap has finished reading and scanning: everything can be started.";
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target && ev.target.closest ? ev.target.closest("button.gated") : null;
+  if (!b || !document.body.classList.contains("unsettled")) return;
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  toast("Not yet: ModTrap is still " + atWork() + ". This opens again by itself as soon as that has finished.");
+}, true);
 const plural = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
 const fold = (s) => s.toLowerCase();
 
@@ -231,9 +259,10 @@ const SETTING_TEXT = [
   ["close_mo2", "Close this modlist's MO2 without asking", "Some steps change MO2's lists and need MO2 closed (putting a demaster in place, Revert, adding a mod). On: ModTrap asks MO2 to close, as a click on its X does, without asking you first. It never ends MO2 by force. The one go closes MO2 for its last step either way: its plan says so."],
   ["open_mo2_after", "Open MO2 again when a demaster is in place", "Starts this modlist's MO2 once the demaster is in place, so that you can look at the result."],
   ["retire_copies", "After a tool's run, retire ModTrap's copy of a plugin the tool made anew", "ModTrap keeps demastered copies in a mod of its own, above the originals. When a tool you start from ModTrap makes such a plugin anew without the mod, ModTrap's copy would hide the new one. On: ModTrap moves its copy into the job's folder by itself (kept, not deleted). Off: it tells you on the Selection tab and waits for the button."],
-  ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and ticks the tool's step off when the tool has written its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
-  ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is ticked off once it has written its output. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
+  ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and the tool's step is done once ModTrap has seen the tool write its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
+  ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is done once it has written its output. Synthesis has no such switch, only its run button: ModTrap presses that button once Synthesis has it ready (never while it is greyed), and asks the window to close when Synthesis's own log says the run has finished; if the press does not start a run, Synthesis stays open and is yours. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
+  ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
 function renderSettings() {
@@ -509,7 +538,7 @@ function updateDemasterButton() {
 // the plan and one question, then everything ModTrap can do by itself.
 // A step of the one go started from the Process tab stays there: that tab shows it, with its buttons (WHY§71).
 function goTab(name) { if (state.tab !== "process") showTab(name); }
-const BEING_READ = /being read/;
+const BEING_READ = /being read|still at work/;
 
 async function demasterGo() {
   if (!state.changes || !state.picked.size) { showTab("selection"); return; }
@@ -532,7 +561,7 @@ async function demasterGo() {
   }
   // ModTrap reads the modlist again after a probe, a Revert or a Rescan. Until it has, nothing can start: the one
   // go waits for it instead of giving up (WHY§71).
-  if (state.status !== "ready") { waitForModlist(); return; }
+  if (!settled()) { waitForModlist(); return; }
   const job = state.job;
   const dryDone = job && job.state === "done" && !job.past && !job.stale && sameMods(job.plan.trapped_mods, state.picked);
   goTab("selection");
@@ -562,7 +591,7 @@ async function demasterGo() {
 // (WHY§71, WHY§77): the modlist being read, or another modlist's MO2 being open.
 const OTHER_MO2 = /Another Mod Organizer is open/;
 const WAITS = {
-  modlist: { over: () => state.status === "ready", text: "ModTrap is reading the modlist again; the demaster goes on by itself when it has." },
+  modlist: { over: () => settled(), text: "ModTrap is still reading or scanning the modlist; the demaster goes on by itself when it has finished." },
   mo2: { over: () => !(state.mo2 && state.mo2.other), text: "Another Mod Organizer is open, for another modlist. MO2 hands every command to the one that is already open, so ModTrap's would go to the wrong modlist. Close that MO2: the demaster goes on by itself, from the step it stopped at." },
 };
 function waitThen(kind, retry, quiet) {
@@ -607,8 +636,10 @@ function demasterChain() {
   }
   if (state.dmChain === "install" && d) {
     if (d.state === "verified") {
+      if (!settled()) return;                              // ModTrap is still reading or scanning: the next round
       state.dmChain = "";
       demasterCall("/api/demaster/install", { close_mo2: true }, "In place. ModTrap is reading the modlist again.", true).then(() => {
+        if (BEING_READ.test(state.dmError || "")) { state.dmError = ""; state.dmChain = "install"; renderDemaster(true); return; }
         const set = state.settings || {}, placed = state.demaster && state.demaster.state === "installed";
         if (placed && set.auto_tools) { state.dmChain = "tools"; state.toolsTried = {}; state.toolsNow = ""; toast("In place. The tools that are to run again are started one after another."); }
         else if (placed && set.open_mo2_after) call("/api/mo2/open", {}).catch((e) => toast(e.message));
@@ -622,6 +653,7 @@ async function planGoAhead() {
   try { await api("/api/demaster/start", {}); }
   catch (e) {
     if (OTHER_MO2.test(e.message)) { waitThen("mo2", planGoAhead); return; }     // the plan stays; the step is taken again
+    if (BEING_READ.test(e.message)) { waitThen("modlist", planGoAhead); return; }
     state.dmError = e.message; state.dmPlan = null; await tick(); renderDemaster(true); return;
   }
   state.dmChain = "install"; state.dmError = ""; state.dmPlan = null;
@@ -650,23 +682,23 @@ function startToolsRow() {
 }
 
 function toolsInARow() {
-  const t = state.tool, d = state.stepsData, ticks = state.stepsDone = state.stepsDone || {};
+  const t = state.tool, d = state.stepsData;
   if (state.status !== "ready" || state.toolsBusy) return;
-  if (t && (t.state === "starting" || t.state === "running")) return;          // one at a time
+  if (toolGoing(t)) return;                                                    // one at a time
   if (state.toolsNow) {                                                          // the one that has just closed
-    const key = state.toolsNow, title = state.toolsTitle;
+    const title = state.toolsTitle;
     state.toolsNow = "";
     if (t && t.title === title && t.state === "done" && t.changed_count > 0) {
-      ticks[stepKey(key)] = true;                                                // it wrote its output: its step is done
-      saveUi(); state.stepsText = ""; state.stepsKey = ""; state.processText = "";
+      // It wrote its output: ModTrap has noted the run with the demaster, and the steps, read again, say done.
+      state.stepsText = ""; state.stepsKey = ""; state.processText = "";
     } else {
       state.dmChain = "";
-      toast("“" + title + "” closed without writing anything new, so ModTrap stops here. The tools are yours from the Steps tab.");
+      toast(t && t.title === title && t.state === "failed" ? "“" + title + "” did not get to its run, so ModTrap stops here: " + (t.message || "see the Tools tab") : "“" + title + "” closed without writing anything new, so ModTrap stops here. The tool's card on the Tools tab says what its own log holds.");
       return;
     }
   }
-  if (!d || state.stepsLooking || state.stepsKey === "") return;                 // the steps are being worked out again
-  const next = d.steps.find((st) => st.key.startsWith("tool:") && st.state === "to do" && !ticks[stepKey(st.key)] &&
+  if (!d || state.stepsLooking || state.stepsKey === "" || !settled()) return;   // the steps are being worked out again
+  const next = d.steps.find((st) => st.key.startsWith("tool:") && st.state === "to do" && !st.manual &&
     !state.toolsTried[st.key] && (st.items || []).some((i) => i.tool));
   if (!next) {
     state.dmChain = "";
@@ -680,6 +712,7 @@ function toolsInARow() {
     .catch((e) => {
       state.toolsNow = ""; delete state.toolsTried[next.key];
       if (OTHER_MO2.test(e.message)) waitThen("mo2", () => { state.dmChain = "tools"; });
+      else if (BEING_READ.test(e.message)) { /* ModTrap is still at work: the row takes this tool up again in the next round */ }
       else { state.dmChain = ""; toast(e.message); }
     }).finally(() => { state.toolsBusy = false; });
 }
@@ -981,7 +1014,7 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "tool ran": "Tool run", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
@@ -998,6 +1031,7 @@ function historyLine(e) {
   if (Array.isArray(e.left) && e.left.length) bits.push("left in place: " + e.left.join(", "));
   if (e.tool) bits.push("“" + e.tool + "”" + (e.file ? ", " + e.file : "") + (e.profile ? ", its profile “" + e.profile + "”" : ""));
   if (e.was && e.now) bits.push("was " + e.was + " · now " + e.now);
+  if (e.kind === "tool ran") bits.push(e.files ? plural(e.files, "file") + " of its output written" : "none of its output files changed");
   if (e.kept) bits.push("a copy as it was: " + e.kept);
   if (Array.isArray(e.placed) && e.placed.length) bits.push("back at their places in the load order: " + e.placed.join(", "));
   if (Array.isArray(e.notes) && e.notes.length) bits.push("not done: " + e.notes.join("; "));
@@ -1682,7 +1716,7 @@ function ticksOfThisDemaster() {
   if (state.status !== "ready" || !state.demaster || !state.session) return;
   const placed = (state.demaster.jobs || []).find((j) => j.state === "installed");
   const now = placed ? placed.job : "";
-  if (state.ticksJob !== undefined && state.ticksJob !== now) {
+  if (state.ticksJob !== now) {                        // also when it was never kept: an older page's ticks are not trusted
     const ticks = state.stepsDone || {};
     let gone = 0;
     for (const k of Object.keys(ticks)) if (/::(tool:|play$)/.test(k)) { delete ticks[k]; gone++; }
@@ -1694,9 +1728,11 @@ function ticksOfThisDemaster() {
 function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
 
 // Starting one of the modlist's tools through MO2 (DESIGN§16.8): the button, and what came of it.
+function toolGoing(t) { return !!t && ["starting", "preparing", "running"].includes(t.state); }
+
 function toolButton(title) {
   const t = state.tool;
-  const going = t && (t.state === "starting" || t.state === "running");
+  const going = toolGoing(t);
   const b = el("button", { type: "button", text: going && t.title === title ? "Running…" : "Start it through MO2", disabled: !!going || !!(state.session && state.session.locked),
     title: "Starts “" + title + "” the way MO2's own Run button does. It is yours to work; ModTrap waits for it to close and then says which of its output files changed." });
   b.addEventListener("click", async () => {
@@ -1712,14 +1748,15 @@ function toolButton(title) {
 function toolCard() {
   const t = state.tool;
   if (!t) return null;
-  const going = t.state === "starting" || t.state === "running";
+  const going = toolGoing(t), preparing = t.state === "preparing";
   const stop = el("button", { type: "button", text: "Stop waiting" });
   stop.addEventListener("click", async () => { try { state.tool = await api("/api/tool/stop", {}); } catch (e) { toast(e.message); } tick(); });
   const mins = Math.floor(t.seconds / 60), secs = t.seconds % 60;
   return el("div", { class: "card" + (going ? " installer" : "") },
-    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? (t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
+    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (preparing ? " “" + t.title + "” is open outside MO2, building its patchers: leave it alone, ModTrap closes it" : going ? (t.drive === "left to the owner" ? " “" + t.title + "” is open and yours: run it, then close it" : t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
       t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
     ...(t.before || []).map((x) => el("p", { class: "would-record", text: "Before the start: " + x + "." })),
+    t.drive_note && (going || t.drive === "left to the owner") ? el("p", { class: t.drive === "left to the owner" ? "would-needs" : "dim", text: t.drive_note.charAt(0).toUpperCase() + t.drive_note.slice(1) + "." }) : null,
     going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago" + (t.profile ? ", through MO2 with its profile “" + t.profile + "”" : "") + ". ModTrap is waiting, and changes nothing meanwhile." }) : null,
     t.state === "done" ? el("p", { class: t.changed_count ? "would-record" : "would-needs", text: t.changed_count ?
       plural(t.changed_count, "file") + " of its output " + (t.changed_count === 1 ? "was" : "were") + " written" + (t.output_mod ? " (its output goes to “" + t.output_mod + "”)" : "") + ". ModTrap has read the modlist again." :
@@ -1925,7 +1962,7 @@ function taskActions(stage, task, first, firstOpen) {
     if (state.dmChain === "tools") {
       out.push(el("span", { class: "act-note", text: "The tools are being started one after another: work each, then close it." }),
         actButton("Stop the row", async () => { state.dmChain = ""; state.toolsNow = ""; toast("Stopped. A tool that is open stays open; the rest are yours."); }));
-    } else if (processIdle() && !(state.tool && ["starting", "running"].includes(state.tool.state))) {
+    } else if (processIdle() && !toolGoing(state.tool)) {
       out.push(actButton("Start the tools one after another", async () => startToolsRow(), true));
     }
   }
@@ -2586,6 +2623,8 @@ async function tick() {
     quit.addEventListener("click", quitModTrap);
     up.replaceChildren("This is ModTrap " + s.version + ", still running, but the files in its folder have changed since it was started" + (onDisk && onDisk !== s.version ? ": they are version " + onDisk + " now" : "") + ". Quit it and start it again: until then the program in memory and the scripts on disk are of different versions, and ModTrap starts nothing.  ", quit);
   }
+  state.working = s.working || [];
+  showWork();
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
   ticksOfThisDemaster();

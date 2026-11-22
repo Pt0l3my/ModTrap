@@ -100,6 +100,7 @@ SETTINGS = {
     "auto_tools": False,       # after the demaster, start the tools that are to run again, one after another
     "tools_self": True,        # a tool with switches of its own to work and close by itself is started with them (WHY§84)
     "tool_versions": True,     # before the patcher framework starts: library versions its last log shows as not fitting are set right (MT27)
+    "tool_prebuild": True,     # and patchers its last log shows as not built are built outside MO2 first (MT28)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -119,6 +120,7 @@ class Api:
         self._lists: dict[str, tuple[object, dict]] = {}
         self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
         self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
+        self._making_tools = 0                        # readings of what the tools made that are going (WHY§92)
         self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
         self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
@@ -141,6 +143,10 @@ class Api:
         self.saver = savelog.SaveJob()         # "Save this session" (WHY§48)
         self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
         self.dismiss = dryrun.winauto.close_message   # closes a message MO2 stops at after a run (MO01§9); replaced in tests
+        self.direct_launcher = dryrun.launch   # starts a program by itself, outside MO2 (WHY§90); replaced in tests
+        self.button_presser = toolrun.press_button      # presses a tool's own run button (WHY§93); replaced in tests
+        self.press_times = (toolrun.PRESS_AFTER, toolrun.PRESS_EVERY, toolrun.PRESS_LIMIT, toolrun.PRESS_AGAIN, toolrun.CLOSE_AFTER)
+        self.prebuild_times: dict = {}         # shorter waits, in tests
         self.presser = dryrun.winauto.press_module_selection_ok   # presses OK in xEdit's module selection (XE01§13)
 
     # --- sessions (MT20, WHY§33) -----------------------------------------------------------------------------------
@@ -300,7 +306,7 @@ class Api:
         """Another start of ModTrap on this PC takes over (WHY§68): this one saves and closes, unless it is in the
         middle of something."""
         if self._busy() or (self.changes is not None and self.changes.busy()) or \
-                (self.tooljob is not None and self.tooljob.state in ("starting", "running")):
+                (self.tooljob is not None and self.tooljob.state in ("starting", "preparing", "running")):
             raise Bad("in the middle of a job")
         log.info("ModTrap was started again on this PC: this one (%s) saves its session and closes", VERSION)
         answer, after = self.quit({})
@@ -441,8 +447,38 @@ class Api:
             raise Bad("tick at least one mod")
         return mods
 
+    def working(self) -> list[dict]:
+        """ModTrap's own reading and scanning that is still going (WHY§92): [{"key", "text"}]. While any of it goes,
+        nothing that changes the modlist or starts a program is begun: the page greys those buttons, and the
+        starts themselves are refused (`unsettled`)."""
+        out = []
+        if self.status == "reading":
+            out.append({"key": "modlist", "text": "reading the modlist"})
+        m = self.model
+        if m is not None:
+            if any(v is None for k, v in list(self._deep.items()) if k[0] == id(m)):
+                out.append({"key": "steps", "text": "looking into the ticked mods' folders and the tools' plugins, for the steps"})
+            if any(v is None for k, v in list(self._adding.items()) if k[0] == id(m)):
+                out.append({"key": "adding", "text": "reading the mods to add"})
+        if self._making_tools:
+            out.append({"key": "tools", "text": "reading what the modlist's tools made"})
+        try:
+            if any(r.get("state") in ("copying", "unpacking") for r in list(self._staged.values())):
+                out.append({"key": "unpack", "text": "unpacking a dropped archive"})
+        except Exception:
+            pass
+        return out
+
+    def unsettled(self) -> str:
+        """Why nothing can be started just now, in words, or "" when ModTrap has finished its own reading and
+        scanning. The modlist being read keeps the words the page already waits on."""
+        if self.status != "ready":
+            return "the modlist is being read"
+        rest = [w["text"] for w in self.working()]
+        return "ModTrap is still at work (%s)" % "; ".join(rest) if rest else ""
+
     def _busy(self) -> bool:
-        if self.tooljob is not None and self.tooljob.state in ("starting", "running"):
+        if self.tooljob is not None and self.tooljob.state in ("starting", "preparing", "running"):
             return True
         if self.recjob is not None and self.recjob.state not in ("done", "failed", "stopped"):
             return True
@@ -460,8 +496,8 @@ class Api:
         with self._lock:
             if self._busy():
                 raise Bad("something else is going; wait for it to end")
-            if self.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
             if self._locked():
                 raise Bad(self._locked())
             inst = m.instance
@@ -475,18 +511,32 @@ class Api:
             try:
                 job = toolrun.ToolJob(inst, title, made, launcher=self._launch, running=self.running, poll=self.poll,
                                       self_run=self.settings().get("tools_self") is not False, dismiss=self.dismiss,
-                                      keep_logs=self.store.dir(self.session.id) / "tool-logs" if self.session else None)
+                                      keep_logs=self.store.dir(self.session.id) / "tool-logs" if self.session else None,
+                                      presser=self.button_presser, closer=self.ask_close, press_times=self.press_times)
             except toolrun.Refused as e:
                 raise Bad(str(e)) from None
 
             def ended() -> None:
                 self.save_log()
+                if job.state == "done" and self.session is not None:
+                    try:
+                        from . import history
+                        history.History(self.store.dir(self.session.id)).add(
+                            "tool ran", tool=title, files=len(job.changed), seconds=int((job.ended or time.time()) - job.started),
+                            why="started by ModTrap through MO2" + (", to run and close by itself" if job.switches else ""))
+                    except Exception:
+                        pass
+                    if self.changes is not None:
+                        self.changes.tool_ran(title, len(job.changed))     # what makes its step done (WHY§91)
                 if job.state == "done" and self.folder and self.status == "ready":
                     self.open(self.folder, self.profile or None, session=self.session, wait=True)   # its output, read again
                     if self.changes is not None:
                         self.changes.retire_remade()         # a copy of ModTrap's that the run made needless (WHY§80)
             job.on_end = ended
             job.before = self._fit_tool(exe, job.image)
+            gap = self._unbuilt_tool(exe)
+            if gap is not None:
+                job.prepare = lambda wait: self._prebuild_tool(exe, gap, wait)
             self.tooljob = job
             if self.changes is not None:
                 # With a demaster in place, what the tool is about to write over is kept for Revert (WHY§81).
@@ -528,6 +578,49 @@ class Api:
             log.warn("the library versions of “%s” could not be checked or set: %s", exe.title, logbook.why(e))
             return []
 
+    def _unbuilt_tool(self, exe) -> dict | None:
+        """For the patcher framework: what its newest log names as not built, if the owner's setting lets ModTrap
+        build it outside MO2. None for any other tool. Never raises."""
+        from . import toolfit
+        try:
+            if not toolfit.is_tool(exe.title, exe.binary) or self.settings().get("tool_prebuild") is False:
+                return None
+            return toolfit.unbuilt(Path(exe.binary.replace("\\", "/")).parent)
+        except Exception:
+            return None
+
+    def _prebuild_tool(self, exe, gap: dict, wait: Callable[[float], bool]) -> list[str]:
+        """Before the patcher framework is started through MO2 (MT28, WHY§90): its newest log names patchers whose
+        build is not there, so the program is opened by itself, outside MO2, until they are built, and closed
+        again. Runs in the tool job's own time. Returns what was done, in words; raises toolrun.Refused when the
+        patchers could not be built, since a start through MO2 would then only fail the same way."""
+        from . import toolfit
+        log.info("“%s”: its last log (%s) names %d patcher(s), %d of them not built. ModTrap opens it by itself, outside "
+                 "MO2, so that it builds them; nothing in it is pressed, and it is closed again once they are built",
+                 exe.title, gap["log"], gap["named"], gap["missing"])
+        try:
+            got = toolfit.prebuild(exe.binary, launcher=self.direct_launcher, closer=self.ask_close, stopped=wait,
+                                   poll=self.poll, **self.prebuild_times)
+        except OSError as e:
+            raise toolrun.Refused("“%s” could not be opened by itself to build its patchers: %s" % (exe.title, logbook.why(e))) from None
+        if got["settings_put_back"]:
+            log.warn("“%s” had changed its settings file while it was open outside MO2: ModTrap put the file back as it was", exe.title)
+        if got["why"] == "stopped":
+            return []
+        if not got["closed"]:
+            raise toolrun.Refused("“%s” was opened outside MO2 to build its patchers and did not close when asked. Close "
+                                  "it, then start it from here again." % exe.title)
+        if not got["ok"]:
+            raise toolrun.Refused("“%s” could not build its patchers outside MO2 either (%s; %d of %d built%s). Its own "
+                                  "log (%s) has the errors; a start through MO2 would fail the same way, so ModTrap did "
+                                  "not make one." % (exe.title, got["why"], got["built"], got["named"],
+                                                     "; " + "; ".join(got["errors"]) if got["errors"] else "", got["log"] or "none written"))
+        text = ("its last log (%s) showed %d of its %d patcher(s) as not built, so ModTrap opened it by itself, outside "
+                "MO2, where it built them (%d of %d, in %d s), and closed it again without running anything" % (
+                    gap["log"], gap["missing"], gap["named"], got["built"], got["named"], got["seconds"]))
+        log.info("“%s”: %s", exe.title, text)
+        return [text[0].upper() + text[1:]]
+
     # --- the record check (DESIGN§16.5): xEdit, read-only ----------------------------------------------------------
 
     def records_start(self, body: dict) -> dict:
@@ -538,8 +631,8 @@ class Api:
         with self._lock:
             if self._busy():
                 raise Bad("something else is going; wait for it to end")
-            if self.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
             if self._locked():
                 raise Bad(self._locked())
             s = self.session
@@ -663,8 +756,8 @@ class Api:
         with self._lock:
             if self._busy():
                 raise Bad("a dry run is already going")
-            if self.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
             if self._locked():
                 raise Bad(self._locked())
             s = self.session
@@ -746,7 +839,8 @@ class Api:
         deep = self._deep.get(key)
         job = self.job.public() if self.job else None
         out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None,
-                                  going=self.changes is not None and self.changes.dm_state in ("working", "verified"))
+                                  going=self.changes is not None and self.changes.dm_state in ("working", "verified"),
+                                  tools_run=self.changes.tools_run() if self.changes is not None else None)
         out["looking"] = bool(mods) and deep is None
         return out
 
@@ -1165,7 +1259,7 @@ class Api:
         """Asks this modlist's MO2 to close, as a click on its X does: on the owner's word, and never by force."""
         m = self._need()
         if self._busy() or (self.changes is not None and self.changes.busy()) or \
-                (self.tooljob is not None and self.tooljob.public().get("state") in ("starting", "running")):
+                (self.tooljob is not None and self.tooljob.public().get("state") in ("starting", "preparing", "running")):
             raise Bad("ModTrap is running something through MO2 right now; wait until it has ended")
         if self.mo2()["state"] != "open":
             return {"asked": False, "mo2": self.mo2()}
@@ -1295,6 +1389,7 @@ class Api:
         settings = paths.load_settings()
         out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         out["log_epoch"] = self.log_epoch
+        out["working"] = self.working()
         every = self.store.all()
         live = [x for x in every if x.status != sessions.FINISHED]
         done = [x for x in every if x.status == sessions.FINISHED][-10:]
@@ -1351,7 +1446,11 @@ class Api:
         hit = self._lists.get("tools_made")
         if hit and hit[0] is m:
             return hit[1]
-        out = toolmade.made(m)
+        self._making_tools += 1
+        try:
+            out = toolmade.made(m)
+        finally:
+            self._making_tools -= 1
         self._lists["tools_made"] = (m, out)
         return out
 

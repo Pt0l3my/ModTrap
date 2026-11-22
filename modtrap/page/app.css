@@ -341,3 +341,8 @@ table.made .small { font-size: 12.5px; }
 .setting .what { grid-column: 2; color: var(--dim); font-size: 13px; }
 .wait-note { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); }
 .wait-note button { margin-left: 10px; }
+
+/* ModTrap's own reading and scanning (WHY§92): what would start something is greyed until it has finished. */
+body.unsettled button.gated { opacity: .4; filter: grayscale(1); cursor: progress; }
+.chip.work { border-color: var(--warn); color: var(--warn); }
+.spinner.small { width: 10px; height: 10px; border-width: 2px; vertical-align: -1px; }
