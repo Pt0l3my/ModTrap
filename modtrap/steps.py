@@ -815,6 +815,10 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
         outputs = []
         stake_kinds = Counter(ch["kind"] for ch in changes.values())
         groups = toolmade.synthesis_groups(toolmade.tool_folders(inst, "Synthesis"))
+        if any(tools.of_executable(e.title, e.binary)[0] == "Synthesis" for e in inst.executables):
+            log.info("tools: Synthesis's own settings file %s", ("names %d group(s) of patchers: %s" % (
+                len(groups), "; ".join("%s (%d patcher(s), %d plugin(s) left out)" % (g["group"], len(g["patchers"]), len(g["left_out"]))
+                                       for g in groups[:12]))) if groups else "was not found beside its program")
         for f in m.order:
             r = m.plugins[f]
             if not r.active or r.source is None or r.path is None or fold(r.name) in tf:

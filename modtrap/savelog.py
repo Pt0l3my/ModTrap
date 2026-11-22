@@ -107,6 +107,17 @@ def _encode(text: str) -> bytes:
     return text.encode("utf-8", errors="backslashreplace")       # a lone surrogate from a JSON escape must not fail
 
 
+def _clean_text_item(name: str, text: str, cleaner: Cleaner) -> str:
+    """A text ModTrap wrote itself for the archive. JSON is cleaned value by value and written again, so that it
+    stays valid: cleaning it as plain text can take the backslash of an escaped quote for part of a path."""
+    if name.lower().endswith(".json"):
+        try:
+            return json.dumps(cleaner.value(json.loads(text)), ensure_ascii=False, indent=1) + "\n"
+        except ValueError:
+            pass
+    return cleaner.text(text)
+
+
 def clean_blocks(path: Path, cleaner: Cleaner) -> Iterator[bytes]:
     """A file's cleaned content, in blocks. Its size is noted when it is opened and no more than that is read, so
     a file still being written is taken as it was then. Text is cleaned block by block, each block cut at a line
@@ -297,7 +308,7 @@ class SaveJob:
                             return                          # failed part way: what was packed is kept
                     self.bytes += writer.add(arc, mtime, rest())
                 else:
-                    self.bytes += writer.add(arc, time.time(), [_encode(cleaner.text(str(source)))])
+                    self.bytes += writer.add(arc, time.time(), [_encode(_clean_text_item(arc, str(source), cleaner))])
                 self.done += 1
             with_data = writer.close()
             writer = None
