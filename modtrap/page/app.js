@@ -246,7 +246,13 @@ function renderSettings() {
     ...SETTING_TEXT.map(([key, name, what]) => {
       const box2 = el("input", { type: "checkbox", id: "set-" + key, checked: !!set[key] });
       box2.addEventListener("change", async () => {
-        try { state.settings = await api("/api/settings", { name: key, value: box2.checked }); toast("Kept."); }
+        try {
+          state.settings = await api("/api/settings", { name: key, value: box2.checked });
+          const placed = state.demaster && state.demaster.state === "installed";
+          toast(key === "auto_tools" && box2.checked && placed && state.dmChain !== "tools"
+            ? "Kept. It holds from the next demaster on. For the one already in place: Demaster, Process, “Start the tools one after another”."
+            : "Kept.");
+        }
         catch (e) { toast(e.message); box2.checked = !box2.checked; }
         renderSettings();
       });
@@ -633,6 +639,12 @@ function autoGo() {
 // The owner's setting (DESIGN§19): after the demaster, each tool that is to run again is started through MO2 as soon
 // as the one before it has closed. The owner still works each tool; ModTrap cannot press a tool's own buttons. A tool
 // that closes without having written anything ends the row: something did not go as meant, and that is the owner's.
+function startToolsRow() {
+  state.dmChain = "tools"; state.toolsTried = {}; state.toolsNow = "";
+  toast("The tools that are to run again are started one after another. Work each, then close it.");
+  state.processText = ""; renderProcess();
+}
+
 function toolsInARow() {
   const t = state.tool, d = state.stepsData, ticks = state.stepsDone = state.stepsDone || {};
   if (state.status !== "ready" || state.toolsBusy) return;
@@ -1852,6 +1864,16 @@ function taskActions(stage, task, first, firstOpen) {
   if (stage.key === "install" && task.key === "left") {
     out.push(navButton("steps", "What is left, on Steps"), navButton("job", "What it takes from the mod, on Dry run"));
   }
+  // The tools one after another (WHY§82): offered at the first tool that is still to run, whenever a demaster is in
+  // place, whether or not the setting was on when it was put in place.
+  if (stage.key === "after" && stage.tasks.find((t) => t.key.startsWith("tool:") && t.state === "yours") === task) {
+    if (state.dmChain === "tools") {
+      out.push(el("span", { class: "act-note", text: "The tools are being started one after another: work each, then close it." }),
+        actButton("Stop the row", async () => { state.dmChain = ""; state.toolsNow = ""; toast("Stopped. A tool that is open stays open; the rest are yours."); }));
+    } else if (processIdle() && !(state.tool && ["starting", "running"].includes(state.tool.state))) {
+      out.push(actButton("Start the tools one after another", async () => startToolsRow(), true));
+    }
+  }
   if (stage.key === "after" && (task.state === "yours" || task.state === "done")) {
     const st = ((state.stepsData || {}).steps || []).find((x) => x.key === task.key);
     if (st) {
@@ -1870,7 +1892,7 @@ function renderProcess() {
   const tool = state.tool;
   const text = JSON.stringify(stages) + "#" + [state.status, state.dmChain || "", state.dmPlan ? 1 : 0, state.picked.size, state.changes ? 1 : 0,
     state.changes ? probeReason() : "", state.demaster ? state.demaster.state : "", tool ? tool.state + tool.title : "",
-    state.dmWait ? state.dmWait.kind : "",
+    state.dmWait ? state.dmWait.kind : "", state.dmChain === "tools" ? "row" : "",
     state.session && state.session.locked ? 1 : 0].join("|");
   const going = stages.find((s) => s.state === "going"), failed = stages.find((s) => s.state === "failed");
   const yours = !going && !failed && stages.find((s) => s.state === "yours" && s.key !== "after");

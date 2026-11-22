@@ -104,6 +104,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 79 | 2026-11-22 | Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself | FACT | #tools #xedit #process |
 | 80 | 2026-11-22 | The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab | DECIDED | #tools #process #page #safety |
 | 81 | 2026-11-22 | The tools in a row, and a Revert that always ends where the demaster began: remade plugins and kept tool output come back, and a job in place is never cleared | DECIDED | #safety #tools #process #page |
+| 82 | 2026-11-22 | The row of tools could only begin at the moment of putting in place: a button starts it whenever a demaster is in place | DECIDED | #page #tools #process |
 
 ## Entries
 
@@ -1917,3 +1918,21 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: a test in which a tool ran, a copy was retired and MO2 rewrote the lists, and every file ends as it
   began, dates included; in a browser, one press through the tool's run, then Revert from the History tab.
 - Not checked: on the owner's PC.
+
+### 82. The row of tools could only begin at the moment of putting in place: a button starts it whenever a demaster is in place
+
+`2026-11-22` · DECIDED · `#page #tools #process` · refs: DESIGN§18, DESIGN§19, WHY§81
+
+- The owner, with the session file of 0.3.14 and a picture of the settings: "yeah I ticked these on after the
+  demaster process got to the tools."
+- FACT (the session file): the demaster ran clean and was put in place; the settings were switched on two
+  minutes later; no tool was started; the owner reverted, whole, to 3,575 mods and no problem. WHY§81's row of
+  tools began only in the moment the demaster was put in place, with the setting already on. Switched on after
+  that, it did nothing, and nothing said so.
+- DECIDED: the last box of the Process tab offers "Start the tools one after another" at the first tool still to
+  run, whenever a demaster is in place and a tool waits; while the row runs it says so and has
+  "Stop the row". Switching the setting on with a demaster already in place says where that button is.
+- FACT: with "go ahead without asking" on, 17 seconds lay between the dry run's end and the demaster's start,
+  against one second the time before. The log cannot say whether the owner pressed. LIKELY otherwise: a browser
+  slows the timers of a tab that is not in view, and the one go is driven by the page. Noted; if it shows again,
+  the one go belongs on the server.
