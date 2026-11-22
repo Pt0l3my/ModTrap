@@ -355,6 +355,12 @@ disabled, each tool's noted run, the settings files): "complete and checked" onl
 says who really does it (WHY§97): ModTrap where it runs a tool itself, ModTrap and the owner where it can only start
 one. What is left to the owner in a settings file is said with the file's path, the line and what to do.
 
+**The scanner (MT34, WHY§98).** Those files are found by one scanner that looks through the whole modlist: the
+game's Data folder, every enabled mod and Overwrite, the winning copy of each path, each read to its end, with no
+time limit. The step is there also when no file names the plugin, and states what was looked through. What the
+scanner could not list or read is named, and the step is then the owner's. The Tools tab shows what the scanner
+covers and the frameworks installed.
+
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
 plugins concerned. Once it is done the steps are stated from what was read. A verdict on a tool does not change

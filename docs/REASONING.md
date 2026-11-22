@@ -120,6 +120,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 95 | 2026-11-22 | The whole demaster went through on the owner's PC; ModTrap reads the settings files that name the plugin line by line, and gives one account of its checks after the demaster | DECIDED | #steps #process #revert |
 | 96 | 2026-11-22 | A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press | FACT | #revert #page |
 | 97 | 2026-11-22 | Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open | DECIDED | #steps #page #tools |
+| 98 | 2026-11-22 | A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed | DECIDED | #steps #tools #page |
 
 ## Entries
 
@@ -2421,3 +2422,38 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   MO2 is open. The buttons now say so.
 - Checked: tests (the labels by setting and tool; the wording before and after the tool's run; the third
   framework's lines; the path, lines and advice for what is left); in a browser, the rendering and the whole flow.
+
+### 98. A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed
+
+`2026-11-22` · DECIDED · `#steps #tools #page` · refs: MT34, MT35, MT33, TL01§23, TL01§24, TL01§25, WHY§95, WHY§97, DESIGN§14
+
+- The owner: "can you also add a scanner for all tools and frameworks, so they can be read at the end of the
+  demaster process reliably?"
+- FACT, in ModTrap's own code before this. The search for settings files that name the plugin (WHY§95) stopped
+  after 12 seconds or 30,000 files, read only the first 512 KB of a file, listed at most 2,000 files of a mod's
+  `SKSE/Plugins` folder and did not say when that listing was cut. It looked at every enabled mod's copy of a
+  file, also one that a mod of higher priority replaces, and not at Overwrite or the game's folder. On a list of
+  some 3,500 mods the answer "nothing names the plugin" could therefore rest on a search that had not finished.
+- DECIDED. One scanner (`census.py`) replaces that search. It lists the game's Data folder, every enabled mod
+  from the lowest priority and Overwrite; of files with the same path the last one wins, as in the game. It looks
+  through each mod's top folder and, to their end, the folders named in ModTrap's data (`mentions.json`,
+  "places"). Every winning file is read to its end, piece by piece. No time limit.
+- It keeps, for each file, which plugins of the modlist the file names, never its text. A file is read once and
+  remembered by path, size and date, so the look after the demaster costs a listing.
+- What could not be listed or read (a folder that failed, a file that would not open, a file past 64 MB) is
+  counted and named. Then the look was not whole: the settings-files step is the owner's and names those files.
+  Only a whole look lets ModTrap say "none names the mod's plugin".
+- The step now exists also when no file names the plugin, and states what was looked through. Before, no step
+  was shown then, which could not be told from "not looked".
+- METHOD. Finding which of some 3,750 names a text holds: from each ".esp", ".esm" or ".esl" backwards, the
+  longest known name that ends there. Names are filed by their last six bytes and under those by length. A first
+  version filed them by the last bytes only and took 2 s for 20,000 lines, because very many names end alike
+  ("… - Patch.esp"); with the lengths it takes 0.05 s. An invented list of 3,500 mods with 14,000 settings files
+  is listed and read in about 2 s here. The time on the owner's list is written in the log and on the Tools tab.
+- The Tools tab has a card for it: files in force, hidden copies, what was passed over, the kinds of settings
+  file (by the ending of their names) with whether ModTrap reads them line by line, and the frameworks installed,
+  by their program files in `SKSE/Plugins` (TL01§25). While a scan goes, ModTrap counts as working (WHY§92).
+- Left open (MT35): condition files of animation replacers lie under `meshes`, not in the places looked through.
+- Checked: tests with invented files (the winner by priority, Overwrite above all, a disabled mod, each place, a
+  name across two pieces of a large file, a file read again only when changed, the step when a file was passed
+  over and when none names the plugin); the card in a browser.

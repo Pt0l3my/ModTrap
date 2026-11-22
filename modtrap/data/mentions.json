@@ -1,23 +1,37 @@
 {
  "format": "modtrap-mentions/1",
- "about": "Settings files of frameworks that work while the game runs, by the name such a file must have, and how a line of one is laid out (TL01§23). ModTrap's data, not code. With it ModTrap says where in a line a plugin is named: as the thing the line gives or changes, as a condition for what the line reaches, or as an exclusion. 'layout' is 'pipes' for a line of the form key = first|more|more, where a condition can start with - (leave out), and conditions joined by + must all hold. What each framework does with a line that names a plugin which is not loaded is in the research note, with its source. Only frameworks whose handling of a missing plugin was read in their source are listed; a file of any other kind is left to the owner. 'flm' is the layout of FormList Manipulator: key = list|forms|filter, or Filter = name|conditions, where a condition is a plugin's name with + (only while that plugin is active) or - (only while it is not).",
+ "about": "Settings files of frameworks that work while the game runs, by the name such a file must have, and how a line of one is laid out (TL01§23). ModTrap's data, not code. With it ModTrap says where in a line a plugin is named: as the thing the line gives or changes, as a condition for what the line reaches, or as an exclusion. 'layout' is 'pipes' for a line of the form key = first|more|more, where a condition can start with - (leave out), and conditions joined by + must all hold. What each framework does with a line that names a plugin which is not loaded is in the research note, with its source. Only frameworks whose handling of a missing plugin was read in their source are listed; a file of any other kind is left to the owner. 'flm' is the layout of FormList Manipulator: key = list|forms|filter, or Filter = name|conditions, where a condition is a plugin's name with + (only while that plugin is active) or - (only while it is not). 'dll' is the framework's program file in SKSE/Plugins, where it was read in the framework's own build files; the scanner uses it to say which frameworks of the modlist ModTrap reads the files of. 'places' are the folders of a mod, beside its top folder, that the scanner looks through for settings files, to their end.",
  "kinds": [
   {
    "pattern": "_DISTR\\.ini$",
    "framework": "Spell Perk Item Distributor",
    "layout": "pipes",
-   "source": "TL01§23"
+   "source": "TL01§23",
+   "dll": "po3_SpellPerkItemDistributor.dll"
   },
   {
    "pattern": "_KID\\.ini$",
    "framework": "Keyword Item Distributor",
    "layout": "pipes",
-   "source": "TL01§23"
+   "source": "TL01§23",
+   "dll": "po3_KeywordItemDistributor.dll"
   },
   {
    "pattern": "_FLM\\.ini$",
    "framework": "FormList Manipulator",
    "layout": "flm",
+   "source": "TL01§24",
+   "dll": "FormListManipulator.dll"
+  }
+ ],
+ "places": [
+  {
+   "folder": "SKSE/Plugins",
+   "why": "where a program that works inside the game (an SKSE plugin) is installed, and by custom keeps its settings"
+  },
+  {
+   "folder": "FLM",
+   "why": "FormList Manipulator reads any INI file in it",
    "source": "TL01§24"
   }
  ]

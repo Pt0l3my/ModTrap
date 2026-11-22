@@ -435,3 +435,18 @@ of its author; facts only, nothing copied. The version a modlist carries may dif
   line with `+plugin` is passed over once the plugin is gone. A line with `-plugin` was held back while the
   plugin was there and is carried out once it is gone: its author wrote it for a modlist without that plugin.
 
+## 25. The program files of the three frameworks (2026-11-22)
+
+Read in each framework's own build files, at the commits named in §23 and §24; facts only, nothing copied.
+
+- **FACT (Spell Perk Item Distributor, `SPID/CMakeLists.txt:2` at `105725c`).** The program is named
+  `po3_SpellPerkItemDistributor`; its own settings file is `po3_SpellPerkItemDistributor.ini` in `SKSE\Plugins`
+  (`SPID/src/main.cpp:115`).
+- **FACT (Keyword Item Distributor, `CMakeLists.txt:2` at `99adaaa`).** The program is named
+  `po3_KeywordItemDistributor`.
+- **FACT (FormList Manipulator, `CMakeLists.txt:7-9` and `:116` at `82a694e`).** The project is named
+  `FormListManipulator`, and the build copies `FormListManipulator.dll`.
+- **So.** A modlist has one of these frameworks installed when an enabled mod carries that program file, with the
+  ending `.dll`, in `SKSE/Plugins`. ModTrap's scanner (WHY§98) lists them by that, in its data (`mentions.json`,
+  "dll"). A release may name the file otherwise; then the framework shows among the other programs, and its
+  settings files are read all the same, by their own names.

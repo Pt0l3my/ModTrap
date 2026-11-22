@@ -241,6 +241,7 @@ function renderSteps() {
 
 function renderTools(s) {
   renderToolsMade();
+  renderToolsScan();
   const box = $("tools-list");
   const rows = s.tools.map((t) => el("tr", {},
     el("td", {}, t.title, t.xedit ? el("span", { class: "tag good", text: "ModTrap starts this one for a dry run" }) : null),
@@ -337,6 +338,51 @@ function renderToolsMade() {
           el("td", {}, el("div", { text: r.records.toLocaleString("en-GB") + " record" + (r.records === 1 ? "" : "s") + (r.cut ? " (not read to the end)" : "") }),
             el("div", { class: "dim small", text: shown.map((k) => kindText(k[0], k[1])).join(" · ") + (r.kinds.length > shown.length ? " · and " + (r.kinds.length - shown.length) + " more kinds" : "") })));
       }))));
+  }
+  box.replaceChildren(el("div", { class: "card" }, ...kids));
+}
+
+// The scanner (WHY§98): the settings files in force in the modlist, their kinds and the frameworks installed.
+function renderToolsScan() {
+  const box = $("tools-scan");
+  if (!box) return;
+  const d = state.toolsScan, busy = state.toolsScanBusy;
+  const look = el("button", { type: "button", text: busy ? "Scanning…" : d ? "Scan again" : "Scan the modlist's settings files", disabled: !!busy });
+  look.addEventListener("click", async () => {
+    state.toolsScanBusy = true; renderToolsScan();
+    try { state.toolsScan = await api("/api/tools/scan"); state.toolsScanFor = state.loaded; } catch (e) { toast(e.message); }
+    state.toolsScanBusy = false; renderToolsScan();
+  });
+  const num = (n) => n.toLocaleString("en-GB");
+  const kids = [el("div", { class: "card-head" }, el("h2", { text: "Scanner: settings files and frameworks" }), look),
+    el("p", { class: "dim", text: "Every settings file that is in force in the modlist, the winning copy of each as the game sees it, and the frameworks that read them while the game runs. ModTrap makes this same scan by itself for the steps of a demaster, and again after it; here you can see what it covers." })];
+  if (d) {
+    if (state.toolsScanFor !== state.loaded) kids.push(el("p", { class: "would-needs", text: "The modlist has been read again since this was made: press “Scan again”." }));
+    kids.push(el("p", { text: num(d.files) + " settings file" + (d.files === 1 ? "" : "s") + " in force, in the game's folder, " + plural(Math.max(0, d.mods - 2), "enabled mod") + " and Overwrite"
+      + (d.hidden ? ", not counting " + num(d.hidden) + " hidden by a mod of higher priority" : "") + ". " + num(d.read) + " read to the end; " + num(d.naming) + " name a plugin of the modlist. It took " + d.seconds + " s." }));
+    kids.push(el("p", { class: "dim small", text: "Looked through: the top folder of each mod, and to their end the folders " + d.places.join(", ") + ". Files ending in .ini, .json, .toml, .yaml, .yml or .txt." }));
+    const missed = [];
+    if (d.cut_mods.length) missed.push("Not listed to the end: " + d.cut_mods.join(", "));
+    if (d.unreadable) missed.push(num(d.unreadable) + " could not be opened: " + d.unreadable_examples.join("; "));
+    if (d.too_large) missed.push(num(d.too_large) + " too large to be a settings file, not read: " + d.too_large_examples.join("; "));
+    kids.push(missed.length ? el("div", { class: "would-needs" }, ...missed.map((t) => el("div", { text: t })))
+      : el("p", { class: "would-record", text: "Nothing was passed over: every folder was listed to its end and every file read." }));
+    const known = d.frameworks.filter((f) => f.read_by_modtrap), other = d.frameworks.filter((f) => !f.read_by_modtrap);
+    kids.push(el("h3", { text: "Settings files by kind" }));
+    if (!d.kinds.length) kids.push(el("p", { class: "dim", text: "No settings file here is named the way a distributor's is (a name ending in _WORD.ini)." }));
+    else kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Files named" }), el("th", { text: "In force" }), el("th", { text: "Read by ModTrap" }))),
+      el("tbody", {}, ...d.kinds.map((k) => el("tr", {}, el("td", {}, el("span", { class: "mono", text: "…" + k.kind })), el("td", { text: num(k.files) }),
+        el("td", { class: k.read_by_modtrap ? "" : "dim", text: k.read_by_modtrap ? "yes, line by line: " + k.framework : "found if it names the plugin, then left to you to judge" }))))));
+    kids.push(el("h3", { text: "Frameworks installed" }));
+    kids.push(el("p", { class: "dim small", text: "Programs that work inside the game, by their files in SKSE/Plugins of the enabled mods: " + num(d.frameworks.length) + "." }));
+    if (known.length) kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Framework" }), el("th", { text: "Program file" }), el("th", { text: "In mod" }))),
+      el("tbody", {}, ...known.map((f) => el("tr", {}, el("td", { text: f.framework }), el("td", {}, el("span", { class: "mono", text: f.dll })), el("td", { text: f.mod }))))));
+    else kids.push(el("p", { class: "dim", text: "None of the frameworks whose settings files ModTrap reads line by line is installed." }));
+    if (other.length) {
+      const more = el("details", {}, el("summary", { text: plural(other.length, "other program") + ": a settings file of theirs that names the mod's plugin is found and shown to you, with its line" }),
+        el("div", { class: "dim small", text: other.map((f) => f.dll.replace(/\.dll$/i, "")).join(" · ") }));
+      kids.push(more);
+    }
   }
   box.replaceChildren(el("div", { class: "card" }, ...kids));
 }
