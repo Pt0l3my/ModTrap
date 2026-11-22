@@ -821,3 +821,9 @@ The update button (MT39) opens the newer file's page; the download goes through 
 **Recommendation: B**, as a later step: it keeps downloading with MO2 and Nexus's own page, and gives the install
 ModTrap's safe folder and Revert. Updating a mod in a tuned modlist can break what depends on it, so the step
 would show the dependants first, as Add mods does.
+
+**Note, 2026-11-22.** The owner: "I thought users can download mods from nexus at slower rate without key?" They
+can (MO01§14): a free account downloads through the site, and through MO2 after a press on the site's download
+button, which makes a short-lived key for that one file. What a free account cannot have is a program starting
+the download by itself; that is what option C would need, and why it is for paying accounts only. Options A and B
+work for every account: the update button opens the file's page, the press there starts MO2's download.
