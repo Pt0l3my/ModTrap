@@ -123,6 +123,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 98 | 2026-11-22 | A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed | DECIDED | #steps #tools #page |
 | 99 | 2026-11-22 | The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure | DECIDED | #steps #tools #log |
 | 100 | 2026-11-22 | On the owner's list the scanner is whole in 20 s, then 3 s; the demaster of 0.3.29 went through clean; the Process tab's own Demaster button was not greyed while ModTrap scanned | FACT | #page #steps #process |
+| 101 | 2026-11-22 | An update check: sources read from MO2's records and a Wabbajack file; Nexus and GitHub asked as MO2 asks; the owner's key kept under Windows' protection; not yet run against the real services | DECIDED | #updates #network #page |
+| 102 | 2026-11-22 | The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything | DECIDED | #page |
 
 ## Entries
 
@@ -2520,3 +2522,54 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   looked ready.
 - Fixed: the button carries the mark; at its start the page marks every fixed button by the same words; a test
   holds every fixed button with such words to the mark.
+
+### 101. An update check: sources read from MO2's records and a Wabbajack file; Nexus and GitHub asked as MO2 asks; the owner's key kept under Windows' protection; not yet run against the real services
+
+`2026-11-22` · DECIDED · `#updates #network #page` · refs: MT37, MO01§12, MO01§13, TL01§27, DESIGN§20
+
+- The owner asked for it (MT37). Until now ModTrap made no connection but to its own page on this PC. This is the
+  one exception, and it is kept narrow: two hosts, named in the code, and a test holds the code to them; an
+  answer that points elsewhere is not followed.
+- Sources, in the order they are trusted: the mod's `meta.ini` (the files installed by number, the mod's number,
+  the archive, a web address), the `.meta` beside the downloaded archive, then the Wabbajack file's entry for the
+  archive. A mod with no number and a GitHub address is a GitHub mod; other hosts cannot be asked for versions
+  and are said so.
+- The Wabbajack file's list is read piece by piece (METHOD: its archives and directives are walked one entry at a
+  time, never the whole text), and only a summary is kept in ModTrap's folder, by the file's size and date.
+  30,000 invented directives through pieces of 4 KB read right in the tests; the real size is not yet seen.
+- The verdict for a Nexus mod follows MO2's own way (MO01§13), in ModTrap's own code: the installed file by its
+  number, else by the archive's name; the chain of replacements; a newer current file is an update. Where the
+  installed file cannot be told, or is marked old with no word of what replaced it, the state is "unclear" with
+  what is known, never "up to date".
+- REJECTED: asking about every mod at each scan. Some 3,000 mods with a number are more than the account's
+  allowance for a day. One question for the month's list says which mods had a new file; a mod is asked about
+  only then, or when its last asking is over four weeks old. The first scans of a large list are therefore
+  spread over several scans, enabled mods and those in the month's list first.
+- REJECTED: taking the key from MO2. MO2 keeps its own in Windows' store for MO2; it is not ModTrap's to take.
+- The key: one file in ModTrap's own folder, written through DPAPI on Windows; the page gets only "a key is
+  kept"; the log gets no part of it (a test reads the log, the page's state and the state for the key's text).
+- A scan does not count as ModTrap working (WHY§92): it changes nothing and reads nothing a demaster needs, so
+  nothing is greyed for it.
+- NOT YET CHECKED: against the real Nexus and GitHub, and with a real Wabbajack file. The answers' fields are as
+  MO2 reads them, and the tests use stand-ins shaped so. The owner's first scan, and its lines in the log, are
+  the check; anything that differs shows there as an error in words, not as a wrong "up to date".
+- Checked: tests (the records of a mod; the list's file, also large and broken ones; the chain, the archive's
+  name, what cannot be told; what is asked again and when; the allowance; no key; the two hosts only; the key
+  never given back); the tab in a browser with stand-ins.
+
+### 102. The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything
+
+`2026-11-22` · DECIDED · `#page` · refs: DESIGN§4, DESIGN§8, WHY§97
+
+- The owner, with a picture: "when the user has mods selected this over top message with buttons covers the UI,
+  can it be moved into header where there is no text? Also what is "ModTrap - … + …" in Not Yet Installed?"
+- The bar ("2 mods ticked: …", "See what depends on them", "Untick all") floated over the bottom of the page and
+  covered the last rows of the list. It is now part of the row of sections (Modlist, Demaster, …), at its right
+  end, which is empty. Tried first: the header's row of chips; on a wide list that row is nearly full, the bar
+  wrapped to a line of its own and the page jumped as mods were ticked. In the row of sections the height stays
+  the same at 1500 and at 1000 pixels' width; the text of the bar is cut with an ellipsis before the row grows.
+- The mod asked about is the one ModTrap makes for a demaster: it holds the plugins ModTrap rewrote (seven in the
+  owner's demaster), is enabled, and is placed above every other mod so that its plugins win over the originals,
+  which stay untouched in their own mods. The Mods tab groups mods by the modlist's separators; the list's last
+  separator is called "Not Yet Installed", so a mod placed above everything shows under it. The label is the
+  list's, not a state of the mod. Revert takes the mod out again.

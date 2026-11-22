@@ -611,3 +611,21 @@ starts are refused, and the one go holds its place and takes its step again by i
    for. So while a MO2 of another modlist is open, ModTrap starts nothing through MO2: the start is refused before
    anything is begun, the one go holds its place and says what it waits for, and it takes the same step again by
    itself once that MO2 is closed.
+
+## 20. The update check (MT37)
+
+An **Updates** tab, beside Tools. It lists every mod with where it came from and whether a newer file of it is out
+(WHY§101).
+
+**Where a mod came from** is read on this PC: the mod's `meta.ini`, the `.meta` beside its downloaded archive
+(MO01§12), and the modlist's own Wabbajack file if the owner names it (TL01§27). The Wabbajack file also says which
+mods are the list's own; the tab filters by the list's own mods, mods added afterwards, and mods added by ModTrap.
+
+**Whether a newer file is out** is asked of Nexus and of GitHub, and of nothing else (MO01§13). ModTrap asks and
+reads: it downloads nothing and changes nothing. Nexus is asked only with the owner's key, kept on this PC under
+Windows' protection for the owner's account, shown to no one and written nowhere else. The account's allowance of
+questions is spared; what did not fit in one scan follows at the next. States: update out, unclear, up to date,
+not asked yet, cannot be asked, gone from its page. What cannot be told is never shown as up to date.
+
+**When.** On "Scan for updates", and once at each start of ModTrap (a setting, on). The last answers are kept and
+shown without asking.

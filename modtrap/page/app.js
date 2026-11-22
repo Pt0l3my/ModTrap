@@ -271,6 +271,7 @@ const SETTING_TEXT = [
   ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is done once it has written its output. Synthesis has no such switch, only its run button: ModTrap presses that button once Synthesis has it ready (never while it is greyed), and asks the window to close when Synthesis's own log says the run has finished; if the press does not start a run, Synthesis stays open and is yours. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
   ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
+  ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updates tab). It asks only those two, reads the answers and changes nothing. Nexus is asked only when you have given ModTrap your Nexus key; without a key and without a mod from GitHub nothing is asked at all. Off: only when you press “Scan for updates”."],
   ["mo2_leave_alone", "When a tool's compiler crashes inside MO2, have MO2 leave the compiler alone", "MO2 hooks every program a tool starts, so that it sees the modlist's files. Synthesis starts the C# compiler to build its patchers; the compiler reads nothing of the modlist, and on some PCs it crashes when hooked. MO2 has its own list of programs it leaves alone (Settings, Workarounds, Executables Blacklist). On: when Synthesis's own log shows the compiler crashing, ModTrap adds the compiler (csc.exe and VBCSCompiler.dll) to that list in MO2's settings file, with MO2 closed and a copy of the file kept with the session, and the row of tools starts Synthesis once more. Off: ModTrap only says so."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
@@ -393,6 +394,112 @@ function renderToolsScan() {
     }
   }
   box.replaceChildren(el("div", { class: "card" }, ...kids));
+}
+
+// The update check (MT37, WHY§101): where each mod came from, and whether a newer file of it is out.
+const UP_STATE = { update: ["Update out", "bad"], maybe: ["Unclear", "warn"], current: ["Up to date", "good"], "not asked": ["Not asked yet", ""], none: ["Cannot be asked", ""], gone: ["Gone from its page", "warn"] };
+const UP_ORIGIN = { list: "the list's own", added: "added afterwards", modtrap: "added by ModTrap", "": "" };
+const UP_HOST = { nexus: "Nexus", github: "GitHub", url: "web address", "": "not known" };
+async function loadUpdates() {
+  if (state.updatesBusy || state.status !== "ready") return;
+  state.updatesBusy = true;
+  try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { state.updatesError = e.message; }
+  state.updatesBusy = false;
+  renderUpdates();
+  const d = state.updates;
+  clearTimeout(state.updatesTimer);
+  if (d && (d.scan.state === "going" || d.list.reading)) state.updatesTimer = setTimeout(loadUpdates, 2000);
+}
+function upFilter(key, value) { state.upFilter = Object.assign({ state: "", origin: "", on: false, text: "" }, state.upFilter, { [key]: value }); renderUpdates(true); }
+function renderUpdates(listOnly) {
+  const head = $("updates-head"), box = $("updates-list");
+  if (!head || !box) return;
+  const d = state.updates;
+  const num = (n) => (n || 0).toLocaleString("en-GB");
+  const badge = $("updates-count");
+  if (badge) { badge.hidden = !(d && d.counts.update); badge.textContent = d ? d.counts.update : ""; }
+  if (!d) { head.replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: state.updatesError || "Reading where the mods came from…" }))); box.replaceChildren(); return; }
+  const f = Object.assign({ state: "", origin: "", on: false, text: "" }, state.upFilter);
+  if (!listOnly) {
+    const going = d.scan.state === "going";
+    const scan = el("button", { type: "button", class: "primary", text: going ? "Scanning…" : "Scan for updates", disabled: going });
+    scan.addEventListener("click", async () => { try { await api("/api/updates/scan", {}); } catch (e) { toast(e.message); } loadUpdates(); });
+    const stop = going ? el("button", { type: "button", text: "Stop the scan" }) : null;
+    if (stop) stop.addEventListener("click", async () => { try { await api("/api/updates/stop", {}); } catch (e) { toast(e.message); } });
+    const kids = [el("div", { class: "card-head" }, el("h2", { text: "Updates" }), el("span", {}, stop, " ", scan)),
+      el("p", { class: "dim", text: "Where each mod came from, read from MO2's own records on this PC, and whether a newer file of it is out, asked of Nexus and GitHub. ModTrap only asks and reads: it downloads nothing and changes nothing in the modlist." })];
+    if (going) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + (d.scan.text || "scanning") + "…"));
+    if (d.scan.error) kids.push(el("p", { class: "would-needs", text: d.scan.error }));
+    const last = d.last;
+    if (last && last.nexus) {
+      const when = new Date(last.when * 1000).toLocaleString("en-GB");
+      kids.push(el("p", { text: "Last scan, " + when + ": Nexus was asked about " + plural(last.nexus.asked, "mod") + (last.nexus.left ? ", " + num(last.nexus.left) + " are left for the next scan" : "")
+        + "; GitHub about " + plural(last.github.asked, "repository", "repositories") + (last.github.left ? ", " + num(last.github.left) + " left" : "") + "." }));
+      for (const why of [last.nexus.why_stopped, last.github.why_stopped]) if (why) kids.push(el("p", { class: "dim small", text: why.charAt(0).toUpperCase() + why.slice(1) + "." }));
+      if (last.nexus.day_left !== null && last.nexus.day_left !== undefined) kids.push(el("p", { class: "dim small", text: "Your Nexus account has " + num(last.nexus.day_left) + " questions left today and " + num(last.nexus.hour_left) + " this hour; ModTrap stops well short of both." }));
+    } else kids.push(el("p", { class: "dim", text: "No scan has been made yet." }));
+    // The Nexus key.
+    const keyIn = el("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: d.key ? "a key is kept; paste another to replace it" : "paste your personal Nexus key here", size: "46" });
+    const keep = el("button", { type: "button", text: "Keep the key" });
+    keep.addEventListener("click", async () => { try { await api("/api/updates/key", { key: keyIn.value }); keyIn.value = ""; toast("The key is kept on this PC."); } catch (e) { toast(e.message); } loadUpdates(); });
+    const forget = d.key ? el("button", { type: "button", text: "Forget the key" }) : null;
+    if (forget) forget.addEventListener("click", async () => { try { await api("/api/updates/key", { key: null }); } catch (e) { toast(e.message); } loadUpdates(); });
+    kids.push(el("h3", { text: "Your Nexus key" }),
+      el("p", { class: "dim small", text: "Nexus answers a program only with a key of your account: you make one on Nexus, in your account's settings, under API keys, as a personal key. ModTrap keeps it on this PC, protected by Windows for your Windows account. It is sent to Nexus only, never shown again, and never written to the log or to a session file." }),
+      el("p", {}, el("span", { class: "tag " + (d.key ? "good" : "warn"), text: d.key ? "a key is kept" : "no key: Nexus is not asked" }), " ", keyIn, " ", keep, " ", forget));
+    // The Wabbajack file.
+    const pathIn = el("input", { type: "text", spellcheck: "false", placeholder: "C:\\Lists\\Example\\Example List.wabbajack", size: "60" });
+    const name = el("button", { type: "button", text: d.list.named ? "Name another file" : "Read this file" });
+    name.addEventListener("click", async () => { try { await api("/api/updates/list", { path: pathIn.value }); pathIn.value = ""; } catch (e) { toast(e.message); } loadUpdates(); });
+    const drop = d.list.named ? el("button", { type: "button", text: "Forget the file" }) : null;
+    if (drop) drop.addEventListener("click", async () => { try { await api("/api/updates/list", { path: "" }); } catch (e) { toast(e.message); } loadUpdates(); });
+    kids.push(el("h3", { text: "The modlist's Wabbajack file" }),
+      el("p", { class: "dim small", text: "Optional. The .wabbajack file the modlist was installed from names every archive of the list with where it is downloaded from, and which mods the list fills. With it ModTrap knows more sources, and can tell the list's own mods from the ones added afterwards. Give its full path; ModTrap only reads it." }));
+    if (d.list.reading) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + (d.list.text || "reading the Wabbajack file") + "… A large list takes a few minutes the first time."));
+    if (d.list.error) kids.push(el("p", { class: "would-needs", text: d.list.error }));
+    if (d.list.named && d.list.counts) kids.push(el("p", { text: "“" + d.list.file + "”: " + (d.list.name || "a list") + (d.list.version ? " " + d.list.version : "") + ", " + plural(d.list.counts.archives, "archive") + ", " + plural(d.list.counts.mods, "mod folder") + "." }));
+    kids.push(el("p", {}, pathIn, " ", name, " ", drop));
+    head.replaceChildren(el("div", { class: "card" }, ...kids));
+  }
+  // The list, with its filters.
+  const pick = (key, value, label, n) => {
+    const b = el("button", { type: "button", class: "chip link" + (f[key] === value ? " on" : ""), text: label + (n === undefined ? "" : " " + num(n)) });
+    b.addEventListener("click", () => upFilter(key, value));
+    return b;
+  };
+  const search = el("input", { type: "search", placeholder: "Search by mod", value: f.text, size: "24" });
+  search.addEventListener("input", () => { state.upFilter = Object.assign({}, f, { text: search.value }); clearTimeout(state.upTimer); state.upTimer = setTimeout(() => renderUpdates(true), 250); });
+  const onlyOn = el("input", { type: "checkbox", id: "up-on" });
+  onlyOn.checked = !!f.on;
+  onlyOn.addEventListener("change", () => upFilter("on", onlyOn.checked));
+  const known = d.list.named && d.list.counts;
+  const bar = [el("div", { class: "chips" }, el("span", { class: "dim", text: "State:" }), pick("state", "", "All", d.rows.length),
+    ...["update", "maybe", "current", "not asked", "none", "gone"].filter((k) => d.counts[k]).map((k) => pick("state", k, UP_STATE[k][0], d.counts[k]))),
+    el("div", { class: "chips" }, el("span", { class: "dim", text: "Mods:" }), pick("origin", "", "All"),
+      ...(known ? [pick("origin", "list", "The list's own", d.origins.list), pick("origin", "added", "Added afterwards", d.origins.added)] : []),
+      pick("origin", "modtrap", "Added by ModTrap", d.origins.modtrap),
+      known ? null : el("span", { class: "dim small", text: "Name the modlist's Wabbajack file above to tell the list's own mods from the ones added afterwards." })),
+    el("div", { class: "chips" }, search, el("label", { for: "up-on" }, onlyOn, " enabled mods only"))];
+  const text = (f.text || "").trim().toLowerCase();
+  const rows = d.rows.filter((r) => (!f.state || r.state === f.state) && (!f.origin || r.origin === f.origin) && (!f.on || r.enabled) && (!text || r.mod.toLowerCase().includes(text)));
+  const order = { update: 0, maybe: 1, gone: 2, "not asked": 3, current: 4, none: 5 };
+  rows.sort((a, b) => (order[a.state] - order[b.state]) || a.mod.localeCompare(b.mod));
+  const shown = rows.slice(0, 600);
+  const link = (r) => {
+    if (!r.page) return null;
+    const a = el("a", { target: "_blank", rel: "noopener noreferrer", text: "its page" });
+    a.setAttribute("href", r.page);
+    return a;
+  };
+  const table = el("table", { class: "plain updates" }, el("thead", {}, el("tr", {}, el("th", { text: "Mod" }), el("th", { text: "From" }), el("th", { text: "Installed" }), el("th", { text: "State" }), el("th", { text: "What is known" }))),
+    el("tbody", {}, ...shown.map((r) => el("tr", { class: r.enabled ? "" : "dim" },
+      el("td", {}, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
+      el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null),
+      el("td", { text: r.version || "" }),
+      el("td", {}, el("span", { class: "tag " + UP_STATE[r.state][1], text: UP_STATE[r.state][0] }), r.newest ? el("div", { class: "small", text: r.newest + (r.when ? " · " + r.when : "") }) : null),
+      el("td", { class: "small" }, r.text.charAt(0).toUpperCase() + r.text.slice(1) + ".", r.asked ? el("span", { class: "dim", text: " Asked " + r.asked + "." }) : null)))));
+  box.replaceChildren(el("div", { class: "card" }, ...bar, rows.length ? table : el("p", { class: "dim", text: "No mod matches." }),
+    rows.length > shown.length ? el("p", { class: "dim", text: "The first 600 of " + num(rows.length) + " are shown: narrow the list with the filters or the search." }) : null));
 }
 
 function renderState(s) {
@@ -2631,12 +2738,13 @@ function showTab(name) {
     if (!b.hidden) shown++;
   });
   $("tabs").classList.toggle("single", shown < 2);
-  document.querySelectorAll("#groups button").forEach((b) => b.classList.toggle("on", b.dataset.group === group));
+  document.querySelectorAll("#groups button[data-group]").forEach((b) => b.classList.toggle("on", b.dataset.group === group));
   document.querySelectorAll(".tab").forEach((t) => { t.hidden = t.id !== "tab-" + name; });
   state.tab = name;
   updateTray();
   saveUi();
   if (name === "history") { state.historyText = ""; pollHistory(); }
+  if (name === "updates") loadUpdates();
   if (name === "job") paneFollow("job-log");
   if (name === "log") paneFollow("log");
 }
@@ -2911,7 +3019,7 @@ $("rescan").addEventListener("click", async () => {
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 const GROUP_FIRST = { modlist: "mods", demaster: "selection", add: "add", record: "history", settings: "settings" };
-document.querySelectorAll("#groups button").forEach((b) => b.addEventListener("click", () =>
+document.querySelectorAll("#groups button[data-group]").forEach((b) => b.addEventListener("click", () =>
   showTab((state.groupTab || {})[b.dataset.group] || GROUP_FIRST[b.dataset.group])));
 $("dry-run").addEventListener("click", showPlan);
 $("demaster").addEventListener("click", demasterGo);

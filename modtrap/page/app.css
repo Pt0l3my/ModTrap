@@ -22,7 +22,7 @@ body.dragging .drop .drop-title { display: block; }
   border-radius: 50%; font-size: 12px; color: var(--dim); cursor: help; margin-left: 4px; }
 #open-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #open-form label { color: var(--dim); }
-input[type=text], input[type=search], select { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+input[type=text], input[type=password], input[type=search], select { background: var(--bg); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; padding: 6px 9px; font: inherit; }
 #folder { flex: 1 1 380px; min-width: 240px; font-family: Consolas, ui-monospace, monospace; }
 input:focus-visible, select:focus-visible, button:focus-visible, .terminal:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -166,9 +166,17 @@ table.plain td { padding: 4px 18px 4px 10px; }
   animation: spin .9s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.tray { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
-  background: var(--panel2); border: 1px solid var(--accent); border-radius: 12px; padding: 9px 12px 9px 16px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, .5); max-width: calc(100vw - 32px); z-index: 5; }
+/* The ticked mods, with what to do next: in the row of sections, at its free end, so that it covers nothing and
+   moves nothing (WHY§102). */
+.tray { display: inline-flex; align-items: center; gap: 8px; margin: 4px 4px 4px auto; padding: 0 3px 0 12px; min-width: 0;
+  border: 1px solid var(--accent); border-radius: 999px; background: var(--sel); font-size: 13.5px; }
+.tray { flex: 0 1 auto; overflow: hidden; }
+.tray[hidden] { display: none; }
+#groups button[data-group] { flex: none; white-space: nowrap; }
+#groups .tray button { flex: none; }
+#groups .tray button { padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-weight: 500;
+  color: var(--text); background: var(--panel2); white-space: nowrap; }
+#groups .tray button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 #tray-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toast { position: fixed; right: 18px; bottom: 18px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
   padding: 9px 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .5); z-index: 6; max-width: 420px; }
@@ -351,3 +359,6 @@ body.unsettled button.gated { opacity: .4; filter: grayscale(1); cursor: progres
 .look { margin: 6px 0 4px 18px; padding: 8px 12px; border-left: 2px solid var(--warn); }
 .look p { margin: 2px 0; }
 .look-line { margin-top: 8px; }
+table.updates { width: 100%; }
+table.updates td { vertical-align: top; }
+.chip.link.on { border-color: var(--accent); color: var(--accent); }

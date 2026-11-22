@@ -19,7 +19,7 @@ import tempfile
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import process, version
+from . import process, updating, version
 from .server import Bad
 
 
@@ -102,6 +102,7 @@ SETTINGS = {
     "tool_versions": True,     # before the patcher framework starts: library versions its last log shows as not fitting are set right (MT27)
     "tool_prebuild": True,     # and patchers its last log shows as not built are built outside MO2 first (MT28)
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
+    "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -123,6 +124,7 @@ class Api:
         self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
         self._making_tools = 0                        # readings of what the tools made that are going (WHY§92)
         self._scanning = 0                            # looks through the modlist's settings files that are going (WHY§98)
+        self.updating = updating.Updating(VERSION)    # the update check (MT37): reads and asks, changes nothing
         self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
         self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
@@ -414,6 +416,47 @@ class Api:
             if run != self._run:
                 return
             self.status, self.message, self.model, self.profile = "ready", "", m, inst.profile
+        try:
+            self.updating.at_launch(m, *self._updates_for(), bool(self.settings().get("updates_at_launch")))
+        except Exception as e:                                  # the update check is beside the point of reading a modlist
+            log.warn("the update check at launch was passed over: %s", logbook.why(e))
+
+    def _updates_for(self) -> tuple[str, set[str]]:
+        """The modlist's key for what the update check remembers, and the mods ModTrap itself added to it."""
+        added: set[str] = set()
+        if self.changes is not None:
+            try:
+                for j in self.changes.jobs():
+                    if j.get("state") == "added":
+                        added |= set(j.get("mods") or [])
+            except Exception:
+                pass
+        return sessions.modlist_key(self.folder or "."), added
+
+    def updates_state(self) -> dict:
+        return self.updating.account(self._need(), *self._updates_for())
+
+    def updates_do(self, what: str, body: dict) -> dict:
+        m = self._need()
+        key, added = self._updates_for()
+        try:
+            if what == "scan":
+                return self.updating.start(m, key, added)
+            if what == "stop":
+                return self.updating.stop()
+            if what == "key":
+                text = body.get("key")
+                if text is not None and not isinstance(text, str):
+                    raise Bad("the key did not arrive")
+                return self.updating.set_key(text)
+            if what == "list":
+                path = body.get("path", "")
+                if not isinstance(path, str) or len(path) > 1000:
+                    raise Bad("give the Wabbajack file's path")
+                return self.updating.set_list(key, path)
+        except updating.Bad as e:
+            raise Bad(str(e)) from None
+        raise Bad("that is not something the update check does")
 
     def locate(self, body: dict) -> dict:
         """A folder dropped on the page (WHY§30): its name and its ModOrganizer.ini. Finds it on disk and opens it."""
@@ -1672,6 +1715,8 @@ class Api:
             return 200, self.tools_made()
         if path == "/api/tools/scan":
             return 200, self.scanner()
+        if path == "/api/updates":
+            return 200, self.updates_state()
         if path == "/api/history":
             return 200, self.history_events()
         if path == "/api/log":
@@ -1694,6 +1739,8 @@ class Api:
             raise Bad(OTHER_MO2)
         if path == "/api/settings":
             return 200, self.settings_set(body), None
+        if path.startswith("/api/updates/"):
+            return 200, self.updates_do(path[len("/api/updates/"):], body), None
         if path in NEEDS_SAME_VERSION:
             log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":

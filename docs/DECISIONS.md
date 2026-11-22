@@ -27,7 +27,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   is run by ModTrap pressing it). MT32 (a compiler that crashes inside MO2 is put on MO2's list of programs it leaves alone). MT33 (ModTrap reads
   the settings files that name the plugin, and gives one account of its checks after the demaster). MT34 (a scanner of every
   settings file in force in the modlist, and of the frameworks installed). MT35 (the scanner looks through the animation folders
-  too; answered the same day). MT36 (the scanner writes every look to the log, with each failure and its reason).
+  too; answered the same day). MT36 (the scanner writes every look to the log, with each failure and its reason). MT37 (an update check: where each mod came
+  from, and whether Nexus or GitHub has a newer file; asks and reads only).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -731,3 +732,30 @@ which files failed."
 - Every file or folder that names a ticked plugin is written with its line count and what is left to the owner.
 - The scanner checks its own count, and a scanner that fails altogether is said as such: it is never taken for
   "nothing found", and the settings-files step is then the owner's.
+
+## MT37
+
+**An update check** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "Can we also add option to scan for mods on nexus, github, etc, by meta file? maybe the user could
+add the modlist's matching Wabbajack image file that has links? then ModTrap could check for updates at launch and
+when the user presses scan for updates button. Also, a separate filters such as for downloaded (non original
+modlist mods)/added mods (via ModTrap) for updates."
+
+**Settled under that freedom** (WHY§101, MO01§12, MO01§13, TL01§27; the owner may overrule any of it):
+
+- An Updates tab lists every mod with where it came from, by MO2's own records and, if the owner names it, the
+  modlist's Wabbajack file; and whether a newer file of it is out. Filters: by state, and the list's own mods,
+  mods added afterwards, mods added by ModTrap.
+- It is the first and only part of ModTrap that goes out to the network, and it goes to two services only:
+  Nexus and GitHub, by their interfaces for programs. It asks and reads. It downloads no mod, updates no mod and
+  changes nothing in the modlist.
+- Nexus is asked only with the owner's own key, which the owner gives ModTrap on the page. The key is kept on
+  the owner's PC, protected by Windows for the owner's account, sent to Nexus only, never shown again, never
+  written to the log or a session file.
+- ModTrap spares the account's allowance of questions: one question for the month's list, then only the mods
+  that need asking, at most 400 in a scan, stopping while 300 are left for the day and 20 for the hour. The
+  rest follow at the next scan.
+- A scan runs when the owner presses the button, and once at each start of ModTrap (a setting, on; without a key
+  and without a mod from GitHub nothing is asked).
+- What cannot be told is said as such ("unclear", "cannot be asked"), never as up to date.

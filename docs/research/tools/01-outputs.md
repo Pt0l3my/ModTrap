@@ -482,3 +482,28 @@ version a modlist carries may differ.
   as for anyone who never had the thing, for 43 of the names in files. For the two named it can hold where it was
   not meant. **LIKELY**, not read: `IsForm` compares the actor itself with the thing, which only matters if there
   is no actor. A condition added by another program is not in this source at all.
+
+## 27. A Wabbajack file (2026-11-22)
+
+Read in Wabbajack's public source (GPL-3.0), commit `a44228e`; facts only, nothing copied. Its licence note says
+that modlists made with it are under CC BY-NC-SA 4.0; ModTrap only reads the owner's own copy on the owner's PC.
+
+- **FACT (`Wabbajack.Installer/AInstaller.cs:192`).** A `.wabbajack` file is a zip archive; the list itself is the
+  entry called `modlist`, a JSON text.
+- **FACT (`Wabbajack.DTOs/ModList/ModList.cs`).** The list holds `Archives`, `Directives`, `Name`, `Version`,
+  `GameType` and more.
+- **FACT (`Wabbajack.DTOs/Archive.cs`).** An archive has `Hash`, `Name`, `Size`, `Meta` and `State`: where it is
+  downloaded from.
+- **FACT (`Wabbajack.DTOs/DownloadStates/Nexus.cs`, `Http.cs`, `Wabbajack.DTOs/JsonConverters/Generated.cs`).** A
+  state names its kind in `$type`: `NexusDownloader, Wabbajack.Lib` with `GameName`, `ModID`, `FileID`,
+  `Version`; `HttpDownloader, Wabbajack.Lib` with `Url`; others for a file of the game, the list's own store,
+  files fetched by hand, and other hosts.
+- **FACT (`Wabbajack.DTOs/ModList/Directive.cs`, `Directives/FromArchive.cs`,
+  `JsonConverters/HashRelativePathConverter.cs:15-18`).** A directive has `To`, the place a file goes to inside
+  the installed list (for a mod's file, `mods`, the mod's folder, the file), and, where the file comes from an
+  archive, `ArchiveHashPath`: a list whose first entry is that archive's hash.
+- **FACT (`Wabbajack.DTOs/Game/GameRegistry.cs:94-115`).** Its names for the games map to Nexus's as in MO01§12.
+- **So.** The mods a list fills are the folders named under `mods` in its directives, each with the archives its
+  files come from; a mod of the installed list that the file does not name was added afterwards. **LIKELY**, not
+  seen: how large such a text is for a list of some 3,500 mods (hundreds of megabytes are expected, so ModTrap
+  reads it piece by piece and keeps only a summary).

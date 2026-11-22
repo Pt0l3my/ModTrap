@@ -145,3 +145,44 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
 - **LIKELY.** A program on the list, started inside MO2, runs as if started outside it: it sees none of the
   modlist's files and is not touched by the hook.
 
+## 12. What MO2 records of where a mod came from (2026-11-22)
+
+Read at `4ba22f0`; facts only, nothing copied.
+
+- **FACT (`src/modinforegular.cpp:87-104`, `:155-178`).** A mod's `meta.ini` holds, under `General`: `modid` (the
+  mod's number at Nexus, -1 when none), `version`, `newestVersion` (the newest MO2 last saw), `ignoredVersion`,
+  `installationFile` (the archive it was installed from), `repository`, `gameName` (MO2's short name of the
+  game), `url` with `hasCustomURL`, `lastNexusQuery`, `lastNexusUpdate`, `nexusLastModified`.
+- **FACT (`src/modinforegular.cpp:227-231`, `:290-300`).** The files installed are kept as a list
+  `installedFiles`, each entry with `modid` and `fileid`.
+- **FACT (`src/downloadmanager.cpp:1770-1797`).** Beside each downloaded archive MO2 keeps `<archive>.meta` with
+  `gameName`, `modID`, `fileID`, `url` (several joined by `;`), `version`, `newestVersion`, `repository`.
+- **FACT (`modorganizer-game_bethesda`, `src/games/skyrimse/gameskyrimse.cpp:276-279`, `skyrim/gameskyrim.cpp:174`,
+  `enderalse/gameenderalse.cpp:286`).** The games' names in Nexus's addresses: `skyrimspecialedition`, `skyrim`,
+  `enderalspecialedition`.
+
+## 13. How MO2 asks Nexus whether a mod has a newer file (2026-11-22)
+
+Read at `4ba22f0`; facts only, nothing copied. ModTrap asks the same questions in its own code (WHY§101).
+
+- **FACT (`src/nexusinterface.cpp:1254`, `:899-926`).** The service is at `https://api.nexusmods.com/v1`. The
+  mods of a game with a new file in a period: `/games/<game>/mods/updated?period=1d`, `1w` or `1m`. A mod's
+  files: `/games/<game>/mods/<number>/files`.
+- **FACT (`src/nexusinterface.cpp:1018`, `src/nxmaccessmanager.cpp:1003-1005`).** The account's key goes in the
+  header `APIKEY`; a program names itself in `Application-Name`, `Application-Version`, `Protocol-Version`.
+- **FACT (`src/nexusinterface.cpp:258-264`).** Each answer says what the account has left: `x-rl-daily-limit`,
+  `x-rl-daily-remaining`, `x-rl-hourly-limit`, `x-rl-hourly-remaining`.
+- **FACT (`src/modinfo.cpp:389-414`).** Of the period's list MO2 reads `mod_id` and `latest_file_update` (seconds),
+  and asks about a mod whose `latest_file_update` is later than its own last asking, less an hour; and about any
+  mod last asked over a month ago.
+- **FACT (`src/mainwindow.cpp:3180-3330`).** Of a mod's files MO2 reads `files` (`file_id`, `file_name`, `version`,
+  `category_id`, `uploaded_timestamp`) and `file_updates` (`old_file_id`, `new_file_id`, `old_file_name`,
+  `new_file_name`). The installed file is found by its number, else by the archive's name among the files, else
+  among the old and new names of the replacements. From it the replacements are followed; the newest one that is
+  current is the update.
+- **FACT (`src/nexusinterface.h:181-210`).** A file's `category_id`: 1 main, 2 update, 3 optional, 4 old version,
+  5 miscellaneous, 6 removed, 7 archived. Current are 1, 2, 3 and 5.
+- **LIKELY (not read today).** GitHub's public interface gives a repository's newest release at
+  `https://api.github.com/repos/<owner>/<name>/releases/latest` (`tag_name`, `published_at`), allows a program
+  without an account some 60 questions an hour, and says what is left in `x-ratelimit-remaining`. This is from
+  GitHub's public documentation as known; the first real scan on the owner's PC is the check.

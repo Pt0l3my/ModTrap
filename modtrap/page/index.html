@@ -56,12 +56,18 @@
   <button data-group="add" title="Add a mod to the modlist safely">Add mods</button>
   <button data-group="record" title="What ModTrap changed, and its log">History</button>
   <button data-group="settings" title="How ModTrap goes about its work">Settings</button>
+  <span id="tray" class="tray" hidden>
+    <span id="tray-text"></span>
+    <button id="tray-review" class="primary" type="button">See what depends on them</button>
+    <button id="tray-clear" type="button">Untick all</button>
+  </span>
 </nav>
 <nav id="tabs" hidden>
   <button data-group="modlist" data-tab="mods" class="on">Mods</button>
   <button data-group="modlist" data-tab="plugins">Plugins</button>
   <button data-group="modlist" data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-group="modlist" data-tab="tools">Tools</button>
+  <button data-group="modlist" data-tab="updates" title="Where each mod came from, and whether a newer file of it is out">Updates <span id="updates-count" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-group="demaster" data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
@@ -211,6 +217,13 @@
     </div>
   </section>
 
+  <section id="tab-updates" class="tab" hidden>
+    <div class="scroll">
+      <div id="updates-head" class="pad"></div>
+      <div id="updates-list" class="pad"></div>
+    </div>
+  </section>
+
   <section id="tab-process" class="tab" hidden>
     <div class="tools">
       <button id="process-go" type="button" class="primary gated" disabled>Demaster Selected</button>
@@ -264,11 +277,6 @@
       <span id="picker-here" class="dim"></span>
     </div>
   </div>
-</div>
-<div id="tray" class="tray" hidden>
-  <span id="tray-text"></span>
-  <button id="tray-review" class="primary" type="button">See what depends on them</button>
-  <button id="tray-clear" type="button">Untick all</button>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script nonce="__NONCE__">/*__JS__*/</script>
