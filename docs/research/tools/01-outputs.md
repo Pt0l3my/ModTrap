@@ -416,3 +416,22 @@ Read in the frameworks' public sources, facts only, nothing copied: Spell Perk I
 - **Not read.** FormList Manipulator and Base Object Swapper (their sources were not at hand), and any settings
   file of another kind: ModTrap leaves those to the owner.
 
+## 24. FormList Manipulator's settings files (2026-11-22)
+
+Read in its public source and its own description (MIT), commit `82a694e` of the repository `FormList-Manipulator`
+of its author; facts only, nothing copied. The version a modlist carries may differ.
+
+- **FACT (its `README.md`, "Config Files" and "General usage").** A settings file is an INI file whose name ends
+  with `_FLM`, or any INI file in a folder `FLM`. A line is `FormList = list|form, form, …|filter`: forms are
+  added to the list; a form or a list is an editor name or a number, `~`, and a plugin's file name. In its
+  words: the list "is skipped if is not found", and a form "is skipped if it already exists in FormList or is
+  not found".
+- **FACT (the same, "Filters").** A filter is made of conditions: a plugin's name with `+` if the plugin must be
+  active, or `-` if it must not be; several joined by `&` must all hold, and of several conditions one is enough.
+  A filter can be written in the line or named once by `Filter = name|conditions` and used by `#name`.
+- **FACT (`src/Utility/Utility.hpp:73-89`).** A form that cannot be found is noted in the framework's log
+  ("Can't find Form …") and not added.
+- **So.** A line that names a plugin as the list's or a form's origin adds nothing once the plugin is gone. A
+  line with `+plugin` is passed over once the plugin is gone. A line with `-plugin` was held back while the
+  plugin was there and is carried out once it is gone: its author wrote it for a modlist without that plugin.
+

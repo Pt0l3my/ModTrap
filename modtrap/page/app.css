@@ -346,3 +346,8 @@ table.made .small { font-size: 12.5px; }
 body.unsettled button.gated { opacity: .4; filter: grayscale(1); cursor: progress; }
 .chip.work { border-color: var(--warn); color: var(--warn); }
 .spinner.small { width: 10px; height: 10px; border-width: 2px; vertical-align: -1px; }
+
+/* What is left to the owner in a settings file (WHY§97): the file, the line, what it means, what to do. */
+.look { margin: 6px 0 4px 18px; padding: 8px 12px; border-left: 2px solid var(--warn); }
+.look p { margin: 2px 0; }
+.look-line { margin-top: 8px; }

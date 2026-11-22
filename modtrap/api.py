@@ -940,7 +940,8 @@ class Api:
         job = self.job.public() if self.job else None
         out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None,
                                   going=self.changes is not None and self.changes.dm_state in ("working", "verified"),
-                                  tools_run=self.changes.tools_run() if self.changes is not None else None)
+                                  tools_run=self.changes.tools_run() if self.changes is not None else None,
+                                  self_run=self.settings().get("tools_self") is not False)
         out["looking"] = bool(mods) and deep is None
         return out
 

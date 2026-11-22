@@ -83,6 +83,11 @@ async function toggleMo2() {
 }
 
 // Who does a step: ModTrap, the owner, or ModTrap starts a tool that the owner then works in.
+function copyButton(text, what) {
+  const b = el("button", { type: "button", class: "nav-link", text: "copy" });
+  b.addEventListener("click", () => copyText(text, what));
+  return b;
+}
 function whoTag(who) {
   return el("span", { class: "who" + (who === "you" ? " you" : who === "both" ? " both" : ""),
     title: who === "both" ? "ModTrap starts the tool through MO2 with the button below; what is done inside the tool is yours" : "",
@@ -678,7 +683,7 @@ function autoGo() {
 // that closes without having written anything ends the row: something did not go as meant, and that is the owner's.
 function startToolsRow() {
   state.dmChain = "tools"; state.toolsTried = {}; state.toolsAgain = {}; state.toolsNow = "";
-  toast("The tools that are to run again are started one after another. Work each, then close it.");
+  toast("The tools that are to run again are started one after another. ModTrap runs and closes the ones it can; any other is yours to work, then close.");
   state.processText = ""; renderProcess();
 }
 
@@ -781,6 +786,10 @@ function remadeNote(j) {
 
 // Revert of a demaster (WHY§81): always back to how things stood before it, whatever came after.
 const REVERT_ASKS = "Put everything back as it was before this demaster?\n\nThe three lists as they were; ModTrap's own mod removed; any plugin a tool has made anew since put back as it was; and the output of each tool that ModTrap started since, as it was kept before the tool ran. What is there now is set aside in the job's folder, not deleted.";
+// Revert never runs while this modlist's MO2 is open (an open MO2 writes its own lists back over ModTrap's): pressed
+// with MO2 open, ModTrap first asks MO2 to close (it asks you before, unless Settings says to close it without asking),
+// and the program itself refuses the Revert while MO2 is still there. So the button is safe to press at any time.
+const REVERT_WITH_MO2 = "Safe to press with MO2 open: ModTrap closes MO2 first (it asks you, unless Settings says to close it without asking), and never reverts while MO2 is still open.";
 function revertSaid(r) {
   if (r.how === "finish") return (r.placed ? plural(r.placed, "plugin") + " back at " + (r.placed === 1 ? "its place" : "their places") + " in the load order. " : "") +
     (r.set_aside ? plural(r.set_aside, "plugin") + " left in ModTrap's own mod set aside in the job's folder; the mod's folder is gone. " : "") +
@@ -892,6 +901,7 @@ function renderDemaster(force) {
   const earlier = allJobs.filter((j) => j.state !== "installed").length;
   for (const j of allJobs.filter((x) => x.state === "installed").slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Revert" });
+    undo.title = REVERT_WITH_MO2;
     undo.addEventListener("click", async () => {
       if (!await confirmBox(REVERT_ASKS)) return;
       revertDemaster(j.job);
@@ -1083,6 +1093,7 @@ async function pollHistory() {
         const cell = el("td", {});
         if (stands && d.can_change) {
           const undo = el("button", { type: "button", text: j.what === "add" ? "Take it out again" : "Revert" });
+          undo.title = REVERT_WITH_MO2;
           undo.addEventListener("click", async () => {
             if (!await confirmBox(j.what === "add" ? "Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder?" : REVERT_ASKS)) return;
             try { const r = await api(j.what === "add" ? "/api/add/revert" : "/api/demaster/revert", { job: j.job }); toast(j.what === "add" ? "Put back as it was." : revertSaid(r)); } catch (e) { toast(e.message); }
@@ -1801,6 +1812,13 @@ function stepItem(it) {
     it.kind ? el("span", { class: "dim", text: "  " + it.kind }) : null,
     el("span", { class: "dim", text: "  names " + it.names.join(", ") + (it.count ? " in " + plural(it.count, "line") : "") }),
     it.verdict ? el("span", { class: "tag " + (it.open ? "warn" : "good"), text: it.verdict }) : null,
+    // What is left to the owner is said in full (WHY§97): where the file is, which line, what it means, what to do.
+    (it.look || []).length ? el("div", { class: "look" },
+      it.path ? el("p", {}, "The file: ", el("span", { class: "mono", text: it.path }), copyButton(it.path, "The file's path")) : null,
+      ...it.look.map((ln) => el("div", { class: "look-line" },
+        el("p", {}, el("b", { text: "Line " + ln.n + ": " }), el("span", { class: "mono", text: ln.text })),
+        el("p", { class: "dim", text: "What it means: " + ln.means + "." }),
+        ln.todo ? el("p", { text: "What to do: " + ln.todo }) : null))) : null,
     it.evidence ? evidenceFold(it.evidence) : null);
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
     el("span", { class: "tag " + (it.what === "missing" ? "bad" : "warn"), text: it.what === "missing" ? "missing" : "not active" }));
@@ -1904,7 +1922,7 @@ function afterStage() {
     if (!(st.key.startsWith("tool:") || ["after-dry", "regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key) || leftOpen)) continue;
     const ticked = st.manual && !!ticks[stepKey(st.key)];
     const done = ticked || st.state === "done";
-    tasks.push({ key: st.key, text: st.title, note: leftOpen ? (st.note || "") : done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? "" : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
+    tasks.push({ key: st.key, text: st.title, note: leftOpen ? (st.note || "") : done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? (st.key.startsWith("tool:") ? "ModTrap runs it and closes it" : "") : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
       state: done ? "done" : st.state === "not needed" ? "skipped" : leftOpen && st.key === "demaster" ? "yours" : st.state.startsWith("wait") ? "waiting" : st.who === "ModTrap" ? "waiting" : "yours" });
   }
   if (!tasks.length) return null;
@@ -1986,7 +2004,7 @@ function taskActions(stage, task, first, firstOpen) {
   // place, whether or not the setting was on when it was put in place.
   if (stage.key === "after" && stage.tasks.find((t) => t.key.startsWith("tool:") && t.state === "yours") === task) {
     if (state.dmChain === "tools") {
-      out.push(el("span", { class: "act-note", text: "The tools are being started one after another: work each, then close it." }),
+      out.push(el("span", { class: "act-note", text: "The tools are being started one after another. ModTrap runs and closes the ones it can; any other is yours to work, then close." }),
         actButton("Stop the row", async () => { state.dmChain = ""; state.toolsNow = ""; toast("Stopped. A tool that is open stays open; the rest are yours."); }));
     } else if (processIdle() && !toolGoing(state.tool)) {
       out.push(actButton("Start the tools one after another", async () => startToolsRow(), true));

@@ -119,6 +119,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 94 | 2026-11-22 | The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason | DECIDED | #tools #mo2 #safety |
 | 95 | 2026-11-22 | The whole demaster went through on the owner's PC; ModTrap reads the settings files that name the plugin line by line, and gives one account of its checks after the demaster | DECIDED | #steps #process #revert |
 | 96 | 2026-11-22 | A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press | FACT | #revert #page |
+| 97 | 2026-11-22 | Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open | DECIDED | #steps #page #tools |
 
 ## Entries
 
@@ -2384,3 +2385,39 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   list, and the press that finishes a Revert (WHY§83) also sets those plugins aside in the job's folder and takes
   the emptied folder away. Not if MO2 has the mod in its list again: then it is MO2's and the owner's.
 - Checked: a test (left behind by the earlier way, said on the job, tidied by the press, the three lists untouched).
+- **Later (2026-11-22, the session file of 0.3.26).** Checked on the owner's PC: the press set the one plugin
+  aside and the folder was gone; the modlist read 3,575 mods and no problem; a new demaster then went through
+  whole.
+
+### 97. Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open
+
+`2026-11-22` · DECIDED · `#steps #page #tools` · refs: MT33, MT31, TL01§23, TL01§24, WHY§93, WHY§95, DESIGN§14
+
+- The owner, with pictures of the Steps and Process tabs of 0.3.26 after a whole demaster: "can you look at steps
+  an ensure they are correctly labelled against our current code, some steps still state run by user that aren't.
+  Also some settings still need to be looked up by user, why is that and what settings? can you make the ModTrap
+  specify those settings or files that need to be looked up by user? A path, some ID, steps to look it up?" And:
+  "when the demaster is finished, ModTrap opens MO2, is it safe to run revert whilst MO2 is open or should it be
+  greyed out?"
+- FACT. A tool's step was labelled "ModTrap starts it · you run it" whenever the tool was in MO2's list, as when
+  that was true of every tool. Since WHY§84 and WHY§93 ModTrap runs two of them itself.
+- DECIDED. A tool's step is labelled by what happens: "ModTrap" where the tool has switches or a button ModTrap
+  works it by and the owner's setting allows it, with the way named in the step; "ModTrap starts it · you run it"
+  where ModTrap can only start it; "You" where it is not in MO2's list.
+- FACT. Two more wordings were behind the code. The step for the patcher framework still said ModTrap's copy
+  would hide the tool's new plugin; the tool in fact writes the new plugin in that copy's place (WHY§95), and the
+  step now says so, before the run and after it. And ModTrap's own mod was listed as an output mod of the texture
+  tool, because that tool's demastered plugin lies in it; ModTrap's mod is no tool's output mod.
+- Why one settings file was left: it belongs to a third framework, whose handling ModTrap had not read. Its
+  source was found and read (TL01§24): its lines add forms to lists, and can be written to hold only while a
+  plugin is active or only while it is not. All three ways are settled by the framework itself once the mod is
+  gone; the last means the line now takes effect, as its author wrote it for a modlist without the mod, and the
+  evidence says so.
+- DECIDED. What is still left to the owner in such a file is said in full, not folded away: the file's whole
+  path (with a button to copy it), each line by its number and text, what the line means, and what to do about
+  it. Left are only exclusions in the two distributors' files (WHY§95) and files of kinds not read.
+- Revert with MO2 open: safe as it is, and not greyed. The page asks MO2 to close before it sends the Revert (it
+  asks the owner first, unless the setting says to close without asking), and the program refuses a Revert while
+  MO2 is open. The buttons now say so.
+- Checked: tests (the labels by setting and tool; the wording before and after the tool's run; the third
+  framework's lines; the path, lines and advice for what is left); in a browser, the rendering and the whole flow.

@@ -351,7 +351,9 @@ files to look at, a tool outside MO2's list), and a play-test tick goes with the
 are read line by line; the step is ModTrap's and done where every line only gives something of the mod's or reaches
 only its things, and the owner's where a line leaves the mod's things out or the file is of a kind ModTrap has not
 read the handling of. With the demaster in place the steps carry one account of ModTrap's checks (masters, mods
-disabled, each tool's noted run, the settings files): "complete and checked" only when all hold.
+disabled, each tool's noted run, the settings files): "complete and checked" only when all hold. Each step
+says who really does it (WHY§97): ModTrap where it runs a tool itself, ModTrap and the owner where it can only start
+one. What is left to the owner in a settings file is said with the file's path, the line and what to do.
 
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the

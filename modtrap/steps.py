@@ -273,11 +273,28 @@ def mention_kinds() -> list[dict]:
 def where_named(line: str, plugin_low: str, layout: str) -> str:
     """Where a line of a settings file names a plugin (TL01§23): "comment" (the line is switched off), "gives" (the
     thing the line gives or changes comes from the plugin), "reaches" (the plugin's things are a condition for
-    what the line reaches), "leaves out" (the line leaves the plugin's things out), or "" where the layout is
-    not one ModTrap reads."""
+    what the line reaches), "leaves out" (the line leaves the plugin's things out), "only with" and "only without"
+    (the line is carried out only while the plugin is, or is not, active), or "" where the layout is not one
+    ModTrap reads."""
     text = line.strip()
     if not text or text[0] in ";#" or text.startswith("//"):
         return "comment"
+    if layout == "flm" and "=" in text:
+        # FormList Manipulator (TL01§24): key = list|forms|filter, or Filter = name|conditions. A condition is a
+        # plugin's name with + (only while it is active) or - (only while it is not), several joined by &.
+        key, rest = text.split("=", 1)
+        fields = rest.split("|")
+        conditions = fields[1:] if key.strip().lower() == "filter" else fields[2:]
+        found = ""
+        for field in conditions:
+            for item in re.split(r"[,&]", field):
+                if plugin_low in item.lower():
+                    if item.strip().startswith("-"):
+                        return "only without"
+                    found = "only with"
+        if found:
+            return found
+        return "gives" if any(plugin_low in f.lower() for f in fields[:2]) else "only with"
     if layout != "pipes" or "=" not in text:
         return ""
     fields = text.split("=", 1)[1].split("|")
@@ -350,8 +367,7 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str]) -> tuple[l
                 if not hit:
                     continue
                 wheres = {where_named(line, p, layout) for p in hit}
-                where = ("leaves out" if "leaves out" in wheres else "" if "" in wheres else
-                         "gives" if "gives" in wheres else "reaches" if "reaches" in wheres else "comment")
+                where = next((w for w in ("leaves out", "", "only without", "gives", "reaches", "only with") if w in wheres), "comment")
                 if where == "comment":
                     continue                                    # a line that is switched off says nothing
                 count += 1
@@ -363,7 +379,7 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str]) -> tuple[l
                 continue                                        # named only in lines that are switched off
             out.append({"mod": m.name, "file": path.relative_to(m.folder).as_posix(), "names": found,
                         "kind": kind["framework"] if kind else "", "lines": lines, "count": count,
-                        "leaves_out": leaves_out, "unread": unread})
+                        "leaves_out": leaves_out, "unread": unread, "path": str(path)})
         if cut:
             break
     return out, cut
@@ -372,13 +388,14 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str]) -> tuple[l
 # --- compiling the steps ------------------------------------------------------------------------------------------
 
 def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None, deep: dict | None = None,
-                  auto: bool = False, going: bool = False, tools_run: dict | None = None) -> dict:
+                  auto: bool = False, going: bool = False, tools_run: dict | None = None, self_run: bool = True) -> dict:
     """The steps for taking `mod_names` out. `job` is the dry run's public state for the same mods, if there is
     one; `deep` is what `look_deeper` found (it takes seconds on a large list, so it is worked out once). `auto`
     says that ModTrap may change the modlist (it was started with the switch): the steps that "Demaster Selected"
     carries out are then ModTrap's, not the owner's (WHY§57). `tools_run` names the tools ModTrap has started, with
     their output written, since the demaster in place was put in place ({title: {"when", "files"}}): that record
-    is what makes a tool's step done (WHY§91); None when ModTrap may not change anything, and so starts no tool."""
+    is what makes a tool's step done (WHY§91); None when ModTrap may not change anything, and so starts no tool.
+    `self_run` is the owner's setting that lets ModTrap run a tool by itself where the tool allows it (WHY§97)."""
     inst = m.instance
     mods = [x for x in (inst.mod(n) for n in mod_names) if x is not None and x.kind == "mod"]
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)            # by file, enabled or not
@@ -638,11 +655,19 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                 if o.get("stake_kinds") else "The mod has no stake in any kind of record this plugin holds.")
         if o["mod"].startswith("ModTrap - "):
             # It named the mod as a master: it held records of the mod's own. ModTrap's copy keeps the load order
-            # whole; the tool's next run makes the plugin anew (WHY§77).
-            e["run"].append("%s named the mod as a master, so it was made from the mod's own records. ModTrap took "
-                            "those out of a copy to keep the load order whole; the tool's run makes the plugin anew, and "
-                            "ModTrap's copy in “%s” then hides the new one until it is taken out of that mod" % (o["plugin"], o["mod"]))
-            e["details"].append({"summary": "%s: a demastered copy of a plugin this tool made, in “%s”" % (o["plugin"], o["mod"]),
+            # whole until the tool's run, which writes the plugin anew in the copy's place (WHY§77, WHY§95).
+            ran_since = o["tool"] in {tools.of_executable(t, binaries.get(t, ""))[0] for t in (tools_run or {})}
+            if ran_since:
+                e["run"].append("%s named the mod as a master, so it was made from the mod's own records. ModTrap took those "
+                                "out of a copy to keep the load order whole, and the tool's run since has written the plugin "
+                                "anew, in that copy's place in “%s” (MO2 writes to the file that wins)" % (o["plugin"], o["mod"]))
+            else:
+                e["run"].append("%s named the mod as a master, so it was made from the mod's own records. ModTrap took "
+                                "those out of a copy, in “%s”, to keep the load order whole; the tool's run makes the plugin "
+                                "anew without the mod, and writes it in that copy's place" % (o["plugin"], o["mod"]))
+            e["details"].append({"summary": "%s in “%s”: %s" % (o["plugin"], o["mod"],
+                                 "written anew by this tool's run since the demaster" if ran_since
+                                 else "ModTrap's demastered copy of a plugin this tool made, until the tool runs"),
                                  "lines": about})
             continue
         if o.get("left_out"):
@@ -727,7 +752,10 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             # Proof, or only "cannot be ruled out"? The title says which (WHY§73).
             to_be_sure = bool(e.get("unsure")) and e["unsure"] == len(e["run"])
             ran = [(n, tools_run[n]) for n in names if n in (tools_run or {})]
-            step("tool:" + tool, "both" if names else "you", "Run %s again%s" % (tool, ", to be sure" if to_be_sure else ""),
+            # Who does it, as it is (WHY§97): ModTrap alone where it runs the tool by the tool's own switches or
+            # button; ModTrap and the owner where it can only start it; the owner where it is not in MO2's list.
+            by_modtrap = bool(names) and tools_run is not None and self_run and isinstance(known.get(tool, {}).get("self_run"), dict)
+            step("tool:" + tool, "ModTrap" if by_modtrap else "both" if names else "you", "Run %s again%s" % (tool, ", to be sure" if to_be_sure else ""),
                  (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also + (
                      " A run of a patcher is short and changes nothing but its own output: when in doubt, run it."
                      if to_be_sure else "") + (
@@ -736,8 +764,14 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                  "done" if ran else "to do", [{"tool": n} for n in names] + evidence,
                  note=("It ran after this demaster was put in place: “%s”, %s, %d file(s) of its output written." % (
                            ran[0][0], ran[0][1].get("when", "").replace("T", " "), ran[0][1].get("files", 0))) if ran else
-                 ("Done when a run of it that ModTrap started after the demaster was put in place has written its "
-                  "output. A Revert, or a new demaster, asks for a new run." if names and tools_run is not None else
+                 ("ModTrap runs it by itself after the demaster (%s), and the step is done when it has written its "
+                  "output. A Revert, or a new demaster, asks for a new run." % (
+                      "by pressing its own run button and closing it when its log says the run is over"
+                      if isinstance(known[tool]["self_run"].get("press"), dict) else "by the tool's own switches to run and close")
+                  if by_modtrap else
+                  "ModTrap starts it through MO2; running it and closing it is yours. The step is done when it has written "
+                  "its output after the demaster was put in place. A Revert, or a new demaster, asks for a new run."
+                  if names and tools_run is not None else
                   "Run it after the demaster. ModTrap was started without --allow-changes and starts no tool: tick it "
                   "off when you have run it." if names else
                   "It is not in this MO2's list of tools; run it the way the modlist's own guide says, and tick it off."))
@@ -773,15 +807,26 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
     if named:
         WHERE = {"gives": "what the line gives or changes comes from the mod: without the mod it has nothing to give",
                  "reaches": "the mod's things are a condition for what the line reaches: without the mod it reaches nothing of them, and nothing else changes",
-                 "leaves out": "the line leaves the mod's things out: look at it",
-                 "": "ModTrap does not read this kind of file: look at it"}
+                 "only with": "the line is carried out only while the mod's plugin is active: without the mod it is passed over",
+                 "only without": "the line was written for a modlist without the mod: it was held back while the mod was there, and is carried out now, as its author meant",
+                 "leaves out": "the line leaves the mod's things out of something meant for everything else",
+                 "": "ModTrap has not read how this kind of file is used"}
+        TODO = {"leaves out": "Open the file in a text editor and go to this line. The part that begins with - and names the "
+                              "plugin is the exclusion. To be sure the line goes on working for everything else, take that part "
+                              "out (and the comma or + beside it); if you would rather not change the file, leave it and look "
+                              "in the framework's own log after starting the game: it says whether it passed the line over.",
+                "": "Open the file in a text editor and go to this line. See what the line is for, by the page of the mod "
+                    "the file belongs to; a line that only does something for the mod you took out can stay as it is."}
 
         def said(x: dict) -> dict:
             lines = x.get("lines") or []
             open_lines = x.get("leaves_out", 0) + x.get("unread", 0)
             return {"mod": x["mod"], "file": x["file"], "names": x["names"], "kind": x.get("kind", ""),
-                    "count": x.get("count", len(lines)), "open": open_lines,
+                    "count": x.get("count", len(lines)), "open": open_lines, "path": x.get("path", "") if open_lines else "",
                     "verdict": ("%d line(s) to look at" % open_lines) if open_lines else "nothing to do",
+                    # What is left to the owner is said in full, not folded away: the line, what it means, what to do.
+                    "look": [{"n": ln["n"], "text": ln["text"], "means": WHERE.get(ln["where"], ln["where"]),
+                              "todo": TODO.get(ln["where"], "")} for ln in lines if ln["where"] in ("leaves out", "")],
                     "evidence": {"summary": "%s: %d line(s) name the plugin%s" % (
                         x["file"], x.get("count", len(lines)), (" (" + x["kind"] + ")") if x.get("kind") else ""),
                         "lines": ["line %d · %s · %s" % (ln["n"], WHERE.get(ln["where"], ln["where"]), ln["text"]) for ln in lines]
@@ -794,19 +839,21 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             step("mentions", "you", "Look at %d settings file(s) with lines only you can judge" % len(to_look) if to_look else
                  "Look at the settings files that name the mod's plugin",
                  "ModTrap read every settings file of another mod that names a ticked plugin, line by line. Where a line "
-                 "gives something of the mod's, or reaches only the mod's things, the framework it is written for passes "
-                 "over it once the mod is gone, and nothing else changes. Left to you are lines that leave the mod's "
-                 "things out of something meant for everything else (what the framework does with such a line once the "
-                 "mod is gone depends on its version: it may go on without the exclusion, or drop the line), and files "
-                 "of a kind ModTrap does not read.",
+                 "gives something of the mod's, reaches only the mod's things, or is written to depend on the mod being "
+                 "there or not, the framework it is written for deals with it by itself once the mod is gone. Left to "
+                 "you are only the lines named below, each with its file, its line number and what to do: lines that "
+                 "leave the mod's things out of something meant for everything else (what the framework does with such "
+                 "a line once the mod is gone depends on its version: it may go on without the exclusion, or drop the "
+                 "whole line), and files of a kind ModTrap has not read the use of.",
                  "to do", items, note="A judgement, not a fault: tick it off when you have looked." + cut_note)
         else:
             mentions_by_modtrap = True
             step("mentions", "ModTrap", "Settings files that name the mod's plugin: read, nothing to do",
                  "ModTrap read every settings file of another mod that names a ticked plugin, line by line: %d line(s) "
-                 "in %d file(s). Each gives something of the mod's, or reaches only the mod's things. The frameworks "
-                 "these files are written for pass over such a line once the mod is gone (they note it in their own "
-                 "log), and nothing else they do changes." % (sum(i["count"] for i in items), len(items)),
+                 "in %d file(s). Each gives something of the mod's, reaches only the mod's things, or is written to "
+                 "depend on the mod being there or not. The frameworks these files are written for deal with such a "
+                 "line by themselves once the mod is gone (they note it in their own log), and nothing else they do "
+                 "changes. The evidence under each file says which line is which." % (sum(i["count"] for i in items), len(items)),
                  "done", items)
 
     # 8. The health check, and playing.
@@ -1187,7 +1234,8 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 targets.append((e.tool, "", r.source))
     for tool, title, target in targets:
         out_mod = inst.mod(target)
-        if fold(target) in seen or out_mod is None or out_mod.folder is None or target in names:
+        if fold(target) in seen or out_mod is None or out_mod.folder is None or target in names \
+                or target.startswith("ModTrap - "):          # ModTrap's own mod is no tool's output mod (WHY§97)
             continue
         seen.add(fold(target))
         listing, cut = walk(out_mod.folder)
