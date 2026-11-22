@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import time
@@ -301,7 +302,10 @@ class ToolEvidence(unittest.TestCase):
         self.assertEqual(len(folds), 2)
         self.assertIn("GLOB 000A00 of core.esp · Bramble.esp has a stake in FLTV · this plugin holds the same FLTV",
                       folds[0]["lines"])
-        self.assertIn("this plugin holds none of it", folds[1]["lines"][0])
+        self.assertIn("this plugin holds none of it", folds[1]["lines"][-1])
+        # What the plugin is comes first (WHY§74): its records by kind, and the mod's stakes among those kinds.
+        self.assertEqual(folds[0]["lines"][:2], ["Its 2 record(s) by kind: GLOB 2",
+                                                 "The mod has a stake in records of kinds this plugin works on: GLOB 2 (this plugin holds 1 of them)"])
         self.assertIn("holds 1 file(s) at the path of a file of the mod", by["tool:ParallaxGen (PGPatcher)"]["why"])
 
     def test_a_patcher_is_cleared_only_where_it_can_be_ruled_out(self):
@@ -331,6 +335,52 @@ class ToolEvidence(unittest.TestCase):
         self.assertNotIn("tool:DynDOLOD", by)
         self.assertTrue(any(i["text"].startswith("DynDOLOD: Synthesis.esp holds 1 record(s) in which the mod has a stake, but none of the mod's values")
                             for i in by["tools-clear"]["items"]))
+
+    def test_the_patcher_frameworks_own_settings_say_who_made_a_plugin_and_what_was_left_out(self):
+        """TL01§14, WHY§74: the framework keeps, beside its program, which patchers make each output plugin and
+        which plugins each output leaves out. A plugin made with the mod's plugin left out holds nothing of it."""
+        from modtrap import toolmade
+        home = Path(self.tmp.name) / "Patcher Framework"
+        fx.write(home / "PipelineSettings.json", json.dumps({"Version": 2, "Profiles": [{"Nickname": "Invented", "Groups": [
+            {"On": True, "Name": "Synthesis", "BlacklistedMods": [], "Patchers": [
+                {"$type": "invented", "On": True, "Nickname": "Lantern Lighter", "RemoteRepoPath": "https://example.invalid/a/lantern-lighter"},
+                {"$type": "invented", "On": False, "Nickname": "", "RemoteRepoPath": "https://example.invalid/a/quill-sharpener"}]},
+            {"On": True, "Name": "Synthesis Gameplay", "BlacklistedMods": ["Bramble.esp", "Other.esp"], "Patchers": [
+                {"$type": "invented", "On": True, "Nickname": "Inn Keeper"}]}]}]}))
+        fx.write(home / "Data" / "Invented" / "Lantern Lighter" / "settings.json", '{"Skip": ["bramble.ESP"]}')
+        fx.write(home / "Data" / "Invented" / "Inn Keeper" / "settings.json", '{"Skip": ["Quill.esp"]}')
+        ini = self.root / "ModOrganizer.ini"
+        text = ini.read_bytes().decode("utf-8")
+        text = text.replace("size=1\r\n", "size=2\r\n2\\title=Synthesis\r\n2\\binary=%s\r\n2\\arguments=\r\n2\\workingDirectory=\r\n"
+                            % (home / "Synthesis.exe").as_posix(), 1)
+        ini.write_bytes(text.encode("utf-8"))
+        m = model.build(instance.load(self.root))
+        self.assertEqual(toolmade.tool_folders(m.instance, "Synthesis"), [home])
+        groups = toolmade.synthesis_groups([home])
+        self.assertEqual([(g["group"], [(p["name"], p["on"]) for p in g["patchers"]], g["left_out"]) for g in groups],
+                         [("Synthesis", [("Lantern Lighter", True), ("quill-sharpener", False)], []),
+                          ("Synthesis Gameplay", [("Inn Keeper", True)], ["Bramble.esp", "Other.esp"])])
+        self.assertEqual(toolmade.group_of("Synthesis Gameplay.esp", groups)["group"], "Synthesis Gameplay")
+        self.assertEqual(toolmade.group_of("Synthesis Gameplay_2.esp", groups)["group"], "Synthesis Gameplay")
+        self.assertIsNone(toolmade.group_of("Bashed Patch, 0.esp", groups))
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        rows = {o["plugin"]: o for o in deep["outputs"]}
+        self.assertEqual(rows["Synthesis Gameplay.esp"]["left_out"], ["Bramble.esp"])
+        self.assertEqual(deep["tool_settings"], [{"tool": "Synthesis", "file": "Data/Invented/Lantern Lighter/settings.json", "names": ["Bramble.esp"]}])
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        syn = by["tool:Synthesis"]
+        self.assertIn("a settings file of one of its patchers names the mod's plugin", syn["why"])
+        self.assertIn("Synthesis Gameplay.esp was made with Bramble.esp left out", syn["why"])     # speaks against it
+        lines = [ln for i in syn["items"] if "details" in i for ln in i["details"]["lines"]]
+        self.assertIn("Made by the patchers of the group “Synthesis”, in order: Lantern Lighter, quill-sharpener (switched off) "
+                      "(from Synthesis's own settings file)", lines)
+        # And the whole modlist's account of what its tools made.
+        got = toolmade.made(m)
+        self.assertTrue(got["synthesis_settings"])
+        table = {x["plugin"]: (x["tool"], x["records"], x["kinds"], x.get("made_by", {}).get("group")) for x in got["plugins"]}
+        self.assertEqual(table["Synthesis.esp"], ("Synthesis", 2, [["GLOB", 2]], "Synthesis"))
+        self.assertEqual(table["Bashed Patch, 0.esp"][:3], ("Wrye Bash", 2, [["GLOB", 2]]))
 
     def test_a_mod_whose_changes_no_output_carries_clears_every_tool(self):
         # Take Core's own D out of the picture: a mod that only holds a record unchanged, and changes nothing else.

@@ -322,3 +322,5 @@ h2.pad-top { margin-top: 18px; }
 .tasks .acts .tickoff { font-size: 13px; color: var(--text); }
 button.nav-link { border: 0; background: none; padding: 2px 2px; color: var(--accent); font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; }
 button.nav-link:hover { color: var(--text); }
+table.made td { vertical-align: top; }
+table.made .small { font-size: 12.5px; }

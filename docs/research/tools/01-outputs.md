@@ -191,3 +191,29 @@ Read in Pandora Behaviour Engine+'s source (GPL-3.0; facts only, nothing copied)
 - **Could be built later.** Letting xEdit compare, in the dry run, each tool plugin's copy with the mod's version
   and with the next in line, by meaning: the same as the mod's, the same as the next in line's, or neither. It
   would clear a patcher whose copies all match the next in line.
+
+## 14. What a tool's own files say it made: the patcher framework's settings, and a plugin's records by kind (2026-11-22)
+
+Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa` of 2026-08-13.
+
+- **FACT.** Its settings are in `PipelineSettings.json` in the folder it runs in, beside its program
+  (`Synthesis.Bethesda.GUI/Settings/PipelineSettingsPathProvider.cs:17`).
+- **FACT.** The file holds profiles (`Synthesis.Bethesda.Execution/Settings/V2/PipelineSettings.cs:9`); a profile
+  holds groups (`V2/SynthesisProfile.cs:16`); a group has a name, whether it is on, its patchers in order, and a
+  list of plugins left out for it (`V2/PatcherGroupSettings.cs:7-11`). Each patcher has a nickname and whether
+  it is on (`Settings/PatcherSettings.cs:10-11`), and where it comes from (`GithubPatcherSettings.cs:22`). The
+  older layout had the patchers straight under the profile (`Settings/V1/SynthesisProfile.cs:12`).
+- **FACT.** A group is one output plugin, named after the group (the tests build it as the group's name with
+  `.esp`: `Synthesis.Bethesda.IntegrationTests/Pipeline/SinglePatcherPipelineTest.cs:60`).
+- **FACT.** Patchers keep their own settings under `Data` in the same folder
+  (`Synthesis.Bethesda.Execution/Pathing/ExtraDataPathProvider.cs:21`).
+- **METHOD.** ModTrap reads that file to say, for each plugin the framework made, which patchers made it and
+  whether each is on. A plugin made with the mod's plugin on the group's left-out list holds nothing of the mod:
+  that output is cleared, with the list as the reason. The patchers' own settings are searched for the mod's
+  plugin name: a patcher set up with the mod in mind is a reason to run again.
+- **METHOD.** For every tool-made plugin, ModTrap counts its records by kind (record headers only). The evidence
+  then says what the plugin works on, in how many records of those kinds the mod has a stake, and how many of
+  those the plugin holds. A plugin that holds only kinds in which the mod has no stake is cleared on firmer
+  ground than by values.
+- **Limit.** Kinds and names say what a patcher works on, not what it does to it. Whether a patcher would write
+  something else without the mod is still known for certain only by running it (§13).
