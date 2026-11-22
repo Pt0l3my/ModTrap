@@ -555,6 +555,11 @@ the steps would look like."
 follows from it. What it shows afterwards rests on what was read, and a verdict on a tool is the same before the
 demaster as after it (WHY§86, DESIGN§14).
 
+**Note, 2026-11-22.** Asked whether the patcher framework should run after every demaster whatever the evidence
+says, the owner first said yes, then put it right: "I mean after every demaster that requires the tool". So a tool
+runs when the steps call for it, by proof or to be sure (WHY§73, WHY§86), and not otherwise; when it runs, it runs
+whole (every group and patcher its own run button starts, WHY§93).
+
 ## MT27
 
 **The patcher framework's library versions** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
