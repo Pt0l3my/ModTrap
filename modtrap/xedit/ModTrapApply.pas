@@ -207,8 +207,12 @@ begin
   all := '(';
   for i := 0 to Pred(ElementCount(e)) do begin
     child := ElementByIndex(e, i);
-    sub := Shape(child);
-    all := all + Clean(Name(child)) + '=' + sub + ';';
+    // Bytes the game does not use (xEdit calls them Unused) hold whatever was in memory when a plugin was
+    // saved. They differ from plugin to plugin and mean nothing: they are no part of what an element says.
+    if Clean(Name(child)) <> 'Unused' then begin
+      sub := Shape(child);
+      all := all + Clean(Name(child)) + '=' + sub + ';';
+    end;
   end;
   Result := all + ')';
 end;

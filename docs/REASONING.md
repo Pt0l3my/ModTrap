@@ -101,6 +101,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 76 | 2026-11-22 | A second mod: the tool check looked at part of the load order, the Process tab hid what was left to the owner, and a script property is the first new shape | DECIDED | #tools #steps #page #xedit #process |
 | 77 | 2026-11-22 | Another modlist's MO2, settings, tabs in sections; and the cell stakes were three unused bytes: every stake a tool holds is now checked against the whole load order | DECIDED | #mo2 #page #tools #steps #process |
 | 78 | 2026-11-22 | The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run | FACT | #tools #steps #process |
+| 79 | 2026-11-22 | Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself | FACT | #tools #xedit #process |
 
 ## Entries
 
@@ -1833,3 +1834,25 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   a patch (MT4, case C). Asked of the owner.
 - Not checked: on the owner's PC. Whether the last cell falls away depends on its flags byte, which the next
   session file will show.
+
+### 79. Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself
+
+`2026-11-22` · FACT · `#tools #xedit #process` · refs: MT4, MT24, XE01§19, XE01§22, TL01§13, TL01§15, WHY§66, WHY§69, WHY§76, WHY§77, WHY§78
+
+- The owner: "so you are saying that ModTrap could do those fixes itself without having to run patching tools?
+  How would that work in details? Would ModTrap alter existing patch files made by those tools or generate new
+  ones? Either way, we have to ensure the ModTrap does not get any more false alarms in the first place (or do
+  those actually comes from those bad fields themselves? are they false or badly written? are thug bugs?)"
+- FACT: none of the false alarms came from a faulty mod or tool. In order: bytes read without knowing what a
+  field means (WHY§63 to WHY§66); values many plugins share (WHY§69); unused bytes taken for content
+  (TL01§15); a conclusion about the whole load order drawn from the part xEdit had loaded (WHY§76); and a slip
+  of mine (WHY§78). Unused bytes are how the game's file format is: every plugin has them.
+- DECIDED: the unused bytes are left out where the comparison is made, in the scripts (XE01§22), not only
+  sorted out afterwards for one field.
+- METHOD told to the owner (MT24, not built): ModTrap never alters a tool's file. It would copy the tool's
+  plugin into its own mod, which has the highest priority, set the one field in the copy to what the plugin next
+  in line says, check the copy, and put it in place with the rest of the demaster; Revert takes it out. It can
+  do this for a value a tool copied into a plugin. It cannot for what a tool builds from the mod's files
+  (models, textures, behaviour files), nor for what a patcher works out anew.
+- KNOWN: the copy hides the tool's next output of that plugin until it is taken out of ModTrap's mod; ModTrap
+  warns of it and does not yet retire its copy by itself.
