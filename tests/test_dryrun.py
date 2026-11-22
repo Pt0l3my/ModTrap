@@ -386,5 +386,27 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(dryrun.read_chain("")["kind"], "field")
 
 
+    def test_a_script_property_that_points_at_the_mod_is_an_entry_to_take_out(self) -> None:
+        """XE01§21, WHY§76: a plugin's own quest with a script whose property is a record of the mod. The property
+        is an entry of the script's list of properties: taken out, the script finds nothing there."""
+        c = fake_chain(("FormID", "etValue", "dtInteger", 0, 2), ("Object v2", "etStruct", "dtStruct", 3, 0),
+                       ("Object Union", "etUnion", "dtUnion", 1, 0), ("Value", "etUnion", "dtUnion", 1, 3),
+                       ("Property", "etStruct", "dtStruct", 4, 7), ("Properties", "etArray", "dtArray", 13, 2),
+                       ("Script", "etStruct", "dtStruct", 3, 0), ("Scripts", "etArray", "dtArray", 1, 2),
+                       ("VMAD - Virtual Machine Adapter", "etSubRecord", "dtStruct", 3, 1))
+        lines = ["H\tmodtrap-report/6\treport\t1", "F\tSettings.esp\t4\tSkyrim.esm,One.esp,Two.esp,Three.esp,Bramble.esp",
+                 "R\tSettings.esp\tQUST\tFE164800\tSettings.esp\t0\tInventedInitQuest",
+                 "E\tSettings.esp\tFE164800\tQUST \\ VMAD\tBramble.esp\t05000801\t%s" % c,
+                 "C\tSettings.esp\tFE164800\tVMAD - Virtual Machine Adapter\tetSubRecord\t\t\t\t0\t0",
+                 "D\tSettings.esp\t4\t1", "X\tok\t"]
+        fd = dryrun.parse_report("\r\n".join(lines), ["Bramble.esp"], ["Bramble"], ["Skyrim.esm"])["files"][0]
+        self.assertEqual((fd["reading"], fd["entries"], fd["needs_you"]), ("can be demastered", 1, 0))
+        e = fd["items"][0]["elements"][0]
+        self.assertEqual((e["would"], e["array"], e["route"]), ("entry", "Properties", [1, 2, 0, 2, 7]))
+        self.assertIn(e["array"], dryrun.SCRIPT_ARRAYS)
+        # The owner's setting: script properties are left to them.
+        fd = dryrun.parse_report("\r\n".join(lines), ["Bramble.esp"], ["Bramble"], ["Skyrim.esm"], script_props=False)["files"][0]
+        self.assertEqual((fd["reading"], fd["needs_you"]), ("needs you", 1))
+
 if __name__ == "__main__":
     unittest.main()

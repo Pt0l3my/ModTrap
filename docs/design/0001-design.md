@@ -524,5 +524,22 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    where new plugins wait, a tool's start button and “I have done this” in the last box. Beside each is a way to
    the tab the button comes from, to look before pressing. They are the same actions as on those tabs. A demaster
    started from this tab stays on it.
+8. Where the demaster stopped short (something still needs the mod), putting in place ends with "Left to you",
+   and the box waits for the owner (WHY§76).
 7. A demaster that is in place stays shown as done until Revert, or until a new one starts. A dry run of the modlist
    as it was before it was read again is not shown as this demaster's.
+
+## 19. Settings, sections, and another modlist's MO2
+
+1. **Settings** (a tab of their own; kept in ModTrap's folder for every session; WHY§77). Each is a switch:
+   after the dry run, go ahead without asking when the plan leaves nothing to the owner (off); show the Process tab
+   when a demaster starts (on); close this modlist's MO2 without asking when a step needs it closed (off); open
+   MO2 again once a demaster is in place (off); take script properties that point at the mod out (on, MT4).
+   What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
+2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
+   tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,
+   Process; History: History, Log).
+3. **Another modlist's MO2.** MO2 hands a command to the MO2 that is already open, whichever modlist that one is
+   for. So while a MO2 of another modlist is open, ModTrap starts nothing through MO2: the start is refused before
+   anything is begun, the one go holds its place and says what it waits for, and it takes the same step again by
+   itself once that MO2 is closed.

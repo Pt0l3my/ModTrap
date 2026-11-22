@@ -49,18 +49,26 @@
   <ul id="notes" class="notes" hidden></ul>
 </header>
 
+<nav id="groups" hidden aria-label="Sections">
+  <button data-group="modlist" class="on" title="Look at the modlist: its mods, its plugins, the health check, its tools">Modlist</button>
+  <button data-group="demaster" title="Take mods out: what depends on them, the dry run, the steps, and the process as it goes">Demaster <span id="group-count" class="count">0</span><span id="group-dot" class="live-dot" hidden></span></button>
+  <button data-group="add" title="Add a mod to the modlist safely">Add mods</button>
+  <button data-group="record" title="What ModTrap changed, and its log">History</button>
+  <button data-group="settings" title="How ModTrap goes about its work">Settings</button>
+</nav>
 <nav id="tabs" hidden>
-  <button data-tab="mods" class="on">Mods</button>
-  <button data-tab="plugins">Plugins</button>
-  <button data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
-  <button data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
-  <button data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
-  <button data-tab="process" title="The demaster as it goes: each stage a box, its tasks inside, coloured as they are carried out">Process <span id="process-dot" class="live-dot" hidden></span></button>
-  <button data-tab="add" title="Add a mod to the modlist safely: what it needs, where it goes, what it replaces, and the steps">Add mods <span id="add-count" class="count" hidden></span></button>
-  <button data-tab="health">Health <span id="health-count" class="count">0</span></button>
-  <button data-tab="tools">Tools</button>
-  <button data-tab="history" title="Everything ModTrap changed in this modlist, with date and time">History</button>
-  <button data-tab="log">Log</button>
+  <button data-group="modlist" data-tab="mods" class="on">Mods</button>
+  <button data-group="modlist" data-tab="plugins">Plugins</button>
+  <button data-group="modlist" data-tab="health">Health <span id="health-count" class="count">0</span></button>
+  <button data-group="modlist" data-tab="tools">Tools</button>
+  <button data-group="demaster" data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
+  <button data-group="demaster" data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
+  <button data-group="demaster" data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
+  <button data-group="demaster" data-tab="process" title="The demaster as it goes: each stage a box, its tasks inside, coloured as they are carried out">Process <span id="process-dot" class="live-dot" hidden></span></button>
+  <button data-group="add" data-tab="add" title="Add a mod to the modlist safely: what it needs, where it goes, what it replaces, and the steps">Add mods <span id="add-count" class="count" hidden></span></button>
+  <button data-group="record" data-tab="history" title="Everything ModTrap changed in this modlist, with date and time">History</button>
+  <button data-group="record" data-tab="log">Log</button>
+  <button data-group="settings" data-tab="settings">Settings</button>
 </nav>
 
 <main>
@@ -210,8 +218,13 @@
     </div>
     <div class="scroll pad">
       <p class="dim" id="process-intro">The demaster from start to finish, as it happens. Each box is a stage, linked to the next; inside it are the tasks that finish it. Click a box's title to go where that stage is worked.</p>
+      <div id="process-wait" hidden></div>
       <div id="process-flow" class="flow"></div>
     </div>
+  </section>
+
+  <section id="tab-settings" class="tab" hidden>
+    <div class="scroll pad"><div id="settings-box"></div></div>
   </section>
 
   <section id="tab-history" class="tab" hidden>

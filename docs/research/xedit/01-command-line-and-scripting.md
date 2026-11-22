@@ -298,3 +298,20 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
   being ready starts the wait over. ModTrap looks every second and a half.
 - **Not done.** ModTrap does not answer xEdit's error message: it cannot know what it says. The owner sees it
   and presses its OK; the run then goes on, or fails with its reason as any run can.
+
+## 21. A script's properties are a list whose entries can be taken out (2026-11-22)
+
+- **FACT (xEdit's source, `Core/wbDefinitionsTES5.pas` at commit `f5c00f3`).** A script on a record has
+  `Properties`, a sorted list of `Property` (`:4744`). A property has a name, a type, and a `Value` that is,
+  by its type, nothing, an object, a text, a number, or a list of one of those; a list of objects is
+  `Array of Object` (`:4713-4736`). An object is the record it points at, inside `Object Union` (`:4689`).
+- **FACT (the owner's list).** The reading script reported such a pointer as: the record's script data, its
+  scripts, a script, its `Properties`, a `Property`, its value, the object, the id. The nearest list above the
+  pointer is `Properties` (or, in a property that is a list, `Array of Object`).
+- **METHOD.** ModTrap takes that entry out, as it takes an entry out of a list of keywords (§7): by its route
+  from the record, highest place first, after checking that the element there is the one the dry run named and
+  still needs the trapped plugin. With the property gone the script has nothing there; with the mod gone and the
+  property left, it would point at nothing as well. xEdit keeps the list's count.
+- **Not proven by the probe.** The probe's invented plugins have no script. The run's own checks apply: an entry
+  xEdit will not take out leaves that plugin as it was; the new plugin must no longer name the mod; xEdit must
+  find nothing left that needs it.

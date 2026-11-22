@@ -347,8 +347,9 @@ class Changes:
                 raise Bad(str(e)) from None
             ok = bool(self.dm_check and self.dm_check.get("ok"))
             board.mark("install", "reread", process.DONE)
-            board.mark("install", "health", process.DONE if ok else process.FAILED,
-                       "clean" if ok else "the check found something: see the Selection tab")
+            problems = bool(self.dm_check and self.dm_check.get("new_problems"))
+            board.mark("install", "health", process.FAILED if problems else process.DONE,
+                       "the check found something: see the Selection tab" if problems else "clean")
             self.dm_state = "installed"
             paths.write_atomic(dm.dir / "plan.json", (json.dumps(dict(self._plan_public(dm.plan), when=time.strftime(
                 "%Y-%m-%dT%H:%M:%S"), written=dm.written), indent=1, ensure_ascii=False) + "\n").encode("utf-8"))

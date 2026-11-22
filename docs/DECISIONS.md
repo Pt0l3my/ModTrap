@@ -109,6 +109,11 @@ remaining masters answer it: case C is automatic where the dry run's evidence sh
 part on from the mod, and still "needs you" otherwise (WHY§55). The owner's words that led there: "basically it's
 about finding what xedit find registered for the big patch files the modlist features".
 
+**Note, 2026-11-22.** A script's property that points at a record of the mod counts as an entry of a list (case
+B): the property is taken out of the script's list of properties, or the one object out of a property that is a
+list of objects, and the plan says so in so many words (WHY§76, XE01§21). The owner's list showed it: a settings
+plugin whose own quest script pointed at the mod, and nothing else of the mod in it. The owner may overrule.
+
 ## MT5
 
 **Where the result goes** · *2026-11-20 · Left to ModTrap by the owner*

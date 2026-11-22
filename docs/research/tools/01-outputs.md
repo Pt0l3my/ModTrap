@@ -217,3 +217,18 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa` of 202
   ground than by values.
 - **Limit.** Kinds and names say what a patcher works on, not what it does to it. Whether a patcher would write
   something else without the mod is still known for certain only by running it (§13).
+
+## 15. A cell's place on the grid: three bytes of it mean nothing (2026-11-22)
+
+- **FACT (xEdit's source, `Core/wbDefinitionsCommon.pas:507-514` at commit `f5c00f3`).** For this game a cell's
+  grid field (XCLC) is two numbers, one byte of land flags, and three bytes named Unused, marked to be ignored;
+  only the two numbers must be there, so an older plugin's field is eight bytes long.
+- **FACT (the owner's list).** Every cell in which a dialogue mod and a follower mod "had a stake" had it in this
+  field alone. The reading script compares every part of a field, the unused bytes among them: they hold
+  whatever was in memory when a plugin was saved, and differ from plugin to plugin.
+- **METHOD.** ModTrap's own comparison takes this field as its two numbers and its flags byte, a missing flags
+  byte counting as none (`plugin.canonical`). With §16 of the reasoning (the whole load order looked through),
+  such a cell is no stake.
+- **Not done.** The reading script still tells these as stakes; they are sorted out afterwards, for the records a
+  tool's plugin holds. Teaching the script to pass over parts xEdit marks as ignored would change the script, and
+  with it ask for the probe again.

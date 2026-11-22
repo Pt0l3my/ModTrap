@@ -404,6 +404,87 @@ class ToolEvidence(unittest.TestCase):
         self.assertTrue(all(i["evidence"] for i in clear["items"]))
 
 
+    def add_plugin(self, mod, name, data, before):
+        """Puts one more mod with one plugin into the list, loading just before the plugin named."""
+        fx.write(self.root / "mods" / mod / name, data)
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Core", b"+" + mod.encode() + b"\r\n+Core"))
+        for fname in ("plugins.txt", "loadorder.txt"):
+            f = self.root / "profiles" / "Default" / fname
+            star = b"*" if fname == "plugins.txt" else b""
+            f.write_bytes(f.read_bytes().replace(star + before.encode(), star + name.encode() + b"\r\n" + star + before.encode(), 1))
+
+    def test_the_mods_value_in_a_tools_plugin_counts_only_if_the_whole_load_order_agrees(self):
+        """WHY§76: the dry run's xEdit loads the mod, its dependants and their masters, not the whole load order. A
+        plugin outside that set may have the last word on a record, or say the same as the mod."""
+        from modtrap import probe
+        A = 0x00000A00
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        pf = lambda value: probe.plugin_file(["Core.esp"], [probe.group(b"GLOB", [probe.glob(A, "MT_A00", value)])], 1, 0x900, "invented")
+        # 1. A plugin that stays and loads after the mod has the last word on A: the tool did not build from the mod.
+        self.add_plugin("Later", "Later.esp", pf(2.0), "Synthesis.esp")
+        deep = steps.look_deeper(model.build(instance.load(self.root)), ["Bramble"], told)
+        rows = {o["plugin"]: o for o in deep["outputs"]}
+        self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (0, 0))   # no stake after all
+        self.assertIn("Later.esp, which loads after the mod and stays, has the last word", rows["Synthesis.esp"]["no_stake"][0]["why"])
+        self.assertEqual(rows["Synthesis Gameplay.esp"]["shared"], 0)                # for every tool's plugin alike
+        (self.root / "mods" / "Later" / "Later.esp").unlink()
+
+    def test_the_next_in_line_saying_the_same_as_the_mod_is_no_trace_of_the_mod(self):
+        from modtrap import probe
+        A = 0x00000A00
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        same = probe.plugin_file(["Core.esp"], [probe.group(b"GLOB", [probe.glob(A, "MT_A00", 7.0)])], 1, 0x900, "invented")
+        self.add_plugin("Earlier", "Earlier.esp", same, "Bramble.esp")          # says 7 too, and loads before the mod
+        m = model.build(instance.load(self.root))
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        rows = {o["plugin"]: o for o in deep["outputs"]}
+        self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (0, 0))
+        self.assertIn("the plugin next in line, Earlier.esp, says the same there as the mod", rows["Synthesis.esp"]["no_stake"][0]["why"])
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        self.assertNotIn("tool:Synthesis", by)                                        # nothing of the mod in it: cleared
+        syn = next(i for i in by["tools-clear"]["items"] if i["text"].startswith("Synthesis"))
+        lines = [ln for d in syn["evidence"] for ln in d["lines"]]
+        self.assertTrue(any("no stake of the mod's after all: the plugin next in line, Earlier.esp" in ln for ln in lines))
+
+    def test_unused_bytes_of_a_cells_place_on_the_grid_do_not_count(self):
+        """TL01§15: the last three bytes of XCLC are unused and hold what happened to be in memory; an older plugin
+        has no flags at all."""
+        new, other, old = b"\x09\x00\x00\x00\xfc\xff\xff\xff\x00\x11\x22\x33", b"\x09\x00\x00\x00\xfc\xff\xff\xff\x00\xaa\xbb\xcc", b"\x09\x00\x00\x00\xfc\xff\xff\xff"
+        self.assertEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", other))
+        self.assertEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", old))
+        self.assertNotEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", new[:8] + b"\x01" + new[9:]))   # a flag counts
+        self.assertEqual(plugin.canonical("FLTV", new), new)                          # any other field: as it is
+
+    def test_a_tools_plugin_that_named_the_mod_is_proof(self):
+        """WHY§77: ModTrap's demastered copy of a plugin a tool made, in ModTrap's own mod: the tool made it from the
+        mod's own records, and makes it anew."""
+        m = model.build(instance.load(self.root))
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        deep["outputs"] = [dict(o, mod="ModTrap - Bramble", carried=0, shared=0, details=[]) if o["plugin"] == "Synthesis Gameplay.esp"
+                           else dict(o, carried=0, shared=0, details=[]) for o in deep["outputs"] if o["tool"] == "Synthesis"]
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        syn = by["tool:Synthesis"]
+        self.assertEqual(syn["title"], "Run Synthesis again")
+        self.assertIn("Synthesis Gameplay.esp named the mod as a master", syn["why"])
+        self.assertIn("ModTrap's copy in “ModTrap - Bramble” then hides the new one", syn["why"])
+
+    def test_only_groups_that_can_hold_a_wanted_kind_are_read(self):
+        from modtrap import probe
+        data = probe.plugin_file([], [probe.group(b"GLOB", [probe.glob(0x800, "MT_One", 1.0)]),
+                                      probe.group(b"MATT", [probe.matt(0x801, "MT_Two", "Two")])], 2, 0x900, "invented")
+        f = fx.write(self.root / "mods" / "Core" / "Two Kinds.esp", data) or self.root / "mods" / "Core" / "Two Kinds.esp"
+        with plugin.Records(self.root / "mods" / "Core" / "Two Kinds.esp") as r:
+            self.assertEqual(sorted(v[3] for v in r.index.values()), ["GLOB", "MATT"])
+        with plugin.Records(self.root / "mods" / "Core" / "Two Kinds.esp", kinds=frozenset(("MATT",))) as r:
+            self.assertEqual([v[3] for v in r.index.values()], ["MATT"])
+        self.assertTrue(plugin._skip_group(int.from_bytes(b"CELL", "little"), 0, frozenset(("GLOB",))))
+        self.assertFalse(plugin._skip_group(int.from_bytes(b"WRLD", "little"), 0, frozenset(("CELL",))))
+        self.assertTrue(plugin._skip_group(0, 9, frozenset(("CELL",))))            # what is in a cell, when only cells are wanted
+        self.assertFalse(plugin._skip_group(0, 9, frozenset(("REFR",))))
+
+
 class PointersAcrossPlugins(unittest.TestCase):
     """WHY§65: two plugins write the same pointer differently when their master lists differ. Comparing bytes
     called a patch's untouched list "changed" and a tool's copy of it "the mod's". Invented plugins, each with the

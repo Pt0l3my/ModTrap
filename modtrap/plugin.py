@@ -154,6 +154,32 @@ def read(path: Path) -> Header:
 COMPRESSED = 0x00040000        # a record whose fields are stored compressed
 
 
+# Where records of a kind live (XE02): placed things, landscape and navmeshes under a cell; cells under their own
+# top group or under a worldspace; dialogue lines under their topic.
+_UNDER_CELL = frozenset(("REFR", "ACHR", "NAVM", "LAND", "PGRE", "PHZD", "PARW", "PBAR", "PBEA", "PCON", "PFLA", "PMIS"))
+
+
+def _skip_group(label: int, group_type: int, kinds: frozenset[str]) -> bool:
+    """May a group be passed over when only records of `kinds` are wanted? `label` and `group_type` as read from
+    the group's header."""
+    if group_type == 0:                                         # a top group: its label is the kind it holds
+        top = struct.pack("<I", label).decode("ascii", "replace")
+        if top in kinds:
+            return False
+        if top == "DIAL":
+            return "INFO" not in kinds
+        if top == "CELL":
+            return not (kinds & _UNDER_CELL)
+        if top == "WRLD":
+            return not ("CELL" in kinds or kinds & _UNDER_CELL)
+        return True
+    if group_type == 7:                                         # a topic's lines
+        return "INFO" not in kinds
+    if group_type in (6, 8, 9, 10):                             # what is in a cell
+        return not (kinds & _UNDER_CELL)
+    return False
+
+
 class Records:
     """The records of one plugin, found by whom they belong to and their id there, with their fields as stored.
     Read with ModTrap's own reader, nothing of xEdit: record headers to find them, and the fields of the few
@@ -166,7 +192,9 @@ class Records:
     compares with that in mind; plain equality of bytes would call such fields different, and could call two
     fields the same that are not (WHY§65)."""
 
-    def __init__(self, path: Path, seconds: float = 8.0) -> None:
+    def __init__(self, path: Path, seconds: float = 8.0, kinds: frozenset[str] | None = None) -> None:
+        """With `kinds`, only records of those kinds are looked for: whole groups that cannot hold one are passed
+        over, which makes looking through a whole load order for a few records quick."""
         self.path, self.name = path, path.name
         h = read(path)
         masters = [m.casefold() for m in h.masters]
@@ -193,6 +221,9 @@ class Records:
             if kind == b"GRUP":
                 if length < 24:
                     break
+                if kinds is not None and _skip_group(flags, form, kinds):
+                    pos += length                               # nothing wanted in there: past the whole group
+                    continue
                 pos += 24                                       # into the group: its records follow
                 continue
             at = form >> 24
@@ -251,6 +282,15 @@ class Records:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+
+def canonical(ftype: str, data: bytes) -> bytes:
+    """A field as it counts, where the way it is stored says more than it means (XE02§, TL01§15). A cell's place on
+    the grid (XCLC) is two numbers and one byte of flags; the three bytes after that are unused and hold whatever
+    was in memory when the plugin was saved, and an older plugin has the two numbers only."""
+    if ftype == "XCLC" and len(data) in (8, 12):
+        return data[:8] + (data[8:9] if len(data) == 12 else b"\x00") + b"\x00\x00\x00"
+    return data
 
 
 def same_field(a: bytes, ra: Records, b: bytes, rb: Records) -> bool:

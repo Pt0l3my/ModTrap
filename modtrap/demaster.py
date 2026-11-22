@@ -110,6 +110,15 @@ def plan(m: model.Model, dry: dict, mod_name: str = "") -> Plan:
             out.switch_off.append(r.name)
         elif f["reading"] == "can be demastered":
             out.demaster[r.name] = actions_for(f)
+            # Said in the plan, in so many words: a script loses what it pointed at (WHY§76).
+            props = sum(1 for rec in f.get("items", []) for e in rec.get("elements", [])
+                        if e.get("would") == "entry" and e.get("array") in dryrun.SCRIPT_ARRAYS)
+            if props:
+                out.notes.append("%s: %d script propert%s that point%s at the mod %s taken out of %s script%s. A script "
+                                 "then finds nothing where the mod's thing was, as it would with the mod gone; it may "
+                                 "write a line in the game's script log" % (
+                                     r.name, props, "y" if props == 1 else "ies", "s" if props == 1 else "",
+                                     "is" if props == 1 else "are", "its" if props == 1 else "their", "" if props == 1 else "s"))
         else:
             out.needs_you.append(r.name)
     # A mod that is all, or nearly all, patches for the trapped mods is disabled whole, as a person would, so that
@@ -369,6 +378,14 @@ class Demaster:
         board.mark("install", "disable", process.DONE if done["disabled"] else process.SKIPPED,
                    ", ".join(done["disabled"][:6]) if done["disabled"] else
                    "the mod stays enabled: something still needs it")
+        if self.plan.blocked:
+            # The demaster stopped short, by design: something still needs the mod. Said where the owner looks.
+            left = list(self.plan.needs_you)
+            board.mark("install", "left", process.YOURS,
+                       "%s. The mod stays enabled until %s; the Steps tab and the Dry run tab say what is taken from "
+                       "the mod" % (", ".join(left[:6]) + (" and %d more" % (len(left) - 6) if len(left) > 6 else ""),
+                                    "it no longer needs it" if len(left) == 1 else "they no longer need it"),
+                       text="Left to you: %d plugin(s) ModTrap could not demaster" % len(left))
         self.stage = "installed"
         paths.write_atomic(self.dir / "installed.json", (json.dumps(done, indent=1) + "\n").encode("utf-8"))
         return done
