@@ -118,6 +118,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 93 | 2026-11-22 | 0.3.21 on the owner's PC: versions set, patchers built outside MO2 and taken as built inside; the framework then waited for its run button, which ModTrap now presses, closing it on its log's word | DECIDED | #tools #mo2 #process |
 | 94 | 2026-11-22 | The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason | DECIDED | #tools #mo2 #safety |
 | 95 | 2026-11-22 | The whole demaster went through on the owner's PC; ModTrap reads the settings files that name the plugin line by line, and gives one account of its checks after the demaster | DECIDED | #steps #process #revert |
+| 96 | 2026-11-22 | A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press | FACT | #revert #page |
+| 97 | 2026-11-22 | Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open | DECIDED | #steps #page #tools |
+| 98 | 2026-11-22 | A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed | DECIDED | #steps #tools #page |
+| 99 | 2026-11-22 | The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure | DECIDED | #steps #tools #log |
 
 ## Entries
 
@@ -2367,3 +2371,127 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests (where a line names the plugin, a switched-off line, a file of an unknown kind, the step ModTrap's
   or the owner's accordingly; the account of checks; Revert with a plugin rewritten in ModTrap's mod); in a
   browser, the one go ending "complete and checked" with the play test left.
+
+### 96. A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press
+
+`2026-11-22` · FACT · `#revert #page` · refs: WHY§95, WHY§83, DESIGN§11
+
+- The owner, after WHY§95: "well I already done a revert, is that bad?"
+- FACT (the code of 0.3.24). That Revert went line by line. It took ModTrap's mod out of the mod list, enabled the
+  mods again with their plugins at their places, put the tools' kept output back, and removed ModTrap's plugins
+  that were still as ModTrap had made them. The one a tool had written anew in place was left, and its folder
+  with it. The folder is in MO2's mods folder and in no list: the game does not get it; MO2 shows such a folder
+  as a new mod, not enabled. The modlist is as it was before the demaster.
+- What it costs: a next demaster of the same mods finds the name taken and calls its mod "… (2)".
+- DECIDED. The newest reverted demaster says when plugins of ModTrap's own mod are still on disk, stays on the job
+  list, and the press that finishes a Revert (WHY§83) also sets those plugins aside in the job's folder and takes
+  the emptied folder away. Not if MO2 has the mod in its list again: then it is MO2's and the owner's.
+- Checked: a test (left behind by the earlier way, said on the job, tidied by the press, the three lists untouched).
+- **Later (2026-11-22, the session file of 0.3.26).** Checked on the owner's PC: the press set the one plugin
+  aside and the folder was gone; the modlist read 3,575 mods and no problem; a new demaster then went through
+  whole.
+
+### 97. Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open
+
+`2026-11-22` · DECIDED · `#steps #page #tools` · refs: MT33, MT31, TL01§23, TL01§24, WHY§93, WHY§95, DESIGN§14
+
+- The owner, with pictures of the Steps and Process tabs of 0.3.26 after a whole demaster: "can you look at steps
+  an ensure they are correctly labelled against our current code, some steps still state run by user that aren't.
+  Also some settings still need to be looked up by user, why is that and what settings? can you make the ModTrap
+  specify those settings or files that need to be looked up by user? A path, some ID, steps to look it up?" And:
+  "when the demaster is finished, ModTrap opens MO2, is it safe to run revert whilst MO2 is open or should it be
+  greyed out?"
+- FACT. A tool's step was labelled "ModTrap starts it · you run it" whenever the tool was in MO2's list, as when
+  that was true of every tool. Since WHY§84 and WHY§93 ModTrap runs two of them itself.
+- DECIDED. A tool's step is labelled by what happens: "ModTrap" where the tool has switches or a button ModTrap
+  works it by and the owner's setting allows it, with the way named in the step; "ModTrap starts it · you run it"
+  where ModTrap can only start it; "You" where it is not in MO2's list.
+- FACT. Two more wordings were behind the code. The step for the patcher framework still said ModTrap's copy
+  would hide the tool's new plugin; the tool in fact writes the new plugin in that copy's place (WHY§95), and the
+  step now says so, before the run and after it. And ModTrap's own mod was listed as an output mod of the texture
+  tool, because that tool's demastered plugin lies in it; ModTrap's mod is no tool's output mod.
+- Why one settings file was left: it belongs to a third framework, whose handling ModTrap had not read. Its
+  source was found and read (TL01§24): its lines add forms to lists, and can be written to hold only while a
+  plugin is active or only while it is not. All three ways are settled by the framework itself once the mod is
+  gone; the last means the line now takes effect, as its author wrote it for a modlist without the mod, and the
+  evidence says so.
+- DECIDED. What is still left to the owner in such a file is said in full, not folded away: the file's whole
+  path (with a button to copy it), each line by its number and text, what the line means, and what to do about
+  it. Left are only exclusions in the two distributors' files (WHY§95) and files of kinds not read.
+- Revert with MO2 open: safe as it is, and not greyed. The page asks MO2 to close before it sends the Revert (it
+  asks the owner first, unless the setting says to close without asking), and the program refuses a Revert while
+  MO2 is open. The buttons now say so.
+- Checked: tests (the labels by setting and tool; the wording before and after the tool's run; the third
+  framework's lines; the path, lines and advice for what is left); in a browser, the rendering and the whole flow.
+
+### 98. A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed
+
+`2026-11-22` · DECIDED · `#steps #tools #page` · refs: MT34, MT35, MT33, TL01§23, TL01§24, TL01§25, WHY§95, WHY§97, DESIGN§14
+
+- The owner: "can you also add a scanner for all tools and frameworks, so they can be read at the end of the
+  demaster process reliably?"
+- FACT, in ModTrap's own code before this. The search for settings files that name the plugin (WHY§95) stopped
+  after 12 seconds or 30,000 files, read only the first 512 KB of a file, listed at most 2,000 files of a mod's
+  `SKSE/Plugins` folder and did not say when that listing was cut. It looked at every enabled mod's copy of a
+  file, also one that a mod of higher priority replaces, and not at Overwrite or the game's folder. On a list of
+  some 3,500 mods the answer "nothing names the plugin" could therefore rest on a search that had not finished.
+- DECIDED. One scanner (`census.py`) replaces that search. It lists the game's Data folder, every enabled mod
+  from the lowest priority and Overwrite; of files with the same path the last one wins, as in the game. It looks
+  through each mod's top folder and, to their end, the folders named in ModTrap's data (`mentions.json`,
+  "places"). Every winning file is read to its end, piece by piece. No time limit.
+- It keeps, for each file, which plugins of the modlist the file names, never its text. A file is read once and
+  remembered by path, size and date, so the look after the demaster costs a listing.
+- What could not be listed or read (a folder that failed, a file that would not open, a file past 64 MB) is
+  counted and named. Then the look was not whole: the settings-files step is the owner's and names those files.
+  Only a whole look lets ModTrap say "none names the mod's plugin".
+- The step now exists also when no file names the plugin, and states what was looked through. Before, no step
+  was shown then, which could not be told from "not looked".
+- METHOD. Finding which of some 3,750 names a text holds: from each ".esp", ".esm" or ".esl" backwards, the
+  longest known name that ends there. Names are filed by their last six bytes and under those by length. A first
+  version filed them by the last bytes only and took 2 s for 20,000 lines, because very many names end alike
+  ("… - Patch.esp"); with the lengths it takes 0.05 s. An invented list of 3,500 mods with 14,000 settings files
+  is listed and read in about 2 s here. The time on the owner's list is written in the log and on the Tools tab.
+- The Tools tab has a card for it: files in force, hidden copies, what was passed over, the kinds of settings
+  file (by the ending of their names) with whether ModTrap reads them line by line, and the frameworks installed,
+  by their program files in `SKSE/Plugins` (TL01§25). While a scan goes, ModTrap counts as working (WHY§92).
+- Left open (MT35): condition files of animation replacers lie under `meshes`, not in the places looked through.
+- Checked: tests with invented files (the winner by priority, Overwrite above all, a disabled mod, each place, a
+  name across two pieces of a large file, a file read again only when changed, the step when a file was passed
+  over and when none names the plugin); the card in a browser.
+
+### 99. The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure
+
+`2026-11-22` · DECIDED · `#steps #tools #log` · refs: MT35, MT36, MT34, TL01§26, WHY§98, WHY§95, DESIGN§14
+
+- The owner, to MT35 and more: "yes, add the animation folders to the scanner, and make sure the scanner reports
+  properly in logs so you can tell if it works and if it doesn't which files failed."
+- FACT (TL01§26). The animation replacer walks the whole of `meshes` for folders of its two names, wherever they
+  lie. So does the scanner now, for every mod in force: folders are found by name, and inside them every settings
+  file is listed to the end. In the older layout a folder named after a plugin is itself a mention; the scanner
+  records it as one.
+- METHOD. The walk of `meshes` lists very many folders. A folder that held no folder when it was last listed, and
+  has not changed since (by its date, which changes when something is added to it or taken from it), is passed
+  by. An invented list of 1,200 mods with 690,000 files under `meshes` is walked in 0.7 s here, and in 0.3 s the
+  second time. The owner's disk will differ; the log states the time.
+- REJECTED: taking every line of a condition file that names the plugin as settled by the replacer. Read
+  condition by condition (TL01§26), 43 of its conditions on a thing do not hold once the thing is gone, which is
+  right: nobody has the thing. But the one on a scene compares with nothing and then holds for everyone who is in
+  no scene, and the one on an enchantment can hold for an enchantment that is built on no other. An animation
+  meant for one case could then be used generally. And a condition of another program's is not known at all.
+- DECIDED. ModTrap reads which condition a mention belongs to from the file's own structure (the JSON tree, also
+  through conditions inside one another; in the older text file, the name at the start of the line). A condition
+  among the 43: settled, ModTrap's. One of the two, or of an unknown name, or a file that is not sound, or a
+  mention outside any condition: the owner's, with the line and what to do. Where several mentions share a line,
+  the least settled counts.
+- The verdict holds only while that replacer's program file is installed: another program that uses the same
+  files was not read, and its files are then the owner's.
+- DECIDED (MT36). The scanner writes to the log, under its own name: sources and folders listed, files by where
+  they lie, files read now and remembered, megabytes, the time of the listing and of the whole look, and
+  "the look is whole" or "NOT whole". Each failure is a line: mod, path inside the mod, reason. It checks that
+  the files in force equal those read plus those not read. A scanner that raises is caught, logged, and shown as
+  failed; the step is then the owner's and the demaster is not called checked.
+- Also: a file that named the plugin when scanned and cannot be opened for its lines is kept as one to look at,
+  where before it would have dropped out in silence.
+- Checked: tests with invented files (folders at any depth, the older layout's folder, conditions nested, on one
+  line, unknown, unsound; the two unsettled; a file and a folder that cannot be opened and what the log says; a
+  second look that fails the same way; a scanner that raises); the card and a whole demaster in a browser.

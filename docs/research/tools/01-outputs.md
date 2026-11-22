@@ -416,3 +416,69 @@ Read in the frameworks' public sources, facts only, nothing copied: Spell Perk I
 - **Not read.** FormList Manipulator and Base Object Swapper (their sources were not at hand), and any settings
   file of another kind: ModTrap leaves those to the owner.
 
+## 24. FormList Manipulator's settings files (2026-11-22)
+
+Read in its public source and its own description (MIT), commit `82a694e` of the repository `FormList-Manipulator`
+of its author; facts only, nothing copied. The version a modlist carries may differ.
+
+- **FACT (its `README.md`, "Config Files" and "General usage").** A settings file is an INI file whose name ends
+  with `_FLM`, or any INI file in a folder `FLM`. A line is `FormList = list|form, form, …|filter`: forms are
+  added to the list; a form or a list is an editor name or a number, `~`, and a plugin's file name. In its
+  words: the list "is skipped if is not found", and a form "is skipped if it already exists in FormList or is
+  not found".
+- **FACT (the same, "Filters").** A filter is made of conditions: a plugin's name with `+` if the plugin must be
+  active, or `-` if it must not be; several joined by `&` must all hold, and of several conditions one is enough.
+  A filter can be written in the line or named once by `Filter = name|conditions` and used by `#name`.
+- **FACT (`src/Utility/Utility.hpp:73-89`).** A form that cannot be found is noted in the framework's log
+  ("Can't find Form …") and not added.
+- **So.** A line that names a plugin as the list's or a form's origin adds nothing once the plugin is gone. A
+  line with `+plugin` is passed over once the plugin is gone. A line with `-plugin` was held back while the
+  plugin was there and is carried out once it is gone: its author wrote it for a modlist without that plugin.
+
+## 25. The program files of the three frameworks (2026-11-22)
+
+Read in each framework's own build files, at the commits named in §23 and §24; facts only, nothing copied.
+
+- **FACT (Spell Perk Item Distributor, `SPID/CMakeLists.txt:2` at `105725c`).** The program is named
+  `po3_SpellPerkItemDistributor`; its own settings file is `po3_SpellPerkItemDistributor.ini` in `SKSE\Plugins`
+  (`SPID/src/main.cpp:115`).
+- **FACT (Keyword Item Distributor, `CMakeLists.txt:2` at `99adaaa`).** The program is named
+  `po3_KeywordItemDistributor`.
+- **FACT (FormList Manipulator, `CMakeLists.txt:7-9` and `:116` at `82a694e`).** The project is named
+  `FormListManipulator`, and the build copies `FormListManipulator.dll`.
+- **So.** A modlist has one of these frameworks installed when an enabled mod carries that program file, with the
+  ending `.dll`, in `SKSE/Plugins`. ModTrap's scanner (WHY§98) lists them by that, in its data (`mentions.json`,
+  "dll"). A release may name the file otherwise; then the framework shows among the other programs, and its
+  settings files are read all the same, by their own names.
+
+## 26. The animation replacer's folders and condition files (2026-11-22)
+
+Read in the public source of Open Animation Replacer (GPL-3.0), commit `f4e7688`; facts only, nothing copied. The
+version a modlist carries may differ.
+
+- **FACT (`src/Parsing.cpp:1914-1953`).** It walks the whole of `data\meshes` for folders named
+  `openanimationreplacer` or `dynamicanimationreplacer`, compared without case, at any depth, and does not look
+  for more of them inside one it found.
+- **FACT (`src/Parsing.cpp:946-952`, `:1043-1049`, `:1150-1154`, `:893-903`).** In such a folder it reads
+  `config.json` and `user.json` of a mod's folder and of each folder below it; in the older layout,
+  `_conditions.txt` in the numbered folders of `_CustomConditions`.
+- **FACT (`src/Parsing.cpp:1296-1305`).** In the older layout a folder named after a plugin holds folders named by
+  a form's number; one is used only if that form is found.
+- **FACT (`src/SharedTypes.h:163-164`).** A thing is named in a JSON file by `pluginName` and `formID`.
+- **FACT (`src/Utils.cpp:610-623`).** A form is looked up by plugin name and number; nothing is returned when it
+  is not found.
+- **FACT (`src/BaseConditions.h:23`).** A condition marked negated gives the opposite of what it evaluates to.
+- **FACT (`src/OpenAnimationReplacer.cpp:828-980`).** The names conditions have in files, each with the code that
+  evaluates it; 146 names, the older layout's among them.
+- **FACT (`src/Conditions.cpp`, every `EvaluateImpl` read by a script over the file, the odd ones by eye).** Of 124
+  conditions 39 are about a form, a keyword or a faction. 25 begin by asking whether that thing is valid and
+  otherwise end as not holding (for example `:411-418`, `:648-655`). Of the other 14, twelve compare the thing
+  with something that is known to be there, or ask a list of found keywords, and so do not hold when the thing
+  was not found. Two differ: `IsInSpecifiedScene` compares the scene an actor is in with the thing, and both are
+  nothing for an actor in no scene; `IsEquippedHasEnchantment` also compares the enchantment's base enchantment
+  with the thing, and both are nothing for an enchantment with no base.
+- **FACT (`CMakeLists.txt:3`).** The program is named `OpenAnimationReplacer`.
+- **So.** Once a plugin is gone, a condition about one of its things does not hold (or, negated, always holds),
+  as for anyone who never had the thing, for 43 of the names in files. For the two named it can hold where it was
+  not meant. **LIKELY**, not read: `IsForm` compares the actor itself with the thing, which only matters if there
+  is no actor. A condition added by another program is not in this source at all.

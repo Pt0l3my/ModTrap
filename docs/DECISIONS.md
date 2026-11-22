@@ -25,7 +25,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
   by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning). MT31 (a tool with only a button
   is run by ModTrap pressing it). MT32 (a compiler that crashes inside MO2 is put on MO2's list of programs it leaves alone). MT33 (ModTrap reads
-  the settings files that name the plugin, and gives one account of its checks after the demaster).
+  the settings files that name the plugin, and gives one account of its checks after the demaster). MT34 (a scanner of every
+  settings file in force in the modlist, and of the frameworks installed). MT35 (the scanner looks through the animation folders
+  too; answered the same day). MT36 (the scanner writes every look to the log, with each failure and its reason).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -672,3 +674,60 @@ ModTrap as well? Could we implement after demaster checks?"
 - After a demaster ModTrap gives one account of its checks, each a fact it read or recorded, and says the
   demaster is complete and checked only when all hold, naming what is left to the owner.
 
+## MT34
+
+**A scanner of every settings file in force, and of the frameworks installed** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "can you also add a scanner for all tools and frameworks, so they can be read at the end of the
+demaster process reliably?"
+
+**Settled under that freedom** (WHY§98, TL01§25; the owner may overrule any of it):
+
+- One scanner looks through the whole modlist for the steps of a demaster and again after it: the game's Data
+  folder, every enabled mod and Overwrite, with no time limit. Of files with the same path only the winner counts,
+  as in the game. Each file is read to its end.
+- What it could not list or read is named, and then the settings-files step is the owner's: ModTrap says
+  "none names the plugin" only when it looked through everything.
+- The Tools tab shows what the scanner covers: the files in force, the kinds of settings file with whether ModTrap
+  reads them line by line, and the frameworks installed.
+- It only reads. It keeps no file's text, only which plugins of the modlist a file names.
+
+## MT35
+
+**Should the scanner also look through the animation folders** · *Open*
+
+The scanner (MT34) looks through each mod's top folder, `SKSE/Plugins` and `FLM`: where the frameworks ModTrap has
+read keep their settings files. Animation replacers keep condition files beside the animations, under `meshes`, and
+a condition can name a plugin. Those folders hold very many files, and ModTrap has not read such a replacer's source.
+
+- **A. Leave them out** (as now): the scan stays short; a condition that names the mod's plugin is not found.
+- **B. Add them** once the replacer's source is read: the first scan of a large list takes longer (how much is
+  seen from the scanner's time on the owner's list, which the log and the Tools tab now state).
+
+**Recommendation: B**, as the next step, after the owner's next session file shows how long the scan takes. By what
+is publicly said of such replacers, a condition about a plugin that is not loaded simply does not hold, so nothing
+breaks meanwhile; that is LIKELY, not read in source.
+
+**Answered, 2026-11-22: B.** The owner: "yes, add the animation folders to the scanner". Done in 0.3.29 (WHY§99,
+TL01§26): the whole `meshes` tree of every mod in force is walked for the replacer's folders, and their condition
+files are read as settings files. The replacer's source was read first. What it showed is not quite what was held
+LIKELY above: most conditions do not hold once their thing is gone, but two can (one on a scene, one on an
+enchantment), and those ModTrap leaves to the owner, with the line and what to do.
+
+## MT36
+
+**The scanner reports in the log** · *2026-11-22 · Asked by the owner*
+
+**Owner's words.** "make sure the scanner reports properly in logs so you can tell if it works and if it doesn't
+which files failed."
+
+**Settled** (WHY§99):
+
+- Every look writes to the log what was listed and read, where the files lie, how long the listing and the whole
+  look took, and whether the look is whole.
+- Every folder that could not be listed and every file that could not be opened or is too large is written on a
+  line of its own: the mod, the path inside it, and the system's own reason. A look that fails in the same way as
+  the one before says so instead of writing them out again.
+- Every file or folder that names a ticked plugin is written with its line count and what is left to the owner.
+- The scanner checks its own count, and a scanner that fails altogether is said as such: it is never taken for
+  "nothing found", and the settings-files step is then the owner's.

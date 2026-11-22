@@ -122,6 +122,7 @@ class Api:
         self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
         self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
         self._making_tools = 0                        # readings of what the tools made that are going (WHY§92)
+        self._scanning = 0                            # looks through the modlist's settings files that are going (WHY§98)
         self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
         self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
@@ -463,6 +464,8 @@ class Api:
                 out.append({"key": "adding", "text": "reading the mods to add"})
         if self._making_tools:
             out.append({"key": "tools", "text": "reading what the modlist's tools made"})
+        if self._scanning:
+            out.append({"key": "scanner", "text": "looking through the modlist's settings files"})
         try:
             if any(r.get("state") in ("copying", "unpacking") for r in list(self._staged.values())):
                 out.append({"key": "unpack", "text": "unpacking a dropped archive"})
@@ -940,7 +943,8 @@ class Api:
         job = self.job.public() if self.job else None
         out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None,
                                   going=self.changes is not None and self.changes.dm_state in ("working", "verified"),
-                                  tools_run=self.changes.tools_run() if self.changes is not None else None)
+                                  tools_run=self.changes.tools_run() if self.changes is not None else None,
+                                  self_run=self.settings().get("tools_self") is not False)
         out["looking"] = bool(mods) and deep is None
         return out
 
@@ -1554,6 +1558,23 @@ class Api:
         self._lists["tools_made"] = (m, out)
         return out
 
+    def scanner(self) -> dict:
+        """The scanner's account of the modlist (WHY§98): the settings files in force, the kinds of them and the
+        frameworks installed, each with whether ModTrap reads its files. Made once for each reading of the modlist."""
+        from . import census
+        m = self._need()
+        hit = self._lists.get("scanner")
+        if hit and hit[0] is m:
+            return hit[1]
+        self._scanning += 1
+        try:
+            c = census.scan(m.instance, census.known_plugins(m.instance))
+        finally:
+            self._scanning -= 1
+        out = census.public(c)
+        self._lists["scanner"] = (m, out)
+        return out
+
     def _tools(self, inst: instance.Instance) -> list[dict]:
         """The executables set up in MO2 (DESIGN§13): title, program file, the mod its new files go to, and
         which one ModTrap would start as xEdit."""
@@ -1649,6 +1670,8 @@ class Api:
             return 200, self.job_state()
         if path == "/api/tools/made":
             return 200, self.tools_made()
+        if path == "/api/tools/scan":
+            return 200, self.scanner()
         if path == "/api/history":
             return 200, self.history_events()
         if path == "/api/log":

@@ -677,6 +677,39 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual({k: v for k, v in lists.items()}, {k: (self.root / "profiles" / "Default" / k).read_bytes() for k in lists})
         self.assertEqual(sorted(snapshot(self.root)), sorted(self.before))                       # the same files as it began with
 
+    def test_a_mod_folder_an_earlier_revert_left_behind_is_tidied_with_one_press(self) -> None:
+        """WHY§96: a Revert made before 0.3.25 left a plugin that a tool had written anew in ModTrap's own mod, and
+        the mod's folder with it. The job says so, stays listed, and one press sets the plugin aside and takes the
+        folder away; nothing else is touched."""
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        job = self.api.state()["demaster"]["jobs"][0]
+        own = self.root / "mods" / job["mod_name"] / "Generated.esp"
+        own.write_bytes(own.read_bytes() + b"written anew by the tool")
+        # The earlier Revert: by line, leaving what was no longer as ModTrap made it.
+        from modtrap import demaster as dm, safe as safe_mod
+        work = self.api.changes._jobs_dir() / job["job"]
+        done = json.loads((work / "installed.json").read_text(encoding="utf-8"))
+        m = model.build(instance.load(self.root))
+        left = dm.undo_by_line(self.root / "profiles" / "Default", safe_mod.Safe(work / "safe"), done, m.instance)["left"]
+        self.assertEqual([Path(p).name for p in left], ["Generated.esp"])
+        self.api.open(str(self.root), None, session=self.api.session)
+        self.ready()
+        j = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual((j["state"], j["unfinished"], j["left_behind"]), ("reverted", [], ["Generated.esp"]))
+        self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 0})              # it stays until tidied
+        lists = {k: (self.root / "profiles" / "Default" / k).read_bytes() for k in ("modlist.txt", "plugins.txt", "loadorder.txt")}
+        out = self.api.post("/api/demaster/revert", {"job": job["job"], "finish": True})[1]
+        self.ready()
+        self.assertEqual((out["how"], out["placed"], out["set_aside"], out["notes"]), ("finish", 0, 1, []))
+        self.assertFalse((self.root / "mods" / job["mod_name"]).exists())
+        self.assertTrue((work / "set-aside-by-revert" / "modtraps-own-mod" / "Generated.esp").is_file())
+        self.assertEqual(lists, {k: (self.root / "profiles" / "Default" / k).read_bytes() for k in lists})   # the lists untouched
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["left_behind"], [])
+
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()
         self.tool = "touch"                       # a run that alters an original on disk

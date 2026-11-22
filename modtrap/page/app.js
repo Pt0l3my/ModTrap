@@ -83,6 +83,11 @@ async function toggleMo2() {
 }
 
 // Who does a step: ModTrap, the owner, or ModTrap starts a tool that the owner then works in.
+function copyButton(text, what) {
+  const b = el("button", { type: "button", class: "nav-link", text: "copy" });
+  b.addEventListener("click", () => copyText(text, what));
+  return b;
+}
 function whoTag(who) {
   return el("span", { class: "who" + (who === "you" ? " you" : who === "both" ? " both" : ""),
     title: who === "both" ? "ModTrap starts the tool through MO2 with the button below; what is done inside the tool is yours" : "",
@@ -236,6 +241,7 @@ function renderSteps() {
 
 function renderTools(s) {
   renderToolsMade();
+  renderToolsScan();
   const box = $("tools-list");
   const rows = s.tools.map((t) => el("tr", {},
     el("td", {}, t.title, t.xedit ? el("span", { class: "tag good", text: "ModTrap starts this one for a dry run" }) : null),
@@ -332,6 +338,57 @@ function renderToolsMade() {
           el("td", {}, el("div", { text: r.records.toLocaleString("en-GB") + " record" + (r.records === 1 ? "" : "s") + (r.cut ? " (not read to the end)" : "") }),
             el("div", { class: "dim small", text: shown.map((k) => kindText(k[0], k[1])).join(" · ") + (r.kinds.length > shown.length ? " · and " + (r.kinds.length - shown.length) + " more kinds" : "") })));
       }))));
+  }
+  box.replaceChildren(el("div", { class: "card" }, ...kids));
+}
+
+// The scanner (WHY§98): the settings files in force in the modlist, their kinds and the frameworks installed.
+function renderToolsScan() {
+  const box = $("tools-scan");
+  if (!box) return;
+  const d = state.toolsScan, busy = state.toolsScanBusy;
+  const look = el("button", { type: "button", text: busy ? "Scanning…" : d ? "Scan again" : "Scan the modlist's settings files", disabled: !!busy });
+  look.addEventListener("click", async () => {
+    state.toolsScanBusy = true; renderToolsScan();
+    try { state.toolsScan = await api("/api/tools/scan"); state.toolsScanFor = state.loaded; } catch (e) { toast(e.message); }
+    state.toolsScanBusy = false; renderToolsScan();
+  });
+  const num = (n) => n.toLocaleString("en-GB");
+  const kids = [el("div", { class: "card-head" }, el("h2", { text: "Scanner: settings files and frameworks" }), look),
+    el("p", { class: "dim", text: "Every settings file that is in force in the modlist, the winning copy of each as the game sees it, and the frameworks that read them while the game runs. ModTrap makes this same scan by itself for the steps of a demaster, and again after it; here you can see what it covers." })];
+  if (d) {
+    if (state.toolsScanFor !== state.loaded) kids.push(el("p", { class: "would-needs", text: "The modlist has been read again since this was made: press “Scan again”." }));
+    if (d.failed) kids.push(el("p", { class: "would-needs", text: "The scanner failed (" + d.failed + ") and looked through nothing. The log says more." }));
+    const places = Object.entries(d.by_place || {}).sort((x, y) => y[1] - x[1]).map(([place, n]) => num(n) + " in " + (place === "top folder" ? "a mod's top folder" : place));
+    kids.push(el("p", { text: num(d.files) + " settings file" + (d.files === 1 ? "" : "s") + " in force, in the game's folder, " + plural(Math.max(0, d.mods - 2), "enabled mod") + " and Overwrite"
+      + (d.hidden ? ", not counting " + num(d.hidden) + " hidden by a mod of higher priority" : "") + ". " + num(d.read) + " read to the end; " + num(d.naming) + " name a plugin of the modlist. It took " + d.seconds + " s." }));
+    if (places.length) kids.push(el("p", { class: "dim small", text: "Where they lie: " + places.join(" · ") + "." + (d.tree_folders ? " " + plural(d.tree_folders, "folder") + " of animation replacers found." : "") }));
+    kids.push(el("p", { class: "dim small", text: "Looked through: the top folder of each mod; to their end the folders " + d.places.join(", ")
+      + (d.trees || []).map((t) => "; and all of " + t.under + " for folders named " + t.folders.join(" or ") + ", wherever they lie").join("")
+      + ". Files ending in .ini, .json, .toml, .yaml, .yml or .txt. Every look is written to the Log, with each folder or file that failed and why." }));
+    const missed = [];
+    if (d.cut) missed.push(num(d.cut) + " folder" + (d.cut === 1 ? "" : "s") + " not listed to the end: " + d.cut_mods.join("; ") + (d.cut > d.cut_mods.length ? "; … the Log names them all" : ""));
+    if (d.unreadable) missed.push(num(d.unreadable) + " could not be opened: " + d.unreadable_examples.join("; ") + (d.unreadable > d.unreadable_examples.length ? "; … the Log names them all" : ""));
+    if (d.too_large) missed.push(num(d.too_large) + " too large to be a settings file, not read: " + d.too_large_examples.join("; ") + (d.too_large > d.too_large_examples.length ? "; … the Log names them all" : ""));
+    if (!d.failed) kids.push(missed.length ? el("div", { class: "would-needs" }, ...missed.map((t) => el("div", { text: t })))
+      : el("p", { class: "would-record", text: "Nothing was passed over: every folder was listed to its end and every file read." }));
+    const known = d.frameworks.filter((f) => f.read_by_modtrap), other = d.frameworks.filter((f) => !f.read_by_modtrap);
+    kids.push(el("h3", { text: "Settings files by kind" }));
+    if (!d.kinds.length) kids.push(el("p", { class: "dim", text: "No settings file here is of a kind with a name of its own (a name ending in _WORD.ini, or a condition file of an animation replacer)." }));
+    else kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Files named" }), el("th", { text: "In force" }), el("th", { text: "Read by ModTrap" }))),
+      el("tbody", {}, ...d.kinds.map((k) => el("tr", {}, el("td", {}, el("span", { class: /^…/.test(k.kind) ? "mono" : "", text: k.kind })), el("td", { text: num(k.files) }),
+        el("td", { class: k.read_by_modtrap ? "" : "dim", text: k.read_by_modtrap ? "yes, line by line: " + k.framework
+          : "found if it names the plugin, then left to you to judge" + (k.why_not ? " (" + k.framework + ": " + k.why_not + ")" : "") }))))));
+    kids.push(el("h3", { text: "Frameworks installed" }));
+    kids.push(el("p", { class: "dim small", text: "Programs that work inside the game, by their files in SKSE/Plugins of the enabled mods: " + num(d.frameworks.length) + "." }));
+    if (known.length) kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Framework" }), el("th", { text: "Program file" }), el("th", { text: "In mod" }))),
+      el("tbody", {}, ...known.map((f) => el("tr", {}, el("td", { text: f.framework }), el("td", {}, el("span", { class: "mono", text: f.dll })), el("td", { text: f.mod }))))));
+    else kids.push(el("p", { class: "dim", text: "None of the frameworks whose settings files ModTrap reads line by line is installed." }));
+    if (other.length) {
+      const more = el("details", {}, el("summary", { text: plural(other.length, "other program") + ": a settings file of theirs that names the mod's plugin is found and shown to you, with its line" }),
+        el("div", { class: "dim small", text: other.map((f) => f.dll.replace(/\.dll$/i, "")).join(" · ") }));
+      kids.push(more);
+    }
   }
   box.replaceChildren(el("div", { class: "card" }, ...kids));
 }
@@ -678,7 +735,7 @@ function autoGo() {
 // that closes without having written anything ends the row: something did not go as meant, and that is the owner's.
 function startToolsRow() {
   state.dmChain = "tools"; state.toolsTried = {}; state.toolsAgain = {}; state.toolsNow = "";
-  toast("The tools that are to run again are started one after another. Work each, then close it.");
+  toast("The tools that are to run again are started one after another. ModTrap runs and closes the ones it can; any other is yours to work, then close.");
   state.processText = ""; renderProcess();
 }
 
@@ -781,8 +838,14 @@ function remadeNote(j) {
 
 // Revert of a demaster (WHY§81): always back to how things stood before it, whatever came after.
 const REVERT_ASKS = "Put everything back as it was before this demaster?\n\nThe three lists as they were; ModTrap's own mod removed; any plugin a tool has made anew since put back as it was; and the output of each tool that ModTrap started since, as it was kept before the tool ran. What is there now is set aside in the job's folder, not deleted.";
+// Revert never runs while this modlist's MO2 is open (an open MO2 writes its own lists back over ModTrap's): pressed
+// with MO2 open, ModTrap first asks MO2 to close (it asks you before, unless Settings says to close it without asking),
+// and the program itself refuses the Revert while MO2 is still there. So the button is safe to press at any time.
+const REVERT_WITH_MO2 = "Safe to press with MO2 open: ModTrap closes MO2 first (it asks you, unless Settings says to close it without asking), and never reverts while MO2 is still open.";
 function revertSaid(r) {
-  if (r.how === "finish") return plural(r.placed, "plugin") + " back at " + (r.placed === 1 ? "its place" : "their places") + " in the load order." + ((r.notes || []).length ? " Not done: " + r.notes.join("; ") + "." : "");
+  if (r.how === "finish") return (r.placed ? plural(r.placed, "plugin") + " back at " + (r.placed === 1 ? "its place" : "their places") + " in the load order. " : "") +
+    (r.set_aside ? plural(r.set_aside, "plugin") + " left in ModTrap's own mod set aside in the job's folder; the mod's folder is gone. " : "") +
+    (!r.placed && !r.set_aside ? "Nothing was left to do. " : "") + ((r.notes || []).length ? "Not done: " + r.notes.join("; ") + "." : "");
   return "Put back as it was before the demaster." + (r.placed ? " " + plural(r.placed, "plugin") + " MO2 had dropped from its lists " + (r.placed === 1 ? "is" : "are") + " back in place in the load order." : "") +
     ((r.notes || []).length ? " Not done: " + r.notes.join("; ") + "." : "") + ((r.tools || []).length ? " Tool output put back too: " + r.tools.join(", ") + "." : "") +
     ((r.tools_not_kept || []).length ? " Too large to have been kept, so run again: " + r.tools_not_kept.join(", ") + "." : "") +
@@ -790,8 +853,8 @@ function revertSaid(r) {
 }
 // A Revert that enabled the mods again but left their plugins out of the load order (WHY§83): MO2 had dropped the
 // lines while the mods were disabled. ModTrap puts them back where they stood.
-function finishButton(j, after) {
-  const b = el("button", { type: "button", class: "primary", text: "Put them back in place" });
+function finishButton(j, after, label) {
+  const b = el("button", { type: "button", class: "primary gated", text: label || "Put them back in place" });
   b.title = "Puts these plugins back where they stood in the load order before the demaster. Nothing else is touched.";
   b.addEventListener("click", async () => {
     b.disabled = true;
@@ -802,10 +865,13 @@ function finishButton(j, after) {
   return b;
 }
 function unfinishedCard(j) {
-  const n = j.unfinished.length;
-  return el("div", { class: "card warn" }, el("h2", { text: "The last Revert left " + plural(n, "plugin") + " out of place in the load order" }),
-    el("p", { text: "The mods are enabled again, but while they were disabled MO2 dropped their plugins from its lists, and the Revert did not put them back where they stood: " + j.unfinished.slice(0, 12).join(", ") + (n > 12 ? " and " + (n - 12) + " more" : "") + ". Left like this, MO2 adds them at the end of the load order, after the plugins that need them." }),
-    el("p", {}, state.changes ? finishButton(j, () => renderDemaster(true)) : null, el("span", { class: "dim", text: "  Close MO2 first. Only the two plugin lists change; a copy of each change is in the history." })));
+  const n = (j.unfinished || []).length, b = (j.left_behind || []).length;
+  const parts = [];
+  if (n) parts.push(el("p", { text: "The mods are enabled again, but while they were disabled MO2 dropped their plugins from its lists, and the Revert did not put them back where they stood: " + j.unfinished.slice(0, 12).join(", ") + (n > 12 ? " and " + (n - 12) + " more" : "") + ". Left like this, MO2 adds them at the end of the load order, after the plugins that need them." }));
+  if (b) parts.push(el("p", { text: "ModTrap's own mod “" + j.mod_name + "” is still in MO2's mods folder with " + plural(b, "plugin") + " a tool had written anew in it (" + j.left_behind.join(", ") + "). It is no longer in the mod list, so the game does not get it and your modlist is as it was before the demaster; MO2 would only show the folder as a new, disabled mod. ModTrap can set the " + (b === 1 ? "plugin" : "plugins") + " aside in the job's folder and take the folder away." }));
+  return el("div", { class: "card warn" }, el("h2", { text: n ? "The last Revert left " + plural(n, "plugin") + " out of place in the load order" : "The last Revert left ModTrap's own mod behind" }),
+    ...parts,
+    el("p", {}, state.changes ? finishButton(j, () => renderDemaster(true), n ? "Put them back in place" : "Tidy it away") : null, el("span", { class: "dim", text: "  Close MO2 first. Nothing is deleted; the change is in the history." })));
 }
 async function revertDemaster(job) {
   let said = "";
@@ -887,6 +953,7 @@ function renderDemaster(force) {
   const earlier = allJobs.filter((j) => j.state !== "installed").length;
   for (const j of allJobs.filter((x) => x.state === "installed").slice(0, 12)) {
     const undo = el("button", { type: "button", text: "Revert" });
+    undo.title = REVERT_WITH_MO2;
     undo.addEventListener("click", async () => {
       if (!await confirmBox(REVERT_ASKS)) return;
       revertDemaster(j.job);
@@ -896,7 +963,7 @@ function renderDemaster(force) {
       el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
       ...remadeNote(j)));
   }
-  for (const j of allJobs.filter((x) => x.state === "reverted" && (x.unfinished || []).length).slice(0, 1)) cards.push(unfinishedCard(j));
+  for (const j of allJobs.filter((x) => x.state === "reverted" && ((x.unfinished || []).length || (x.left_behind || []).length)).slice(0, 1)) cards.push(unfinishedCard(j));
   if (earlier) {
     const go = el("button", { type: "button", class: "linkish", text: "the History tab" });
     go.addEventListener("click", () => showTab("history"));
@@ -1078,6 +1145,7 @@ async function pollHistory() {
         const cell = el("td", {});
         if (stands && d.can_change) {
           const undo = el("button", { type: "button", text: j.what === "add" ? "Take it out again" : "Revert" });
+          undo.title = REVERT_WITH_MO2;
           undo.addEventListener("click", async () => {
             if (!await confirmBox(j.what === "add" ? "Put the mod list and the load order back as they were before this add, and remove ModTrap's copy of the mod from MO2's mods folder?" : REVERT_ASKS)) return;
             try { const r = await api(j.what === "add" ? "/api/add/revert" : "/api/demaster/revert", { job: j.job }); toast(j.what === "add" ? "Put back as it was." : revertSaid(r)); } catch (e) { toast(e.message); }
@@ -1086,8 +1154,9 @@ async function pollHistory() {
           });
           cell.append(undo);
         }
-        if (j.what !== "add" && (j.unfinished || []).length && d.can_change) {
-          cell.append(el("div", { class: "dim", text: plural(j.unfinished.length, "plugin") + " left out of place" }), finishButton(j, pollHistory));
+        if (j.what !== "add" && ((j.unfinished || []).length || (j.left_behind || []).length) && d.can_change) {
+          cell.append(el("div", { class: "dim", text: (j.unfinished || []).length ? plural(j.unfinished.length, "plugin") + " left out of place" : "ModTrap's own mod left behind" }),
+            finishButton(j, pollHistory, (j.unfinished || []).length ? "Put them back in place" : "Tidy it away"));
         }
         tr.append(cell);
         return tr;
@@ -1795,6 +1864,13 @@ function stepItem(it) {
     it.kind ? el("span", { class: "dim", text: "  " + it.kind }) : null,
     el("span", { class: "dim", text: "  names " + it.names.join(", ") + (it.count ? " in " + plural(it.count, "line") : "") }),
     it.verdict ? el("span", { class: "tag " + (it.open ? "warn" : "good"), text: it.verdict }) : null,
+    // What is left to the owner is said in full (WHY§97): where the file is, which line, what it means, what to do.
+    (it.look || []).length ? el("div", { class: "look" },
+      it.path ? el("p", {}, "The file: ", el("span", { class: "mono", text: it.path }), copyButton(it.path, "The file's path")) : null,
+      ...it.look.map((ln) => el("div", { class: "look-line" },
+        el("p", {}, ln.n ? el("b", { text: "Line " + ln.n + ": " }) : null, el("span", { class: ln.n ? "mono" : "", text: ln.text })),
+        el("p", { class: "dim", text: "What it means: " + ln.means + "." }),
+        ln.todo ? el("p", { text: "What to do: " + ln.todo }) : null))) : null,
     it.evidence ? evidenceFold(it.evidence) : null);
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
     el("span", { class: "tag " + (it.what === "missing" ? "bad" : "warn"), text: it.what === "missing" ? "missing" : "not active" }));
@@ -1898,7 +1974,7 @@ function afterStage() {
     if (!(st.key.startsWith("tool:") || ["after-dry", "regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key) || leftOpen)) continue;
     const ticked = st.manual && !!ticks[stepKey(st.key)];
     const done = ticked || st.state === "done";
-    tasks.push({ key: st.key, text: st.title, note: leftOpen ? (st.note || "") : done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? "" : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
+    tasks.push({ key: st.key, text: st.title, note: leftOpen ? (st.note || "") : done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? (st.key.startsWith("tool:") ? "ModTrap runs it and closes it" : "") : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
       state: done ? "done" : st.state === "not needed" ? "skipped" : leftOpen && st.key === "demaster" ? "yours" : st.state.startsWith("wait") ? "waiting" : st.who === "ModTrap" ? "waiting" : "yours" });
   }
   if (!tasks.length) return null;
@@ -1980,7 +2056,7 @@ function taskActions(stage, task, first, firstOpen) {
   // place, whether or not the setting was on when it was put in place.
   if (stage.key === "after" && stage.tasks.find((t) => t.key.startsWith("tool:") && t.state === "yours") === task) {
     if (state.dmChain === "tools") {
-      out.push(el("span", { class: "act-note", text: "The tools are being started one after another: work each, then close it." }),
+      out.push(el("span", { class: "act-note", text: "The tools are being started one after another. ModTrap runs and closes the ones it can; any other is yours to work, then close." }),
         actButton("Stop the row", async () => { state.dmChain = ""; state.toolsNow = ""; toast("Stopped. A tool that is open stays open; the rest are yours."); }));
     } else if (processIdle() && !toolGoing(state.tool)) {
       out.push(actButton("Start the tools one after another", async () => startToolsRow(), true));

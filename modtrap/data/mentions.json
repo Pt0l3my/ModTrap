@@ -1,18 +1,112 @@
 {
  "format": "modtrap-mentions/1",
- "about": "Settings files of frameworks that work while the game runs, by the name such a file must have, and how a line of one is laid out (TL01§23). ModTrap's data, not code. With it ModTrap says where in a line a plugin is named: as the thing the line gives or changes, as a condition for what the line reaches, or as an exclusion. 'layout' is 'pipes' for a line of the form key = first|more|more, where a condition can start with - (leave out), and conditions joined by + must all hold. What each framework does with a line that names a plugin which is not loaded is in the research note, with its source. Only frameworks whose handling of a missing plugin was read in their source are listed; a file of any other kind is left to the owner.",
+ "about": "Settings files of frameworks that work while the game runs, by the name such a file must have, and how a line of one is laid out (TL01§23). ModTrap's data, not code. With it ModTrap says where in a line a plugin is named: as the thing the line gives or changes, as a condition for what the line reaches, or as an exclusion. 'layout' is 'pipes' for a line of the form key = first|more|more, where a condition can start with - (leave out), and conditions joined by + must all hold. What each framework does with a line that names a plugin which is not loaded is in the research note, with its source. Only frameworks whose handling of a missing plugin was read in their source are listed; a file of any other kind is left to the owner. 'flm' is the layout of FormList Manipulator: key = list|forms|filter, or Filter = name|conditions, where a condition is a plugin's name with + (only while that plugin is active) or - (only while it is not). 'dll' is the framework's program file in SKSE/Plugins, where it was read in the framework's own build files; the scanner uses it to say which frameworks of the modlist ModTrap reads the files of. 'places' are the folders of a mod, beside its top folder, that the scanner looks through for settings files, to their end. 'conditions' is the layout of an animation replacer's condition file: every line that names a plugin is a condition on one of its things. 'when_installed' marks a kind whose handling ModTrap read in one framework's source while another framework uses files of the same name: it counts as read only while that framework's program file is installed. 'label' is how the kind is named on the page. 'trees' are folders of a mod that the scanner walks to their end for folders of the given names, wherever they lie, and then looks through those; 'plugin_folders' are those of them in which a folder named after a plugin is itself a mention of it. For the 'conditions' layout, 'settled' are the names of the conditions that do not hold once the thing they are about is gone (read one by one in the framework's source, TL01§26), and 'unsettled' those that can hold then, with why; a condition of any other name is another program's, and left to the owner.",
  "kinds": [
   {
    "pattern": "_DISTR\\.ini$",
    "framework": "Spell Perk Item Distributor",
    "layout": "pipes",
-   "source": "TL01§23"
+   "source": "TL01§23",
+   "dll": "po3_SpellPerkItemDistributor.dll",
+   "label": "…_DISTR.ini"
   },
   {
    "pattern": "_KID\\.ini$",
    "framework": "Keyword Item Distributor",
    "layout": "pipes",
-   "source": "TL01§23"
+   "source": "TL01§23",
+   "dll": "po3_KeywordItemDistributor.dll",
+   "label": "…_KID.ini"
+  },
+  {
+   "pattern": "_FLM\\.ini$",
+   "framework": "FormList Manipulator",
+   "layout": "flm",
+   "source": "TL01§24",
+   "dll": "FormListManipulator.dll",
+   "label": "…_FLM.ini"
+  },
+  {
+   "pattern": "(^|/)(OpenAnimationReplacer|DynamicAnimationReplacer)/(.+/)?(config\\.json|user\\.json|_conditions\\.txt)$",
+   "framework": "Open Animation Replacer",
+   "layout": "conditions",
+   "source": "TL01§26",
+   "dll": "OpenAnimationReplacer.dll",
+   "when_installed": true,
+   "label": "condition files in an animation replacer's folder (config.json, user.json, _conditions.txt)",
+   "settled": [
+    "CrimeGold",
+    "CurrentFurniture",
+    "CurrentFurnitureHasKeyword",
+    "CurrentWeather",
+    "FactionRank",
+    "HasKeyword",
+    "HasMagicEffect",
+    "HasMagicEffectWithKeyword",
+    "HasPerk",
+    "HasSpell",
+    "InventoryCount",
+    "IsActorBase",
+    "IsAttackTypeKeyword",
+    "IsBeingRiddenBy",
+    "IsClass",
+    "IsCombatStyle",
+    "IsCurrentPackage",
+    "IsEquipped",
+    "IsEquippedHasEnchantmentWithKeyword",
+    "IsEquippedHasKeyword",
+    "IsEquippedLeft",
+    "IsEquippedLeftHasKeyword",
+    "IsEquippedPower",
+    "IsEquippedRight",
+    "IsEquippedRightHasKeyword",
+    "IsEquippedShout",
+    "IsFactionRankEqualTo",
+    "IsFactionRankLessThan",
+    "IsForm",
+    "IsInFaction",
+    "IsInLocation",
+    "IsParentCell",
+    "IsRace",
+    "IsRiding",
+    "IsRidingHasKeyword",
+    "IsScenePlaying",
+    "IsVoiceType",
+    "IsWorldSpace",
+    "IsWorn",
+    "IsWornHasKeyword",
+    "IsWornInSlotHasKeyword",
+    "LocationHasKeyword",
+    "MagicEffectElapsedTime"
+   ],
+   "unsettled": {
+    "IsInSpecifiedScene": "without the mod the scene is not there, and this condition then holds for everyone who is in no scene at all",
+    "IsEquippedHasEnchantment": "without the mod the enchantment is not there, and this condition can then hold for an enchanted thing whose enchantment is not built on another"
+   }
+  }
+ ],
+ "places": [
+  {
+   "folder": "SKSE/Plugins",
+   "why": "where a program that works inside the game (an SKSE plugin) is installed, and by custom keeps its settings"
+  },
+  {
+   "folder": "FLM",
+   "why": "FormList Manipulator reads any INI file in it",
+   "source": "TL01§24"
+  }
+ ],
+ "trees": [
+  {
+   "under": "meshes",
+   "folders": [
+    "OpenAnimationReplacer",
+    "DynamicAnimationReplacer"
+   ],
+   "plugin_folders": [
+    "DynamicAnimationReplacer"
+   ],
+   "source": "TL01§26"
   }
  ]
 }

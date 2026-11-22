@@ -351,7 +351,21 @@ files to look at, a tool outside MO2's list), and a play-test tick goes with the
 are read line by line; the step is ModTrap's and done where every line only gives something of the mod's or reaches
 only its things, and the owner's where a line leaves the mod's things out or the file is of a kind ModTrap has not
 read the handling of. With the demaster in place the steps carry one account of ModTrap's checks (masters, mods
-disabled, each tool's noted run, the settings files): "complete and checked" only when all hold.
+disabled, each tool's noted run, the settings files): "complete and checked" only when all hold. Each step
+says who really does it (WHY§97): ModTrap where it runs a tool itself, ModTrap and the owner where it can only start
+one. What is left to the owner in a settings file is said with the file's path, the line and what to do.
+
+**The scanner (MT34, WHY§98).** Those files are found by one scanner that looks through the whole modlist: the
+game's Data folder, every enabled mod and Overwrite, the winning copy of each path, each read to its end, with no
+time limit. The step is there also when no file names the plugin, and states what was looked through. What the
+scanner could not list or read is named, and the step is then the owner's. The Tools tab shows what the scanner
+covers and the frameworks installed.
+
+**Animation replacers, and the log (MT35, MT36, WHY§99).** The scanner also walks all of `meshes` for the folders
+of animation replacers and reads their condition files. Which condition a mention belongs to is read from the
+file's structure: one that does not hold once the mod is gone is ModTrap's; one that can hold then, or one ModTrap
+does not know, is the owner's, with the line and what to do. Every look is written to the log: what was listed
+and read, the time, and each folder or file that failed, with its reason. A scanner that fails is said as failed.
 
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the

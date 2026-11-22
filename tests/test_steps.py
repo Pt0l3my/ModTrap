@@ -189,7 +189,12 @@ class StepsTests(unittest.TestCase):
         # record of its run since the demaster was put in place, and to do again without one.
         engine = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, tools_run={})["steps"]}["tool:Pandora Behaviour Engine"]
         self.assertEqual((engine["state"], engine["manual"]), ("to do", False))
-        self.assertIn("Done when a run of it that ModTrap started", engine["note"])
+        # Who does it is said as it is (WHY§97): this engine has switches to run and close, so the step is ModTrap's.
+        self.assertEqual(engine["who"], "ModTrap")
+        self.assertIn("ModTrap runs it by itself after the demaster (by the tool's own switches to run and close)", engine["note"])
+        theirs = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, tools_run={}, self_run=False)["steps"]}["tool:Pandora Behaviour Engine"]
+        self.assertEqual(theirs["who"], "both")                                     # the setting off: ModTrap starts it, the owner runs it
+        self.assertIn("running it and closing it is yours", theirs["note"])
         ran = {"Invented Behaviour Engine": {"when": "2026-01-01T10:00:00", "files": 4}}
         after = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, tools_run=ran)["steps"]}
         self.assertEqual((after["tool:Pandora Behaviour Engine"]["state"], after["tool:Pandora Behaviour Engine"]["manual"]), ("done", False))
@@ -220,6 +225,14 @@ class StepsTests(unittest.TestCase):
         self.assertEqual(w("  ; Spell = 0x800~Bramble.esp"), "comment")
         self.assertEqual(w("# about Bramble.esp"), "comment")
         self.assertEqual(steps.where_named("something Bramble.esp", "bramble.esp", ""), "")     # a kind ModTrap does not read
+        # FormList Manipulator's layout (TL01§24): list|forms|filter, and conditions with + or - before a plugin's name.
+        f = lambda line: steps.where_named(line, "bramble.esp", "flm")
+        self.assertEqual(f("FormList = 0x800~Bramble.esp|InventedForm"), "gives")
+        self.assertEqual(f("FormList = InventedList|0x801~Bramble.esp, OtherForm"), "gives")
+        self.assertEqual(f("FormList = InventedList|OtherForm|+Bramble.esp"), "only with")
+        self.assertEqual(f("FormList = InventedList|OtherForm|-Bramble.esp"), "only without")
+        self.assertEqual(f("Filter = NoBramble|+Other.esp&-Bramble.esp"), "only without")
+        self.assertEqual(f("; FormList = InventedList|OtherForm|-Bramble.esp"), "comment")
         self.assertEqual([k["framework"] for k in steps.mention_kinds()][:2], ["Spell Perk Item Distributor", "Keyword Item Distributor"])
 
     def test_a_line_that_leaves_the_mod_out_or_a_file_of_an_unknown_kind_stays_the_owners(self):
@@ -238,6 +251,12 @@ class StepsTests(unittest.TestCase):
         self.assertEqual([(i["file"].rsplit("/", 1)[-1], i["open"]) for i in st["items"]],
                          [("Quill_KID.ini", 1), ("QuillSettings.json", 1), ("Quill_DISTR.ini", 0)])     # what is to look at comes first
         self.assertIn("leaves the mod's things out", " ".join(st["items"][0]["evidence"]["lines"]))
+        # What is left to the owner is said in full: where the file is, which line, what it means, what to do.
+        kid = st["items"][0]
+        self.assertTrue(kid["path"].replace("\\", "/").endswith("mods/Quill/SKSE/Plugins/Quill_KID.ini"))
+        self.assertEqual([(x["n"], x["text"]) for x in kid["look"]], [(2, "Keyword = InventedKeyword|Armor|-0x801~Bramble.esp")])
+        self.assertIn("take that part out", kid["look"][0]["todo"])
+        self.assertEqual((st["items"][2]["path"], st["items"][2]["look"]), ("", []))               # nothing to look up where nothing is left
         self.assertNotIn("a comment", " ".join(st["items"][0]["evidence"]["lines"]))             # a line switched off is not shown
         del m0
 
@@ -597,7 +616,11 @@ class ToolEvidence(unittest.TestCase):
         syn = by["tool:Synthesis"]
         self.assertEqual(syn["title"], "Run Synthesis again")
         self.assertIn("Synthesis Gameplay.esp named the mod as a master", syn["why"])
-        self.assertIn("ModTrap's copy in “ModTrap - Bramble” then hides the new one", syn["why"])
+        self.assertIn("the tool's run makes the plugin anew without the mod, and writes it in that copy's place", syn["why"])
+        # Once the tool has had its run since the demaster, the same plugin is said as what it then is (WHY§95).
+        ran = {"Synthesis": {"when": "2026-01-01T10:00:00", "files": 1}}
+        after = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True, tools_run=ran)["steps"]}["tool:Synthesis"]
+        self.assertIn("the tool's run since has written the plugin anew, in that copy's place in “ModTrap - Bramble”", after["why"])
 
     def test_only_groups_that_can_hold_a_wanted_kind_are_read(self):
         from modtrap import probe
