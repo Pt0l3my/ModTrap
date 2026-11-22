@@ -274,3 +274,30 @@ Read in the tools' public sources (both GPL-3.0: facts only, nothing copied), ea
   through ModTrap gets what MO2's Run button gives it.
 - **Not established.** Why building fails inside MO2 on this PC, and whether it does from MO2's own Run button.
 
+## 18. The patcher framework's own log, and what four of them showed (2026-11-22)
+
+- **FACT (the owner's PC).** Synthesis writes a log for each time it is opened into a folder `logs` beside its
+  program, one file a session, named by date and time. A line has a time, a level in brackets (INF, WRN, ERR)
+  and the text.
+- **FACT (the logs).** Lines ModTrap goes by: "Opening Synthesis v…" (its version); "Swapped profile … to
+  (Mutagen ==> Manual: … )(Synthesis ==> Manual: … )" (the library versions the profile is set to, written again
+  when they change); "Swapping to net…" (the .NET version a patcher's project is set to before it is built);
+  "error NU1202: Package … is not compatible with net…" (a library that does not support that .NET version);
+  "csc.exe" exited with code -1073741819; "Win32Exception (5): Access is denied"; "Encountered blocking overall
+  error".
+- **FACT (Synthesis, `Synthesis.Bethesda.Execution/Patchers/Git/Services/ModifyProject/SwapToProperNetVersion.cs:83-102`
+  at commit `14cf3fa`).** The .NET version a patcher is built for is looked up from the library version aimed at,
+  in a table the program carries: the entry at or below that version. A library version newer than the
+  program's table gets the last .NET version the program knows.
+- **FACT (the owner's four logs of one day, version 0.35.5 of the program).**
+  1. Started through MO2, profile set to library versions 0.53.1 and 0.35.5: patchers set to net8.0; the compiler
+     crashed 42 times; nothing else.
+  2. Started through MO2, the same versions at first: the compiler's crash and "Access is denied". Three minutes
+     in, the profile's versions were changed to 0.54.4 and 0.36.6; from then on NU1202 for every patcher: those
+     libraries support net9.0 and net10.0, and the patchers were still set to net8.0.
+  3. Started through MO2 by MO2's own Run button (the owner's word), the raised versions: NU1202, and a few of the
+     crash and the refusal.
+  4. Started from its own folder, outside MO2 (no arguments in the log), the raised versions: NU1202 only.
+- **LIKELY.** With the profile's versions back at the first pair, the patchers build outside MO2: outside MO2
+  neither the crash nor the refusal showed. Not established.
+

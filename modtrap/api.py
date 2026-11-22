@@ -473,7 +473,8 @@ class Api:
                     and any(e.tool == name for e in adding.generated(m, r, memo))]
             try:
                 job = toolrun.ToolJob(inst, title, made, launcher=self._launch, running=self.running, poll=self.poll,
-                                      self_run=self.settings().get("tools_self") is not False, dismiss=self.dismiss)
+                                      self_run=self.settings().get("tools_self") is not False, dismiss=self.dismiss,
+                                      keep_logs=self.store.dir(self.session.id) / "tool-logs" if self.session else None)
             except toolrun.Refused as e:
                 raise Bad(str(e)) from None
 

@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import dryrun, logbook, steps, tools, winauto
+from . import dryrun, logbook, steps, toollog, tools, winauto
 from .instance import Instance, fold
 
 log = logbook.get("tool")
@@ -74,12 +74,14 @@ class ToolJob:
     def __init__(self, inst: Instance, title: str, watch_files: list[Path], *,
                  launcher: Callable = dryrun.launch, running: Callable[[str], bool | None] = dryrun.image_running,
                  poll: float = 1.0, self_run: bool = False, dismiss: Callable[[str], bool] = winauto.close_message,
-                 grace: float = dryrun.GONE_GRACE):
+                 grace: float = dryrun.GONE_GRACE, keep_logs: Path | None = None):
         exe = next((e for e in inst.executables if e.title == title), None)
         if exe is None:
             raise Refused("“%s” is not in this MO2's list of tools" % title)
         self.inst, self.title = inst, title
         self._dismiss, self._grace = dismiss, grace
+        self._binary, self._keep_logs = exe.binary, keep_logs
+        self.own_log: dict | None = None        # what the tool's own log of this run says (toollog, WHY§88)
         self.arguments, self.switches = self_run_arguments(title, exe.binary, exe.arguments) if self_run else ("", [])
         name, _kind = tools.of_executable(title, exe.binary)
         # What is known about this tool closing without having written anything (data, TL01§16): said then, as a hint.
@@ -119,7 +121,7 @@ class ToolJob:
         return {"title": self.title, "state": self.state, "message": self.message, "output_mod": self.output_mod,
                 "seconds": int((self.ended or time.time()) - self.started), "changed": self.changed[:200],
                 "changed_count": len(self.changed), "by_itself": bool(self.switches), "profile": self.inst.profile,
-                "hint": self.hint if self.state == "done" and not self.changed else ""}
+                "hint": self.hint if self.state == "done" and not self.changed else "", "own_log": self.own_log}
 
     def _run(self) -> None:
         try:
@@ -189,6 +191,7 @@ class ToolJob:
                         break
             if time.time() - self.started > TIME_LIMIT:
                 raise Refused("“%s” was still open after %d hours; ModTrap stopped waiting" % (self.title, TIME_LIMIT // 3600))
+        self.own_log = toollog.after_run(self.title, self._binary, self.started, self._keep_logs)
         after = _snapshot(self.places, self.files)
         roots = [(str(p), p.name) for p in self.places]
         changed = []

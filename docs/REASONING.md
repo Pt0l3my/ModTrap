@@ -110,6 +110,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 85 | 2026-11-22 | The log panes keep to the latest line until the owner scrolls away, and take it up again at the bottom | DECIDED | #page |
 | 86 | 2026-11-22 | The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after | DECIDED | #steps #tools |
 | 87 | 2026-11-22 | 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing | FACT | #revert #page #tools |
+| 88 | 2026-11-22 | A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's | DECIDED | #tools #page #session |
 
 ## Entries
 
@@ -2081,3 +2082,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   card also names the MO2 profile the tool was started with.
 - Checked: tests (the hint and the profile); in a browser, the ticks gone after Revert, the panes with a long
   restored log, opened early, late, and put back as the last tab.
+
+### 88. A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's
+
+`2026-11-22` · DECIDED · `#tools #page #session` · refs: TL01§16, TL01§17, TL01§18, WHY§84, WHY§87, DESIGN§16.8
+
+- The owner, with four of the patcher framework's own logs: "does ModTrap check these? Does ModTrap check any tool
+  logs? Does ModTrap collect any tool logs for sessions?" and: the framework shows its blocking errors when
+  started from MO2 itself, and when started from its own folder.
+- FACT. It did none of the three. A tool's run was judged by its output files alone; a session file held ModTrap's
+  log and xEdit's logs of ModTrap's own runs.
+- FACT (the four logs, TL01§18). Two different failures. Inside MO2, with the library versions the profile had
+  at first: the compiler crashing, and Windows refusing to start the build program. Then, in the framework's
+  second session of the day, the profile's library versions were raised to the newest; from then on every
+  patcher failed in every kind of start, MO2 or not, because this framework builds for a .NET version those
+  libraries no longer support. Started outside MO2, that was the only failure left: no crash, no refusal.
+- So: started by MO2's own Run button it fails as it does from ModTrap (WHY§87's open point, settled), and the
+  failure outside MO2 is the versions, not the building. LIKELY: with the first versions back, the patchers build
+  outside MO2. Not established: that a start inside MO2 then finds them built and does not build again.
+- DECIDED. Where a tool keeps a log of its own, ModTrap reads the one written during the run it started, after
+  the tool has closed. Which tools, where, and which lines mean what is data (`tools.json`, "log"): a pattern
+  and the sentence said when it shows, counted or listed, nothing inferred (`toollog`). What it finds is on the
+  tool's card and in ModTrap's log. A copy of the tool's log goes into the session's folder and from there into
+  a saved session file (the newest six of each tool), cleaned there like every text.
+- So far only the patcher framework has signs: its version, the library versions of its profile and a change of
+  them, the .NET version it built for, a library that does not fit, the compiler's crash, a refused start, a
+  blocking error. Other tools' logs are not read: their lines have not been looked up, and none is guessed.
+- Checked: the reader on the owner's four logs (each read as told above); a test with an invented log (the one
+  of this run read and kept, an older one left alone, the session file holding it); the card in a browser.
+- Not checked: on the owner's PC.

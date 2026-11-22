@@ -1,6 +1,6 @@
 {
  "format": "modtrap-tools/1",
- "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes. 'self_run' names the switches of the tool's own with which it does its work and closes without being touched, where it has such; ModTrap adds them to the arguments MO2 has for the tool when the owner's setting says so (WHY§84). 'wrote_nothing' is what is known about the tool closing without having written anything, said to the owner as a hint when that happens, with its source in the research note.",
+ "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes. 'self_run' names the switches of the tool's own with which it does its work and closes without being touched, where it has such; ModTrap adds them to the arguments MO2 has for the tool when the owner's setting says so (WHY§84). 'wrote_nothing' is what is known about the tool closing without having written anything, said to the owner as a hint when that happens, with its source in the research note. 'log' names the folder beside the tool's program where it keeps logs of its own, and the signs ModTrap looks for in the log of a run it started: a pattern, and the sentence said when it shows (WHY§88).",
  "tools": [
   {
    "tool": "Wrye Bash",
@@ -43,7 +43,54 @@
    ],
    "does": "Synthesis runs its patchers over the whole load order; each writes records it has worked out from the versions of those records in the load order.",
    "writes": "own",
-   "wrote_nothing": "If its patchers showed “Blocking Error” with an error from compiling: Synthesis builds its patchers on your PC, and its own source names building inside MO2 (or antivirus software) as the usual cause of the compiler crashing with code -1073741819. Its own answer is to build them outside MO2: open Synthesis once directly from its folder, wait until no patcher shows an error, close it without running anything, then start it from here again. The profile named inside Synthesis is Synthesis's own and has nothing to do with MO2's profiles."
+   "wrote_nothing": "If its patchers showed “Blocking Error” with an error from compiling: Synthesis builds its patchers on your PC, and its own source names building inside MO2 (or antivirus software) as the usual cause of the compiler crashing with code -1073741819. Its own answer is to build them outside MO2: open Synthesis once directly from its folder, wait until no patcher shows an error, close it without running anything, then start it from here again. The profile named inside Synthesis is Synthesis's own and has nothing to do with MO2's profiles.",
+   "log": {
+    "folder": "logs",
+    "pattern": "*.log",
+    "source": "TL01§18",
+    "signs": [
+     {
+      "kind": "values",
+      "find": "Opening Synthesis v(?P<v>[\\w.\\-]+)",
+      "value": "{v}",
+      "says": "This is Synthesis {last}."
+     },
+     {
+      "kind": "values",
+      "find": "Swapped profile .+? to \\(Mutagen ==> \\w+: (?P<mutagen>[\\w.\\-]+) .*?\\(Synthesis ==> \\w+: (?P<synthesis>[\\w.\\-]+) ",
+      "value": "Mutagen {mutagen} with Synthesis {synthesis}",
+      "says": "The library versions set in Synthesis's profile (Nuget Versions): {last}.",
+      "says_changed": "The library versions set in Synthesis's profile (Nuget Versions) were changed while it was open: {values}.",
+      "level": "note"
+     },
+     {
+      "kind": "values",
+      "find": "Swapping to (?P<target>net[\\w.\\-]+)",
+      "value": "{target}",
+      "says": "It built its patchers for {values}: the .NET version this Synthesis knows for those library versions."
+     },
+     {
+      "find": "error NU1202: Package (?P<package>Mutagen\\.[\\w.]+) (?P<version>[\\w.\\-]+) is not compatible with (?P<target>net[\\d.]+)",
+      "level": "error",
+      "says": "{n} line(s) of a library that does not fit, the last: {package} {version} cannot be used by a patcher built for {target}. The library versions set in Synthesis's profile are newer than this Synthesis can build for. Set them back to the versions the modlist came with (its profile page, Nuget Versions), or update Synthesis itself."
+     },
+     {
+      "find": "\\\"csc\\.exe\\\" exited with code -1073741819",
+      "level": "error",
+      "says": "{n} line(s) of the C# compiler crashing while a patcher was built. Synthesis's own source gives the usual causes as antivirus software or MO2's virtual file system; building the patchers once outside MO2 (Synthesis opened from its own folder) is its answer."
+     },
+     {
+      "find": "Win32Exception \\(5\\): Access is denied",
+      "level": "error",
+      "says": "{n} time(s) Windows refused to let Synthesis start a program it builds with (“Access is denied”)."
+     },
+     {
+      "find": "Encountered blocking overall error",
+      "level": "error",
+      "says": "{n} time(s) it reported a “Blocking Error”: a group of patchers could not be made ready to run."
+     }
+    ]
+   }
   },
   {
    "tool": "ParallaxGen (PGPatcher)",

@@ -152,6 +152,51 @@ class Tools(unittest.TestCase):
         job.join(10)
         self.assertEqual(job.state, "done")
 
+    def test_a_tools_own_log_is_read_after_its_run_and_kept_with_the_session(self) -> None:
+        """WHY§88: where a tool keeps a log of its own, ModTrap reads the one written during the run it started,
+        says which of the signs it knows show in it (data in tools.json), and keeps a copy for the session file."""
+        tool_dir = Path(self.tmp.name) / "Tools" / "Framework"
+        (tool_dir / "logs").mkdir(parents=True)
+        (tool_dir / "logs" / "an older run.log").write_text("error NU1202: Package Mutagen.Invented 9.9 is not compatible with net1.0\n", encoding="utf-8")
+        os.utime(tool_dir / "logs" / "an older run.log", (time.time() - 3600, time.time() - 3600))
+        ini = self.root / "ModOrganizer.ini"
+        ini.write_bytes(ini.read_bytes().replace(b"title=Invented Patcher", b"title=Synthesis")
+                        .replace(b"C:/Tools/Patcher.exe", (tool_dir / "Synthesis.exe").as_posix().encode()))
+        self.api.open(str(self.root), wait=True)
+        lines = ["2026-01-01 10:00:00.000 +00:00 [INF] ============== Opening Synthesis v1.2.3 ==============",
+                 "2026-01-01 10:00:01.000 +00:00 [INF] Swapped profile Invented to (Mutagen ==> Manual: 0.10.0 Newest:  ==> Manual)(Synthesis ==> Manual: 1.2.3 Newest:  ==> Manual)",
+                 "2026-01-01 10:00:02.000 +00:00 [INF] Swapping to net8.0",
+                 "2026-01-01 10:00:09.000 +00:00 [INF] Swapped profile Invented to (Mutagen ==> Manual: 0.11.0 Newest: 0.11.0 ==> Manual)(Synthesis ==> Manual: 1.3.0 Newest: 1.3.0 ==> Manual)",
+                 "Invented.csproj : error NU1202: Package Mutagen.Invented 0.11.0 is not compatible with net8.0 (.NETCoreApp,Version=v8.0). Package Mutagen.Invented 0.11.0 supports:",
+                 "Invented.csproj : error NU1202: Package Mutagen.Invented.Synthesis 1.3.0 is not compatible with net8.0 (.NETCoreApp,Version=v8.0).",
+                 "2026-01-01 10:00:12.000 +00:00 [WRN] Encountered blocking overall error: \"Invented group\" has a blocking error"]
+        real = self.launch
+
+        def launch(cmd, cwd):                              # the tool writes its log while it runs
+            (tool_dir / "logs" / "this run.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return real(cmd, cwd)
+
+        self.api.launcher = launch
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        own = t["own_log"]
+        self.assertEqual((own["file"], own["kept"]), ("this run.log", True))
+        said = [f["text"] for f in own["findings"]]
+        self.assertIn("This is Synthesis 1.2.3.", said)
+        self.assertTrue(any("were changed while it was open: Mutagen 0.10.0 with Synthesis 1.2.3, then Mutagen 0.11.0 with Synthesis 1.3.0" in x for x in said))
+        self.assertTrue(any(x.startswith("2 line(s) of a library that does not fit, the last: Mutagen.Invented.Synthesis 1.3.0 cannot be used by a patcher built for net8.0") for x in said))
+        self.assertEqual([f["level"] for f in own["findings"]], ["note", "note", "note", "error", "error"])
+        kept = self.api.store.dir(self.api.session.id) / "tool-logs" / "Synthesis" / "this run.log"
+        self.assertTrue(kept.is_file())
+        self.assertFalse((kept.parent / "an older run.log").exists())             # not of this run: neither read nor kept
+        self.assertIn("ModTrap read it", "\n".join(x["text"] for x in logbook.lines_after(0)[0]))
+        # The session file holds it.
+        from modtrap import savelog
+        names = [n for n, _f in savelog.collect(self.api.store.dir(self.api.session.id), None, Path(self.tmp.name) / "home", {})]
+        self.assertIn("tool-logs/Synthesis/this run.log", names)
+        # A tool whose log ModTrap does not know has none read.
+        self.assertIsNone(toolrun.toollog.after_run("Invented Patcher", "C:/Tools/Patcher.exe", 0, None))
+
     def test_only_a_tool_of_this_mo2_and_one_at_a_time(self) -> None:
         with self.assertRaises(Bad):
             self.api.post("/api/tool/start", {"title": "Not Set Up"})

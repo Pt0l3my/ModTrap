@@ -509,6 +509,10 @@ nothing but ModTrap's own copy of the mod is removed (MT9, WHY§42).
 Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting tool's
 rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.
 
+**A tool's own log (WHY§88).** Where a tool keeps a log of its own and ModTrap knows its lines (data, `tools.json`),
+the log written during a run ModTrap started is read once the tool has closed: what shows in it is said on the
+tool's card and in ModTrap's log, and a copy is kept with the session and packed into a saved session file.
+
 ## 17. Versions, and one ModTrap at a time (MT22)
 
 1. **The version** is `0.3.n`, kept in `modtrap/version.json` with a mark of the contents of ModTrap's own files.
