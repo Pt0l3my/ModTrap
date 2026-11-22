@@ -123,6 +123,58 @@ class Adding(unittest.TestCase):
         self.assertEqual(events[1]["archive"], "Heather-1-0.zip")
         self.assertIsInstance(events[2]["position"], int)
 
+    def newer(self, files: dict) -> addjob.AddJob:
+        """A newer version of Quill, unpacked: planned as an update of it (MT40)."""
+        root = Path(self.tmp.name) / "unpacked" / "Quill (1.4)"
+        for rel, data in files.items():
+            write(root / rel, data)
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        rep = adding.analyse(m, [], staged=[adding.staged_mod("Quill (1.4)", root)], updates={"Quill (1.4)": "Quill"})
+        p = addjob.plan(m, rep, {"Quill (1.4)": {"root": str(root), "archive": "Quill-4321-1-4.7z"}})
+        return addjob.AddJob(inst, m, p, self.work / "jobs" / "add-2", self.work, lambda: self.closed)
+
+    def test_a_newer_version_goes_right_above_the_old_one_which_is_disabled(self) -> None:
+        j = self.newer({"Quill.esp": b((SKY,)), "textures/quill/only.dds": b"newer"})
+        self.assertEqual([(x["name"], x["updates"], x["replaces"]) for x in j.plan.mods], [("Quill (1.4)", "Quill", "Quill")])
+        order_before = [n for n, _a in instance.load(self.root).load_order]
+        done = j.run()
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        old, new = inst.mod("Quill"), inst.mod("Quill (1.4)")
+        self.assertEqual((old.enabled, new.enabled, new.priority), (False, True, old.priority + 1))
+        self.assertTrue((self.root / "mods" / "Quill" / "Quill.esp").is_file())            # the old version is only disabled
+        self.assertEqual([n for n, _a in inst.load_order], order_before)                   # the plugin keeps its place
+        self.assertEqual(m.row("Quill.esp").source, "Quill (1.4)")
+        self.assertEqual(m.issues, [])
+        self.assertEqual(done["mods"][0]["replaces"], "Quill")
+        kinds = [(e["kind"], e.get("mod")) for e in history.History(self.work).all()]
+        self.assertEqual(kinds[:2], [("mod added", "Quill (1.4)"), ("mod disabled", "Quill")])
+        # Revert: file for file as before, the old version enabled again, the new one gone.
+        self.assertEqual(j.revert(), {"left": [], "how": "whole"})
+        self.assertEqual(snapshot(self.root), self.before)
+        self.assertIn(("mod enabled", "Quill"), [(e["kind"], e.get("mod")) for e in history.History(self.work).all()])
+
+    def test_a_newer_version_that_lacks_a_plugin_others_need_is_put_back(self) -> None:
+        """The newer file no longer brings Quill.esp, which a plugin of the modlist needs: the check after the add
+        finds the missing master, and everything is as it was."""
+        j = self.newer({"QuillRenamed.esp": b((SKY,)), "textures/quill/only.dds": b"newer"})
+        with self.assertRaisesRegex(addjob.Refused, "put back"):
+            j.run()
+        self.assertEqual(snapshot(self.root), self.before)
+        self.assertTrue(instance.load(self.root).mod("Quill").enabled)
+
+    def test_a_newer_version_is_undone_by_line_when_the_lists_changed_since(self) -> None:
+        j = self.newer({"Quill.esp": b((SKY,))})
+        j.run()
+        lo = self.root / "profiles" / "Default" / "loadorder.txt"
+        lo.write_bytes(lo.read_bytes() + b"# touched by something else\r\n")              # as MO2 does when it runs
+        self.assertEqual(j.revert()["how"], "by line")
+        inst = instance.load(self.root)
+        self.assertTrue(inst.mod("Quill").enabled)
+        self.assertIsNone(inst.mod("Quill (1.4)"))
+        self.assertEqual(model.build(inst).issues, [])
+
     def test_revert_puts_the_modlist_back_file_for_file(self) -> None:
         j = self.job(["Thistle"])
         j.run()

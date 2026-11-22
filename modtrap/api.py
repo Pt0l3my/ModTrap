@@ -103,6 +103,7 @@ SETTINGS = {
     "tool_prebuild": True,     # and patchers its last log shows as not built are built outside MO2 first (MT28)
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
+    "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -433,8 +434,20 @@ class Api:
                 pass
         return sessions.modlist_key(self.folder or "."), added
 
+    def stage_where_it_lies(self, path: Path, name: str, updates: str, version: str) -> dict:
+        """An archive the owner downloaded, found in a watched folder (MT42): read where it lies, not copied, not
+        moved, and marked as a newer version of the mod it was downloaded for."""
+        self._need()
+        name = self._archive_name(name)
+        rec = self._new_staged(name, "downloads", updates=updates, version=version)
+        rec["state"] = "unpacking"
+        self._save_staged(rec)
+        threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
+        return self._staged_public(rec)
+
     def updates_state(self) -> dict:
-        return self.updating.account(self._need(), *self._updates_for())
+        return self.updating.account(self._need(), *self._updates_for(),
+                                     stage=self.stage_where_it_lies if self.changes is not None and self.session is not None else None)
 
     def updates_upload(self, query: dict, length: int, stream) -> dict:
         """The list of a dropped Wabbajack file, as its bytes (WHY§103)."""
@@ -457,7 +470,10 @@ class Api:
         key, added = self._updates_for()
         try:
             if what == "scan":
-                return self.updating.start(m, key, added)
+                only = body.get("mods")
+                if only is not None and (not isinstance(only, list) or not only or len(only) > 50 or not all(isinstance(x, str) for x in only)):
+                    raise Bad("name the mods to ask about")
+                return self.updating.start(m, key, added, only=set(only) if only else None)
             if what == "stop":
                 return self.updating.stop()
             if what == "key":
@@ -470,6 +486,28 @@ class Api:
                 if not isinstance(path, str) or len(path) > 1000:
                     raise Bad("give the Wabbajack file's path")
                 return self.updating.set_list(key, path)
+            if what == "get":
+                mod = body.get("mod")
+                if not isinstance(mod, str):
+                    raise Bad("name the mod")
+                if self.changes is None:
+                    only_open = True                    # without the switch nothing is added, so nothing is fetched to add
+                else:
+                    only_open = False
+                return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open)
+            if what == "folder":
+                path = body.get("path", "")
+                if not isinstance(path, str) or len(path) > 1000:
+                    raise Bad("give the folder's path")
+                return self.updating.set_downloads_folder(path)
+            if what == "wait":
+                if isinstance(body.get("mod"), str):
+                    self.updating.stop_waiting(body["mod"])
+                return {}
+            if what == "seen":
+                if isinstance(body.get("mod"), str):
+                    self.updating.seen(body["mod"])
+                return {}
             if what == "link":
                 mod, url = body.get("mod"), body.get("url", "")
                 if not isinstance(mod, str) or not isinstance(url, str) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):
@@ -1050,7 +1088,7 @@ class Api:
         try:
             paths.write_atomic(Path(rec["dir"]) / "staged.json", json.dumps(
                 {k: rec.get(k, "") for k in ("id", "archive", "name", "state", "note", "root", "files", "kind", "source",
-                                             "installer", "options", "raw", "picks")},
+                                             "installer", "options", "raw", "picks", "updates")},
                 ensure_ascii=False).encode("utf-8"))
         except OSError:
             pass
@@ -1077,7 +1115,9 @@ class Api:
                 rec["state"], rec["note"] = "failed", "ModTrap was closed while this was being unpacked. Drop it again."
             self._staged[d.name] = rec
 
-    def _new_staged(self, archive: str, source: str) -> dict:
+    def _new_staged(self, archive: str, source: str, updates: str = "", version: str = "") -> dict:
+        """`updates`: the mod of the modlist this archive is a newer version of (MT40); the new mod is then named
+        after it, with the version."""
         base = self._incoming()
         sid = secrets.token_hex(5)
         d = base / sid
@@ -1085,13 +1125,20 @@ class Api:
         m = self.model
         taken = {instance.fold(x.name) for x in m.instance.mods} if m is not None else set()
         taken |= {instance.fold(r["name"]) for r in self._staged.values()}
+        if updates and m is not None and m.instance.mod(updates) is None:
+            updates = ""
         stem = adding.NEXUS_TAIL.sub("", adding.ARCHIVE.sub("", archive)).strip(" .") or "New mod"
         stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", stem).strip(" .")[:120] or "New mod"
         name, n = stem, 2
+        if updates:
+            version = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", version).strip(" .")[:30]
+            stem = updates[:120]
+            name = "%s (%s)" % (stem, version) if version else "%s (new)" % stem
         while instance.fold(name) in taken:
             name, n = "%s (%d)" % (stem, n), n + 1
         rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
-               "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {}}
+               "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {},
+               "updates": updates}
         self._staged[sid] = rec
         self._save_staged(rec)
         return rec
@@ -1209,10 +1256,32 @@ class Api:
             raise Bad("the dropped file has no usable name")
         return name
 
-    def upload(self, name: str, length: int, stream) -> dict:
-        """A dropped archive, as its bytes: written into the session's folder as it arrives, then unpacked."""
+    def stage_fetched(self, path: Path, name: str, updates: str, version: str) -> dict:
+        """A newer file ModTrap fetched for a mod (MT40): taken into the session's folder and unpacked, as a dropped
+        archive is, and marked as a newer version of that mod."""
         self._need()
         name = self._archive_name(name)
+        rec = self._new_staged(name, "fetched", updates=updates, version=version)
+        target = Path(rec["dir"]) / "archive"
+        try:
+            shutil.move(str(path), str(target))
+        except OSError as e:
+            shutil.rmtree(rec["dir"], ignore_errors=True)
+            self._staged.pop(rec["id"], None)
+            raise Bad("the fetched file could not be taken in: %s" % logbook.why(e)) from None
+        rec["state"] = "unpacking"
+        self._save_staged(rec)
+        log.info("add: took in “%s”, fetched as a newer version of “%s”", name, updates)
+        threading.Thread(target=self._unpack, args=(rec, target), name="unpack", daemon=True).start()
+        return self._staged_public(rec)
+
+    def upload(self, name: str, length: int, stream, updates: str = "") -> dict:
+        """A dropped archive, as its bytes: written into the session's folder as it arrives, then unpacked.
+        `updates`: the mod of the modlist it is a newer version of, when the owner said so (MT40)."""
+        self._need()
+        name = self._archive_name(name)
+        if updates and (not isinstance(updates, str) or self.model.instance.mod(updates) is None):
+            raise Bad("that is not a mod of this modlist")
         if length <= 0:
             raise Bad("the dropped file is empty")
         base = self._incoming()
@@ -1224,7 +1293,7 @@ class Api:
         if free is not None and free < length * 2 + unpack.SPARE_BYTES:
             raise Bad("there is not enough room on the disk of ModTrap's work folder to take this file in and unpack "
                       "it (%s free)" % unpack.size_words(free))
-        rec = self._new_staged(name, "upload")
+        rec = self._new_staged(name, "upload", updates=updates)
         target = Path(rec["dir"]) / "archive"
         left = length
         try:
@@ -1284,6 +1353,7 @@ class Api:
     @staticmethod
     def _staged_public(rec: dict) -> dict:
         out = {k: rec[k] for k in ("id", "archive", "name", "state", "note", "files", "kind")}
+        out["updates"] = rec.get("updates", "")
         out["installer"] = bool(rec.get("installer"))
         out["picks"] = rec.get("picks") or {}
         return out
@@ -1318,7 +1388,8 @@ class Api:
 
             def work() -> None:
                 try:
-                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None)
+                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None,
+                                           updates={r["name"]: r["updates"] for r in ready if r.get("updates")})
                     log.info("add: analysed %d mod(s): %s", len(found["mods"]), found["summary"])
                 except Exception as e:
                     log.warn("analysing the mods to add failed: %s", logbook.why(e))

@@ -307,11 +307,22 @@ def staged_mod(name: str, folder: Path) -> Mod:
 
 
 def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float = CONFLICT_SECONDS,
-            staged: list[Mod] | tuple[Mod, ...] = (), auto: bool = False) -> dict:
+            staged: list[Mod] | tuple[Mod, ...] = (), auto: bool = False, updates: dict[str, str] | None = None) -> dict:
     """Everything ModTrap can tell about adding these mods without xEdit. `staged` are mods unpacked in
-    ModTrap's work folder, not yet in MO2: they are read where they lie."""
+    ModTrap's work folder, not yet in MO2: they are read where they lie. `updates` names, for a staged mod, the
+    mod of the modlist it is a newer version of (MT40): it is then judged at that mod's own place, right above
+    it, and not at the place a new mod would get."""
     inst = m.instance
     memo: dict = {}
+    olds = {fold(new): inst.mod(old) for new, old in (updates or {}).items()}
+    olds = {k: v for k, v in olds.items() if v is not None and v.kind == "mod"}
+
+    def above(old: Mod) -> str:
+        """The mod that stands right above `old` in MO2's list: a newer version goes directly before it."""
+        nxt = min((y for y in inst.mods if y.priority > old.priority and y.kind in ("mod", "separator", "foreign")),
+                  key=lambda y: y.priority, default=None)
+        return nxt.name if nxt is not None else ""
+
     cands = [x for x in (inst.mod(n) for n in names) if x is not None and x.kind == "mod" and x.folder is not None]
     waiting = {id(x) for x in staged}
     cands += list(staged)
@@ -321,6 +332,8 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
 
     def effective(x: Mod) -> float:
         """A mod's priority as it would be: a mod still to enable sits in the proposed place."""
+        if not x.enabled and fold(x.name) in olds:
+            return olds[fold(x.name)].priority + 0.5
         return float(x.priority) if x.enabled else place["priority"] - 0.5 + 0.001 * turn.get(x.name, 0)
     stop = time.monotonic() + seconds
 
@@ -411,7 +424,12 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
                 if entry["version"] is not None and entry["version"] >= NEW_HEADER - 0.001:
                     entry["notes"].append("Its header is in the newer format (%.2f): it needs game version 1.6.1130 "
                                           "or later, or a backport of that format on an older game." % entry["version"])
-                if not entry["active"]:
+                # A plugin of a newer version that the load order already names keeps the older version's place
+                # and state there (MT40): it is not a new plugin.
+                there = m.row(entry["name"]) if fold(x.name) in olds else None
+                if there is not None and there.position is not None and not entry["active"]:
+                    entry["keeps"] = {"position": there.position, "active": bool(there.active)}
+                if not entry["active"] and not entry.get("keeps"):
                     new_plugins += 1
                     if is_light(entry["kind"]):
                         light_add += 1
@@ -450,7 +468,12 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
         out_mods.append({"name": x.name, "priority": x.priority, "enabled": x.enabled, "listed": x.listed,
                          "staged": id(x) in waiting,
                          "files": len(files), "cut": cut, "kinds": kinds, "plugins": plugs,
-                         "wins": wins, "loses": loses})
+                         "wins": wins, "loses": loses,
+                         # A newer version of a mod of the modlist (MT40): which, where it goes, and whether the
+                         # older one is enabled now and so is to be disabled when this one is added.
+                         "updates": olds[fold(x.name)].name if fold(x.name) in olds else "",
+                         "own_before": above(olds[fold(x.name)]) if fold(x.name) in olds else "",
+                         "updates_enabled": bool(fold(x.name) in olds and olds[fold(x.name)].enabled)})
 
     # The new plugins among themselves: masters' block first, then each after the masters that come along.
     entries = {fold(p["name"]): p for x in out_mods for p in x["plugins"]}
@@ -605,15 +628,20 @@ def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
         for x, p in plugs:
             pr = p["proposed"]
             spot = ("directly before %s" % pr["before"]) if pr["before"] else "at the end of the load order"
+            keeps = p.get("keeps")
             if p["active"]:
                 text = "%s: active, at position %s" % (p["name"], p["position"])
+            elif keeps:
+                text = "%s: keeps the older version's place in the load order, position %s%s" % (
+                    p["name"], keeps["position"], "" if keeps["active"] else " (not active there, as you have it)")
             else:
                 text = "%s [%s]: to activate, %s (%s)" % (p["name"], p["kind"], spot, pr["why"])
-            items.append({"text": text, "plugin": p["name"] if p["active"] else "", "tag": "active" if p["active"] else "not active",
-                          "cls": "good" if p["active"] else ""})
+            items.append({"text": text, "plugin": p["name"] if p["active"] else "",
+                          "tag": "active" if p["active"] else "keeps its place" if keeps else "not active",
+                          "cls": "good" if p["active"] or keeps else ""})
             for n in p["notes"]:
                 items.append({"text": n, "tag": "note", "cls": "warn"})
-        inactive = [p for _, p in plugs if not p["active"]]
+        inactive = [p for _, p in plugs if not p["active"] and not p.get("keeps")]
         step("activate", doer, "Activate the new plugin%s, in the right place" % ("s" if len(plugs) > 1 else ""),
              "After every master it names, and before the plugins the modlist's tools made: those are built from "
              "everything above them and are meant to stay last. Placed there, the new plugin wins over the plugins "

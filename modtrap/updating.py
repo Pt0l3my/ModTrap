@@ -8,6 +8,8 @@ else, and the account given to the page. It changes nothing in the modlist.
 from __future__ import annotations
 
 import json
+import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -18,6 +20,10 @@ log = logbook.get("updates")
 
 KEY = "nexus"
 PLACES = "update-lists.json"         # which Wabbajack file belongs to which modlist
+PREFS = "update-prefs.json"          # the folder the owner's browser saves downloads to, if not the usual one
+WAIT_SECONDS = 45 * 60               # how long ModTrap waits for a download the owner started in the browser
+LOOK_EVERY = 2.0                     # seconds between two looks into the watched folders
+PARTIAL = (".crdownload", ".part", ".partial", ".tmp", ".download", ".unfinished", ".opdownload")
 LIST_MAX = 2 * 1024 * 1024 * 1024    # the bytes of a dropped list, at most
 DROP_FILES = 20_000                  # meta files taken in one drop, at most
 ROWS_MAX = 20_000
@@ -38,6 +44,11 @@ class Updating:
         self._stop = threading.Event()
         self.store = updates.load()
         self.launched = False
+        self.waiting: dict[str, dict] = {}         # a mod's name -> the download ModTrap waits for (MT42)
+        self._sizes: dict[str, int] = {}           # a candidate file -> its size at the last look: taken once it stands
+        self._looked = 0.0
+        self.premium: bool | None = None           # whether the key's account is a paying one, once Nexus has said
+        self.fetching: dict[str, dict] = {}        # a mod's name -> how the fetching of its newer file stands
 
     # --- the Wabbajack file of a modlist ---------------------------------------------------------------------------
     def _places(self) -> dict:
@@ -245,13 +256,19 @@ class Updating:
             self._rows = (model, wj, rows, set(added))
         return rows, wj
 
-    def account(self, model, modlist_key: str, added: set[str]) -> dict:
-        """Everything the Updates tab shows."""
+    def account(self, model, modlist_key: str, added: set[str], stage=None) -> dict:
+        """Everything the Updates tab shows. `stage` takes an archive that lies in a watched folder to Add mods."""
         rows, wj = self.rows(model, modlist_key, added)
+        if stage is not None and self.waiting:
+            try:
+                self.look(model, stage)
+            except Exception as e:
+                log.warn("looking for a download failed: %s", logbook.why(e))
         out_rows = []
         counts = {"update": 0, "maybe": 0, "current": 0, "not asked": 0, "none": 0, "gone": 0}
         origins = {"list": 0, "added": 0, "modtrap": 0, "": 0}
         hosts: dict[str, int] = {}
+        key_kept = secret.kept(KEY)
         for r in rows[:ROWS_MAX]:
             v = updates.verdict(r, self.store)
             counts[v["state"]] = counts.get(v["state"], 0) + 1
@@ -259,7 +276,9 @@ class Updating:
             hosts[r["host"] or "not known"] = hosts.get(r["host"] or "not known", 0) + 1
             out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": r["version"],
                              "archive": r["archive"], "origin": r["origin"], "by": r["by"], "given": r.get("given", ""), "state": v["state"], "text": v["text"],
-                             "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r)})
+                             "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r),
+                             "get": updates.get_of(r, v) or (updates.page_of(r) if r["host"] in ("loverslab", "url") else ""), "fetches": "fetch" in updates.how_to_get(r, v, self.store, key_kept, self.premium)
+                             if v["state"] == "update" else False, "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", "")})
         place = self._place(modlist_key)
         given = sources.given_load()
         return {"rows": out_rows, "counts": counts, "origins": origins, "hosts": hosts, "key": secret.kept(KEY),
@@ -267,10 +286,208 @@ class Updating:
                 "list": {"named": bool(place), "file": Path(place["path"]).name if place.get("path") else place.get("file", ""), "name": wj["name"] if wj else "",
                          "version": wj["version"] if wj else "", "counts": wj["counts"] if wj else None,
                          "reading": self.reading["state"] == "going", "text": self.reading["text"], "error": self.reading["error"]},
-                "scan": dict(self.work), "last": self.store.get("last") or None}
+                "scan": dict(self.work), "last": self.store.get("last") or None,
+                "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()},
+                "watch": {"folder": str(self.downloads_folder()), "there": self.downloads_folder().is_dir(),
+                          "waiting": {m: {"minutes": max(0, int((WAIT_SECONDS - (time.time() - w["since"])) // 60)), "name": w["name"]}
+                                      for m, w in self.waiting.items()}}}
+
+    # --- waiting for a download the owner starts in the browser (MT42) ---------------------------------------------------
+    def downloads_folder(self) -> Path:
+        """Where the owner's browser saves downloads: the folder they named, else Windows' own Downloads folder."""
+        try:
+            with open(paths.home() / PREFS, "rb") as f:
+                named = str(json.loads(f.read().decode("utf-8")).get("downloads") or "")
+        except (OSError, ValueError, AttributeError):
+            named = ""
+        if named:
+            return Path(named)
+        if os.name == "nt":
+            try:
+                import ctypes
+                from ctypes import wintypes
+
+                class GUID(ctypes.Structure):
+                    _fields_ = [("a", wintypes.DWORD), ("b", wintypes.WORD), ("c", wintypes.WORD), ("d", ctypes.c_ubyte * 8)]
+
+                fid = GUID(0x374DE290, 0x123F, 0x4565, (ctypes.c_ubyte * 8)(0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B))
+                got = ctypes.c_wchar_p()
+                shell32, ole32 = ctypes.WinDLL("shell32"), ctypes.WinDLL("ole32")
+                shell32.SHGetKnownFolderPath.argtypes = [ctypes.POINTER(GUID), wintypes.DWORD, wintypes.HANDLE, ctypes.POINTER(ctypes.c_wchar_p)]
+                ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+                if shell32.SHGetKnownFolderPath(ctypes.byref(fid), 0, None, ctypes.byref(got)) == 0 and got.value:
+                    path = Path(got.value)
+                    ole32.CoTaskMemFree(got)
+                    return path
+            except Exception:
+                pass
+        return Path(os.path.expanduser("~")) / "Downloads"
+
+    def set_downloads_folder(self, path: str) -> dict:
+        path = (path or "").strip().strip('"')
+        if path and not Path(path).is_dir():
+            raise Bad("there is no folder at that path")
+        paths.write_atomic(paths.home() / PREFS, json.dumps({"downloads": path}).encode("utf-8"))
+        log.info("the folder watched for the browser's downloads is %s", "the one the owner named" if path else "Windows' own Downloads folder again")
+        return {"folder": str(self.downloads_folder())}
+
+    def stop_waiting(self, mod: str) -> dict:
+        self.waiting.pop(mod, None)
+        return {}
+
+    def _expect(self, row: dict, v: dict) -> None:
+        self.waiting[row["mod"]] = {"since": time.time(), "host": row["host"], "mod_id": row.get("mod_id") or 0, "file_id": v.get("file_id") or 0,
+                                    "name": v.get("file") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
+                                    "installed": list(row.get("files") or [])}
+
+    def look(self, model, stage) -> None:
+        """Looks into MO2's downloads folder and the browser's for an archive a waiting mod's download has brought, and
+        hands it to Add mods through `stage(path, name, mod, version)`, read where it lies. A file counts once it is
+        whole: not under a name browsers and MO2 give an unfinished download, and of the same size at two looks.
+        It never deletes or moves a file of the owner's."""
+        now = time.time()
+        if not self.waiting or now - self._looked < LOOK_EVERY:
+            return
+        self._looked = now
+        for mod in [m for m, w in self.waiting.items() if now - w["since"] > WAIT_SECONDS]:
+            self.waiting.pop(mod, None)
+            self.fetching[mod] = {"state": "failed", "error": "no download for it showed up in %d minutes; ModTrap has stopped waiting" % (WAIT_SECONDS // 60), "open": ""}
+        if not self.waiting:
+            return
+        first = min(w["since"] for w in self.waiting.values())
+        shape = lambda name: re.sub(r"[\d._\- ()]+", "", name.lower())
+        plain = lambda name: re.sub(r" \(\d+\)(?=\.\w+$)", "", name).lower()        # a browser's "name (1).zip"
+        sizes: dict[str, int] = {}
+        found: list[tuple[str, Path, str]] = []                                      # (mod, file, where)
+        for where, folder in (("MO2's downloads folder", model.instance.downloads_dir), ("your browser's Downloads folder", self.downloads_folder())):
+            if folder is None:
+                continue
+            try:
+                with os.scandir(folder) as it:
+                    entries = [e for e in it if e.is_file() and updates.ARCHIVE.search(e.name) and not e.name.lower().endswith(PARTIAL)]
+            except OSError:
+                continue
+            for e in entries:
+                try:
+                    st = e.stat()
+                except OSError:
+                    continue
+                if st.st_mtime < first - 5 or st.st_size <= 0:
+                    continue
+                sizes[e.path] = st.st_size
+                if self._sizes.get(e.path) != st.st_size:
+                    continue                                    # seen first now, or still growing: next look
+                try:
+                    with open(e.path, "rb") as f:
+                        f.read(1)
+                except OSError:
+                    continue                                    # still held by what is writing it
+                mine = None
+                meta = sources.download_meta(Path(folder), e.name) if where.startswith("MO2") else {}
+                for mod, w in self.waiting.items():
+                    if st.st_mtime < w["since"] - 5:
+                        continue
+                    if meta.get("mod_id") and w["mod_id"]:
+                        if meta["mod_id"] == w["mod_id"] and (meta.get("file_id") == w["file_id"] if w["file_id"] else meta.get("file_id") not in w["installed"]):
+                            mine = mod
+                            break
+                        continue
+                    if w["name"] and plain(e.name) == w["name"].lower():
+                        mine = mod
+                        break
+                if mine is None:
+                    # No number and no name to go by: the one mod waited for, or the one whose installed archive is
+                    # named alike but for its digits.
+                    alike = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and w["archive"] and shape(w["archive"]) == shape(plain(e.name))]
+                    open_ones = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and not w["name"]]
+                    mine = alike[0] if len(alike) == 1 else open_ones[0] if len(open_ones) == 1 and len(self.waiting) == 1 else None
+                if mine is not None and mine not in [m for m, _p, _w in found]:
+                    found.append((mine, Path(e.path), where))
+        self._sizes = sizes
+        for mod, path, where in found:
+            w = self.waiting.pop(mod)
+            try:
+                rec = stage(path, path.name, mod, w["version"])
+                self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
+                log.info("the download for “%s” is in %s: taken to Add mods as its newer version", mod, where)
+            except Exception as e:
+                why = str(e) if e.__class__.__name__ == "Bad" else logbook.why(e)
+                self.fetching[mod] = {"state": "failed", "error": why, "open": ""}
+                log.warn("the download for “%s” was found and could not be taken in: %s", mod, why)
+
+    # --- fetching a newer file (MT40) -----------------------------------------------------------------------------------
+    def _account(self) -> None:
+        """Asks Nexus once what kind of account the key is of: a program may start a download only for a paying one."""
+        key = secret.read(KEY)
+        if not key or self.premium is not None:
+            return
+        got = updates.nexus_account(key, self.net)
+        if got["ok"]:
+            self.premium = got["premium"]
+            log.info("Nexus says the key's account is %s", "a Premium one: ModTrap can fetch files itself" if got["premium"]
+                     else "not a Premium one: a download goes through Nexus's page and MO2")
+        else:
+            log.warn("the kind of the key's account could not be asked: %s", got["why"])
+
+    def get(self, model, modlist_key: str, added: set[str], mod: str, folder: Path, stage, only_open: bool = False) -> dict:
+        """The update button for one mod. Where ModTrap can fetch the newer file itself (a Nexus key of a paying
+        account; a GitHub release), it does, beside everything else, and hands the file to Add mods through `stage`;
+        the answer is {"going": True}. Otherwise the answer names the page to open and why: {"open", "why"}."""
+        rows, _wj = self.rows(model, modlist_key, added)
+        row = next((r for r in rows if r["mod"] == mod), None)
+        if row is None:
+            raise Bad("that is not a mod of this modlist")
+        v = updates.verdict(row, self.store)
+        key = secret.read(KEY)
+        if row["host"] == "nexus" and key and self.premium is None:
+            self._account()
+        how = updates.how_to_get(row, v, self.store, bool(key), self.premium)
+        if "open" in how or only_open:
+            page = how.get("open") or how.get("page") or ""
+            why = how.get("why") or "ModTrap adds mods only when it is started with its switch for changes, so the file is not fetched"
+            if not page:
+                raise Bad("no page is known for this mod: add a source link first")
+            log.info("the newer file of “%s” is not fetched: %s; its page is opened instead", mod, why)
+            if not only_open:
+                self._expect(row, v)                       # what the owner downloads there is taken from the watched folders
+            return {"open": page, "why": why, "watching": not only_open}
+        with self._lock:
+            if self.fetching.get(mod, {}).get("state") == "going":
+                return {"going": True}
+            self.fetching[mod] = {"state": "going", "text": "asking for the file", "pct": 0}
+
+        def run():
+            def progress(done: int, total: int) -> None:
+                self.fetching[mod].update(text="fetching %s" % how.get("name", "the file"), pct=int(100 * done / total) if total else 0,
+                                          mb=round(done / (1024 * 1024), 1))
+            try:
+                got = updates.fetch(how, row, key, self.net, folder, progress)
+                if "open" in got:
+                    self.premium = False
+                    self._expect(row, v)
+                    self.fetching[mod] = {"state": "open", "open": got["open"], "why": got["why"]}
+                    return
+                rec = stage(got["path"], got["name"], mod, got["version"])
+                self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
+            except updates.Refused as e:
+                log.warn("the newer file of “%s” was not fetched: %s", mod, e)
+                self.fetching[mod] = {"state": "failed", "error": str(e), "open": how.get("page", "")}
+            except Exception as e:
+                why = str(e) if e.__class__.__name__ == "Bad" else logbook.why(e)
+                log.error("fetching the newer file of “%s” failed: %s", mod, why)
+                self.fetching[mod] = {"state": "failed", "error": why, "open": how.get("page", "")}
+
+        threading.Thread(target=run, name="fetch", daemon=True).start()
+        return {"going": True}
+
+    def seen(self, mod: str) -> None:
+        """The page has shown how a fetching ended: it is not told again."""
+        if self.fetching.get(mod, {}).get("state") != "going":
+            self.fetching.pop(mod, None)
 
     # --- the key -----------------------------------------------------------------------------------------------------
     def set_key(self, text: str | None) -> dict:
+        self.premium = None
         if not text:
             secret.forget(KEY)
             log.info("the Nexus key is forgotten")
@@ -286,13 +503,18 @@ class Updating:
         return {"key": True}
 
     # --- the scan ----------------------------------------------------------------------------------------------------
-    def start(self, model, modlist_key: str, added: set[str], why: str = "asked for") -> dict:
+    def start(self, model, modlist_key: str, added: set[str], why: str = "asked for", only: set[str] | None = None) -> dict:
+        """A scan, beside everything else. `only`: these mods alone, asked about now whatever is kept."""
         with self._lock:
             if self.work["state"] == "going":
+                if only:
+                    raise Bad("a scan is going: ask again when it has finished")
                 return dict(self.work)
             self.work = {"state": "going", "text": "getting ready", "started": time.time(), "error": ""}
             self._stop.clear()
         rows, _wj = self.rows(model, modlist_key, added)
+        if only:
+            rows, why = [r for r in rows if r["mod"] in only], "about %d mod(s) by name" % len(only)
         key = secret.read(KEY)
         log.info("scan for updates (%s): %d mod(s), %d with a number at Nexus, %d from a GitHub repository%s", why, len(rows),
                  sum(1 for r in rows if r["host"] == "nexus"), sum(1 for r in rows if r["host"] == "github"),
@@ -300,7 +522,10 @@ class Updating:
 
         def run():
             try:
-                updates.scan(rows, key, self.net, self.store, progress=lambda t: self.work.update(text=t), stopped=self._stop.is_set)
+                if key and not only:
+                    self._account()
+                updates.scan(rows, key, self.net, self.store, progress=lambda t: self.work.update(text=t), stopped=self._stop.is_set,
+                             force=bool(only))
                 with self._lock:
                     self.work = {"state": "idle", "text": "", "started": 0.0, "error": ""}
             except Exception as e:

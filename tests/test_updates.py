@@ -38,6 +38,17 @@ class FakeNet:
                 return status, dict(h), body
         return 404, {}, None
 
+    def download(self, url, dest, progress=None, stopped=None):
+        """A file fetched: what `files` holds for the address, written as the real one writes it."""
+        self.asked.append((url, {}))
+        data = getattr(self, "files", {}).get(url)
+        if data is None:
+            raise updates.Refused("the file's host answered with an error (404)")
+        Path(dest).write_bytes(data)
+        if progress is not None:
+            progress(len(data), len(data))
+        return len(data)
+
 
 def files_answer(files, chain=()):
     return {"files": [{"file_id": i, "file_name": n, "version": v, "category_id": c, "uploaded_timestamp": t} for i, n, v, c, t in files],
@@ -245,6 +256,284 @@ class GivenByHand(Sources):
         self.assertTrue(got["taken"])
 
 
+class TheListAsTheModlist(Sources):
+    """WHY§104: each row carries what the Updates tab needs to lay the mods out as the modlist does."""
+
+    def test_a_row_has_the_mods_priority_and_what_the_owner_wrote_of_it_in_mo2(self):
+        fx.write(self.mods / "Quill" / "meta.ini", meta(comments="keep an eye on this one",
+                                                         notes='"<html><head><style>p { x: y; }</style></head><body><p>A longer note,</p><p>in two &amp; more lines.</p></body></html>"',
+                                                         gameName="SkyrimSE", modid=4321, version="1.2", installationFile="a.7z", files=[(4321, 111)]))
+        inst = instance.load(self.root)
+        r = {x["mod"]: x for x in sources.gather(inst)}
+        self.assertEqual((r["Quill"]["comments"], r["Quill"]["notes"]), ("keep an eye on this one", "A longer note, in two & more lines."))
+        self.assertEqual(r["Quill"]["priority"], next(m.priority for m in inst.mods if m.name == "Quill"))
+        self.assertEqual((r["Bramble"]["comments"], r["Bramble"]["notes"]), ("", ""))
+
+    def test_the_update_button_leads_to_the_newer_file_itself(self):
+        row = Verdicts.row(self)
+        files = [(111, "a.7z", "1.2", 4, 100), (113, "b.7z", "1.4", 1, 300)]
+        v = updates.nexus_verdict(row, {"asked": 1, "files": [list(f) for f in files], "chain": [[111, 113, "a.7z", "b.7z"]]})
+        self.assertEqual(v["file_id"], 113)
+        self.assertEqual(updates.get_of(row, v), "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113&nmm=1")
+        unsure = updates.nexus_verdict(dict(row, files=[], archive="renamed.7z"), {"asked": 1, "files": [list(files[1])], "chain": []})
+        self.assertEqual((unsure["state"], updates.get_of(row, unsure)), ("maybe", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
+        self.assertEqual(updates.get_of(row, {"state": "current"}), "")
+        gh = dict(row, host="github", repo="invented-owner/lantern", tag="v2.0")
+        self.assertEqual(updates.get_of(gh, {"state": "update"}), "https://github.com/invented-owner/lantern/releases/latest")
+
+    def test_single_mods_are_asked_about_now_whatever_is_kept(self):
+        a = api.Api()
+        now = int(time.time())
+        a.updating.net = FakeNet({"/mods/updated?period=1m": (200, {}, []),
+                                  "/mods/4321/files": (200, {}, files_answer([(111, "a.7z", "1.2", 1, 100)]))})
+        a.open(str(self.root), wait=True)
+        a.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
+
+        def wait():
+            for _ in range(300):
+                if a.get("/api/updates", {})[1]["scan"]["state"] != "going":
+                    return
+                time.sleep(0.02)
+
+        wait()                                                                    # the scan begun at launch, if any
+        a.post("/api/updates/scan", {})
+        wait()
+        first = len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u])
+        a.post("/api/updates/scan", {})                                           # nothing newer: not asked again
+        wait()
+        self.assertEqual(len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u]), first)
+        last = a.get("/api/updates", {})[1]["last"]["when"]
+        a.post("/api/updates/scan", {"mods": ["Quill"]})                          # by name: asked now
+        wait()
+        self.assertEqual(len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u]), first + 1)
+        self.assertEqual([u for u, _h in a.updating.net.asked[-2:] if "/mods/777/" in u], [])   # and only that mod
+        self.assertEqual(a.get("/api/updates", {})[1]["last"]["when"], last)      # it is not "the last scan"
+        row = next(r for r in a.get("/api/updates", {})[1]["rows"] if r["mod"] == "Quill")
+        self.assertEqual((row["state"], row["get"], isinstance(row["priority"], int)), ("current", "", True))
+        with self.assertRaises(api.Bad):
+            a.post("/api/updates/scan", {"mods": []})
+
+
+def a_zip(files: dict) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in files.items():
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+class FetchingANewerFile(unittest.TestCase):
+    """MT40, WHY§105: with a key of a paying account ModTrap fetches the file and hands it to Add mods; without, or
+    for a host that gives a program nothing, the page is opened and the reason said."""
+
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        self.root = fx.small_list(Path(self.tmp.name) / "Example List")
+        mods = self.root / "mods"
+        fx.write(mods / "Quill" / "meta.ini", meta(gameName="SkyrimSE", modid=4321, version="1.2", installationFile="Quill-4321-1-2.7z", files=[(4321, 111)]))
+        fx.write(mods / "Lantern" / "meta.ini", meta(gameName="SkyrimSE", modid=0, version="2.0", installationFile="Lantern.Release.2.0.zip",
+                                                      url="https://github.com/invented-owner/lantern/releases/download/v2.0/Lantern.Release.2.0.zip", hasCustomURL="true"))
+        fx.write(mods / "Old Lantern" / "meta.ini", meta(url="https://www.loverslab.com/files/file/1234-old-lantern/", hasCustomURL="true"))
+        now = int(time.time())
+        self.cdn = "https://cf-files.nexus-cdn.com/1704/4321/Quill-4321-1-4.zip?token=x"
+        self.net = FakeNet({
+            "users/validate": (200, {}, {"user_id": 1, "is_premium": True}),
+            "/mods/updated?period=1m": (200, {}, []),
+            "/mods/4321/files/113/download_link": (200, {}, [{"name": "CDN", "short_name": "CDN", "URI": self.cdn}]),
+            "/mods/4321/files": (200, {}, files_answer([(111, "Quill-4321-1-2.7z", "1.2", 4, 100), (113, "Quill-4321-1-4.zip", "1.4", 1, now)],
+                                                       [(111, 113, "Quill-4321-1-2.7z", "Quill-4321-1-4.zip")])),
+            "/repos/invented-owner/lantern/releases/latest": (200, {}, {"tag_name": "v2.1", "published_at": "2026-11-20T10:00:00Z", "assets": [
+                {"name": "Lantern.Release.2.1.zip", "browser_download_url": "https://github.com/invented-owner/lantern/releases/download/v2.1/Lantern.Release.2.1.zip", "size": 10},
+                {"name": "Source.txt", "browser_download_url": "https://github.com/invented-owner/lantern/releases/download/v2.1/Source.txt", "size": 1}]})})
+        self.net.files = {self.cdn: a_zip({"Quill.esp": (mods / "Quill" / "Quill.esp").read_bytes(), "textures/quill/new.dds": b"newer"}),
+                          "https://github.com/invented-owner/lantern/releases/download/v2.1/Lantern.Release.2.1.zip": a_zip({"Lantern.esp": (mods / "Lantern" / "Lantern.esp").read_bytes()})}
+        self.api = api.Api()
+        self.api.updating.net = self.net
+        self.api.running = lambda image: False
+        self.api.open(str(self.root), wait=True)
+
+    def tearDown(self):
+        for _ in range(400):                              # a scan begun at launch ends before its folder goes
+            if self.api.updating.work["state"] != "going" and self.api.updating.reading["state"] != "going":
+                break
+            time.sleep(0.01)
+        time.sleep(0.05)
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def wait(self, test):
+        for _ in range(400):
+            st = self.api.get("/api/updates", {})[1]
+            if test(st):
+                return st
+            time.sleep(0.02)
+        self.fail("it did not come about")
+
+    def scanned(self, key=True):
+        self.wait(lambda st: st["scan"]["state"] != "going")                      # the scan begun at launch, if any
+        if key:
+            self.api.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
+        self.api.post("/api/updates/scan", {})
+        return self.wait(lambda st: st["scan"]["state"] != "going" and st["last"])
+
+    def test_without_the_switch_for_changes_nothing_is_fetched(self):
+        self.scanned()
+        got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
+        self.assertEqual(got["open"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113&nmm=1")
+        self.assertEqual([u for u, _h in self.net.asked if "download_link" in u or "nexus-cdn" in u], [])
+
+    def test_what_the_button_does_by_key_account_and_host(self):
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        st = self.scanned(key=False)                       # no key: GitHub is asked, Nexus is not
+        rows = {r["mod"]: r for r in st["rows"]}
+        self.assertEqual((rows["Old Lantern"]["host"], rows["Old Lantern"]["state"]), ("loverslab", "none"))
+        self.assertEqual((rows["Lantern"]["state"], rows["Lantern"]["fetches"]), ("update", True))
+        got = self.api.post("/api/updates/get", {"mod": "Old Lantern"})[1]
+        self.assertEqual(got["open"], "https://www.loverslab.com/files/file/1234-old-lantern/")
+        self.assertIn("logged-in browser", got["why"])
+        # A key of an account that is not a paying one: the page, and the file is not asked for.
+        self.net.answers["users/validate"] = (200, {}, {"user_id": 1, "is_premium": False})
+        st = self.scanned()
+        self.assertFalse(next(r for r in st["rows"] if r["mod"] == "Quill")["fetches"])
+        got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
+        self.assertIn("&nmm=1", got["open"])
+        self.assertIn("Premium", got["why"])
+        self.assertEqual([u for u, _h in self.net.asked if "download_link" in u], [])
+        with self.assertRaises(api.Bad):
+            self.api.post("/api/updates/get", {"mod": "No Such Mod"})
+
+    def test_a_paying_accounts_key_fetches_the_file_and_add_mods_takes_it_as_a_newer_version(self):
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        st = self.scanned()
+        self.assertTrue(st["premium"])
+        self.assertTrue(next(r for r in st["rows"] if r["mod"] == "Quill")["fetches"])
+        self.assertEqual(self.api.post("/api/updates/get", {"mod": "Quill"})[1], {"going": True})
+        st = self.wait(lambda st: st["fetching"].get("Quill", {}).get("state") in ("done", "failed", "open"))
+        f = st["fetching"]["Quill"]
+        self.assertEqual((f["state"], f["name"]), ("done", "Quill (1.4)"))
+        # The key went to Nexus's own service only; the file's host got none.
+        for url, headers in self.net.asked:
+            self.assertEqual("APIKEY" in headers, url.startswith("https://api.nexusmods.com/"), url)
+        # Add mods has it, unpacked, as a newer version of Quill: right above it, Quill to be disabled.
+        staged = f["staged"]
+        for _ in range(400):
+            got = self.api.post("/api/add", {"mods": [], "staged": [staged]})[1]
+            if not got.get("looking") and not got.get("unpacking") and got.get("mods"):
+                break
+            time.sleep(0.02)
+        x = got["mods"][0]
+        self.assertEqual((x["name"], x["updates"], x["updates_enabled"]), ("Quill (1.4)", "Quill", True))
+        self.assertEqual(next(r for r in got["staged"] if r["id"] == staged)["updates"], "Quill")
+        self.api.post("/api/updates/seen", {"mod": "Quill"})
+        self.assertEqual(self.api.get("/api/updates", {})[1]["fetching"], {})
+        # A GitHub release: the file named as the installed archive but for its version.
+        self.assertEqual(self.api.post("/api/updates/get", {"mod": "Lantern"})[1], {"going": True})
+        st = self.wait(lambda st: st["fetching"].get("Lantern", {}).get("state") in ("done", "failed", "open"))
+        self.assertEqual((st["fetching"]["Lantern"]["state"], st["fetching"]["Lantern"]["name"]), ("done", "Lantern (v2.1)"))
+
+    def test_a_download_started_in_the_browser_is_taken_from_the_watched_folders(self):
+        """MT42: the page is opened, the owner presses download there, and ModTrap takes the archive from MO2's
+        downloads folder (by the numbers MO2 writes beside it) or from the browser's (by the file's name)."""
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        self.net.answers["users/validate"] = (200, {}, {"user_id": 1, "is_premium": False})
+        browser = Path(self.tmp.name) / "Browser Downloads"
+        browser.mkdir()
+        self.api.post("/api/updates/folder", {"path": str(browser)})
+        self.scanned()
+        got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
+        self.assertTrue(got["watching"])
+        st = self.api.get("/api/updates", {})[1]
+        self.assertEqual(list(st["watch"]["waiting"]), ["Quill"])
+        self.assertEqual(st["watch"]["folder"], str(browser))
+        data = self.net.files[self.cdn]
+        # An older file, an unfinished one, and one of another mod are passed by.
+        fx.write(browser / "Quill-4321-1-4.zip.crdownload", data)
+        fx.write(browser / "something else.zip", data)
+        old = fx.write(browser / "Quill-4321-1-2.zip", data)
+        os.utime(old, (time.time() - 3600, time.time() - 3600))
+        self.api.updating._looked = 0
+        self.api.get("/api/updates", {})
+        self.assertEqual(list(self.api.get("/api/updates", {})[1]["watch"]["waiting"]), ["Quill"])
+        # The download itself, as the browser names it; taken at the second look, once its size stands.
+        fx.write(browser / "Quill-4321-1-4 (1).zip", data)
+        for _ in range(3):
+            self.api.updating._looked = 0
+            st = self.api.get("/api/updates", {})[1]
+        self.assertEqual((st["fetching"]["Quill"]["state"], st["fetching"]["Quill"]["name"]), ("done", "Quill (1.4)"))
+        self.assertEqual(st["watch"]["waiting"], {})
+        self.assertTrue((browser / "Quill-4321-1-4 (1).zip").is_file())            # the owner's file stays where it is
+        # MO2's own downloads folder, by the numbers in the file MO2 keeps beside the archive.
+        self.api.post("/api/updates/seen", {"mod": "Quill"})
+        self.api.post("/api/updates/get", {"mod": "Quill"})
+        downloads = self.root / "downloads"
+        fx.write(downloads / "renamed by mo2.zip", data)
+        fx.write(downloads / "renamed by mo2.zip.meta", meta(gameName="SkyrimSE", modID=4321, fileID=113, version="1.4"))
+        fx.write(downloads / "another mod.zip", data)
+        fx.write(downloads / "another mod.zip.meta", meta(gameName="SkyrimSE", modID=9, fileID=1))
+        for _ in range(3):
+            self.api.updating._looked = 0
+            st = self.api.get("/api/updates", {})[1]
+        self.assertEqual(st["fetching"]["Quill"]["state"], "done")
+        # Waiting can be stopped, and ends by itself.
+        self.api.post("/api/updates/seen", {"mod": "Quill"})
+        self.api.post("/api/updates/get", {"mod": "Quill"})
+        self.api.post("/api/updates/wait", {"mod": "Quill"})
+        self.assertEqual(self.api.get("/api/updates", {})[1]["watch"]["waiting"], {})
+        self.api.post("/api/updates/get", {"mod": "Quill"})
+        self.api.updating.waiting["Quill"]["since"] -= updating.WAIT_SECONDS + 10
+        self.api.updating._looked = 0
+        st = self.api.get("/api/updates", {})[1]
+        self.assertIn("stopped waiting", st["fetching"]["Quill"]["error"])
+        with self.assertRaises(api.Bad):
+            self.api.post("/api/updates/folder", {"path": str(browser / "no such folder")})
+
+    def test_a_site_without_a_name_to_go_by_takes_the_one_archive_that_comes(self):
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        browser = Path(self.tmp.name) / "Browser Downloads"
+        browser.mkdir()
+        self.api.post("/api/updates/folder", {"path": str(browser)})
+        self.wait(lambda st: st["scan"]["state"] != "going")
+        row = next(r for r in self.api.get("/api/updates", {})[1]["rows"] if r["mod"] == "Old Lantern")
+        self.assertEqual(row["get"], "https://www.loverslab.com/files/file/1234-old-lantern/")       # the button is there for it too
+        self.api.post("/api/updates/get", {"mod": "Old Lantern"})
+        fx.write(browser / "Old Lantern v3.7z.zip", a_zip({"Lantern.esp": (self.root / "mods" / "Lantern" / "Lantern.esp").read_bytes()}))
+        for _ in range(3):
+            self.api.updating._looked = 0
+            st = self.api.get("/api/updates", {})[1]
+        self.assertEqual((st["fetching"]["Old Lantern"]["state"], st["fetching"]["Old Lantern"]["name"]), ("done", "Old Lantern (new)"))
+
+    def test_an_archive_the_owner_downloaded_is_taken_as_a_newer_version_of_the_mod_named(self):
+        data = a_zip({"Lantern.esp": (self.root / "mods" / "Lantern" / "Lantern.esp").read_bytes()})
+        rec = self.api.upload("old-lantern-from-the-browser.zip", len(data), io.BytesIO(data), "Old Lantern")
+        self.assertEqual((rec["updates"], rec["name"]), ("Old Lantern", "Old Lantern (new)"))
+        with self.assertRaises(api.Bad):
+            self.api.upload("x.zip", len(data), io.BytesIO(data), "No Such Mod")
+
+    def test_the_real_net_fetches_a_file_only_from_where_mod_files_are_kept(self):
+        net = updates.Net("test")
+        for url in ("https://example.invalid/x.zip", "http://github.com/a/b/releases/download/v1/x.zip", "https://github.com/a/b/archive/x.zip",
+                    "https://nexus-cdn.com.example.invalid/x.zip", "https://%s/x.zip" % "@".join(("someone", "cf-files.nexus-cdn.com")),   # a name before the host
+                    "https://www.loverslab.com/files/x.zip"):
+            with self.assertRaises(updates.Refused, msg=url):
+                net.download(url, Path(self.tmp.name) / "x.bin")
+        self.assertFalse((Path(self.tmp.name) / "x.bin").exists())
+
+    def test_which_file_of_a_release_is_the_mods(self):
+        row = {"archive": "Lantern.Release.2.0.zip"}
+        files = [["Lantern.Release.2.1.zip", "u1", 1], ["Lantern.Extras.2.1.zip", "u2", 1], ["notes.txt", "u3", 1]]
+        self.assertEqual(updates.github_asset(row, {"assets": files}), ("Lantern.Release.2.1.zip", "u1"))
+        self.assertIsNone(updates.github_asset({"archive": "renamed.zip"}, {"assets": files}))      # two archives, neither named so
+        self.assertEqual(updates.github_asset({"archive": ""}, {"assets": files[1:]}), ("Lantern.Extras.2.1.zip", "u2"))
+        self.assertIsNone(updates.github_asset(row, {"assets": [["notes.txt", "u3", 1]]}))
+
+
 class Verdicts(unittest.TestCase):
     def row(self, **over):
         r = {"mod": "Quill", "enabled": True, "host": "nexus", "game": "skyrimspecialedition", "mod_id": 4321, "files": [111],
@@ -424,6 +713,10 @@ class TheKeyAndThePage(unittest.TestCase):
         self.assertEqual((quill["host"], quill["state"], quill["page"]), ("nexus", "not asked", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
         self.assertEqual(a.updating.net.asked, [])                           # no key, no GitHub mod: nothing asked at launch
         a.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
+        for _ in range(200):                                                      # a scan begun at launch, if any
+            if a.get("/api/updates", {})[1]["scan"]["state"] != "going":
+                break
+            time.sleep(0.02)
         a.post("/api/updates/scan", {})
         for _ in range(200):
             if a.get("/api/updates", {})[1]["scan"]["state"] != "going":

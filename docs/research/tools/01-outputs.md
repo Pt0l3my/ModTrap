@@ -507,3 +507,21 @@ that modlists made with it are under CC BY-NC-SA 4.0; ModTrap only reads the own
   files come from; a mod of the installed list that the file does not name was added afterwards. **LIKELY**, not
   seen: how large such a text is for a list of some 3,500 mods (hundreds of megabytes are expected, so ModTrap
   reads it piece by piece and keeps only a summary).
+
+## 28. How Wabbajack is let in by Nexus and by LoversLab, and what it does where it is not (2026-11-22)
+
+Read in Wabbajack's public source, commit `a44228e`; facts only, nothing copied.
+
+- **FACT (`Wabbajack.Networking.NexusApi/OAuth/NexusOAuthLogin.cs:62-63`, `NexusApi.cs:337-343`).** Wabbajack asks
+  Nexus for the user's permission through Nexus's own sign-in pages, as the application `wabbajack`: a name Nexus
+  knows it by. The user's password never reaches Wabbajack.
+- **FACT (`Wabbajack.Downloaders.Nexus/NexusDownloader.cs:117-124`).** With that permission, it still fetches a
+  file by itself only for a Premium account. For any other it stops with "Nexus Premium is required for
+  automatic downloads" and treats the file as one the user has to fetch by hand.
+- **FACT (`Wabbajack.Downloaders.ManualSources/LoversLabSource.cs`).** In this version LoversLab is among the
+  sources fetched by hand.
+- **FACT (`Wabbajack.Installer/Preflight/Manual/ManualDownloadAcquirer.cs:23-36`).** For files fetched by hand it
+  watches a folder, normally the user's Downloads folder, takes a file as finished when it can be opened alone,
+  matches it to what it is waiting for, and moves it in. It deletes none of the user's files.
+- **So.** Permission through a site's own pages is given to applications the site knows. And for Nexus it does
+  not change what a free account may do: the download still begins with the user's press on the site.

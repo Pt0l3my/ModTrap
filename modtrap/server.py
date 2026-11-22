@@ -368,7 +368,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(404, {"error": "not found"})
             try:
                 query = urllib.parse.parse_qs(self.path.partition("?")[2], keep_blank_values=True)
-                return self.send(200, upload(query.get("name", [""])[0], n, self.rfile))
+                updates = query.get("updates", [""])[0]
+                return self.send(200, upload(query.get("name", [""])[0], n, self.rfile, updates) if updates
+                                 else upload(query.get("name", [""])[0], n, self.rfile))
             except Exception as e:
                 self.close_connection = True          # what is left of the body is not read
                 return self._error(e)

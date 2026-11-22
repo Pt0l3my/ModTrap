@@ -634,3 +634,24 @@ shown without asking.
 source link…" asks for the web address the mod comes from and keeps it in ModTrap's own folder, before every other
 record. A drop zone, with "Add files…" and "Add a folder…" in its middle, takes the modlist's Wabbajack file, `.meta`
 files of downloads and mods' folders; of a Wabbajack file the page sends only the list. Nothing of a mod is changed.
+
+**The list (MT39, WHY§104).** As the Mods tab: lowest priority first, under the modlist's separators, which fold.
+Columns: Priority, Mod, From, Installed, Notes (what the owner wrote of the mod in MO2), Update (the state by the
+last asking), a button, What is known. The button, an upward arrow shown where a newer file is out, opens that
+file's own page for a download through MO2, or the newest release at GitHub. ModTrap downloads and installs
+nothing; whether it should is open (MT40).
+
+**Getting the newer file (MT40, MT41, WHY§105).** The button fetches the file where its host gives one to a program:
+Nexus for the key of a paying account, GitHub for a release's file. Otherwise it opens the file's page and says
+why: Nexus without a key or for another kind of account, LoversLab and other sites always. A fetched file, and one
+the owner downloaded and names through the mod's menu, go to Add mods (§16) as a newer version of the mod: placed
+right above the old one, which is disabled and not deleted; a plugin the load order already names keeps its place.
+Nothing is changed before the owner has seen the plan and gone ahead; Revert puts all of it back.
+
+**A download started in the browser (MT42, WHY§106).** Where the button opens a page, ModTrap waits 45 minutes for
+the archive in MO2's downloads folder or the folder the browser saves to, and takes it to Add mods once it is
+whole, read where it lies. The row shows that ModTrap is waiting, with a way to stop.
+
+**One press all the way (MT43).** With the setting "Add a newer file without asking, when its plan leaves nothing
+to you", the add of a newer version goes ahead by itself when it is the only thing on the Add mods list, has no
+installer with questions and lacks nothing. Otherwise it waits on the Add mods tab as before.

@@ -186,3 +186,31 @@ Read at `4ba22f0`; facts only, nothing copied. ModTrap asks the same questions i
   `https://api.github.com/repos/<owner>/<name>/releases/latest` (`tag_name`, `published_at`), allows a program
   without an account some 60 questions an hour, and says what is left in `x-ratelimit-remaining`. This is from
   GitHub's public documentation as known; the first real scan on the owner's PC is the check.
+
+## 14. How a download from Nexus is started, for a paying account and for a free one (2026-11-22)
+
+Read at `4ba22f0`; facts only, nothing copied.
+
+- **FACT (`src/nexusinterface.cpp:936-961`).** MO2 asks Nexus for a file's download address in one of two ways.
+  For a paying account: `/games/<game>/mods/<number>/files/<file>/download_link`, with nothing more. For any
+  other account: the same with `?key=…&expires=…`, and only when it holds such a key for that file and the key
+  was made for the same account; otherwise it gives up and says so.
+- **FACT (`src/downloadmanager.cpp:867-868`).** That key and its end come from the link the site hands to the mod
+  manager when the owner presses the site's own download button.
+- **So.** A free account can download, and through MO2: but each download begins with a press on the site, which
+  makes a key for that one file, for a short time. A program cannot ask for a download by itself for a free
+  account; for a paying one it can. The slower speed for free accounts is the site's own doing and was not read
+  in source.
+
+## 15. What Nexus says of an account, and the answer to a request for a download address (2026-11-22)
+
+Read at `4ba22f0`; facts only, nothing copied.
+
+- **FACT (`src/nxmaccessmanager.cpp:199`, `:357-365`).** MO2 checks a key at the service's `users/validate`; the answer holds
+  `user_id` and `is_premium`.
+- **FACT (`src/downloadmanager.cpp:2187`, `:1977`).** The answer to a request for a file's download address (§14) is
+  a list of servers, each with `URI`, the address, and `short_name`.
+- **LIKELY, not read.** The addresses Nexus names are on hosts of its own (names ending in `nexus-cdn.com` or
+  `nexusmods.com`); GitHub hands a release's file on to a host ending in `githubusercontent.com`. ModTrap fetches a
+  file only from such hosts (WHY§105); if Nexus or GitHub names another, the fetch is refused in words and the
+  file's page is still there to open.

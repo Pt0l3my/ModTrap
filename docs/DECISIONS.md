@@ -29,7 +29,12 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   settings file in force in the modlist, and of the frameworks installed). MT35 (the scanner looks through the animation folders
   too; answered the same day). MT36 (the scanner writes every look to the log, with each failure and its reason). MT37 (an update check: where each mod came
   from, and whether Nexus or GitHub has a newer file; asks and reads only). MT38 (a menu on a mod by the right mouse button, with a
-  source link of the owner's own; a drop zone on the Updates tab for files that name sources).
+  source link of the owner's own; a drop zone on the Updates tab for files that name sources). MT39 (the Updates tab lists the mods as
+  the modlist does, with an Update column and a button that leads to the newer file).
+  MT40 (answered the same day: ModTrap fetches a newer file where the host gives it to a program, and installs through
+  Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
+  MT42 (answered: ModTrap watches the Downloads folders for a file the owner fetched in the browser). MT43 (one press
+  all the way: a setting lets a newer file be added without asking where its plan leaves nothing open).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -782,3 +787,138 @@ style menu and one of the rows in that should be to add source link, which then 
   folder, for their `meta.ini`). ModTrap only reads them.
 - Of a Wabbajack file only its list is taken: the page cuts it out of the file and sends that alone, so a file
   of some gigabytes is not copied. Only ModTrap's reading of the list is kept.
+
+## MT39
+
+**The Updates tab lists the mods as the modlist does, with an Update column and its button** · *2026-11-22 · Asked by the owner*
+
+**Owner's words.** "Can you make the upate tab list mods as the modlist does with its priorities, separators,
+comments, etc.? Also, can you add another column that show if an update is available and then an update button next
+to it (can be just an update symbol)."
+
+**Settled** (WHY§104; the owner may overrule any of it):
+
+- The list is in the modlist's own order, lowest priority first, each separator heading its mods and folding as
+  on the Mods tab; columns Priority, Mod, From, Installed, Notes, Update, the button, What is known.
+- Notes shows what the owner wrote of the mod in MO2: its Notes column, and a mark for a longer note, whose words
+  show when the pointer rests on it.
+- Update shows the state by the last asking. Beside it, where a newer file is out, a button with an upward arrow.
+- The button opens the newer file's own page: at Nexus the way Nexus's own "mod manager download" opens it, so
+  that MO2 takes the download; at GitHub the newest release. ModTrap itself still downloads and installs nothing
+  (MT37). Whether it should is MT40.
+- The menu on a mod also has "Get the newer file…" and "Ask about this mod now".
+
+## MT40
+
+**Should ModTrap itself fetch and install a mod's newer file** · *Open*
+
+The update button (MT39) opens the newer file's page; the download goes through MO2 and the owner installs it there.
+
+- **A. As now.** ModTrap finds the update and leads to it; MO2 downloads and installs. Nothing new can go wrong
+  in ModTrap. The owner does the install in MO2.
+- **B. ModTrap takes it from there.** Once the newer archive is in MO2's downloads folder (MO2's record beside
+  it names the file's number), ModTrap offers to put it in through its own Add mods (MT21): it shows what the
+  archive needs, what it replaces, and can be reverted. The download itself still goes through MO2 and the
+  owner's browser: Nexus gives a program a download link only for a paying account.
+- **C. ModTrap downloads too.** Only possible for a paying Nexus account, and it makes ModTrap a downloader.
+
+**Recommendation: B**, as a later step: it keeps downloading with MO2 and Nexus's own page, and gives the install
+ModTrap's safe folder and Revert. Updating a mod in a tuned modlist can break what depends on it, so the step
+would show the dependants first, as Add mods does.
+
+**Note, 2026-11-22.** The owner: "I thought users can download mods from nexus at slower rate without key?" They
+can (MO01§14): a free account downloads through the site, and through MO2 after a press on the site's download
+button, which makes a short-lived key for that one file. What a free account cannot have is a program starting
+the download by itself; that is what option C would need, and why it is for paying accounts only. Options A and B
+work for every account: the update button opens the file's page, the press there starts MO2's download.
+
+**Answered, 2026-11-22: B and C together.** The owner: "can we merge B and C? If nexus key is given, then download
+the mod as well, if not, open nexus page. also make sure you support not just nexus but loverslab and github for
+downloading mods and yes, also make ModTrap use its install mod feature for mods downloaded/added in ModTrap."
+Done in 0.3.34 (WHY§105, MO01§14, MO01§15), within what each host allows a program:
+
+- **Nexus, with a key.** ModTrap asks Nexus once what kind of account the key is of. For a paying account the
+  update button fetches the file. For any other account Nexus gives a program no download (MO01§14), so the button
+  opens the file's page, as without a key. The button's own words say which it will do.
+- **GitHub.** The newest release's file is fetched, without any key, where ModTrap can tell which file is the
+  mod's; otherwise the release's page is opened.
+- **LoversLab.** It is known as a source and its page is opened. It gives files to a logged-in browser only, and
+  ModTrap does not ask for or keep a site's password. The file the owner downloads there goes in through the
+  mod's menu, "Install a downloaded archive as its newer version…".
+- **The install.** A fetched file, and one the owner downloaded, go to Add mods as a newer version of the mod
+  (MT41). Nothing is changed before the owner has seen the plan there and pressed "Go ahead".
+
+## MT41
+
+**A newer version of a mod through Add mods** · *2026-11-22 · Follows from the owner's answer to MT40*
+
+**Settled** (WHY§105; the owner may overrule any of it):
+
+- A newer version is added as a mod of its own, named after the old one with the new version. Its place is right
+  above the old one. The old one is disabled, never deleted or overwritten (MT9), and Revert enables it again.
+- A plugin the load order already names keeps its place and its state there. Only plugins the newer version
+  brings anew are placed.
+- After the add the modlist is read again, as for every add: if the newer version no longer brings a plugin that
+  others need, the missing master is found and everything is put back.
+
+## MT42
+
+**Sign-in through the sites' own pages, or watching the Downloads folder** · *Open*
+
+**Owner's words (2026-11-22).** "would it work if you added login hook to ModTrap, so you could add Nexus, Loverslab
+and Github buttons to Update page, and clicking on one would open browser page of the clicked site which would ask
+for hook of the site that user is logged into (could be also an authrorize like what Wabbajack does), ModTrap would
+never get login details or directly login."
+
+What is known (TL01§28, MO01§14):
+
+- Such a sign-in keeps the password away from ModTrap, as the owner says. But a site offers it only to an
+  application it knows by name. Nexus knows Wabbajack and MO2; it does not know ModTrap. Using another
+  application's name is not ModTrap's to do.
+- For Nexus it would replace pasting a key, and nothing more: with it, Wabbajack too fetches by itself only for
+  a Premium account.
+- LoversLab: the Wabbajack read today does not sign in there; the user fetches by hand and Wabbajack watches the
+  Downloads folder.
+- GitHub needs no sign-in to fetch a release's file. A sign-in would only raise how many questions an hour
+  ModTrap may ask.
+
+Options:
+
+- **A. Watch the Downloads folders.** The buttons open the mod's page; the owner presses download there, in the
+  browser where they are signed in. ModTrap watches the folder the browser saves to, and MO2's downloads folder,
+  and when the archive it is waiting for is there, takes it to Add mods as the mod's newer version. No sign-in,
+  no key, works for Nexus (free accounts), LoversLab and any other site.
+- **B. Ask Nexus to make ModTrap known**, for a "sign in with Nexus" button in place of the key field. Only the
+  owner can ask Nexus for that. A convenience; it unlocks nothing.
+- **C. Both.**
+
+**Recommendation: A now**, and B only if pasting the key bothers the owner. A is what gives the missing piece: a
+file the owner fetched in the browser getting into ModTrap without a second step.
+
+**Answered, 2026-11-22: A.** The owner: "Yes I would go with A, but is it totally not possible to download and
+install/update with a single click on download button?" Done in 0.3.35 (WHY§106):
+
+- Where ModTrap cannot fetch a file itself, the button opens the mod's page and ModTrap waits, for 45 minutes,
+  for the archive to appear in MO2's downloads folder or in the folder the browser saves to (Windows' own
+  Downloads folder, or one the owner names). Once the file is whole it goes to Add mods as the mod's newer
+  version. ModTrap reads it where it lies and moves or deletes nothing.
+- A file in MO2's folder is known by the numbers MO2 writes beside it; one in the browser's folder by the name
+  Nexus gives the file. For a site with no name to go by, ModTrap takes a new archive only while it waits for
+  that one mod alone; otherwise the mod's menu serves.
+- Sites that cannot be asked for versions (LoversLab, any other address) have the button too: it opens the page
+  and waits likewise.
+
+## MT43
+
+**One press all the way** · *2026-11-22 · From the owner's question under MT42*
+
+**Settled** (WHY§106; the owner may overrule any of it):
+
+- A setting, off to begin with: "Add a newer file without asking, when its plan leaves nothing to you". With it
+  on, a press on a mod's update button ends with the newer version added and the older one disabled.
+- With a Premium account's key, and for GitHub, that is one press. For a free Nexus account and for LoversLab it
+  is that press and the press on the site's own download button: the site asks for that one, and ModTrap cannot
+  and does not press it.
+- ModTrap still stops and shows the plan when the archive has an installer with questions, when something the
+  mod needs is missing, or when more than that one mod is on the Add mods list. The check after the add, and
+  Revert, are as for every add.
