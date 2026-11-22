@@ -130,6 +130,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 105 | 2026-11-22 | The update button fetches the newer file where the host gives one to a program (Nexus for a paying account's key, GitHub), else opens its page; the file goes to Add mods as a newer version: right above the old mod, which is disabled; LoversLab only through the owner's browser | DECIDED | #updates #add #network |
 | 106 | 2026-11-22 | ModTrap watches MO2's and the browser's Downloads folders for a file the owner fetched on a site, and a setting lets a newer file be added without asking: one press where the host lets a program fetch, one more on the site where it does not | DECIDED | #updates #add #page |
 | 107 | 2026-11-22 | On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made | FACT | #updates #page |
+| 108 | 2026-11-22 | The owner was right that a scan needs no key: Nexus's newer public service answers without one; the scan is rebuilt on it, the key kept only for fetching and as a fallback | DECIDED | #updates #network |
 
 ## Entries
 
@@ -2727,3 +2728,36 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   nothing by comparison. MO2's word is now passed on only where both are plain numbers and MO2's is the higher.
 - The tab's own description still said that ModTrap downloads nothing; since MT40 a mod's update button can fetch.
   It now says what a scan does and what the button does.
+
+### 108. The owner was right that a scan needs no key: Nexus's newer public service answers without one; the scan is rebuilt on it, the key kept only for fetching and as a fallback
+
+`2026-11-22` · DECIDED · `#updates #network` · refs: MT44, MT37, MT40, TL01§29, MO01§13, WHY§101, WHY§107
+
+- The owner, after 0.3.36 told them a key was needed: "I see no reason why it would need a nexus key to check if
+  there are any updates for mods."
+- FACT, my error. WHY§101 built the scan on what MO2's source shows: MO2 sends a key with every question, to
+  Nexus's older service. From that I wrote that Nexus answers a program only with a key, and never checked
+  whether Nexus has another way. It has (TL01§29). The claim was an inference from one program's habit, stated
+  as a fact about the service.
+- METHOD. This session's network did not reach Nexus's services. A second environment that does was proposed to
+  the owner and approved; this session could not move to it, so a helper session on it asked the live service,
+  with no key and only about two well-known public mods, and reported the literal questions and answers.
+- DECIDED. The scan asks the public service first. Fifty mods to a question give each mod's time of last upload.
+  Where the installed archive's name carries that same time (Nexus writes the upload's time into a file's
+  name), the installed file is the mod's newest and nothing more is asked. Otherwise the mod's files are asked
+  for, five mods to a question; a question that is refused is asked again mod by mod.
+- The verdict without a word of what replaced what: the files of one line of versions share a group (TL01§29,
+  LIKELY). The newest current file of the installed file's group, uploaded after it, is its newer version. This
+  also keeps a mod's other lines apart: a newer main file is no update for an installed patch of another line.
+  Where the installed file is not found among the mod's files, the older rules hold (by the archive's name, by
+  version, else "unclear").
+- What is kept from the older way: the key and its service remain, used only where the public service does not
+  answer as expected at the outset, and for fetching (MT40). The key is never sent to the public service; a test
+  holds that.
+- The public service is said by Nexus to be still changing. An answer in a form ModTrap does not know is said in
+  words, in the log and on the page, and never taken for "no update".
+- NOT YET CHECKED by ModTrap's own code against the live service: the helper asked the questions by hand. The
+  owner's next scan is the check, with its lines in the log.
+- Checked: tests with a stand-in for the public service (states by group and by time; no key sent; files asked
+  for only where needed; a second scan; fifty and five to a question; the service absent, with and without a
+  key; a service that asks to wait; a game's name that is no name); the page in a browser.

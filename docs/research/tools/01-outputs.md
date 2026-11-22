@@ -525,3 +525,33 @@ Read in Wabbajack's public source, commit `a44228e`; facts only, nothing copied.
   matches it to what it is waiting for, and moves it in. It deletes none of the user's files.
 - **So.** Permission through a site's own pages is given to applications the site knows. And for Nexus it does
   not change what a free account may do: the download still begins with the user's press on the site.
+
+## 29. Nexus's public service: what it answers without a key (2026-11-22)
+
+Asked of the live service on 2026-11-22 by a helper session of this work, with no key and no sign-in, only for two
+well-known public mods; and read on the service's own documentation page. Nothing copied but the names a question
+needs.
+
+- **FACT (asked).** The older service refuses a question without a key: status 401, "Please provide an
+  authentication method".
+- **FACT (its documentation page).** Of the newer service: "Most of GraphQL V2 is accessible without
+  authentication, but some endpoints do require an OAuth token." And: "Existing stuff may change, evolve, or even
+  disappear without warning".
+- **FACT (asked).** The newer service takes a question as a text, posted to `https://api.nexusmods.com/v2/graphql`,
+  and answered each of these without a key:
+  - `game(domainName: …) { id }`: a game's number (1704 for the game ModTrap is for).
+  - `legacyModsByDomain(ids: [{ gameDomain, modId } …]) { nodes { modId gameId status updatedAt } }`: several mods
+    in one question. A page of mods held at most 80, whatever was asked for.
+  - `modFiles(modId, gameId) { fileId uri version categoryId date groupId }`: a mod's files. `uri` is the file's
+    name as it is downloaded; `date` is in seconds; `categoryId` has the numbers of MO01§13. Several such
+    questions went in one request under names of their own.
+- **FACT (asked, for both mods).** A mod's `updatedAt` was the time of its newest main file. The mod's own
+  `version` lagged behind its newest file for one of them, so it is not what to compare.
+- **FACT (asked).** There is no word of which file replaced which. Files of one line of versions shared a
+  `groupId` (every main file of the one mod from its first to its newest; its translation patch another; its
+  developer kit a third). **LIKELY**: that is what the group means; it is inferred from the data, not documented.
+- **FACT (asked).** No header of an answer spoke of an allowance of questions. How many the service allows without
+  a key is not known.
+- **FACT (Nexus's page on acceptable use, of 2020).** A program is asked to name itself in `Application-Name` and
+  `Application-Version`; a personal key is tolerated for a program meant for personal use; a program meant for
+  the public is asked to get in touch with Nexus first.

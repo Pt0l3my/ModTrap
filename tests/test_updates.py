@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import re
 import tempfile
 import time
 import unittest
@@ -37,6 +38,13 @@ class FakeNet:
                 status, h, body = answer(url) if callable(answer) else answer
                 return status, dict(h), body
         return 404, {}, None
+
+    def ask(self, url, query, headers):
+        """Nexus's public service: `public(query)` answers, where a test gives one; else it is not there."""
+        self.asked.append((url, dict(headers)))
+        self.questions = getattr(self, "questions", []) + [query]
+        public = getattr(self, "public", None)
+        return public(query) if public is not None else (404, {}, None)
 
     def download(self, url, dest, progress=None, stopped=None):
         """A file fetched: what `files` holds for the address, written as the real one writes it."""
@@ -418,7 +426,7 @@ class FetchingANewerFile(unittest.TestCase):
         self.assertEqual((f["state"], f["name"]), ("done", "Quill (1.4)"))
         # The key went to Nexus's own service only; the file's host got none.
         for url, headers in self.net.asked:
-            self.assertEqual("APIKEY" in headers, url.startswith("https://api.nexusmods.com/"), url)
+            self.assertEqual("APIKEY" in headers, url.startswith("https://api.nexusmods.com/v1/"), url)
         # Add mods has it, unpacked, as a newer version of Quill: right above it, Quill to be disabled.
         staged = f["staged"]
         for _ in range(400):
@@ -620,9 +628,9 @@ class Scan(unittest.TestCase):
         self.assertEqual((out["github"]["repos"], out["github"]["asked"]), (1, 1))
         # Only the two services, the key only to Nexus, and never in an address.
         for url, headers in self.net.asked:
-            self.assertTrue(url.startswith(("https://api.nexusmods.com/v1/", "https://api.github.com/")), url)
+            self.assertTrue(url.startswith(("https://api.nexusmods.com/v1/", "https://api.nexusmods.com/v2/graphql", "https://api.github.com/")), url)
             self.assertNotIn("INVENTEDKEY", url)
-            self.assertEqual("APIKEY" in headers, "nexusmods" in url, url)
+            self.assertEqual("APIKEY" in headers, "/v1/" in url, url)             # the key goes to the service that needs it, and to no other
         self.assertEqual([updates.verdict(r, store)["state"] for r in self.rows], ["update", "current", "update"])
         # The answers are kept: a second ModTrap reads them without asking.
         again = updates.load()
@@ -645,8 +653,8 @@ class Scan(unittest.TestCase):
         store = updates.load()
         out = updates.scan(self.rows, "", self.net, store, now=self.now)
         self.assertEqual((out["nexus"]["asked"], out["nexus"]["left"]), (0, 2))
-        self.assertIn("no Nexus key", out["nexus"]["why_stopped"])
-        self.assertEqual([u for u, _h in self.net.asked if "nexusmods" in u], [])
+        self.assertIn("none is kept", out["nexus"]["why_stopped"])
+        self.assertEqual([u for u, _h in self.net.asked if "/v1/" in u], [])            # the keyed service is not asked without a key
         self.assertEqual(out["github"]["asked"], 1)
 
     def test_the_accounts_allowance_is_spared_and_a_refused_key_is_said(self):
@@ -674,6 +682,147 @@ class Scan(unittest.TestCase):
                     "https://api.github.com@example.invalid/x"):
             with self.assertRaises(updates.Refused, msg=url):
                 net.get(url, {})
+
+
+def public_service(mods: dict, game_id: int = 1704, asked: list | None = None):
+    """A stand-in for Nexus's public service (TL01§29), answering the three questions ModTrap asks of it. `mods`:
+    {mod number: {"updated": "2026-05-05T22:41:21Z", "status": "published", "files": [(file number, name, version,
+    category number, time, group)]}}."""
+    import re as _re
+
+    def answer(query: str):
+        if asked is not None:
+            asked.append(query)
+        if "game(domainName" in query:
+            return 200, {}, {"data": {"game": {"id": game_id}}}
+        if "legacyModsByDomain" in query:
+            ids = [int(x) for x in _re.findall(r"modId: (\d+)", query)]
+            return 200, {}, {"data": {"legacyModsByDomain": {"nodes": [
+                {"modId": i, "gameId": game_id, "status": mods[i].get("status", "published"), "updatedAt": mods[i]["updated"]} for i in ids if i in mods]}}}
+        if "modFiles" in query:
+            out = {}
+            for alias, mod_id in _re.findall(r'(m\d+): modFiles\(modId: "(\d+)"', query):
+                out[alias] = [{"fileId": f[0], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5]}
+                              for f in mods[int(mod_id)]["files"]]
+            return 200, {}, {"data": out}
+        return 200, {}, {"errors": [{"message": "not a question this stand-in knows"}], "data": None}
+    return answer
+
+
+class WithoutAKey(unittest.TestCase):
+    """MT44, WHY§108: Nexus's public service answers without a key. Which mods had a new file is asked fifty mods to
+    a question; a mod's files only where the installed file is not plainly its newest."""
+
+    T_OLD, T_NEW = 1774355307, 1778020881
+    NEW = "2026-05-05T22:41:21Z"                      # T_NEW, as the service writes a mod's time
+
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        row = lambda mod, mod_id, files, archive, **over: dict(Verdicts.row(self), mod=mod, mod_id=mod_id, files=files, archive=archive, **over)
+        self.rows = [
+            row("Quill", 4321, [735000], "Quill-4321-6-0-%d.zip" % self.T_OLD),                 # an older file of the main line
+            row("Reed", 5000, [], "Reed-5000-2-0-%d.7z" % self.T_NEW),                          # its archive carries the mod's own newest time
+            row("Thistle", 6000, [61], "Thistle Old Name.7z"),                                  # no time in the name; its file is current
+            row("Gone", 7000, [71], "Gone-7000-1-0-%d.zip" % self.T_OLD),                       # no longer shown
+            row("Patch of Quill", 4321, [736000], "Quill Patch-4321-1-0-%d.zip" % self.T_OLD)]  # a second file of the same mod, in another line
+        self.mods = {
+            4321: {"updated": self.NEW, "files": [(735000, "Quill-4321-6-0-%d.zip" % self.T_OLD, "6.0", 7, self.T_OLD, 42),
+                                                  (749043, "Quill-4321-6-11-%d.zip" % self.T_NEW, "6.11", 1, self.T_NEW, 42),
+                                                  (736000, "Quill Patch-4321-1-0-%d.zip" % self.T_OLD, "1.0", 3, self.T_OLD, 77)]},
+            5000: {"updated": self.NEW, "files": [(900, "Reed-5000-2-0-%d.7z" % self.T_NEW, "2.0", 1, self.T_NEW, 5)]},
+            6000: {"updated": self.NEW, "files": [(61, "Thistle-6000-1-0.7z", "1.0", 1, 100, 9), (62, "Thistle Extras.7z", "0.1", 3, self.T_NEW, 10)]}}
+        self.net = FakeNet({})
+        self.questions = []
+        self.net.public = public_service(self.mods, asked=self.questions)
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def scan(self, store, **over):
+        return updates.scan(self.rows, over.pop("key", ""), self.net, store, now=1_800_000_000 + over.pop("later", 0), pause=0, **over)
+
+    def test_a_scan_needs_no_key_and_tells_each_mods_state(self):
+        store = updates.load()
+        out = self.scan(store)
+        self.assertEqual((out["nexus"]["way"], out["nexus"]["why_stopped"], out["nexus"]["left"]), ("public", "", 0))
+        states = {r["mod"]: updates.verdict(r, store) for r in self.rows}
+        self.assertEqual({m: v["state"] for m, v in states.items()},
+                         {"Quill": "update", "Reed": "current", "Thistle": "current", "Gone": "gone", "Patch of Quill": "current"})
+        # The newer file is the newest current one of the installed file's own line, not any newer file of the mod.
+        self.assertEqual((states["Quill"]["newest"], states["Quill"]["file_id"]), ("6.11", 749043))
+        self.assertIn("nothing was uploaded after it", states["Reed"]["text"])
+        # No key went anywhere, and only the public service was asked.
+        for url, headers in self.net.asked:
+            self.assertEqual(url, "https://api.nexusmods.com/v2/graphql")
+            self.assertNotIn("APIKEY", headers)
+            self.assertEqual(headers.get("Application-Name"), "ModTrap")
+        # Files were asked for only where needed: not for Reed (plainly newest) nor for Gone.
+        files_q = " ".join(q for q in self.questions if "modFiles" in q)
+        self.assertEqual(sorted(set(re.findall(r'modId: "(\d+)"', files_q))), ["4321", "6000"])
+        self.assertEqual(sum("legacyModsByDomain" in q for q in self.questions), 1)
+
+    def test_a_second_scan_asks_for_files_only_where_something_was_uploaded_since(self):
+        store = updates.load()
+        self.scan(store)
+        self.questions.clear()
+        self.scan(store, later=86400)
+        self.assertEqual([q for q in self.questions if "modFiles" in q], [])                    # nothing changed: no files asked for
+        self.mods[6000]["updated"] = "2026-06-01T00:00:00Z"
+        self.mods[6000]["files"].append((63, "Thistle-6000-1-1.7z", "1.1", 1, 1780272000, 9))
+        self.mods[6000]["files"][0] = (61, "Thistle-6000-1-0.7z", "1.0", 4, 100, 9)
+        self.questions.clear()
+        self.scan(store, later=2 * 86400)
+        self.assertEqual(re.findall(r'modId: "(\d+)"', " ".join(q for q in self.questions if "modFiles" in q)), ["6000"])
+        v = updates.verdict(self.rows[2], store)
+        self.assertEqual((v["state"], v["newest"]), ("update", "1.1"))
+
+    def test_many_mods_go_fifty_to_a_question_and_a_few_to_a_question_for_files(self):
+        rows, mods = [], {}
+        for i in range(1, 121):
+            rows.append(dict(Verdicts.row(self), mod="Mod %d" % i, mod_id=i, files=[i * 10], archive="renamed %d.7z" % i))
+            mods[i] = {"updated": self.NEW, "files": [(i * 10, "x.7z", "1.0", 1, 100, i)]}
+        qs = []
+        self.net.public = public_service(mods, asked=qs)
+        store = updates.load()
+        out = updates.scan(rows, "", self.net, store, now=1_800_000_000, pause=0)
+        self.assertEqual(sum("legacyModsByDomain" in q for q in qs), 3)                         # 50, 50, 20
+        self.assertEqual(sum("modFiles" in q for q in qs), 24)                                  # 120 mods, five to a question
+        self.assertEqual((out["nexus"]["asked"], out["nexus"]["left"]), (120, 0))
+        self.assertEqual({updates.verdict(r, store)["state"] for r in rows}, {"current"})
+
+    def test_where_the_public_service_is_not_there_the_key_serves_and_without_one_it_is_said(self):
+        self.net.public = lambda q: (500, {}, None)
+        out = self.scan(updates.load())
+        self.assertEqual(out["nexus"]["way"], "key")
+        self.assertIn("answered with an error (500)", out["nexus"]["why_stopped"])
+        self.assertIn("none is kept", out["nexus"]["why_stopped"])
+        self.net.answers = {"/mods/updated?period=1m": (200, {}, []),
+                            "/files": (200, {}, files_answer([(735000, "a.zip", "6.0", 1, 100)]))}
+        out = self.scan(updates.load(), key="INVENTEDKEY0123456789")
+        self.assertEqual((out["nexus"]["way"], out["nexus"]["asked"] > 0), ("key", True))
+        # A service that asks to wait part way stops the scan, keeps what it has, and says so.
+        n = [0]
+        base = public_service(self.mods)
+
+        def tiring(q):
+            n[0] += 1
+            return (429, {}, None) if "modFiles" in q else base(q)
+        self.net.public = tiring
+        out = self.scan(updates.load())
+        self.assertEqual(out["nexus"]["way"], "public")
+        self.assertIn("asks ModTrap to wait", out["nexus"]["why_stopped"])
+        self.assertGreater(out["nexus"]["left"], 0)
+
+    def test_a_game_name_that_could_carry_more_than_a_name_is_not_put_into_a_question(self):
+        rows = [dict(Verdicts.row(self), game='x") { id } } #', mod_id=1)]
+        qs = []
+        self.net.public = public_service({}, asked=qs)
+        updates.scan(rows, "", self.net, updates.load(), now=1_800_000_000, pause=0)
+        self.assertEqual([q for q in qs if "#" in q or "x\")" in q], [])
 
 
 class TheKeyAndThePage(unittest.TestCase):
@@ -715,7 +864,12 @@ class TheKeyAndThePage(unittest.TestCase):
         st = a.get("/api/updates", {})[1]
         quill = next(r for r in st["rows"] if r["mod"] == "Quill")
         self.assertEqual((quill["host"], quill["state"], quill["page"]), ("nexus", "not asked", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
-        self.assertEqual(a.updating.net.asked, [])                           # no key, no GitHub mod: nothing asked at launch
+        for _ in range(200):                                                      # the scan at launch: the public service, no key
+            if a.get("/api/updates", {})[1]["scan"]["state"] != "going":
+                break
+            time.sleep(0.02)
+        self.assertEqual({u for u, _h in a.updating.net.asked}, {"https://api.nexusmods.com/v2/graphql"})
+        self.assertEqual([h for _u, h in a.updating.net.asked if "APIKEY" in h], [])
         a.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
         for _ in range(200):                                                      # a scan begun at launch, if any
             if a.get("/api/updates", {})[1]["scan"]["state"] != "going":

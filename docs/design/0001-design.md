@@ -655,3 +655,8 @@ whole, read where it lies. The row shows that ModTrap is waiting, with a way to 
 **One press all the way (MT43).** With the setting "Add a newer file without asking, when its plan leaves nothing
 to you", the add of a newer version goes ahead by itself when it is the only thing on the Add mods list, has no
 installer with questions and lacks nothing. Otherwise it waits on the Add mods tab as before.
+
+**No key for scanning (MT44, WHY§108).** A scan asks Nexus's public service, which needs no key: when each mod last
+had a file uploaded, and a mod's files only where the installed one is not plainly its newest. The owner's key is
+optional: it lets the update button fetch for a Premium account, and serves for scanning only where the public
+service does not answer as expected.

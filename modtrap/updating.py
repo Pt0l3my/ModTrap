@@ -542,7 +542,7 @@ class Updating:
 
     def at_launch(self, model, modlist_key: str, added: set[str], wanted: bool) -> None:
         """Once for each start of ModTrap, when the first modlist is read: a scan, if the owner's setting asks for
-        one and there is something that can be asked (a key for Nexus, or a mod from GitHub)."""
+        one and there is a mod that can be asked about (one from Nexus or from GitHub)."""
         if self.launched:
             return
         self.launched = True
@@ -550,7 +550,7 @@ class Updating:
             return
         try:
             rows, _wj = self.rows(model, modlist_key, added)
-            if secret.kept(KEY) or any(r["host"] == "github" for r in rows):
+            if any(r["host"] in ("nexus", "github") for r in rows):          # Nexus needs no key (MT44)
                 self.start(model, modlist_key, added, "at launch")
         except Exception as e:
             log.warn("the scan for updates at launch could not be started: %s", logbook.why(e))

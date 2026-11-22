@@ -271,7 +271,7 @@ const SETTING_TEXT = [
   ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is done once it has written its output. Synthesis has no such switch, only its run button: ModTrap presses that button once Synthesis has it ready (never while it is greyed), and asks the window to close when Synthesis's own log says the run has finished; if the press does not start a run, Synthesis stays open and is yours. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
   ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
-  ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updates tab). It asks only those two, reads the answers and changes nothing. Nexus is asked only when you have given ModTrap your Nexus key; without a key and without a mod from GitHub nothing is asked at all. Off: only when you press “Scan for updates”."],
+  ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updates tab). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["updates_go", "Add a newer file without asking, when its plan leaves nothing to you", "One press on a mod's update button then goes all the way: the file is fetched (or taken from your Downloads folder once you have pressed download on the site), unpacked, and added as the mod's newer version, with the older one disabled. ModTrap still stops and shows the plan when the archive has an installer with questions, when something the mod needs is missing, or when more than this one mod is on the Add mods list. Revert undoes it. Off: the newer file waits on the Add mods tab for “Add it for me”."],
   ["mo2_leave_alone", "When a tool's compiler crashes inside MO2, have MO2 leave the compiler alone", "MO2 hooks every program a tool starts, so that it sees the modlist's files. Synthesis starts the C# compiler to build its patchers; the compiler reads nothing of the modlist, and on some PCs it crashes when hooked. MO2 has its own list of programs it leaves alone (Settings, Workarounds, Executables Blacklist). On: when Synthesis's own log shows the compiler crashing, ModTrap adds the compiler (csc.exe and VBCSCompiler.dll) to that list in MO2's settings file, with MO2 closed and a copy of the file kept with the session, and the row of tools starts Synthesis once more. Off: ModTrap only says so."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
@@ -669,7 +669,8 @@ async function loadUpdates() {
     if (d.scan.error) toast(d.scan.error);
     else if (l && l.nexus) {
       const why = l.nexus.why_stopped || l.github.why_stopped;
-      toast("Scan done: " + plural(l.nexus.asked + l.github.asked, "source") + " asked, " + plural(d.counts.update || 0, "update") + " out"
+      const about = (l.nexus.way === "public" ? l.nexus.month_list : l.nexus.asked) + l.github.asked;
+      toast("Scan done: asked about " + plural(about, "mod") + ", " + plural(d.counts.update || 0, "update") + " out"
         + (l.nexus.left ? ", " + l.nexus.left.toLocaleString("en-GB") + " mods left for the next scan" : "") + "." + (why ? " " + why.charAt(0).toUpperCase() + why.slice(1) + "." : ""));
     }
   }
@@ -693,17 +694,13 @@ function renderUpdates(listOnly) {
     const scan = el("button", { type: "button", class: "primary", text: going ? "Scanning…" : "Scan for updates", disabled: going });
     scan.addEventListener("click", async () => {
       const nexus = (d.hosts || {}).nexus || 0, github = (d.hosts || {}).github || 0;
-      if (!d.key && !github) {
-        // Nothing can be asked: said at once, and the place for the key is opened (WHY§107).
-        state.upOpen = Object.assign({}, state.upOpen, { "Your Nexus key": true });
-        toast(nexus ? "Nothing can be asked yet. " + num(nexus) + " of your mods come from Nexus, and Nexus answers a program only with your account's key: paste it under “Your Nexus key”." : "None of the mods has a source that can be asked: give the Wabbajack file, or add source links.");
-        renderUpdates();
-        const field = document.querySelector("#updates-head input[type=password]");
-        if (field) { field.scrollIntoView({ block: "center" }); field.focus(); }
+      if (!nexus && !github) {
+        // Nothing can be asked: said at once (WHY§107). Nexus itself needs no key (MT44).
+        toast("None of the mods has a source that can be asked: give the Wabbajack file, or add source links (right-click a mod).");
         return;
       }
       state.upScanAsked = true;
-      try { await api("/api/updates/scan", {}); toast("Scanning for updates…"); } catch (e) { toast(e.message); }
+      try { await api("/api/updates/scan", {}); toast("Scanning for updates: asking Nexus about " + num(nexus) + " mods" + (github ? " and GitHub about " + num(github) : "") + ". On a large list the first scan takes a few minutes."); } catch (e) { toast(e.message); }
       loadUpdates();
     });
     const stop = going ? el("button", { type: "button", text: "Stop the scan" }) : null;
@@ -716,6 +713,7 @@ function renderUpdates(listOnly) {
     if (last && last.nexus) {
       const when = new Date(last.when * 1000).toLocaleString("en-GB");
       const nexusLine = !last.nexus.asked && !last.nexus.month_list && last.nexus.left ? "Nexus was not asked (" + num(last.nexus.left) + " mods wait)"
+        : last.nexus.way === "public" ? "Nexus was asked, without a key, when " + num(last.nexus.month_list) + " mods last had a new file, and for the files of " + num(last.nexus.asked) + (last.nexus.left ? "; " + num(last.nexus.left) + " are left for the next scan" : "")
         : "Nexus was asked about " + plural(last.nexus.asked, "mod") + (last.nexus.left ? ", " + num(last.nexus.left) + " are left for the next scan" : "");
       kids.push(el("p", { text: "Last scan, " + when + ": " + nexusLine
         + "; GitHub about " + plural(last.github.asked, "repository", "repositories") + (last.github.left ? ", " + num(last.github.left) + " left" : "") + "." }));
@@ -728,8 +726,8 @@ function renderUpdates(listOnly) {
     keep.addEventListener("click", async () => { try { await api("/api/updates/key", { key: keyIn.value }); keyIn.value = ""; toast("The key is kept on this PC."); } catch (e) { toast(e.message); } loadUpdates(); });
     const forget = d.key ? el("button", { type: "button", text: "Forget the key" }) : null;
     if (forget) forget.addEventListener("click", async () => { try { await api("/api/updates/key", { key: null }); } catch (e) { toast(e.message); } loadUpdates(); });
-    kids.push(el("h3", { text: "Your Nexus key" }),
-      el("p", { class: "dim small", text: "Nexus answers a program only with a key of your account. ModTrap keeps it on this PC, protected by Windows for your Windows account. It is sent to Nexus only, never shown again, and never written to the log or to a session file." }),
+    kids.push(el("h3", { text: "Your Nexus key (optional)" }),
+      el("p", { class: "dim small", text: "Not needed to scan for updates: Nexus answers that without a key. A key is for one thing only: with the key of a Premium account, a mod's update button fetches the newer file itself; without one, or with a free account's, it opens the file's page and you press download there. ModTrap keeps the key on this PC, protected by Windows for your Windows account. It is sent to Nexus only, never shown again, and never written to the log or to a session file." }),
       (() => {
         const a = el("a", { target: "_blank", rel: "noopener noreferrer", text: "Open Nexus's page for API keys" });
         a.setAttribute("href", d.key_page || "");
@@ -738,7 +736,7 @@ function renderUpdates(listOnly) {
           el("li", { text: "Go to the bottom of that page, to “Personal API Key”. If there is none yet, press the button there to make one." }),
           el("li", { text: "Copy the long line of letters and digits, paste it into the field below, and press “Keep the key”." }));
       })(),
-      el("p", {}, el("span", { class: "tag " + (d.key ? "good" : "warn"), text: d.key ? "a key is kept" : "no key: Nexus is not asked" }), " ", keyIn, " ", keep, " ", forget));
+      el("p", {}, el("span", { class: "tag " + (d.key ? "good" : ""), text: d.key ? "a key is kept" : "no key kept" }), " ", keyIn, " ", keep, " ", forget));
     // Files given by hand: a drop zone, with its button in the middle.
     const pickFiles = el("input", { type: "file", multiple: "multiple", accept: ".wabbajack,.meta,.ini", hidden: "hidden" });
     pickFiles.addEventListener("change", () => updatesChosen(pickFiles));
@@ -806,11 +804,11 @@ function renderUpdates(listOnly) {
       if (k.tagName === "H3") {
         const title = k.textContent, isKey = /key/i.test(title);
         const isWatch = /watches/i.test(title);
-        const hint = isKey ? (d.key ? "a key is kept" + (d.premium === true ? ", of a Premium account: ModTrap fetches files itself" : d.premium === false ? ", not of a Premium account: downloads go through Nexus's page" : "") : "no key: Nexus is not asked")
+        const hint = isKey ? (d.key ? "a key is kept" + (d.premium === true ? ", of a Premium account: ModTrap fetches files itself" : d.premium === false ? ", not of a Premium account: downloads go through Nexus's page" : "") : "none kept; scanning needs none")
           : isWatch ? (waitingFor.length ? "waiting for " + plural(waitingFor.length, "download") : w.there ? "ready" : "your browser's folder was not found")
           : (have.length ? have.length + " kind" + (have.length === 1 ? "" : "s") + " of record given" : "nothing given yet");
         cur = el("details", { class: "upfold" }, el("summary", {}, el("b", { text: title }), el("span", { class: "dim", text: " · " + hint })));
-        const wanted = state.upOpen[title] !== undefined ? state.upOpen[title] : isWatch ? !w.there : (isKey ? !d.key : !have.length) || !!state.updatesTaking || d.list.reading || !!d.list.error;
+        const wanted = state.upOpen[title] !== undefined ? state.upOpen[title] : isWatch ? !w.there : isKey ? false : !have.length || !!state.updatesTaking || d.list.reading || !!d.list.error;
         if (wanted) cur.setAttribute("open", "");
         const mine = cur;
         cur.addEventListener("toggle", () => { state.upOpen[title] = mine.open; });

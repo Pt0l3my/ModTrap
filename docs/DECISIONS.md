@@ -35,6 +35,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
   MT42 (answered: ModTrap watches the Downloads folders for a file the owner fetched in the browser). MT43 (one press
   all the way: a setting lets a newer file be added without asking where its plan leaves nothing open).
+  MT44 (a scan for updates needs no key).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -922,3 +923,25 @@ install/update with a single click on download button?" Done in 0.3.35 (WHY§106
 - ModTrap still stops and shows the plan when the archive has an installer with questions, when something the
   mod needs is missing, or when more than that one mod is on the Add mods list. The check after the add, and
   Revert, are as for every add.
+
+## MT44
+
+**A scan for updates needs no key** · *2026-11-22 · Asked by the owner*
+
+**Owner's words.** "The scan for updates still won't scan for updates... I see no reason why it would need a nexus
+key to check if there are any updates for mods."
+
+The owner was right, and MT37's "Nexus is asked only with the owner's own key" was wrong for scanning: it held for
+the older of Nexus's two services, the only one ModTrap had read about. The newer one answers what is public
+without a key (TL01§29).
+
+**Settled** (WHY§108):
+
+- A scan asks Nexus's public service, with no key: first, fifty mods to a question, when each mod last had a file
+  uploaded; then, only for mods where that is later than the installed file or cannot be compared, the mod's
+  files.
+- The key is optional and has one use: with a Premium account's key, a mod's update button fetches the file
+  itself (MT40). It is also the fallback for scanning where the public service does not answer as expected.
+- ModTrap names itself to Nexus in every question, asks no faster than five questions a second, at most 800 in a
+  scan, and stops when the service asks it to wait.
+- A scan at each start (the setting of MT37) now needs no key either.
