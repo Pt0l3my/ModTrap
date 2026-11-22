@@ -96,6 +96,7 @@ SETTINGS = {
     "open_mo2_after": False,   # start MO2 again once a demaster is in place
     "follow": True,            # show the Process tab when a demaster starts
     "script_props": True,      # take script properties that point at the mod out (MT4); off: they are left to the owner
+    "retire_copies": True,     # after a tool's run, take ModTrap's own copy of a plugin the tool made anew out of the way
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -475,7 +476,9 @@ class Api:
             def ended() -> None:
                 self.save_log()
                 if job.state == "done" and self.folder and self.status == "ready":
-                    self.open(self.folder, self.profile or None, session=self.session)   # its output, read again
+                    self.open(self.folder, self.profile or None, session=self.session, wait=True)   # its output, read again
+                    if self.changes is not None:
+                        self.changes.retire_remade()         # a copy of ModTrap's that the run made needless (WHY§80)
             job.on_end = ended
             self.tooljob = job
         job.start()

@@ -294,7 +294,7 @@ class DemasterThroughThePage(unittest.TestCase):
 
     def test_the_owners_settings_are_kept_and_only_known_ones(self) -> None:
         self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
-                                                        "follow": True, "script_props": True})
+                                                        "follow": True, "script_props": True, "retire_copies": True})
         self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
         self.assertTrue(self.api.state()["settings"]["auto_go"])
         for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):
@@ -413,6 +413,51 @@ class DemasterThroughThePage(unittest.TestCase):
         after = self.api.get("/api/history", {})[1]
         self.assertEqual((after["jobs"], after["events"][0]["kind"]), ([], "reverted"))
         self.assertTrue((self.api.changes._jobs_dir() / jobs[0]["job"] / "plan.json").is_file())
+
+    def test_modtraps_copy_is_retired_once_a_tool_has_made_the_plugin_anew(self) -> None:
+        """WHY§80: ModTrap's demastered copy has the higher priority and would hide the plugin a tool makes anew.
+        It goes only when the new original stands without the mod; it is kept in the job's folder, not deleted."""
+        from modtrap import plugin
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        job = self.api.state()["demaster"]["jobs"][0]
+        mine = self.root / "mods" / "ModTrap - Bramble" / "Generated.esp"
+        original = self.root / "mods" / "Tool Output" / "Generated.esp"
+        self.assertTrue(mine.is_file() and original.is_file())
+        self.assertEqual((job["remade"], job["retired"]), ([], []))
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/retire", {"job": job["job"]})          # nothing was made anew
+        # A tool run while the mod was still named: the new original needs the mod. ModTrap's copy stays.
+        original.write_bytes(original.read_bytes() + b" made again, still with the mod")
+        job = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual([(x["plugin"], x["ok"]) for x in job["remade"]], [("Generated.esp", False)])
+        self.assertIn("still names Bramble.esp as a master", job["remade"][0]["why"])
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/retire", {"job": job["job"]})
+        self.assertTrue(mine.is_file())
+        # The tool's run without the mod: the new original names the game's plugin only.
+        original.write_bytes(plugin.build(("Skyrim.esm",)))
+        job = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual([(x["plugin"], x["ok"], x["original"]) for x in job["remade"]], [("Generated.esp", True, "Tool Output")])
+        self.mo2_running = True
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/retire", {"job": job["job"]})          # MO2 is open
+        self.mo2_running = False
+        got = self.api.post("/api/demaster/retire", {"job": job["job"]})[1]
+        self.ready()
+        self.assertEqual(got, {"retired": ["Generated.esp"]})
+        self.assertFalse(mine.exists())
+        self.assertTrue((self.api.changes._jobs_dir() / job["job"] / "retired" / "Generated.esp").is_file())   # kept
+        m = model.build(instance.load(self.root))
+        self.assertEqual((m.row("Generated.esp").source, m.issues), ("Tool Output", []))      # the new one counts, in its place
+        job = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual((job["retired"], job["remade"], job["stale"]), (["Generated.esp"], [], []))
+        self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "copy retired")
+        # After a tool's run that ModTrap started this happens by itself, unless the owner's setting says no.
+        self.api.changes.retire_remade()                                          # nothing left to retire: no harm
 
     def test_revert_after_mo2_rewrote_the_lists_goes_line_by_line(self) -> None:
         self.dry_run()

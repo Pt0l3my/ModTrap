@@ -16,7 +16,9 @@ from pathlib import Path
 
 import json
 
-from . import addjob, demaster, dryrun, history, logbook, paths, probejob, safe
+import shutil
+
+from . import addjob, demaster, dryrun, history, logbook, paths, plugin, probejob, safe
 from . import process
 from .instance import fold
 from .server import Bad
@@ -24,7 +26,7 @@ from .server import Bad
 log = logbook.get("add")
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
-         "/api/demaster/drop", "/api/jobs/clear",
+         "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
 
 
@@ -381,12 +383,125 @@ class Changes:
                 reverted = bool(safe.Safe(d / "safe").reverted)
             except safe.Refused:
                 reverted = False
+            retired = [n for n in done.get("retired", []) if isinstance(n, str)]
+            # ModTrap's copies that hide a plugin made anew (WHY§56), and for each whether the copy can go: the new
+            # original must stand without the mod (WHY§80).
+            remade = [] if reverted else self._remade(d, [n for n in done.get("plugins", []) if n not in retired],
+                                                    data.get("trapped", []))
             out.append({"job": d.name, "when": data.get("when", ""), "mods": data.get("mods", []),
                         "mod_name": done.get("mod", ""), "plugins": done.get("plugins", []),
                         "disabled": done.get("disabled", []), "deactivated": done.get("deactivated", []),
-                        "state": "reverted" if reverted else "installed",
-                        "stale": [] if reverted else self._stale(d, done.get("plugins", []))})
+                        "state": "reverted" if reverted else "installed", "retired": retired,
+                        "stale": [x["plugin"] for x in remade], "remade": remade})
         return out
+
+    def _remade(self, job_dir: Path, plugins: list[str], trapped: list[str]) -> list[dict]:
+        """The demastered plugins whose original a tool has made anew, each with whether ModTrap's copy of it can be
+        retired: the original as it is now names no ticked plugin as a master, and every master it names is in the
+        load order and active. {"plugin", "ok", "why", "original"}."""
+        names = self._stale(job_dir, plugins)
+        if not names:
+            return []
+        try:
+            where = {fold(Path(i["path"]).name): Path(i["path"]) for i in safe.Safe(job_dir / "safe").items}
+        except safe.Refused:
+            where = {}
+        m = self.api.model
+        tf = {fold(t) for t in trapped}
+        out = []
+        for name in names:
+            orig = where.get(fold(name))
+            ok, why = False, "its original could not be found"
+            if orig is not None:
+                masters = None
+                try:
+                    masters = plugin.read(orig).masters
+                except (plugin.Unreadable, OSError) as e:
+                    why = "the new original cannot be read: %s" % logbook.why(e)
+                if masters is not None:
+                    still = [x for x in masters if fold(x) in tf]
+                    absent = [x for x in masters if m is not None and (m.row(x) is None or not m.row(x).active)]
+                    if still:
+                        why = "the new original still names %s as a master: it was made while the mod was enabled" % ", ".join(still)
+                    elif absent:
+                        why = "the new original names a master that is missing or not active: %s" % ", ".join(absent[:4])
+                    else:
+                        ok, why = True, "the new original stands without the mod"
+            out.append({"plugin": name, "ok": ok, "why": why, "original": orig.parent.name if orig is not None else ""})
+        return out
+
+    def demaster_retire(self, body: dict, quiet: bool = False) -> dict:
+        """Takes ModTrap's own demastered copy of a plugin out of ModTrap's mod once a tool has made the plugin anew
+        without the mod (WHY§80): the copy has the higher priority and would hide the new one. The copy is moved
+        into the job's folder, not deleted; nothing else is touched, and the plugin keeps its place in the load
+        order under its new provider."""
+        api = self.api
+        name = body.get("job")
+        wanted = body.get("plugins")
+        if not isinstance(name, str) or not re.fullmatch(r"demaster-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
+            raise Bad("that is not one of this session's demasters")
+        api.wait_mo2_gone()
+        gone = []
+        with self._lock:
+            api._need()
+            if api._busy() or self.busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.closed() is not True:
+                raise Bad("MO2 must be closed while ModTrap takes its copy out of its mod. Close MO2, then go on.")
+            job = next((j for j in self.demaster_jobs() if j["job"] == name), None)
+            if job is None or job["state"] != "installed":
+                raise Bad("that demaster is not in place")
+            can = [x for x in job["remade"] if x["ok"] and (not isinstance(wanted, list) or x["plugin"] in wanted)]
+            if not can:
+                if quiet:
+                    return {"retired": []}
+                raise Bad("no copy of ModTrap's can be retired there: " + ("; ".join(
+                    "%s: %s" % (x["plugin"], x["why"]) for x in job["remade"]) or "no original has been made anew"))
+            work = self._jobs_dir() / name
+            mod_dir = api.model.instance.mods_dir / job["mod_name"]
+            hist = history.History(api.store.dir(api.session.id))
+            for x in can:
+                src, dst = mod_dir / x["plugin"], work / "retired" / x["plugin"]
+                try:
+                    if not src.is_file():
+                        continue
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(src, dst)
+                    if safe.sha256(dst) != safe.sha256(src):
+                        raise OSError("the copy kept in the job's folder is not whole")
+                    src.unlink()
+                except OSError as e:
+                    raise Bad("%s could not be retired: %s. What was retired before it stays so." % (x["plugin"], logbook.why(e))) from None
+                gone.append(x["plugin"])
+                hist.add("copy retired", plugin=x["plugin"], mod=job["mod_name"], now_in=x["original"],
+                         why="a tool made the plugin anew, without the mod")
+                log.info("ModTrap's copy of %s is retired from “%s”: the plugin a tool made anew in “%s” now counts",
+                         x["plugin"], job["mod_name"], x["original"])
+            if gone:
+                try:
+                    with open(work / "installed.json", "rb") as f:
+                        done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
+                    done["retired"] = sorted(set(done.get("retired", [])) | set(gone))
+                    paths.write_atomic(work / "installed.json", (json.dumps(done, indent=1) + "\n").encode("utf-8"))
+                except (OSError, ValueError) as e:
+                    log.warn("the retiring could not be written down: %s", logbook.why(e))
+        if gone:
+            api.open(api.folder, api.profile or None, session=api.session)
+        return {"retired": gone}
+
+    def retire_remade(self) -> None:
+        """After a tool's run that ModTrap started: every copy of ModTrap's that the run made needless is retired,
+        if the owner's setting says so. Never raises: a tool's run must end cleanly whatever comes of this."""
+        try:
+            if self.api.settings().get("retire_copies") is False:
+                return
+            for job in self.demaster_jobs():
+                if job["state"] == "installed" and any(x["ok"] for x in job["remade"]):
+                    self.demaster_retire({"job": job["job"]}, quiet=True)
+        except Bad as e:
+            log.warn("ModTrap's copy was not retired by itself: %s", e)
+        except Exception as e:
+            log.warn("ModTrap's copy was not retired by itself: %s", logbook.why(e))
 
     def _stale(self, job_dir: Path, plugins: list[str]) -> list[str]:
         """The demastered plugins whose original has changed since. ModTrap's copy lies in ModTrap's own mod, above
@@ -507,6 +622,8 @@ class Changes:
             return self.demaster_revert(body)
         if path == "/api/demaster/drop":
             return self.demaster_drop(body)
+        if path == "/api/demaster/retire":
+            return self.demaster_retire(body)
         if path == "/api/jobs/clear":
             return self.jobs_clear(body)
         if path == "/api/add/plan":

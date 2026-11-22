@@ -297,6 +297,12 @@ order around it has changed since.
   contains (by folder and file name only) and, where a kind matches what one of the instance's tools consumes, adds
   a "may need a re-run" step that says why. These are hints, worded as such.
 
+**ModTrap's copy of a tool's plugin (WHY§80).** A plugin a tool made that named the mod is demastered like any
+other: a copy in ModTrap's mod, above the original. When the tool makes the plugin anew without the mod, ModTrap
+retires its copy: moved into the job's folder, never deleted, and only if the new original names no ticked plugin
+and all its masters are active. By itself after a tool's run that ModTrap started (a setting), or by a button on
+the Selection tab. Every executable of MO2's list can be started from the Tools tab.
+
 **What the tools made (WHY§74).** The Tools tab lists every tool-made plugin of the load order: the tool, how
 ModTrap knows, the patchers behind it where the tool's own settings file says so, and its records by kind. The same
 facts stand in a tool's step, with the mod's stakes among those kinds. A plugin made with the mod's plugin left out

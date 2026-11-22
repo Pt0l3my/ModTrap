@@ -102,6 +102,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 77 | 2026-11-22 | Another modlist's MO2, settings, tabs in sections; and the cell stakes were three unused bytes: every stake a tool holds is now checked against the whole load order | DECIDED | #mo2 #page #tools #steps #process |
 | 78 | 2026-11-22 | The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run | FACT | #tools #steps #process |
 | 79 | 2026-11-22 | Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself | FACT | #tools #xedit #process |
+| 80 | 2026-11-22 | The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab | DECIDED | #tools #process #page #safety |
 
 ## Entries
 
@@ -1856,3 +1857,29 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   (models, textures, behaviour files), nor for what a patcher works out anew.
 - KNOWN: the copy hides the tool's next output of that plugin until it is taken out of ModTrap's mod; ModTrap
   warns of it and does not yet retire its copy by itself.
+
+### 80. The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab
+
+`2026-11-22` · DECIDED · `#tools #process #page #safety` · refs: MT9, MT14, MT15, MT17, DESIGN§11, DESIGN§13, DESIGN§19, WHY§56, WHY§77, WHY§79
+
+- The owner, on version 0.3.12: "no dyndolod asked this time, looks promising." And on ModTrap's copy hiding a
+  plugin a tool makes anew: "Build that next. Could the user run tools as well from ModTrap? basically start up
+  MO2 interface and run the tools from its environment. Can that be built?"
+- FACT (the session file): the probe passed with the changed scripts; two mods demastered with seven plugins,
+  one of them through script properties; the generator cleared, each of six cells with its reason, the last one
+  "the plugin next in line says the same there as the mod". XE01§22 and WHY§77 hold on a real list.
+- FACT: a demastered copy of a tool's plugin lies in ModTrap's mod, above the original. After the tool's next
+  run the original is new and whole, and ModTrap's copy hides it. ModTrap said so (WHY§56) and left the rest to
+  the owner.
+- DECIDED: ModTrap retires its copy. Only when the original, as it is now, names no ticked plugin as a master
+  and all its masters are active: a tool run while the mod was still enabled makes an original that still
+  needs it, and then the copy must stay. The copy is moved into the job's folder (MT9: nothing of the owner's is
+  deleted, and this is ModTrap's own file), the history says so (MT15), MO2 must be closed, and the plugin keeps
+  its place in the load order under the mod that now provides it.
+- DECIDED: after a tool's run that ModTrap started, this happens by itself (a setting, on). Otherwise the
+  Selection tab says which copies can go and has the button; a copy that must stay says why.
+- FACT (the owner's second question): starting a tool through MO2, with the modlist's files in place, was built
+  (DESIGN§16.8) but only offered inside a step. DECIDED: the Tools tab has a start button for every executable of
+  MO2's list, and one to open MO2 itself.
+- Checked: tests on the stand-in (refused when nothing was made anew, when the new original still needs the mod,
+  when MO2 is open; done otherwise). Not checked: on the owner's PC, with a real tool's run.

@@ -212,11 +212,15 @@ function renderTools(s) {
   const rows = s.tools.map((t) => el("tr", {},
     el("td", {}, t.title, t.xedit ? el("span", { class: "tag good", text: "ModTrap starts this one for a dry run" }) : null),
     el("td", { class: "mono", text: t.file }),
-    el("td", { text: t.output_mod || "" })));
+    el("td", { text: t.output_mod || "" }),
+    el("td", {}, toolButton(t.title))));
+  const openMo2 = el("button", { type: "button", text: s.mo2 && s.mo2.state === "open" ? "MO2 is open" : "Open this modlist's MO2", disabled: !s.mo2 || s.mo2.state !== "closed" || !!s.mo2.other });
+  openMo2.addEventListener("click", toggleMo2);
   box.replaceChildren(el("div", { class: "card" },
     el("h2", { text: plural(s.tools.length, "tool") + " set up in this MO2" }),
     el("p", { class: "dim", text: "These are the executables in MO2's own list. ModTrap only ever starts xEdit. “Output goes to” is the mod MO2 sends a tool's new files to; a plugin found there was made by that tool." }),
-    el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "Name in MO2" }), el("th", { text: "Program" }), el("th", { text: "Output goes to" }))),
+    el("p", {}, el("span", { class: "dim", text: "Any of them can be started from here, the way MO2's own Run button does, with the modlist's files in place; it is yours to work, and ModTrap says afterwards which of its output files changed. MO2 itself:  " }), openMo2),
+    el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "Name in MO2" }), el("th", { text: "Program" }), el("th", { text: "Output goes to" }), el("th", {}))),
       el("tbody", {}, ...rows))));
 }
 
@@ -226,6 +230,7 @@ const SETTING_TEXT = [
   ["follow", "Show the Process tab when a demaster starts", "“Demaster Selected” takes you to the Process tab, where each stage and task is shown as it happens."],
   ["close_mo2", "Close this modlist's MO2 without asking", "Some steps change MO2's lists and need MO2 closed (putting a demaster in place, Revert, adding a mod). On: ModTrap asks MO2 to close, as a click on its X does, without asking you first. It never ends MO2 by force. The one go closes MO2 for its last step either way: its plan says so."],
   ["open_mo2_after", "Open MO2 again when a demaster is in place", "Starts this modlist's MO2 once the demaster is in place, so that you can look at the result."],
+  ["retire_copies", "After a tool's run, retire ModTrap's copy of a plugin the tool made anew", "ModTrap keeps demastered copies in a mod of its own, above the originals. When a tool you start from ModTrap makes such a plugin anew without the mod, ModTrap's copy would hide the new one. On: ModTrap moves its copy into the job's folder by itself (kept, not deleted). Off: it tells you on the Selection tab and waits for the button."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
 function renderSettings() {
@@ -337,7 +342,7 @@ function renderState(s) {
   sel.hidden = s.profiles.length < 2;
   if (document.activeElement !== sel)
     sel.replaceChildren(...s.profiles.map((p) => el("option", { value: p, text: p, selected: p === s.profile })));
-  const toolsKey = JSON.stringify(s.tools);
+  const toolsKey = JSON.stringify(s.tools) + "|" + (s.tool ? s.tool.state + s.tool.title : "") + "|" + (s.mo2 ? s.mo2.state + s.mo2.other : "");
   if (toolsKey !== state.toolsKey) { state.toolsKey = toolsKey; renderTools(s); }
   renderHealth(s);
   renderSteps();
@@ -649,6 +654,31 @@ async function demasterCall(path, body, done, noAsk) {
   renderDemaster(true);
 }
 
+// A plugin ModTrap demastered that a tool has since made anew: ModTrap's copy, in its own mod, hides the new one
+// (WHY§56). Where the new one stands without the mod, the copy can be retired (WHY§80).
+function remadeNote(j) {
+  const list = j.remade || [];
+  if (!list.length) return [];
+  const can = list.filter((x) => x.ok), cannot = list.filter((x) => !x.ok);
+  const out = [];
+  if (can.length) {
+    const go = el("button", { type: "button", class: "primary", text: "Retire ModTrap's cop" + (can.length === 1 ? "y" : "ies") });
+    go.title = "Moves ModTrap's copy out of its mod into the job's folder (it is kept, not deleted). The plugin keeps its place in the load order.";
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try { const r = await api("/api/demaster/retire", { job: j.job }); toast(r.retired.length ? "Retired: " + r.retired.join(", ") + ". The plugin a tool made anew now counts." : "Nothing was retired."); }
+      catch (e) { toast(e.message); }
+      state.dmText = ""; state.historyText = ""; state.gen = (state.gen || 0) + 1;
+      await tick();
+    });
+    out.push(el("p", { class: "message" }, "Made anew by a tool, without the mod: " + can.map((x) => x.plugin + " (in “" + x.original + "”)").join(", ") +
+      ". ModTrap’s older copy in “" + j.mod_name + "” still wins over it and is no longer needed.  ", go));
+  }
+  if (cannot.length) out.push(el("p", { class: "message bad", text: "Made again since, but ModTrap’s copy must stay for now: " +
+    cannot.map((x) => x.plugin + " (" + x.why + ")").join("; ") + ". Run the tool again with the mod disabled; ModTrap’s copy in “" + j.mod_name + "” keeps the load order whole until then." }));
+  return out;
+}
+
 function renderDemaster(force) {
   const d = state.demaster;
   const text = JSON.stringify(d || 0) + JSON.stringify(state.dmPlan || 0) + (state.dmError || "");
@@ -725,7 +755,7 @@ function renderDemaster(force) {
     cards.push(el("div", { class: "card" }, el("p", {}, el("span", { class: "tag " + (j.state === "installed" ? "good" : ""), text: j.state === "installed" ? "demastered by ModTrap" : "reverted" }),
       " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + "  ", j.state === "installed" && state.changes ? undo : null),
       el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
-      ...((j.stale || []).length ? [el("p", { class: "message bad", text: "Made again since: " + j.stale.join(", ") + ". The original changed after ModTrap demastered it (a tool has probably made it again), and ModTrap’s older copy in “" + j.mod_name + "” still wins over it. Delete ModTrap’s copy of " + (j.stale.length > 1 ? "these plugins" : "this plugin") + " from that mod’s folder, then press Rescan and look at Health." })] : [])));
+      ...remadeNote(j)));
   }
   if (earlier) {
     const go = el("button", { type: "button", class: "linkish", text: "the History tab" });
