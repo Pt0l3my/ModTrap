@@ -30,6 +30,7 @@ LINE_CAP = 1024 * 1024                 # a line longer than this is cut where it
 JSON_CAP = 64 * 1024 * 1024            # a .json larger than this is packed as plain text
 FILE_CAP = 512 * 1024 * 1024           # a single file larger than this is left out
 JOBS = 40                              # the newest jobs of the session
+TOOL_LOGS = 6                          # the newest logs of each tool that are packed
 TEXT_SUFFIXES = (".json", ".jsonl", ".txt", ".tsv", ".log", ".ini")
 SKIP_DIRS = {"files", "out", "staged", "xedit-backups", "incoming"}      # mods' content: never packed
 LEFT_OUT = "<a text that could not be cleaned was left out>"
@@ -211,6 +212,19 @@ def collect(session_dir: Path | None, profile_dir: Path | None, home_dir: Path, 
             notes.append("%d older job(s) of this session were left out; the newest %d are here" % (len(jobs) - JOBS, JOBS))
         for job in jobs[-JOBS:]:
             _job_files(job, "jobs/" + job.name, items, notes)
+        # The tools' own logs of the runs ModTrap started (WHY§88): the newest few of each tool.
+        try:
+            for d in sorted(p for p in (session_dir / "tool-logs").iterdir() if p.is_dir()):
+                logs = sorted((f for f in d.iterdir() if f.is_file() and f.name.lower().endswith(TEXT_SUFFIXES)),
+                              key=lambda f: f.stat().st_mtime)
+                if len(logs) > TOOL_LOGS:
+                    notes.append("%d older log(s) of %s were left out; the newest %d are here" % (len(logs) - TOOL_LOGS, d.name, TOOL_LOGS))
+                for f in logs[-TOOL_LOGS:]:
+                    if f.stat().st_size > FILE_CAP:
+                        continue
+                    items.append(("tool-logs/%s/%s" % (d.name, f.name), f))
+        except OSError:
+            pass
         try:
             for d in sorted((session_dir / "incoming").iterdir()):
                 if (d / "staged.json").is_file():

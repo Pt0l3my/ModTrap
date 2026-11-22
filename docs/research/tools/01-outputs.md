@@ -262,3 +262,62 @@ Read in the tools' public sources (both GPL-3.0: facts only, nothing copied), ea
   building inside MO2 crashed the compiler. Not established: whether the same shows from MO2's own Run button on
   that PC, and whether the owner's version has the setting named above.
 
+## 17. A second failure of the patcher framework inside MO2, and what MO2 hands a tool (2026-11-22)
+
+- **FACT (the owner's PC, a picture of the framework's window).** On the next start through MO2 every patcher
+  again showed "Blocking Error", with another error: "Error compiling", a Windows error 5, "Access is denied",
+  raised where the framework starts the build program and makes the pipes to read its output. So the failure
+  is not always the compiler's crash of §16; both come while the patchers are built, before a load order is read.
+- **FACT (MO2, `src/spawn.cpp:421-435` and `:463-466` at commit `4ba22f0`).** MO2 starts a program with no
+  handles passed on, unless MO2 itself redirects the program's output. What a `run` command's own start gave MO2
+  (ModTrap gives it none to read or write) therefore does not reach the tool: in that respect a tool started
+  through ModTrap gets what MO2's Run button gives it.
+- **Not established.** Why building fails inside MO2 on this PC, and whether it does from MO2's own Run button.
+
+## 18. The patcher framework's own log, and what four of them showed (2026-11-22)
+
+- **FACT (the owner's PC).** Synthesis writes a log for each time it is opened into a folder `logs` beside its
+  program, one file a session, named by date and time. A line has a time, a level in brackets (INF, WRN, ERR)
+  and the text.
+- **FACT (the logs).** Lines ModTrap goes by: "Opening Synthesis v…" (its version); "Swapped profile … to
+  (Mutagen ==> Manual: … )(Synthesis ==> Manual: … )" (the library versions the profile is set to, written again
+  when they change); "Swapping to net…" (the .NET version a patcher's project is set to before it is built);
+  "error NU1202: Package … is not compatible with net…" (a library that does not support that .NET version);
+  "csc.exe" exited with code -1073741819; "Win32Exception (5): Access is denied"; "Encountered blocking overall
+  error".
+- **FACT (Synthesis, `Synthesis.Bethesda.Execution/Patchers/Git/Services/ModifyProject/SwapToProperNetVersion.cs:83-102`
+  at commit `14cf3fa`).** The .NET version a patcher is built for is looked up from the library version aimed at,
+  in a table the program carries: the entry at or below that version. A library version newer than the
+  program's table gets the last .NET version the program knows.
+- **FACT (the owner's four logs of one day, version 0.35.5 of the program).**
+  1. Started through MO2, profile set to library versions 0.53.1 and 0.35.5: patchers set to net8.0; the compiler
+     crashed 42 times; nothing else.
+  2. Started through MO2, the same versions at first: the compiler's crash and "Access is denied". Three minutes
+     in, the profile's versions were changed to 0.54.4 and 0.36.6; from then on NU1202 for every patcher: those
+     libraries support net9.0 and net10.0, and the patchers were still set to net8.0.
+  3. Started through MO2 by MO2's own Run button (the owner's word), the raised versions: NU1202, and a few of the
+     crash and the refusal.
+  4. Started from its own folder, outside MO2 (no arguments in the log), the raised versions: NU1202 only.
+- **LIKELY.** With the profile's versions back at the first pair, the patchers build outside MO2: outside MO2
+  neither the crash nor the refusal showed. Not established.
+
+## 19. Where the patcher framework keeps its library versions, and what its log's first lines state (2026-11-22)
+
+Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`.
+
+- **FACT (`Synthesis.Bethesda.Execution/Settings/V1/SynthesisProfile.cs:9-19`).** A profile in
+  `PipelineSettings.json` has, beside its name (`Nickname`): `MutagenVersioning` and `SynthesisVersioning`, each
+  one of Latest, Match, Manual; and `MutagenManualVersion` and `SynthesisManualVersion`, the versions used when
+  that is Manual.
+- **FACT (`Synthesis.Bethesda.Execution/Settings/NugetVersioningEnum.cs:3-8`, `Constants.cs:14-20`).** The three
+  ways are numbered Latest 1, Match 2, Manual 3, and the file is written with such values as words.
+- **FACT (`Synthesis.Bethesda.Execution/Settings/GithubPatcherSettings.cs:31-34`).** A patcher can override the
+  profile: `MutagenVersionType` and `SynthesisVersionType` (Profile, Latest, Match, Manual), with
+  `ManualMutagenVersion` and `ManualSynthesisVersion`.
+- **FACT (`Mutagen.Bethesda.Synthesis/Versioning/ProvideCurrentVersions.cs:48-49` and `:97-99`,
+  `Synthesis.Bethesda.GUI/Services/Startup/Startup.cs:69`).** At its start the program writes "Mutagen version: …"
+  and "Synthesis version: …" into its log: the versions of the two libraries in the program's own files, the ones
+  it was built with.
+- **FACT (the owner's logs, TL01§18).** Program 0.35.5 states 0.53.1 and 0.35.5 there, the pair its profile was
+  set to before the change, and with that pair no build error of the "does not fit" kind showed.
+

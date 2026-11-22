@@ -109,6 +109,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 84 | 2026-11-22 | A tool's run ends when the tool has gone: MO2's leftover message is closed; a tool with switches of its own runs and closes by itself; the patcher framework's compiler crash is its own, under MO2 | DECIDED | #tools #mo2 #process |
 | 85 | 2026-11-22 | The log panes keep to the latest line until the owner scrolls away, and take it up again at the bottom | DECIDED | #page |
 | 86 | 2026-11-22 | The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after | DECIDED | #steps #tools |
+| 87 | 2026-11-22 | 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing | FACT | #revert #page #tools |
+| 88 | 2026-11-22 | A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's | DECIDED | #tools #page #session |
+| 89 | 2026-11-22 | Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof | DECIDED | #tools #safety #settings |
 
 ## Entries
 
@@ -1969,6 +1972,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   byte for byte as before the demaster, by Revert and by the finishing press (with the plugins unlisted, and added
   at the end); in a browser, both.
 - Not checked: on the owner's PC.
+- **Later (2026-11-22, the session file of 0.3.16).** Checked on the owner's PC: the finishing press put ten
+  plugins back and the modlist read no problem where it had read 12; a new demaster and its Revert, with a tool
+  run through MO2 in between, ended at 3,751 plugins and no problem, ten plugins back at their places (WHY§87).
 
 ### 84. A tool's run ends when the tool has gone: MO2's leftover message is closed; a tool with switches of its own runs and closes by itself; the patcher framework's compiler crash is its own, under MO2
 
@@ -2018,6 +2024,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   Both panes: the log, and the dry run's lines.
 - Checked in a browser: at the start, with lines coming, scrolled away, another tab and back, scrolled down
   again, and lines that came while the tab was not shown.
+- **Later (2026-11-22).** The owner, on 0.3.16: the log "isn't showing automatically the latest entry at the
+  bottom of terminal log after a ModTrap launch". Not reproduced in a browser here; made independent of the
+  order in which things are shown (WHY§87).
 
 ### 86. The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after
 
@@ -2042,3 +2051,98 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   is kept; it states what was looked at and found.
 - Checked: tests (the two steps before and during the dry run; the tool's step from the dry run on, with the
   plugin demastered in the plan or not); in a browser, before the dry run and after the demaster.
+
+### 87. 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing
+
+`2026-11-22` · FACT · `#revert #page #tools` · refs: WHY§83, WHY§84, WHY§85, TL01§16, TL01§17, DESIGN§14, DESIGN§18
+
+- FACT (the session file of 0.3.16). The Revert left unfinished by 0.3.15 was finished (WHY§83). A new one go ran
+  clean to "in place"; the row of tools then started the patcher framework and not the behaviour engine; the
+  framework wrote nothing; MO2's message after it was closed by ModTrap and the run ended; Revert ended clean.
+- FACT. The behaviour engine was passed over because its step was still ticked "I have done this" from the
+  demaster before, which had been reverted. A tick was kept by the ticked mods and the step alone.
+- DECIDED. A tick on a tool's step or on the play test belongs to the demaster in place: when that demaster is
+  reverted, or another is put in place, those ticks go. The page keeps the job the ticks were made for.
+- The owner: the behaviour engine, started by ModTrap, did its work and closed by itself (WHY§84, on their PC).
+- The log pane (WHY§85's Later line). DECIDED: a pane takes its place again whenever it comes into view or
+  changes size, whatever made it so (its tab, the page shown after a start), and only a move up by the owner
+  stops the following; a log read afresh follows again. LIKELY cause, not established: the Log tab was put back
+  as the session's last tab before the page's body was in view, and no line came afterwards to move it.
+- The owner: "Synthesis opens default JoJ profile, not the custom one I made to be modified. it seems it's not
+  being seen by synthesis at all." FACT (TL01§14): the name shown there is a profile of the framework's own, kept
+  in its settings file; it names the game's Data folder and holds the groups of patchers. Which mods and load
+  order it reads is MO2's doing. FACT (the session file): ModTrap started it with MO2's profile of the session,
+  and it was that profile's plugin lists MO2 wrote during the run (WHY§83).
+- FACT (the owner's picture). This time the patchers failed earlier than before: "Access is denied" when the
+  framework started the build program, where the time before the compiler had crashed (TL01§16). Both lie before
+  any load order is read. FACT (TL01§17): MO2 hands a tool the same whether started by its Run button or by its
+  `run` command, as far as handles go. Not established: whether the framework builds its patchers from MO2's own
+  Run button on this PC; asked of the owner twice.
+- DECIDED. What is known about a tool that closes without output is data and is said as a hint on the tool's card
+  and in the log, for the framework: its own answer to a failed build inside MO2 (build outside MO2 once). The
+  card also names the MO2 profile the tool was started with.
+- Checked: tests (the hint and the profile); in a browser, the ticks gone after Revert, the panes with a long
+  restored log, opened early, late, and put back as the last tab.
+
+### 88. A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's
+
+`2026-11-22` · DECIDED · `#tools #page #session` · refs: TL01§16, TL01§17, TL01§18, WHY§84, WHY§87, DESIGN§16.8
+
+- The owner, with four of the patcher framework's own logs: "does ModTrap check these? Does ModTrap check any tool
+  logs? Does ModTrap collect any tool logs for sessions?" and: the framework shows its blocking errors when
+  started from MO2 itself, and when started from its own folder.
+- FACT. It did none of the three. A tool's run was judged by its output files alone; a session file held ModTrap's
+  log and xEdit's logs of ModTrap's own runs.
+- FACT (the four logs, TL01§18). Two different failures. Inside MO2, with the library versions the profile had
+  at first: the compiler crashing, and Windows refusing to start the build program. Then, in the framework's
+  second session of the day, the profile's library versions were raised to the newest; from then on every
+  patcher failed in every kind of start, MO2 or not, because this framework builds for a .NET version those
+  libraries no longer support. Started outside MO2, that was the only failure left: no crash, no refusal.
+- So: started by MO2's own Run button it fails as it does from ModTrap (WHY§87's open point, settled), and the
+  failure outside MO2 is the versions, not the building. LIKELY: with the first versions back, the patchers build
+  outside MO2. Not established: that a start inside MO2 then finds them built and does not build again.
+- DECIDED. Where a tool keeps a log of its own, ModTrap reads the one written during the run it started, after
+  the tool has closed. Which tools, where, and which lines mean what is data (`tools.json`, "log"): a pattern
+  and the sentence said when it shows, counted or listed, nothing inferred (`toollog`). What it finds is on the
+  tool's card and in ModTrap's log. A copy of the tool's log goes into the session's folder and from there into
+  a saved session file (the newest six of each tool), cleaned there like every text.
+- So far only the patcher framework has signs: its version, the library versions of its profile and a change of
+  them, the .NET version it built for, a library that does not fit, the compiler's crash, a refused start, a
+  blocking error. Other tools' logs are not read: their lines have not been looked up, and none is guessed.
+- Checked: the reader on the owner's four logs (each read as told above); a test with an invented log (the one
+  of this run read and kept, an older one left alone, the session file holding it); the card in a browser.
+- Not checked: on the owner's PC.
+
+### 89. Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof
+
+`2026-11-22` · DECIDED · `#tools #safety #settings` · refs: MT27, TL01§18, TL01§19, WHY§88, DESIGN§19, MT14, MT15
+
+- The owner: "can you make ModTrap to check the patches what versions are required and automatically set them to
+  that version?"
+- What "required" can mean, as facts: a patcher's own project names the library versions it was written
+  against (old ones, for most); the framework's profile overrides them all with one pair, by the modlist's
+  choice; and the program can only build for versions it knows a .NET version for (TL01§18). The last is the
+  one that failed, and the only one with a certain answer: the pair of versions the program itself was built
+  with, which every log of it states at its top (TL01§19).
+- REJECTED: comparing version numbers ("newer than the program's own means unfit"). A later patch version of a
+  library may well fit; ModTrap would be setting things right that were not wrong.
+- DECIDED. Three facts must agree before anything is set: the program's newest log names a library version as
+  not fitting (its build error for that); the profile in the settings file is still set to exactly that
+  version, or to "Latest"; and the same log states the program's own pair. Then, before ModTrap starts the
+  program, the profile is set to that pair, chosen by hand, in the settings file: four fields of that profile,
+  nothing else. A profile set to follow each patcher's own versions is left alone, and so are a patcher's own
+  overrides.
+- Safety (MT14, MT15): the program must not be running; a copy of the settings file as it was goes into the
+  session's folder first and is compared with what was read; the file is written whole and swapped in, with its
+  byte order mark and line ends as before; the change is in the History with what was and what is. A setting,
+  on by default at the owner's word, turns the setting-right off; ModTrap then only says what it found.
+- Not part of a demaster, so Revert does not undo it: it puts right the tool's own setup. The kept copy is the
+  way back.
+- What this does not solve: building inside MO2 (the compiler's crash, TL01§16), which showed with the fitting
+  versions too.
+- Checked: the reading on the owner's four logs (own pair and unfit pair as told in TL01§18); tests (set once
+  and not again; only the four fields change; left alone when the log's errors name other versions, when there
+  is no such error, when the log does not state the program's pair, when the setting is off; "Latest"; a number
+  kept a number).
+- Not checked: on the owner's PC; against a settings file of the owner's (none was at hand: the field names are
+  from the source).

@@ -342,6 +342,9 @@ A typical job's steps:
 9. *ModTrap:* verify the instance: the health check (§3), and the load order otherwise as it was.
 10. *You:* open MO2 and confirm it shows no missing-master warning; then play, and report anything odd.
 
+**Ticks.** "I have done this" on a tool's step or on the play test holds for the demaster in place: a Revert, or a
+new demaster, takes those ticks away (WHY§87).
+
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
 plugins concerned. Once it is done the steps are stated from what was read. A verdict on a tool does not change
@@ -506,6 +509,10 @@ nothing but ModTrap's own copy of the mod is removed (MT9, WHY§42).
 Later, if they prove worth it: comparing packed files; reading the owner's own installed copy of a sorting tool's
 rules for known incompatibilities (its licence is to be read first); proposing a patch from §16.5.
 
+**A tool's own log (WHY§88).** Where a tool keeps a log of its own and ModTrap knows its lines (data, `tools.json`),
+the log written during a run ModTrap started is read once the tool has closed: what shows in it is said on the
+tool's card and in ModTrap's log, and a copy is kept with the session and packed into a saved session file.
+
 ## 17. Versions, and one ModTrap at a time (MT22)
 
 1. **The version** is `0.3.n`, kept in `modtrap/version.json` with a mark of the contents of ModTrap's own files.
@@ -562,6 +569,8 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    after a tool's run, retire ModTrap's copy of a plugin the tool made anew (on, WHY§80); after the demaster, start
    the tools that are to run again one after another (off, WHY§81); let a tool that can do so run and close by
    itself, by switches of its own that ModTrap knows as data (on, MT25, WHY§84).
+   Before the patcher framework starts, library versions that its own last log proves unfit for the program are
+   set to the pair the program was built with, in its settings file, a copy kept first (on, MT27, WHY§89).
    What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
 2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
    tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,

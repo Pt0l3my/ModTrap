@@ -233,6 +233,7 @@ const SETTING_TEXT = [
   ["retire_copies", "After a tool's run, retire ModTrap's copy of a plugin the tool made anew", "ModTrap keeps demastered copies in a mod of its own, above the originals. When a tool you start from ModTrap makes such a plugin anew without the mod, ModTrap's copy would hide the new one. On: ModTrap moves its copy into the job's folder by itself (kept, not deleted). Off: it tells you on the Selection tab and waits for the button."],
   ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and ticks the tool's step off when the tool has written its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
   ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is ticked off once it has written its output. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
+  ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
 function renderSettings() {
@@ -391,6 +392,7 @@ function currentUi() {
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
+    ticksJob: state.ticksJob === undefined ? null : state.ticksJob,
     adding: [...(state.adding || [])], staged: [...(state.staged || [])],
   };
 }
@@ -419,6 +421,7 @@ function applyUi(ui) {
     $("p-problems").checked = !!ui.pProblems; $("p-deps").checked = !!ui.pDeps;
     state.collapsed = new Set(Array.isArray(ui.collapsed) ? ui.collapsed : []);
     state.stepsDone = ui.stepsDone && typeof ui.stepsDone === "object" ? ui.stepsDone : {};
+    state.ticksJob = typeof ui.ticksJob === "string" ? ui.ticksJob : undefined;
     state.stepsText = "";
     state.adding = (Array.isArray(ui.adding) ? ui.adding : []).filter((n) => { const m = findMod(n); return m && m.kind === "mod"; });
     state.staged = (Array.isArray(ui.staged) ? ui.staged : []).filter((x) => typeof x === "string").slice(0, 20);
@@ -978,7 +981,7 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
@@ -993,6 +996,9 @@ function historyLine(e) {
   if (e.kind === "verified") bits.push(e.ok === false ? "something to look at" : "as planned" + (e.what ? " (" + e.what + ")" : ""));
   if (Array.isArray(e.restored) && e.restored.length) bits.push("put back: " + e.restored.join(", "));
   if (Array.isArray(e.left) && e.left.length) bits.push("left in place: " + e.left.join(", "));
+  if (e.tool) bits.push("“" + e.tool + "”" + (e.file ? ", " + e.file : "") + (e.profile ? ", its profile “" + e.profile + "”" : ""));
+  if (e.was && e.now) bits.push("was " + e.was + " · now " + e.now);
+  if (e.kept) bits.push("a copy as it was: " + e.kept);
   if (Array.isArray(e.placed) && e.placed.length) bits.push("back at their places in the load order: " + e.placed.join(", "));
   if (Array.isArray(e.notes) && e.notes.length) bits.push("not done: " + e.notes.join("; "));
   return bits.join(" · ");
@@ -1670,6 +1676,21 @@ const STEP_STATE = {
   "waiting": ["waits for the steps above", ""], "waiting for the dry run": ["waits for the dry run", ""],
 };
 
+// "I have done this" on a tool's step or on the play test says: done after the demaster that is in place. A
+// Revert takes that away, and so does a new demaster: the ticks go with the demaster they were made for (WHY§87).
+function ticksOfThisDemaster() {
+  if (state.status !== "ready" || !state.demaster || !state.session) return;
+  const placed = (state.demaster.jobs || []).find((j) => j.state === "installed");
+  const now = placed ? placed.job : "";
+  if (state.ticksJob !== undefined && state.ticksJob !== now) {
+    const ticks = state.stepsDone || {};
+    let gone = 0;
+    for (const k of Object.keys(ticks)) if (/::(tool:|play$)/.test(k)) { delete ticks[k]; gone++; }
+    if (gone) { state.stepsText = ""; state.stepsKey = ""; state.processText = ""; }
+  }
+  if (state.ticksJob !== now) { state.ticksJob = now; saveUi(); }
+}
+
 function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
 
 // Starting one of the modlist's tools through MO2 (DESIGN§16.8): the button, and what came of it.
@@ -1698,10 +1719,16 @@ function toolCard() {
   return el("div", { class: "card" + (going ? " installer" : "") },
     el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? (t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
       t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
-    going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago. ModTrap is waiting, and changes nothing meanwhile." }) : null,
+    ...(t.before || []).map((x) => el("p", { class: "would-record", text: "Before the start: " + x + "." })),
+    going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago" + (t.profile ? ", through MO2 with its profile “" + t.profile + "”" : "") + ". ModTrap is waiting, and changes nothing meanwhile." }) : null,
     t.state === "done" ? el("p", { class: t.changed_count ? "would-record" : "would-needs", text: t.changed_count ?
       plural(t.changed_count, "file") + " of its output " + (t.changed_count === 1 ? "was" : "were") + " written" + (t.output_mod ? " (its output goes to “" + t.output_mod + "”)" : "") + ". ModTrap has read the modlist again." :
       "None of its output files changed. If you meant it to build its output, it may not have been run to the end." }) : null,
+    t.state === "done" && t.own_log ? el("div", {}, el("p", { text: "What its own log of this run says (" + t.own_log.file + (t.own_log.kept ? "; a copy is kept with this session" : "") + "):" }),
+      t.own_log.findings.length ? el("ul", {}, ...t.own_log.findings.map((f) => el("li", { class: f.level === "error" ? "would-needs" : "dim", text: f.text })))
+        : el("p", { class: "dim", text: "None of the signs ModTrap knows shows in it." })) : null,
+    t.state === "done" && !t.changed_count && t.hint && !(t.own_log && t.own_log.findings.some((f) => f.level === "error")) ? el("p", { class: "dim", text: t.hint }) : null,
+    t.state === "done" && t.profile ? el("p", { class: "dim", text: "It was started through MO2 with MO2's profile “" + t.profile + "”: that profile's mods and load order are what it was given." }) : null,
     t.changed_count ? el("details", {}, el("summary", { text: "The files" }), el("ul", {}, ...t.changed.map((c) => el("li", { class: "mono", text: c })))) : null,
     going ? el("div", { class: "actions" }, stop) : null);
 }
@@ -2484,16 +2511,23 @@ function showTab(name) {
 const PANES = { "log": { follow: true, top: 0 }, "job-log": { follow: true, top: 0 } };
 function paneFollow(id) {
   const p = $(id), s = PANES[id];
-  if (!p || !p.offsetParent) return;                       // not shown: set when its tab opens
+  if (!p || !p.offsetParent) return;                       // not shown: set when it comes into view
   p.scrollTop = s.follow ? p.scrollHeight : s.top;
+  s.top = p.scrollTop;
 }
 function paneWatch(id) {
   const p = $(id);
   p.addEventListener("scroll", () => {
     if (!p.offsetParent) return;
-    PANES[id].follow = p.scrollTop + p.clientHeight >= p.scrollHeight - 30;
-    PANES[id].top = p.scrollTop;
+    const s = PANES[id], atEnd = p.scrollTop + p.clientHeight >= p.scrollHeight - 30;
+    // Only the owner's own move away from the end stops the following: a move up. Lines that come, a pane that
+    // is emptied or shown again, and a window that changes size also move it, and mean nothing.
+    if (atEnd) s.follow = true; else if (p.scrollTop < s.top - 1) s.follow = false;
+    s.top = p.scrollTop;
   });
+  // A pane that comes into view (its tab opens, the page is shown after a start) or changes size takes its place
+  // again: the last line if it follows, else where it was left.
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => paneFollow(id)).observe(p);
 }
 
 async function pollLog() {
@@ -2554,6 +2588,7 @@ async function tick() {
   }
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
+  ticksOfThisDemaster();
   demasterChain();
   state.save = s.save || null;
   renderSave();
@@ -2566,6 +2601,7 @@ async function tick() {
     state.jobSeen = "";
     $("log").replaceChildren();
     $("job-log").replaceChildren();
+    for (const k in PANES) { PANES[k].follow = true; PANES[k].top = 0; }       // a log read afresh: its latest line
   }
   const key = s.status === "ready" ? (s.session ? s.session.id : "") + "|" + s.folder + "|" + s.profile + "|" + s.mods + "|" + s.plugins + "|" + s.issue_count + "|" + (state.gen || 0) : "";
   if (s.status === "ready" && (key !== state.loaded || was !== "ready")) {
