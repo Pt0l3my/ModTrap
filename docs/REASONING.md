@@ -125,6 +125,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 100 | 2026-11-22 | On the owner's list the scanner is whole in 20 s, then 3 s; the demaster of 0.3.29 went through clean; the Process tab's own Demaster button was not greyed while ModTrap scanned | FACT | #page #steps #process |
 | 101 | 2026-11-22 | An update check: sources read from MO2's records and a Wabbajack file; Nexus and GitHub asked as MO2 asks; the owner's key kept under Windows' protection; not yet run against the real services | DECIDED | #updates #network #page |
 | 102 | 2026-11-22 | The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything | DECIDED | #page |
+| 103 | 2026-11-22 | A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list | DECIDED | #updates #page |
 
 ## Entries
 
@@ -2573,3 +2574,32 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   which stay untouched in their own mods. The Mods tab groups mods by the modlist's separators; the list's last
   separator is called "Not Yet Installed", so a mod placed above everything shows under it. The label is the
   list's, not a state of the mod. Revert takes the mod out again.
+
+### 103. A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list
+
+`2026-11-22` · DECIDED · `#updates #page` · refs: MT38, MT37, WHY§101, TL01§27, MO01§12, DESIGN§20
+
+- The owner asked for both (MT38).
+- The link is not written into the mod's `meta.ini`, though MO2 has a field for it: that file is the mod's and
+  MO2's, and ModTrap changes no file of a mod it did not make (MT9). It is kept in ModTrap's folder by modlist
+  and mod, and read before the mod's own records: it is the owner's own word on the source.
+- What a dropped meta file is good for: a list installed by Wabbajack often keeps its downloads in a folder that
+  is not MO2's downloads folder, so MO2's own records of the archives are not where ModTrap looks. A download's
+  `<archive>.meta` names the mod's and the file's number (MO01§12); it is matched to the mods by the archive each
+  was installed from. A mod's `meta.ini` alone does not say which mod it is of, so it is taken with its folder,
+  whose name is the mod's. A given meta file fills in only where the mod's own records say nothing.
+- A dropped folder is looked through at its top and one folder down: that covers one mod's folder, a folder of
+  mods, and a folder of downloads, and never walks a whole drive.
+- METHOD. A browser gives a dropped file's bytes, not its path, and a Wabbajack file can be gigabytes. The page
+  reads the archive's directory at the file's end (also the large kind, for more than 65,535 entries or sizes
+  past 4 GB), finds the entry called `modlist` (TL01§27), and sends only that entry's bytes as they lie in the
+  file. ModTrap unpacks them as it reads, writes nothing but its summary, and deletes what arrived. Checked in a
+  browser with an invented file of 66,000 entries, and in tests with the bytes packed and unpacked.
+- The path field stays, for a file too awkward to drag.
+- While the Updates tab is shown, a drop anywhere on the page is for the update check; elsewhere a drop still
+  opens a modlist or adds a mod's archive as before.
+- The menu is the page's own, not the browser's: rows as buttons, closed by Escape, a click elsewhere, a scroll
+  or leaving the window; the arrow keys move in it.
+- Checked: tests (the kinds of link and what is refused; the link before every record and no file of the mod
+  changed; given meta files, and the mod's own record winning; the list's bytes, broken bytes; through the
+  requests); in a browser the menu on both tabs, the box, the button's file chooser and a real drop.

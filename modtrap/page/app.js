@@ -396,6 +396,206 @@ function renderToolsScan() {
   box.replaceChildren(el("div", { class: "card" }, ...kids));
 }
 
+// A menu at the pointer, in the page's own look (WHY§103): rows of {text, run, note, off}; null draws a line.
+function menuAt(x, y, title, rows) {
+  closeMenu();
+  const box = el("div", { class: "ctx", role: "menu" }, title ? el("div", { class: "ctx-title", text: title }) : null);
+  for (const r of rows) {
+    if (!r) { box.append(el("div", { class: "ctx-line" })); continue; }
+    const b = el("button", { type: "button", role: "menuitem", text: r.text, disabled: !!r.off, title: r.note || "" });
+    b.addEventListener("click", () => { closeMenu(); r.run(); });
+    box.append(b);
+  }
+  document.body.append(box);
+  const w = box.offsetWidth, h = box.offsetHeight;
+  box.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 6)) + "px";
+  box.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 6)) + "px";
+  state.menu = box;
+  const first = box.querySelector("button:not([disabled])");
+  if (first) first.focus();
+}
+function closeMenu() { if (state.menu) { state.menu.remove(); state.menu = null; } }
+document.addEventListener("mousedown", (ev) => { if (state.menu && !state.menu.contains(ev.target)) closeMenu(); }, true);
+document.addEventListener("keydown", (ev) => {
+  if (!state.menu) return;
+  if (ev.key === "Escape") { ev.preventDefault(); closeMenu(); return; }
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    const stops = [...state.menu.querySelectorAll("button:not([disabled])")];
+    const i = stops.indexOf(document.activeElement);
+    ev.preventDefault();
+    if (stops.length) stops[(i + (ev.key === "ArrowDown" ? 1 : stops.length - 1)) % stops.length].focus();
+  }
+}, true);
+window.addEventListener("blur", closeMenu);
+document.addEventListener("scroll", closeMenu, true);
+
+// The menu of one mod (WHY§103), on the Mods tab and on the Updates tab.
+async function sourceLink(mod, now) {
+  const text = "A source link for “" + mod + "”\n\nThe web address the mod comes from: its page at Nexus, its GitHub repository, or any other page. With a Nexus or GitHub address ModTrap can ask whether a newer file is out; any other address is kept for you to open."
+    + "\n\nModTrap keeps the link in its own folder. The mod's own files are not touched.";
+  const url = await modalBox(text, { input: now || "", yes: "Keep the link", no: "Cancel" });
+  if (url === null) return;
+  if (!url.trim() && !now) return;
+  try {
+    await api("/api/updates/link", { mod, url: url.trim() });
+    toast(url.trim() ? "The source link is kept." : "The source link is forgotten.");
+    state.updatesStale = true;
+    await loadUpdates();
+  } catch (e) { toast(e.message); }
+}
+async function modMenu(ev, mod) {
+  ev.preventDefault();
+  const x = ev.clientX, y = ev.clientY;
+  if (!state.updates || state.updatesFor !== state.loaded) { try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { /* the menu still serves */ } }
+  const r = state.updates ? state.updates.rows.find((u) => u.mod === mod) : null;
+  const m = findMod(mod);
+  const page = r && r.page;
+  const rows = [
+    { text: r && r.given ? "Change the source link…" : "Add a source link…", run: () => sourceLink(mod, r ? r.given : "") },
+    r && r.given ? { text: "Forget my source link", run: async () => { try { await api("/api/updates/link", { mod, url: "" }); toast("The source link is forgotten."); await loadUpdates(); } catch (e) { toast(e.message); } } } : undefined,
+    { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => window.open(page, "_blank", "noopener,noreferrer") },
+    { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
+    null,
+    { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
+    state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => focusMod(mod) } : { text: "Show it on the Updates tab", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
+    m && m.row && m.row.classList.contains("tickable") ? { text: state.picked.has(mod) ? "Untick it" : "Tick it, to take it out", run: () => { togglePick(mod, !state.picked.has(mod)); updateTray(); } } : undefined,
+  ].filter((v) => v !== undefined);
+  menuAt(x, y, mod, rows);
+}
+
+// Files dropped on the Updates tab, or chosen with its button (WHY§103): a Wabbajack file, meta files of downloads,
+// mods' folders. A Wabbajack file can be gigabytes: only its list is cut out of it here and sent.
+async function wabbajackList(file) {
+  const view = async (from, to) => new DataView(await file.slice(from, to).arrayBuffer());
+  const tailLen = Math.min(file.size, 65557 + 76);
+  const tail = await view(file.size - tailLen, file.size);
+  let e = -1;
+  for (let i = tail.byteLength - 22; i >= 0; i--) if (tail.getUint32(i, true) === 0x06054b50) { e = i; break; }
+  if (e < 0) throw new Error("it is not a Wabbajack file (no archive's directory was found in it)");
+  let cdSize = tail.getUint32(e + 12, true), cdOff = tail.getUint32(e + 16, true);
+  if (cdOff === 0xFFFFFFFF || cdSize === 0xFFFFFFFF || tail.getUint16(e + 10, true) === 0xFFFF) {
+    const l = e - 20;
+    if (l < 0 || tail.getUint32(l, true) !== 0x07064b50) throw new Error("its directory could not be found");
+    const at = Number(tail.getBigUint64(l + 8, true));
+    const rec = await view(at, at + 56);
+    if (rec.getUint32(0, true) !== 0x06064b50) throw new Error("its directory could not be read");
+    cdSize = Number(rec.getBigUint64(40, true)); cdOff = Number(rec.getBigUint64(48, true));
+  }
+  const cd = await view(cdOff, cdOff + cdSize);
+  const words = new TextDecoder();
+  let p = 0;
+  while (p + 46 <= cd.byteLength && cd.getUint32(p, true) === 0x02014b50) {
+    const method = cd.getUint16(p + 10, true), n = cd.getUint16(p + 28, true), x = cd.getUint16(p + 30, true), c = cd.getUint16(p + 32, true);
+    let comp = cd.getUint32(p + 20, true), plain = cd.getUint32(p + 24, true), off = cd.getUint32(p + 42, true);
+    if (n === 7 && words.decode(new Uint8Array(cd.buffer, cd.byteOffset + p + 46, n)) === "modlist") {
+      let q = p + 46 + n;
+      const end = q + x;
+      while (q + 4 <= end) {                              // the entry's large sizes, where it has them
+        const id = cd.getUint16(q, true), size = cd.getUint16(q + 2, true);
+        if (id === 1) {
+          let r = q + 4;
+          if (plain === 0xFFFFFFFF) { plain = Number(cd.getBigUint64(r, true)); r += 8; }
+          if (comp === 0xFFFFFFFF) { comp = Number(cd.getBigUint64(r, true)); r += 8; }
+          if (off === 0xFFFFFFFF) off = Number(cd.getBigUint64(r, true));
+        }
+        q += 4 + size;
+      }
+      const head = await view(off, off + 30);
+      if (head.getUint32(0, true) !== 0x04034b50) throw new Error("its list could not be found");
+      const start = off + 30 + head.getUint16(26, true) + head.getUint16(28, true);
+      return { method, blob: file.slice(start, start + comp) };
+    }
+    p += 46 + n + x + c;
+  }
+  throw new Error("it holds no list: it is not a Wabbajack file");
+}
+async function sendList(file) {
+  let part;
+  if (/\.wabbajack$/i.test(file.name)) part = await wabbajackList(file);
+  else part = { method: 0, blob: file };                 // the list's own text, taken out of such a file by hand
+  const q = "?name=" + encodeURIComponent(file.name) + "&size=" + file.size + "&date=" + Math.floor(file.lastModified || 0) + "&method=" + part.method;
+  const r = await fetch("/api/updates/upload" + q, { method: "POST", headers: { "X-ModTrap-Token": TOKEN, "Content-Type": "application/octet-stream" }, body: part.blob });
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* no answer to read */ }
+  if (!r.ok) throw new Error(data.error || "the list was not accepted");
+  return data;
+}
+const readText = (file) => file.slice(0, 64 * 1024).text();
+const entryFile = (dir, name) => new Promise((resolve) => dir.getFile(name, {}, (fe) => fe.file(resolve, () => resolve(null)), () => resolve(null)));
+const entryList = (dir) => new Promise((resolve) => {
+  const all = [], reader = dir.createReader();
+  const more = () => reader.readEntries((got) => { if (!got.length) resolve(all); else { all.push(...got); more(); } }, () => resolve(all));
+  more();
+});
+async function takeForUpdates(files, entries) {
+  // files: [{file, folder}] chosen or dropped singly; entries: dropped folders.
+  const metas = [], lists = [], passed = [];
+  const one = (file, folder) => {
+    const low = file.name.toLowerCase();
+    if (low.endsWith(".wabbajack") || low === "modlist") lists.push(file);
+    else if (low.endsWith(".meta") || low === "meta.ini") metas.push({ file, folder: low === "meta.ini" ? folder || "" : "" });
+    else passed.push(file.name);
+  };
+  for (const f of files) one(f.file, f.folder);
+  state.updatesTaking = "looking through what was dropped";
+  renderUpdates();
+  for (const dir of entries) {
+    // A mod's folder (its meta.ini), a folder of mods (each one's meta.ini), a folder of downloads (its .meta files).
+    const own = await entryFile(dir, "meta.ini");
+    if (own) metas.push({ file: own, folder: dir.name });
+    for (const e of await entryList(dir)) {
+      if (e.isDirectory) { const f = await entryFile(e, "meta.ini"); if (f) metas.push({ file: f, folder: e.name }); }
+      else if (/\.(meta|wabbajack)$/i.test(e.name)) { const f = await new Promise((res) => e.file(res, () => res(null))); if (f) one(f, ""); }
+    }
+  }
+  const told = { archives: 0, mods: 0, passed: passed.map((n) => n + ": not a meta file or a Wabbajack file") };
+  try {
+    for (let i = 0; i < metas.length;) {
+      const batch = [];
+      let bytes = 0;
+      while (i < metas.length && batch.length < 300 && bytes < 1500000) {
+        const text = await readText(metas[i].file);
+        batch.push({ name: metas[i].file.name, folder: metas[i].folder, text });
+        bytes += text.length + 200;
+        i++;
+      }
+      state.updatesTaking = "taking in meta files: " + i + " of " + metas.length;
+      renderUpdates();
+      const got = await api("/api/updates/metas", { files: batch });
+      told.archives += got.archives; told.mods += got.mods; told.passed.push(...got.passed);
+    }
+    for (const f of lists.slice(0, 1)) {
+      state.updatesTaking = "taking the list out of “" + f.name + "”";
+      renderUpdates();
+      await sendList(f);
+      told.list = f.name;
+    }
+  } catch (e) { told.error = e.message; }
+  state.updatesTaking = "";
+  state.updatesTold = told;
+  await loadUpdates();
+}
+function updatesDropped(ev) {
+  const dt = ev.dataTransfer;
+  if (!dt) return;
+  const items = dt.items ? Array.from(dt.items).filter((i) => i.kind === "file") : [];
+  const entries = items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null));
+  const files = Array.from(dt.files || []);
+  const dirs = entries.filter((e) => e && e.isDirectory);
+  const singles = entries.some(Boolean) ? files.filter((f, i) => !(entries[i] && entries[i].isDirectory)) : files;
+  takeForUpdates(singles.map((file) => ({ file, folder: "" })), dirs);
+}
+function updatesChosen(input) {
+  const files = Array.from(input.files || []).map((file) => {
+    const parts = (file.webkitRelativePath || "").split("/");
+    return { file, folder: parts.length >= 2 ? parts[parts.length - 2] : "" };
+  });
+  // Of a chosen folder only what is at its top or one folder down is taken, as with a dropped one.
+  const near = files.filter((f) => ((f.file.webkitRelativePath || "").split("/").length <= 3));
+  input.value = "";
+  takeForUpdates(near, []);
+}
+
 // The update check (MT37, WHY§101): where each mod came from, and whether a newer file of it is out.
 const UP_STATE = { update: ["Update out", "bad"], maybe: ["Unclear", "warn"], current: ["Up to date", "good"], "not asked": ["Not asked yet", ""], none: ["Cannot be asked", ""], gone: ["Gone from its page", "warn"] };
 const UP_ORIGIN = { list: "the list's own", added: "added afterwards", modtrap: "added by ModTrap", "": "" };
@@ -447,17 +647,50 @@ function renderUpdates(listOnly) {
     kids.push(el("h3", { text: "Your Nexus key" }),
       el("p", { class: "dim small", text: "Nexus answers a program only with a key of your account: you make one on Nexus, in your account's settings, under API keys, as a personal key. ModTrap keeps it on this PC, protected by Windows for your Windows account. It is sent to Nexus only, never shown again, and never written to the log or to a session file." }),
       el("p", {}, el("span", { class: "tag " + (d.key ? "good" : "warn"), text: d.key ? "a key is kept" : "no key: Nexus is not asked" }), " ", keyIn, " ", keep, " ", forget));
-    // The Wabbajack file.
-    const pathIn = el("input", { type: "text", spellcheck: "false", placeholder: "C:\\Lists\\Example\\Example List.wabbajack", size: "60" });
-    const name = el("button", { type: "button", text: d.list.named ? "Name another file" : "Read this file" });
-    name.addEventListener("click", async () => { try { await api("/api/updates/list", { path: pathIn.value }); pathIn.value = ""; } catch (e) { toast(e.message); } loadUpdates(); });
-    const drop = d.list.named ? el("button", { type: "button", text: "Forget the file" }) : null;
-    if (drop) drop.addEventListener("click", async () => { try { await api("/api/updates/list", { path: "" }); } catch (e) { toast(e.message); } loadUpdates(); });
-    kids.push(el("h3", { text: "The modlist's Wabbajack file" }),
-      el("p", { class: "dim small", text: "Optional. The .wabbajack file the modlist was installed from names every archive of the list with where it is downloaded from, and which mods the list fills. With it ModTrap knows more sources, and can tell the list's own mods from the ones added afterwards. Give its full path; ModTrap only reads it." }));
-    if (d.list.reading) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + (d.list.text || "reading the Wabbajack file") + "… A large list takes a few minutes the first time."));
+    // Files given by hand: a drop zone, with its button in the middle.
+    const pickFiles = el("input", { type: "file", multiple: "multiple", accept: ".wabbajack,.meta,.ini", hidden: "hidden" });
+    pickFiles.addEventListener("change", () => updatesChosen(pickFiles));
+    const pickDir = el("input", { type: "file", hidden: "hidden" });
+    pickDir.setAttribute("webkitdirectory", "");
+    pickDir.addEventListener("change", () => updatesChosen(pickDir));
+    const add = el("button", { type: "button", class: "primary", text: "Add files…" });
+    add.addEventListener("click", () => pickFiles.click());
+    const addDir = el("button", { type: "button", text: "Add a folder…" });
+    addDir.addEventListener("click", () => pickDir.click());
+    const zone = el("div", { class: "upzone", id: "upzone" },
+      el("div", { class: "upzone-title", text: "Drop files here that say where mods come from" }),
+      el("div", { class: "upzone-buttons" }, add, addDir, pickFiles, pickDir),
+      el("div", { class: "dim small", text: "The modlist's .wabbajack file · .meta files of downloads, or the whole downloads folder · a mod's folder, or the whole mods folder (for their meta.ini). ModTrap only reads them; of a Wabbajack file only its list is taken." }));
+    zone.addEventListener("dragenter", () => zone.classList.add("over"));
+    zone.addEventListener("dragleave", (ev) => { if (!zone.contains(ev.relatedTarget)) zone.classList.remove("over"); });
+    zone.addEventListener("drop", () => zone.classList.remove("over"));
+    kids.push(el("h3", { text: "Sources given by hand" }), zone);
+    if (state.updatesTaking) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + state.updatesTaking + "…"));
+    const told = state.updatesTold;
+    if (told) {
+      const bits = [];
+      if (told.list) bits.push("the list of “" + told.list + "” is being read");
+      if (told.archives) bits.push(plural(told.archives, "download's meta file") + " taken");
+      if (told.mods) bits.push(plural(told.mods, "mod's meta file") + " taken");
+      if (!bits.length && !told.error) bits.push("nothing in it names a source");
+      kids.push(el("p", { class: told.error ? "would-needs" : "would-record", text: told.error ? "That did not work: " + told.error + "." : "Taken in: " + bits.join("; ") + "." }));
+      if (told.passed.length) kids.push(el("details", {}, el("summary", { class: "dim small", text: plural(told.passed.length, "file") + " passed over" }), ...told.passed.slice(0, 40).map((t) => el("div", { class: "dim small", text: t }))));
+    }
+    if (d.list.reading) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + (d.list.text || "reading the Wabbajack list") + "… A large list takes a few minutes the first time."));
     if (d.list.error) kids.push(el("p", { class: "would-needs", text: d.list.error }));
-    if (d.list.named && d.list.counts) kids.push(el("p", { text: "“" + d.list.file + "”: " + (d.list.name || "a list") + (d.list.version ? " " + d.list.version : "") + ", " + plural(d.list.counts.archives, "archive") + ", " + plural(d.list.counts.mods, "mod folder") + "." }));
+    const g = d.given || { links: 0, archives: 0, mods: 0 };
+    const have = [];
+    if (d.list.named && d.list.counts) have.push("the Wabbajack list “" + d.list.file + "”: " + (d.list.name || "a list") + (d.list.version ? " " + d.list.version : "") + ", " + plural(d.list.counts.archives, "archive") + ", " + plural(d.list.counts.mods, "mod folder"));
+    if (g.archives) have.push(plural(g.archives, "download's meta file"));
+    if (g.mods) have.push(plural(g.mods, "mod's meta file"));
+    if (g.links) have.push(plural(g.links, "source link") + " of your own (right-click a mod)");
+    kids.push(el("p", { class: have.length ? "" : "dim", text: have.length ? "ModTrap has: " + have.join("; ") + "." : "Nothing has been given yet. Right-click a mod below to add a source link for it alone." }));
+    // The Wabbajack file by its path, for a file too awkward to drag.
+    const pathIn = el("input", { type: "text", spellcheck: "false", placeholder: "or the Wabbajack file's full path, such as C:\\Lists\\Example\\Example List.wabbajack", size: "70" });
+    const name = el("button", { type: "button", text: "Read this file" });
+    name.addEventListener("click", async () => { try { await api("/api/updates/list", { path: pathIn.value }); pathIn.value = ""; } catch (e) { toast(e.message); } loadUpdates(); });
+    const drop = d.list.named ? el("button", { type: "button", text: "Forget the Wabbajack list" }) : null;
+    if (drop) drop.addEventListener("click", async () => { try { await api("/api/updates/list", { path: "" }); } catch (e) { toast(e.message); } loadUpdates(); });
     kids.push(el("p", {}, pathIn, " ", name, " ", drop));
     head.replaceChildren(el("div", { class: "card" }, ...kids));
   }
@@ -492,12 +725,14 @@ function renderUpdates(listOnly) {
     return a;
   };
   const table = el("table", { class: "plain updates" }, el("thead", {}, el("tr", {}, el("th", { text: "Mod" }), el("th", { text: "From" }), el("th", { text: "Installed" }), el("th", { text: "State" }), el("th", { text: "What is known" }))),
-    el("tbody", {}, ...shown.map((r) => el("tr", { class: r.enabled ? "" : "dim" },
+    el("tbody", {}, ...shown.map((r) => el("tr", { class: r.enabled ? "" : "dim", "data-mod": r.mod, title: "Right-click for more: add a source link, open its page" },
       el("td", {}, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
-      el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null),
+      el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null,
+        r.given ? el("div", { class: "dim small", text: "by your link" }) : null),
       el("td", { text: r.version || "" }),
       el("td", {}, el("span", { class: "tag " + UP_STATE[r.state][1], text: UP_STATE[r.state][0] }), r.newest ? el("div", { class: "small", text: r.newest + (r.when ? " · " + r.when : "") }) : null),
       el("td", { class: "small" }, r.text.charAt(0).toUpperCase() + r.text.slice(1) + ".", r.asked ? el("span", { class: "dim", text: " Asked " + r.asked + "." }) : null)))));
+  table.addEventListener("contextmenu", (ev) => { const tr = ev.target.closest("tr[data-mod]"); if (tr) modMenu(ev, tr.dataset.mod); });
   box.replaceChildren(el("div", { class: "card" }, ...bar, rows.length ? table : el("p", { class: "dim", text: "No mod matches." }),
     rows.length > shown.length ? el("p", { class: "dim", text: "The first 600 of " + num(rows.length) + " are shown: narrow the list with the filters or the search." }) : null));
 }
@@ -1413,6 +1648,7 @@ function modRow(m) {
     focusMod(m.name);
   });
   tr.dataset.name = m.name;
+  if (m.kind === "mod") tr.addEventListener("contextmenu", (ev) => modMenu(ev, m.name));
   m.row = tr;
   m.hay = fold(m.name + " " + m.plugins.join(" "));
 }
@@ -3010,7 +3246,10 @@ const dragOn = (yes) => {
 document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dragOn(true); });
 document.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; });
 document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dragOn(false); });
-document.addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; dragOn(false); dropped(e); });
+document.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; dragOn(false);
+  if (state.tab === "updates" && state.status === "ready") updatesDropped(e); else dropped(e);
+});
 
 $("profile").addEventListener("change", () => $("open-form").requestSubmit());
 $("rescan").addEventListener("click", async () => {

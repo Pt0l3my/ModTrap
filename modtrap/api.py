@@ -436,6 +436,22 @@ class Api:
     def updates_state(self) -> dict:
         return self.updating.account(self._need(), *self._updates_for())
 
+    def updates_upload(self, query: dict, length: int, stream) -> dict:
+        """The list of a dropped Wabbajack file, as its bytes (WHY§103)."""
+        self._need()
+        key, _added = self._updates_for()
+
+        def number(name: str) -> int:
+            try:
+                return max(0, int(query.get(name, ["0"])[0]))
+            except ValueError:
+                return 0
+
+        try:
+            return self.updating.take_list(key, query.get("name", [""])[0], number("size"), number("date"), number("method"), length, stream)
+        except updating.Bad as e:
+            raise Bad(str(e)) from None
+
     def updates_do(self, what: str, body: dict) -> dict:
         m = self._need()
         key, added = self._updates_for()
@@ -454,6 +470,16 @@ class Api:
                 if not isinstance(path, str) or len(path) > 1000:
                     raise Bad("give the Wabbajack file's path")
                 return self.updating.set_list(key, path)
+            if what == "link":
+                mod, url = body.get("mod"), body.get("url", "")
+                if not isinstance(mod, str) or not isinstance(url, str) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):
+                    raise Bad("that is not a mod of this modlist")
+                return self.updating.set_link(key, mod, url)
+            if what == "metas":
+                files = body.get("files")
+                if not isinstance(files, list):
+                    raise Bad("the files did not arrive")
+                return self.updating.take_metas(key, files)
         except updating.Bad as e:
             raise Bad(str(e)) from None
         raise Bad("that is not something the update check does")

@@ -28,7 +28,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   the settings files that name the plugin, and gives one account of its checks after the demaster). MT34 (a scanner of every
   settings file in force in the modlist, and of the frameworks installed). MT35 (the scanner looks through the animation folders
   too; answered the same day). MT36 (the scanner writes every look to the log, with each failure and its reason). MT37 (an update check: where each mod came
-  from, and whether Nexus or GitHub has a newer file; asks and reads only).
+  from, and whether Nexus or GitHub has a newer file; asks and reads only). MT38 (a menu on a mod by the right mouse button, with a
+  source link of the owner's own; a drop zone on the Updates tab for files that name sources).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -759,3 +760,25 @@ modlist mods)/added mods (via ModTrap) for updates."
 - A scan runs when the owner presses the button, and once at each start of ModTrap (a setting, on; without a key
   and without a mod from GitHub nothing is asked).
 - What cannot be told is said as such ("unclear", "cannot be asked"), never as up to date.
+
+## MT38
+
+**A menu on a mod, a source link of the owner's own, and a drop zone for sources** · *2026-11-22 · Asked by the owner*
+
+**Owner's words.** "1. when right clicking a mod in updates tab (or in Modlist tab) can you implement right click
+style menu and one of the rows in that should be to add source link, which then pops up a UI window with text.
+2. In updates tab, can you add dropzone for meta, wabbajack, etc. files (with add button in middle)."
+
+**Settled** (WHY§103; the owner may overrule any of it):
+
+- A right click on a mod, on the Mods tab and on the Updates tab, opens a menu in the page's own look: add or
+  change a source link, forget it, open the mod's page, copy its address, copy the mod's name, show the mod on
+  the other tab, tick it.
+- "Add a source link…" opens ModTrap's own box with a text field. The link is kept in ModTrap's own folder, for
+  that modlist; the mod's files are not touched. It comes before every other record of the mod's source. A page
+  at Nexus or a GitHub repository can be asked for updates; any other address is kept for the owner to open.
+- The Updates tab has a drop zone with "Add files…" and "Add a folder…" in its middle. It takes the modlist's
+  Wabbajack file, `.meta` files of downloads (or a whole downloads folder) and mods' folders (or a whole mods
+  folder, for their `meta.ini`). ModTrap only reads them.
+- Of a Wabbajack file only its list is taken: the page cuts it out of the file and sends that alone, so a file
+  of some gigabytes is not copied. Only ModTrap's reading of the list is kept.

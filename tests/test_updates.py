@@ -149,6 +149,102 @@ class Sources(unittest.TestCase):
             sources.read_wabbajack(p)
 
 
+class GivenByHand(Sources):
+    """WHY§103: a source link of the owner's own, meta files dropped on the page, a Wabbajack list sent as its bytes."""
+
+    def test_a_link_says_what_kind_of_source_it_is(self):
+        self.assertEqual(sources.parse_link("https://www.nexusmods.com/skyrimspecialedition/mods/555?tab=files&file_id=5"),
+                         {"host": "nexus", "game": "skyrimspecialedition", "mod_id": 555, "file_id": 5,
+                          "url": "https://www.nexusmods.com/skyrimspecialedition/mods/555?tab=files&file_id=5"})
+        got = sources.parse_link("https://github.com/invented-owner/reed/releases/tag/v1")
+        self.assertEqual((got["host"], got["repo"], got["tag"]), ("github", "invented-owner/reed", ""))
+        self.assertEqual(sources.parse_link("https://example.invalid/mods/reed")["host"], "url")
+        for bad in ("", "reed", "ftp://example.invalid/x", "https://example.invalid/a b", "javascript:alert(1)", "https://x/" + "a" * 600):
+            with self.assertRaises(ValueError, msg=bad):
+                sources.parse_link(bad)
+
+    def test_the_owners_link_comes_before_every_record_and_touches_no_file_of_the_mod(self):
+        before = (self.mods / "Quill" / "meta.ini").read_bytes()
+        u = updating.Updating("test", FakeNet({}))
+        inst_key = "the modlist"
+        u.set_link(inst_key, "Quill", "https://www.nexusmods.com/skyrimspecialedition/mods/9999")
+        u.set_link(inst_key, "Old Lantern", "https://example.invalid/old-lantern")
+        r = {x["mod"]: x for x in sources.gather(instance.load(self.root), None, None, u._given(inst_key))}
+        self.assertEqual((r["Quill"]["mod_id"], r["Quill"]["by"], r["Quill"]["given"]),
+                         (9999, ["your link"], "https://www.nexusmods.com/skyrimspecialedition/mods/9999"))
+        self.assertEqual((r["Old Lantern"]["host"], r["Old Lantern"]["url"]), ("url", "https://example.invalid/old-lantern"))
+        self.assertEqual(updates.page_of(r["Old Lantern"]), "https://example.invalid/old-lantern")
+        self.assertEqual((self.mods / "Quill" / "meta.ini").read_bytes(), before)
+        self.assertEqual(u._given("another modlist")["links"], {})               # a link belongs to its modlist
+        with self.assertRaises(updating.Bad):
+            u.set_link(inst_key, "Quill", "not an address")
+        u.set_link(inst_key, "Quill", "")
+        self.assertEqual({x["mod"]: x for x in sources.gather(instance.load(self.root), None, None, u._given(inst_key))}["Quill"]["mod_id"], 4321)
+
+    def test_dropped_meta_files_fill_in_where_the_mods_own_records_say_nothing(self):
+        fx.write(self.mods / "Old Lantern" / "meta.ini", meta(installationFile="Old Lantern 1.0.zip"))
+        u = updating.Updating("test", FakeNet({}))
+        got = u.take_metas("the modlist", [
+            {"name": "Old Lantern 1.0.zip.meta", "folder": "", "text": meta(gameName="SkyrimSE", modID=6100, fileID=61, version="1.0")},
+            {"name": "Tool Output", "folder": "", "text": "x"},
+            {"name": "meta.ini", "folder": "", "text": meta(gameName="SkyrimSE", modid=1)},
+            {"name": "meta.ini", "folder": "Patch Collection", "text": meta(gameName="SkyrimSE", modid=6200, version="2.2", files=[(6200, 62)])},
+            {"name": "meta.ini", "folder": "Quill", "text": meta(gameName="SkyrimSE", modid=1)},     # the mod's own record says more
+            {"name": "empty.7z.meta", "folder": "", "text": "[General]\r\n"}, "not a file", {"name": 5}])
+        self.assertEqual((got["archives"], got["mods"]), (1, 2))
+        self.assertEqual(len(got["passed"]), 3)
+        self.assertTrue(any("alone it does not say which mod" in t for t in got["passed"]))
+        r = {x["mod"]: x for x in sources.gather(instance.load(self.root), None, None, u._given("the modlist"))}
+        self.assertEqual((r["Old Lantern"]["mod_id"], r["Old Lantern"]["files"], r["Old Lantern"]["by"]), (6100, [61], ["a download's meta file you gave"]))
+        self.assertEqual((r["Patch Collection"]["mod_id"], r["Patch Collection"]["files"], r["Patch Collection"]["by"]), (6200, [62], ["a meta file you gave"]))
+        self.assertEqual((r["Quill"]["mod_id"], r["Quill"]["by"]), (4321, ["meta.ini"]))
+
+    def test_a_dropped_lists_bytes_alone_are_read_and_only_the_reading_is_kept(self):
+        import zlib
+        p = self.wabbajack()
+        with zipfile.ZipFile(p) as z:
+            plain = z.read("modlist")
+        packer = zlib.compressobj(6, zlib.DEFLATED, -15)
+        packed = packer.compress(plain) + packer.flush()
+        for method, data in ((8, packed), (0, plain)):
+            u = updating.Updating("test", FakeNet({}))
+            u.take_list("the modlist", "C:\\somewhere\\Invented List.wabbajack", 123456, 99 + method, method, len(data), io.BytesIO(data))
+            for _ in range(300):
+                if u.reading["state"] != "going":
+                    break
+                time.sleep(0.01)
+            wj, place = u._list("the modlist")
+            self.assertEqual((wj["name"], wj["counts"]["archives"], place["file"]), ("Invented List", 3, "Invented List.wabbajack"))
+            self.assertEqual(sorted(x.name for x in (Path(os.environ["MODTRAP_HOME"]) / "wabbajack").iterdir() if "incoming" in x.name), [])
+            # Another ModTrap finds the reading again, without the file.
+            self.assertEqual(updating.Updating("test", FakeNet({}))._list("the modlist")[0]["name"], "Invented List")
+        # Bytes that are not a list are said as such, and nothing is kept for them.
+        u = updating.Updating("test", FakeNet({}))
+        u.take_list("another modlist", "broken.wabbajack", 1, 1, 8, 5, io.BytesIO(b"\x00\x01\x02\x03\x04"))
+        for _ in range(300):
+            if u.reading["state"] != "going":
+                break
+            time.sleep(0.01)
+        self.assertIn("could not be read", u.reading["error"])
+        self.assertEqual(u._place("another modlist"), {})
+        with self.assertRaises(updating.Bad):
+            u.take_list("another modlist", "x.wabbajack", 1, 1, 8, 0, io.BytesIO(b""))
+
+    def test_through_the_page_a_link_is_for_a_mod_of_this_modlist_only(self):
+        a = api.Api()
+        a.updating.net = FakeNet({})
+        a.open(str(self.root), wait=True)
+        self.assertEqual(a.post("/api/updates/link", {"mod": "Old Lantern", "url": "https://example.invalid/x"})[1], {"kept": True, "kind": "url"})
+        row = next(r for r in a.get("/api/updates", {})[1]["rows"] if r["mod"] == "Old Lantern")
+        self.assertEqual((row["given"], row["page"], row["host"]), ("https://example.invalid/x", "https://example.invalid/x", "url"))
+        self.assertEqual(a.get("/api/updates", {})[1]["given"]["links"], 1)
+        with self.assertRaises(api.Bad):
+            a.post("/api/updates/link", {"mod": "No Such Mod", "url": "https://example.invalid/x"})
+        self.assertEqual(a.post("/api/updates/metas", {"files": [{"name": "a.7z.meta", "text": meta(gameName="SkyrimSE", modID=1, fileID=2)}]})[1]["archives"], 1)
+        got = a.updates_upload({"name": ["x.wabbajack"], "size": ["5"], "date": ["7"], "method": ["0"]}, 2, io.BytesIO(b"{}"))
+        self.assertTrue(got["taken"])
+
+
 class Verdicts(unittest.TestCase):
     def row(self, **over):
         r = {"mod": "Quill", "enabled": True, "host": "nexus", "game": "skyrimspecialedition", "mod_id": 4321, "files": [111],

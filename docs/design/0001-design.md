@@ -629,3 +629,8 @@ not asked yet, cannot be asked, gone from its page. What cannot be told is never
 
 **When.** On "Scan for updates", and once at each start of ModTrap (a setting, on). The last answers are kept and
 shown without asking.
+
+**Sources given by hand (MT38, WHY§103).** A right click on a mod, here and on the Mods tab, opens a menu; "Add a
+source link…" asks for the web address the mod comes from and keeps it in ModTrap's own folder, before every other
+record. A drop zone, with "Add files…" and "Add a folder…" in its middle, takes the modlist's Wabbajack file, `.meta`
+files of downloads and mods' folders; of a Wabbajack file the page sends only the list. Nothing of a mod is changed.
