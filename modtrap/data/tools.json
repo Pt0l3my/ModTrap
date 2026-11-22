@@ -88,6 +88,10 @@
       "find": "Encountered blocking overall error",
       "level": "error",
       "says": "{n} time(s) it reported a “Blocking Error”: a group of patchers could not be made ready to run."
+     },
+     {
+      "find": "Short circuiting .+ compilation because meta matched",
+      "says": "{n} time(s) it took a patcher as built already and did not build it again."
      }
     ]
    }

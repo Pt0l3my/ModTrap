@@ -234,6 +234,7 @@ const SETTING_TEXT = [
   ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and ticks the tool's step off when the tool has written its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
   ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is ticked off once it has written its output. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
+  ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
 function renderSettings() {
@@ -652,7 +653,7 @@ function startToolsRow() {
 function toolsInARow() {
   const t = state.tool, d = state.stepsData, ticks = state.stepsDone = state.stepsDone || {};
   if (state.status !== "ready" || state.toolsBusy) return;
-  if (t && (t.state === "starting" || t.state === "running")) return;          // one at a time
+  if (toolGoing(t)) return;                                                    // one at a time
   if (state.toolsNow) {                                                          // the one that has just closed
     const key = state.toolsNow, title = state.toolsTitle;
     state.toolsNow = "";
@@ -1694,9 +1695,11 @@ function ticksOfThisDemaster() {
 function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
 
 // Starting one of the modlist's tools through MO2 (DESIGN§16.8): the button, and what came of it.
+function toolGoing(t) { return !!t && ["starting", "preparing", "running"].includes(t.state); }
+
 function toolButton(title) {
   const t = state.tool;
-  const going = t && (t.state === "starting" || t.state === "running");
+  const going = toolGoing(t);
   const b = el("button", { type: "button", text: going && t.title === title ? "Running…" : "Start it through MO2", disabled: !!going || !!(state.session && state.session.locked),
     title: "Starts “" + title + "” the way MO2's own Run button does. It is yours to work; ModTrap waits for it to close and then says which of its output files changed." });
   b.addEventListener("click", async () => {
@@ -1712,12 +1715,12 @@ function toolButton(title) {
 function toolCard() {
   const t = state.tool;
   if (!t) return null;
-  const going = t.state === "starting" || t.state === "running";
+  const going = toolGoing(t), preparing = t.state === "preparing";
   const stop = el("button", { type: "button", text: "Stop waiting" });
   stop.addEventListener("click", async () => { try { state.tool = await api("/api/tool/stop", {}); } catch (e) { toast(e.message); } tick(); });
   const mins = Math.floor(t.seconds / 60), secs = t.seconds % 60;
   return el("div", { class: "card" + (going ? " installer" : "") },
-    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? (t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
+    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (preparing ? " “" + t.title + "” is open outside MO2, building its patchers: leave it alone, ModTrap closes it" : going ? (t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
       t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
     ...(t.before || []).map((x) => el("p", { class: "would-record", text: "Before the start: " + x + "." })),
     going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago" + (t.profile ? ", through MO2 with its profile “" + t.profile + "”" : "") + ". ModTrap is waiting, and changes nothing meanwhile." }) : null,
@@ -1925,7 +1928,7 @@ function taskActions(stage, task, first, firstOpen) {
     if (state.dmChain === "tools") {
       out.push(el("span", { class: "act-note", text: "The tools are being started one after another: work each, then close it." }),
         actButton("Stop the row", async () => { state.dmChain = ""; state.toolsNow = ""; toast("Stopped. A tool that is open stays open; the rest are yours."); }));
-    } else if (processIdle() && !(state.tool && ["starting", "running"].includes(state.tool.state))) {
+    } else if (processIdle() && !toolGoing(state.tool)) {
       out.push(actButton("Start the tools one after another", async () => startToolsRow(), true));
     }
   }

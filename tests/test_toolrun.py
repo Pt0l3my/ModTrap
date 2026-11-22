@@ -284,6 +284,93 @@ class Tools(unittest.TestCase):
         import json
         self.assertEqual(json.loads((tool_dir / "PipelineSettings.json").read_bytes().decode("utf-8-sig"))["Profiles"][0]["MutagenVersioning"], 3)
 
+    def _outside(self, tool_dir: Path, records: list[Path], builds: bool, touch_settings: bool = False):
+        """The framework opened by itself, outside MO2: it writes a log that names each patcher's build record,
+        builds (the records appear) or fails, and stays open until its window is asked to close."""
+        closed = Path(self.tmp.name) / "window closed"
+        opened: list[list[str]] = []
+
+        def launch(cmd, cwd):
+            opened.append(cmd)
+            lines = ["x [INF] Mutagen version: 0.10.0", "x [INF] Synthesis version: 1.2.3"]
+            for r in records:
+                lines += ["x [INF] Compiling RunnerRepoInfo { Project = TargetProject { SolutionPath = C:\\T\\Invented.sln }",
+                          ", MetaPath = %s, CommitDate = 01/01/2026 }" % r]
+                if builds:
+                    r.parent.mkdir(parents=True, exist_ok=True)
+                    r.write_bytes(b"built")
+                else:
+                    lines.append('x [WRN] error MSB6006: "csc.exe" exited with code -1073741819.')
+            (tool_dir / "logs" / "opened outside.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            if touch_settings:
+                f = tool_dir / "PipelineSettings.json"
+                f.write_bytes(f.read_bytes().replace(b'"Kept": 1.5', b'"Kept": 2.5'))
+            return subprocess.Popen([sys.executable, FAKE], cwd=cwd, env=dict(os.environ, FAKE_TOOL_UNTIL=str(closed)))
+
+        def ask_close(program):
+            closed.write_bytes(b"")
+            return True
+
+        self.api.direct_launcher, self.api.ask_close = launch, ask_close
+        self.api.prebuild_times = {"quiet": (0.1, 0.3, 1.0), "close_wait": 8.0}
+        return opened
+
+    def _last_log_names_unbuilt(self, tool_dir: Path) -> list[Path]:
+        records = [Path(self.tmp.name) / "Temp" / "Framework" / name / "Build.meta" for name in ("one", "two")]
+        lines = ["x [INF] Mutagen version: 0.10.0", "x [INF] Synthesis version: 1.2.3"]
+        for r in records:
+            lines += ["x [INF] Compiling RunnerRepoInfo { Project = TargetProject { SolutionPath = C:\\T\\Invented.sln }",
+                      ", MetaPath = %s, CommitDate = 01/01/2026 }" % r, 'x [WRN] error MSB6006: "csc.exe" exited with code -1073741819.']
+        (tool_dir / "logs" / "the last run.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return records
+
+    def test_patchers_that_are_not_built_are_built_outside_mo2_before_the_start(self) -> None:
+        """MT28, WHY§90: the framework's last log names patcher builds whose record is not there. ModTrap opens the
+        program by itself, waits for its log and the records to show every patcher built, closes it, and only then
+        starts it through MO2. Its settings file is as before, even if the program wrote to it meanwhile."""
+        from modtrap import toolfit
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"))
+        records = self._last_log_names_unbuilt(tool_dir)
+        self.assertEqual(toolfit.unbuilt(tool_dir), {"log": "the last run.log", "named": 2, "missing": 2})
+        settings = (tool_dir / "PipelineSettings.json").read_bytes()
+        opened = self._outside(tool_dir, records, builds=True, touch_settings=True)
+        got = self.api.post("/api/tool/start", {"title": "Synthesis"})[1]
+        self.assertIn(got["state"], ("starting", "preparing"))
+        with self.assertRaises(Bad):
+            self.api.post("/api/dryrun/start", {"mods": ["Quill"]})                  # busy while it builds
+        t = self.ended()
+        self.assertEqual(t["state"], "done")
+        self.assertEqual(len(opened), 1)
+        self.assertTrue(opened[0][0].endswith("Synthesis.exe") and len(opened[0]) == 1)       # by itself: no MO2, no arguments
+        self.assertEqual(self.commands[0][1:], ["-p", "Default", "run", "-e", "Synthesis"])    # then through MO2
+        self.assertTrue(all(r.is_file() for r in records))
+        self.assertIn("opened it by itself, outside MO2, where it built them (2 of 2", t["before"][0])
+        self.assertEqual((tool_dir / "PipelineSettings.json").read_bytes(), settings)          # put back as it was
+        self.assertIsNone(toolfit.unbuilt(tool_dir))
+        # Built now: the next start opens nothing outside MO2.
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        self.ended()
+        self.assertEqual(len(opened), 1)
+
+    def test_a_build_that_fails_outside_mo2_too_ends_there(self) -> None:
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"))
+        records = self._last_log_names_unbuilt(tool_dir)
+        opened = self._outside(tool_dir, records, builds=False)
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertEqual((t["state"], len(opened), self.commands), ("failed", 1, []))          # no start through MO2
+        self.assertIn("could not build its patchers outside MO2 either", t["message"])
+        self.assertIn("the compiler crashing", t["message"])
+
+    def test_the_owner_can_keep_the_framework_inside_mo2(self) -> None:
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"))
+        records = self._last_log_names_unbuilt(tool_dir)
+        opened = self._outside(tool_dir, records, builds=True)
+        self.api.post("/api/settings", {"name": "tool_prebuild", "value": False})
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertEqual((t["state"], opened, t["before"]), ("done", [], []))
+
     def test_only_a_tool_of_this_mo2_and_one_at_a_time(self) -> None:
         with self.assertRaises(Bad):
             self.api.post("/api/tool/start", {"title": "Not Set Up"})

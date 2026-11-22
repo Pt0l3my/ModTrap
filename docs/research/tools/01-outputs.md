@@ -321,3 +321,24 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`.
 - **FACT (the owner's logs, TL01§18).** Program 0.35.5 states 0.53.1 and 0.35.5 there, the pair its profile was
   set to before the change, and with that pair no build error of the "does not fit" kind showed.
 
+## 20. When the patcher framework builds a patcher, and when it takes the build as done (2026-11-22)
+
+Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`.
+
+- **FACT (`Synthesis.Bethesda.Execution/Patchers/Running/Git/GitPatcherCompilation.cs:62-66`).** Before it
+  builds, it reads the patcher's record file and asks whether the build can be passed over; if so it logs
+  "Short circuiting … compilation because meta matched" and builds nothing.
+- **FACT (`…/ShouldShortCircuitCompilation.cs:26-40`).** The build is passed over when the setting for it is on
+  (it is by default, `Settings/V2/PipelineSettings.cs:10`), the record is there, and it names the same commit of
+  the patcher, the same two library versions and the same version of the program, and the built program it
+  names still exists.
+- **FACT (`GitPatcherCompilation.cs:86-98` and `:104-112`).** Otherwise the record file is deleted
+  ("Clearing short circuit meta"), the project is built, and only after a build that did not fail is the record
+  written anew.
+- **FACT (the owner's logs, version 0.35.5).** Each start logs, for each patcher, "Compiling RunnerRepoInfo { … ,
+  MetaPath = …Build.meta, … }": the record's place, in a folder of the program's under the user's temporary
+  folder, the same place whether started through MO2 or not; and "Cleared short circuit meta" before each build.
+  Thirteen records were named in each of the four logs, as many as the settings file has patchers.
+- **LIKELY.** A patcher built in a start outside MO2 is passed over in the next start through MO2: nothing the
+  check looks at differs between the two.
+

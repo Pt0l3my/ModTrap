@@ -22,7 +22,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
 - **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
-  right before it starts).
+  right before it starts). MT28 (its patchers are built outside MO2 first when they are not built).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -568,4 +568,21 @@ to that version?"
   with the session, and records the change in the History.
 - A setting, on by default, turns it off; ModTrap then only says what it found.
 - It is a tool's own file, outside any demaster: Revert does not undo it.
+
+## MT28
+
+**Building the patcher framework's patchers outside MO2** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "can ModTrap also build the patchers outside MO2 automatically? is that safe?"
+
+**Settled under that freedom** (WHY§90, TL01§20; the owner may overrule any of it):
+
+- When the framework's own last log names patchers whose build is not there, ModTrap opens the program by
+  itself, outside MO2, waits until its log and its build records show every patcher built, asks its window to
+  close, and then starts it through MO2.
+- Nothing in the program is pressed; its settings file is put back if opening it changed the file; the program is
+  asked to close, never ended. This amends MT25 for this one case: ModTrap closes this window, because "done"
+  is a fact on disk and nothing was run in it.
+- If the build fails outside MO2 too, ModTrap makes no start through MO2 and says what the log holds.
+- A setting, on by default, turns it off.
 

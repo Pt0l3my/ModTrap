@@ -83,6 +83,10 @@ class ToolJob:
         self._binary, self._keep_logs = exe.binary, keep_logs
         self.own_log: dict | None = None        # what the tool's own log of this run says (toollog, WHY§88)
         self.before: list[str] = []             # what ModTrap set right in the tool's own settings before the start (WHY§89)
+        # Something to do before the start, in this job's own time (building a tool's patchers outside MO2, WHY§90):
+        # called with a function that waits and says whether the owner stopped the job; returns what was done, in
+        # words, or raises Refused when the start is not to go on.
+        self.prepare: Callable[[Callable[[float], bool]], list[str]] | None = None
         self.arguments, self.switches = self_run_arguments(title, exe.binary, exe.arguments) if self_run else ("", [])
         name, _kind = tools.of_executable(title, exe.binary)
         # What is known about this tool closing without having written anything (data, TL01§16): said then, as a hint.
@@ -98,7 +102,7 @@ class ToolJob:
                        + [inst.overwrite_dir] if p.is_dir()]
         self.files = watch_files
         self.output_mod = target
-        self.state = "starting"            # starting, running, done, failed, stopped
+        self.state = "starting"            # starting, preparing, running, done, failed, stopped
         self.message = ""
         self.started = time.time()
         self.ended: float | None = None
@@ -144,6 +148,12 @@ class ToolJob:
         if self._running(self.image):
             raise Refused("%s is already running: close it first, so that ModTrap can tell when its own start of "
                           "it has ended" % self.image)
+        if self.prepare is not None:
+            self.state = "preparing"
+            self.before += self.prepare(self._stop.wait)
+            if self._stop.is_set():
+                self.state, self.message = "stopped", "ModTrap stopped before the tool was started through MO2"
+                return
         before = _snapshot(self.places, self.files)
         cmd = [str(self.mo2), "-p", self.inst.profile, "run", "-e"] + (["-a", self.arguments] if self.switches else []) + [self.title]
         if self.switches:

@@ -112,6 +112,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 87 | 2026-11-22 | 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing | FACT | #revert #page #tools |
 | 88 | 2026-11-22 | A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's | DECIDED | #tools #page #session |
 | 89 | 2026-11-22 | Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof | DECIDED | #tools #safety #settings |
+| 90 | 2026-11-22 | The patcher framework's patchers are built outside MO2 before it is started through MO2, when its log shows them unbuilt; what makes that safe | DECIDED | #tools #safety #mo2 |
 
 ## Entries
 
@@ -2146,3 +2147,39 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   kept a number).
 - Not checked: on the owner's PC; against a settings file of the owner's (none was at hand: the field names are
   from the source).
+
+### 90. The patcher framework's patchers are built outside MO2 before it is started through MO2, when its log shows them unbuilt; what makes that safe
+
+`2026-11-22` · DECIDED · `#tools #safety #mo2` · refs: MT28, TL01§16, TL01§18, TL01§20, WHY§88, WHY§89, MT25, DESIGN§19
+
+- The owner: "can ModTrap also build the patchers outside MO2 automatically? is that safe?"
+- FACT (TL01§20). The framework builds a patcher when it is opened, in a folder of its own under the user's
+  temporary folder, not in the modlist. A build that succeeds leaves a record file beside it; a build about to be
+  made anew has its record deleted first. Asked again, the framework takes the build as done when the record
+  matches (the patcher's commit, the two library versions, the program's version, the built program still
+  there). MO2 plays no part in that. Its log names each patcher's record file when it sets out to build.
+- FACT (TL01§18). On the owner's PC building failed inside MO2 and, outside MO2, failed only for the versions.
+- DECIDED. Before ModTrap starts the framework through MO2: if the framework's newest log names patcher builds
+  whose record file is not there, ModTrap opens the program by itself (its program file, no arguments, no MO2),
+  and waits. Done: the new log names builds, every record named is there, the log has stood still for ten
+  seconds, and as many are named as the settings file has patchers switched on (or two minutes have passed
+  without more). Failed: build errors in the log and thirty seconds of stillness; or the window closed early;
+  or forty-five minutes. Then the window is asked to close, as a click on its X does, and only when the program
+  has gone and every patcher is built is it started through MO2. If the build failed outside MO2 too, no start
+  through MO2 is made: it would fail the same way, and the tool's card says what the log holds.
+- What makes it safe. Nothing in the program is pressed: no patcher runs, so nothing is written to the game's
+  folder or to the modlist. What the open program writes is its own: its log, the builds in the temporary
+  folder, and its settings file when it closes. The settings file is compared, by content, with how it was
+  before; if it says anything else, the file as it was is put back. The program is never ended, only asked to
+  close; one that stays is left to the owner. The one thing ModTrap cannot keep from happening is the owner
+  pressing Run in that window: the card says to leave it alone.
+- This is the one tool ModTrap closes (MT25 said none): here "done" is a fact on disk, and a window in which
+  nothing was run has no work to lose.
+- A setting, on by default, turns it off.
+- Not established: that the builds succeed outside MO2 on the owner's PC with the fitting versions (LIKELY,
+  WHY§88), and that version 0.35.5 words its log and keeps its records as the source read here does (its logs
+  show the record's name and its deletion, as the source has them).
+- Checked: the reading of the owner's four logs (13 records named in each, the errors of each); tests (built
+  outside, then started through MO2, the settings file put back after the program had changed it, nothing
+  opened the next time; a build that fails outside ends there with no start through MO2; the setting off).
+- Not checked: on the owner's PC.
