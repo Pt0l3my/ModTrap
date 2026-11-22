@@ -583,6 +583,10 @@ class Verdicts(unittest.TestCase):
         v = updates.verdict(self.row(mo2_newest="1.3.0.0", version="1.2.0.0"), {"nexus": {}, "github": {}})
         self.assertEqual(v["state"], "not asked")
         self.assertIn("MO2's own last check saw version 1.3.0.0", v["text"])
+        # MO2's word is passed on only where it says something: both plain numbers, and MO2's the higher. A version
+        # MO2 made up from a file's date, or a lower one, is left out.
+        for mine, theirs in (("d2025.1.9.0", "0.8.0.0"), ("1.3", "1.2"), ("1.2", "1.2.0.0"), ("", "2.0")):
+            self.assertNotIn("MO2's own last check", updates.verdict(self.row(mo2_newest=theirs, version=mine), {"nexus": {}, "github": {}})["text"], (mine, theirs))
         self.assertEqual(updates.verdict(self.row(host="", mod_id=0), {"nexus": {}, "github": {}})["state"], "none")
         self.assertTrue(updates.same_version("v1.2.0.0", "1.2"))
         self.assertFalse(updates.same_version("1.2", "1.2a"))

@@ -663,6 +663,16 @@ async function loadUpdates() {
   const d = state.updates;
   clearTimeout(state.updatesTimer);
   if (d) fetchingEnded(d);
+  if (d && state.upScanAsked && d.scan.state !== "going") {              // the scan the owner asked for has ended: say what came of it
+    state.upScanAsked = false;
+    const l = d.last;
+    if (d.scan.error) toast(d.scan.error);
+    else if (l && l.nexus) {
+      const why = l.nexus.why_stopped || l.github.why_stopped;
+      toast("Scan done: " + plural(l.nexus.asked + l.github.asked, "source") + " asked, " + plural(d.counts.update || 0, "update") + " out"
+        + (l.nexus.left ? ", " + l.nexus.left.toLocaleString("en-GB") + " mods left for the next scan" : "") + "." + (why ? " " + why.charAt(0).toUpperCase() + why.slice(1) + "." : ""));
+    }
+  }
   if (d && (d.scan.state === "going" || d.list.reading || Object.values(d.fetching || {}).some((f) => f.state === "going")
     || Object.keys((d.watch || {}).waiting || {}).length)) state.updatesTimer = setTimeout(loadUpdates, 2000);
 }
@@ -681,17 +691,33 @@ function renderUpdates(listOnly) {
   if (!listOnly && !typing) {
     const going = d.scan.state === "going";
     const scan = el("button", { type: "button", class: "primary", text: going ? "Scanning…" : "Scan for updates", disabled: going });
-    scan.addEventListener("click", async () => { try { await api("/api/updates/scan", {}); } catch (e) { toast(e.message); } loadUpdates(); });
+    scan.addEventListener("click", async () => {
+      const nexus = (d.hosts || {}).nexus || 0, github = (d.hosts || {}).github || 0;
+      if (!d.key && !github) {
+        // Nothing can be asked: said at once, and the place for the key is opened (WHY§107).
+        state.upOpen = Object.assign({}, state.upOpen, { "Your Nexus key": true });
+        toast(nexus ? "Nothing can be asked yet. " + num(nexus) + " of your mods come from Nexus, and Nexus answers a program only with your account's key: paste it under “Your Nexus key”." : "None of the mods has a source that can be asked: give the Wabbajack file, or add source links.");
+        renderUpdates();
+        const field = document.querySelector("#updates-head input[type=password]");
+        if (field) { field.scrollIntoView({ block: "center" }); field.focus(); }
+        return;
+      }
+      state.upScanAsked = true;
+      try { await api("/api/updates/scan", {}); toast("Scanning for updates…"); } catch (e) { toast(e.message); }
+      loadUpdates();
+    });
     const stop = going ? el("button", { type: "button", text: "Stop the scan" }) : null;
     if (stop) stop.addEventListener("click", async () => { try { await api("/api/updates/stop", {}); } catch (e) { toast(e.message); } });
     const kids = [el("div", { class: "card-head" }, el("h2", { text: "Updates" }), el("span", {}, stop, " ", scan)),
-      el("p", { class: "dim", text: "Where each mod came from, read from MO2's own records on this PC, and whether a newer file of it is out, asked of Nexus and GitHub. ModTrap only asks and reads: it downloads nothing and changes nothing in the modlist." })];
+      el("p", { class: "dim", text: "Where each mod came from, read from MO2's own records on this PC, and whether a newer file of it is out, asked of Nexus and GitHub. A scan only asks and reads. A newer file is fetched only when you press a mod's update button, and nothing in the modlist changes before Add mods has shown you its plan." })];
     if (going) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + (d.scan.text || "scanning") + "…"));
     if (d.scan.error) kids.push(el("p", { class: "would-needs", text: d.scan.error }));
     const last = d.last;
     if (last && last.nexus) {
       const when = new Date(last.when * 1000).toLocaleString("en-GB");
-      kids.push(el("p", { text: "Last scan, " + when + ": Nexus was asked about " + plural(last.nexus.asked, "mod") + (last.nexus.left ? ", " + num(last.nexus.left) + " are left for the next scan" : "")
+      const nexusLine = !last.nexus.asked && !last.nexus.month_list && last.nexus.left ? "Nexus was not asked (" + num(last.nexus.left) + " mods wait)"
+        : "Nexus was asked about " + plural(last.nexus.asked, "mod") + (last.nexus.left ? ", " + num(last.nexus.left) + " are left for the next scan" : "");
+      kids.push(el("p", { text: "Last scan, " + when + ": " + nexusLine
         + "; GitHub about " + plural(last.github.asked, "repository", "repositories") + (last.github.left ? ", " + num(last.github.left) + " left" : "") + "." }));
       for (const why of [last.nexus.why_stopped, last.github.why_stopped]) if (why) kids.push(el("p", { class: "dim small", text: why.charAt(0).toUpperCase() + why.slice(1) + "." }));
       if (last.nexus.day_left !== null && last.nexus.day_left !== undefined) kids.push(el("p", { class: "dim small", text: "Your Nexus account has " + num(last.nexus.day_left) + " questions left today and " + num(last.nexus.hour_left) + " this hour; ModTrap stops well short of both." }));
@@ -703,7 +729,15 @@ function renderUpdates(listOnly) {
     const forget = d.key ? el("button", { type: "button", text: "Forget the key" }) : null;
     if (forget) forget.addEventListener("click", async () => { try { await api("/api/updates/key", { key: null }); } catch (e) { toast(e.message); } loadUpdates(); });
     kids.push(el("h3", { text: "Your Nexus key" }),
-      el("p", { class: "dim small", text: "Nexus answers a program only with a key of your account: you make one on Nexus, in your account's settings, under API keys, as a personal key. ModTrap keeps it on this PC, protected by Windows for your Windows account. It is sent to Nexus only, never shown again, and never written to the log or to a session file." }),
+      el("p", { class: "dim small", text: "Nexus answers a program only with a key of your account. ModTrap keeps it on this PC, protected by Windows for your Windows account. It is sent to Nexus only, never shown again, and never written to the log or to a session file." }),
+      (() => {
+        const a = el("a", { target: "_blank", rel: "noopener noreferrer", text: "Open Nexus's page for API keys" });
+        a.setAttribute("href", d.key_page || "");
+        return el("ol", { class: "small upsteps" },
+          el("li", {}, "Sign in at Nexus Mods in your browser, then: ", a, ". (Or by hand: your picture at the top right, Account settings, API Keys.)"),
+          el("li", { text: "Go to the bottom of that page, to “Personal API Key”. If there is none yet, press the button there to make one." }),
+          el("li", { text: "Copy the long line of letters and digits, paste it into the field below, and press “Keep the key”." }));
+      })(),
       el("p", {}, el("span", { class: "tag " + (d.key ? "good" : "warn"), text: d.key ? "a key is kept" : "no key: Nexus is not asked" }), " ", keyIn, " ", keep, " ", forget));
     // Files given by hand: a drop zone, with its button in the middle.
     const pickFiles = el("input", { type: "file", multiple: "multiple", accept: ".wabbajack,.meta,.ini", hidden: "hidden" });

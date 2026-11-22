@@ -387,3 +387,4 @@ table.updates .c-get { width: 34px; padding-left: 0; padding-right: 4px; }
 .upzone-buttons { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
 .upfold { margin: 8px 0 0; }
 .upfold > summary { cursor: pointer; padding: 4px 0; }
+.upsteps { margin: 4px 0 10px; padding-left: 22px; line-height: 1.6; }

@@ -129,6 +129,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 104 | 2026-11-22 | The Updates tab is laid out as the modlist: priority, separators, MO2's notes; an Update column whose button opens the newer file's own page for a download through MO2; ModTrap still downloads nothing | DECIDED | #updates #page |
 | 105 | 2026-11-22 | The update button fetches the newer file where the host gives one to a program (Nexus for a paying account's key, GitHub), else opens its page; the file goes to Add mods as a newer version: right above the old mod, which is disabled; LoversLab only through the owner's browser | DECIDED | #updates #add #network |
 | 106 | 2026-11-22 | ModTrap watches MO2's and the browser's Downloads folders for a file the owner fetched on a site, and a setting lets a newer file be added without asking: one press where the host lets a program fetch, one more on the site where it does not | DECIDED | #updates #add #page |
+| 107 | 2026-11-22 | On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made | FACT | #updates #page |
 
 ## Entries
 
@@ -2702,3 +2703,27 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   by; MO2's folder by numbers; a site with no name; stopping and the end of waiting); in a browser both ways to
   the end: a Premium account in one press, a free one with the file saved as the browser saves it, each ending
   with the newer version above the disabled older one.
+
+### 107. On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made
+
+`2026-11-22` · FACT · `#updates #page` · refs: MT37, WHY§101, WHY§104
+
+- The owner, with a picture and a session file of 0.3.35: "Clicking Scan for updates doesn't seem to be doing
+  anything? Where do I get Nexus key from?"
+- FACT (the session's log). The scan ran, twice: 3,576 mods, 3,503 of them with a number at Nexus (3,000 different
+  numbers), none from GitHub, 73 with no source that can be asked; no key kept; nothing asked; 0.0 seconds. The
+  page did say "no Nexus key is kept", in small print under the last scan's line. A press that ends at once with
+  a line of small print reads as a press that did nothing.
+- The reading of sources works on the real list: every mod's own record gave its number, with no Wabbajack file.
+- Fixed. With no key and no mod from GitHub, the button asks nothing of the program at all: it says at once how
+  many mods come from Nexus and that Nexus needs the key, opens the key's part and puts the cursor in its field.
+  A scan that does run says "Scanning…", and what came of it when it ends. The last scan's line says "Nexus was
+  not asked" where it was not.
+- The key's part now has the steps to make one, with a link to Nexus's page for it. LIKELY, not checked against
+  the site today: the page is the account's "API Keys" page, with the personal key at its bottom. The steps say
+  the way by hand as well, in case the address has moved.
+- FACT (the picture). The line "MO2's own last check saw version 0.8.0.0 as the newest" stood beside an installed
+  version "d2025.1.9.0": MO2 writes such a version itself, from a file's date, when a mod gives none. The two say
+  nothing by comparison. MO2's word is now passed on only where both are plain numbers and MO2's is the higher.
+- The tab's own description still said that ModTrap downloads nothing; since MT40 a mod's update button can fetch.
+  It now says what a scan does and what the button does.

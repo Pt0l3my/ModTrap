@@ -287,7 +287,7 @@ class Updating:
                          "version": wj["version"] if wj else "", "counts": wj["counts"] if wj else None,
                          "reading": self.reading["state"] == "going", "text": self.reading["text"], "error": self.reading["error"]},
                 "scan": dict(self.work), "last": self.store.get("last") or None,
-                "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()},
+                "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()}, "key_page": updates.KEY_PAGE,
                 "watch": {"folder": str(self.downloads_folder()), "there": self.downloads_folder().is_dir(),
                           "waiting": {m: {"minutes": max(0, int((WAIT_SECONDS - (time.time() - w["since"])) // 60)), "name": w["name"]}
                                       for m, w in self.waiting.items()}}}

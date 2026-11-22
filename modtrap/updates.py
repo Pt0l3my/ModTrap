@@ -35,6 +35,7 @@ log = logbook.get("updates")
 NEXUS = "https://api.nexusmods.com/v1"
 GITHUB = "https://api.github.com"
 ACCOUNT = "users/validate"           # under NEXUS: what kind of account a key is of (MO01§15)
+KEY_PAGE = "https://next.nexusmods.com/settings/api-keys"   # where an account's keys are, for the owner to open (WHY§107)
 HOSTS = ("api.nexusmods.com", "api.github.com")
 # A mod's file is fetched from these and no others (MT40): GitHub's own store of release files, and the hosts Nexus
 # names in the download address it gives. The owner's key is never sent to any of them.
@@ -270,7 +271,10 @@ def verdict(row: dict, store: dict) -> dict:
         v = {"state": "none", "text": why.get(row["host"], "it came from %s, which cannot be asked for versions" % row["host"]),
              "newest": "", "file": "", "when": "", "asked": ""}
     # What MO2 itself last saw is said beside it: it is on this PC already, and costs no question.
-    if row.get("mo2_newest") and row.get("version") and not same_version(row["mo2_newest"], row["version"]) and v["state"] in ("not asked", "maybe"):
+    # Only where both versions are plain numbers and MO2's is the higher: a version MO2 made up from a file's date,
+    # or one written in another way, says nothing by comparison (WHY§107).
+    mine, theirs = _parts(row.get("version") or ""), _parts(row.get("mo2_newest") or "")
+    if mine is not None and theirs is not None and theirs > mine and v["state"] in ("not asked", "maybe"):
         v["text"] += "; MO2's own last check saw version %s as the newest" % row["mo2_newest"]
         if v["state"] == "not asked":
             v["mo2"] = True
