@@ -529,6 +529,15 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             about.append("The mod has a stake in records of kinds this plugin works on: %s" % ", ".join(
                 "%s %d (this plugin holds %d of them)" % (k, n, h) for k, n, h in o["stake_kinds"])
                 if o.get("stake_kinds") else "The mod has no stake in any kind of record this plugin holds.")
+        if o["mod"].startswith("ModTrap - "):
+            # It named the mod as a master: it held records of the mod's own. ModTrap's copy keeps the load order
+            # whole; the tool's next run makes the plugin anew (WHY§77).
+            e["run"].append("%s named the mod as a master, so it was made from the mod's own records. ModTrap took "
+                            "those out of a copy to keep the load order whole; the tool's run makes the plugin anew, and "
+                            "ModTrap's copy in “%s” then hides the new one until it is taken out of that mod" % (o["plugin"], o["mod"]))
+            e["details"].append({"summary": "%s: a demastered copy of a plugin this tool made, in “%s”" % (o["plugin"], o["mod"]),
+                                 "lines": about})
+            continue
         if o.get("left_out"):
             # The framework was told to keep the mod's plugin out of this output: nothing of the mod went into it.
             e["clear"].append("%s was made with %s left out: the group “%s” has it in its own list of plugins to leave "
@@ -539,8 +548,9 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         lines = ["%s %s of %s · %s has a stake in %s · %s" % (
             d["kind"], d["id"], d["owner"], ", ".join(d["by"]), ", ".join(d["changed"][:8]),
             ("this plugin holds the same " + ", ".join(d["carried"][:8])) if d["carried"]
-            else ("not the mod's doing: " + d["note"]) if d.get("note") else "this plugin holds none of it")
-            for d in o["details"]]
+            else "this plugin holds none of it") for d in o["details"]]
+        lines += ["%s %s of %s · no stake of the mod's after all: %s" % (x["kind"], x["id"], x["owner"], x["why"])
+                  for x in o.get("no_stake", [])]
         if o["carried"]:
             e["run"].append("%s holds, in %d record(s), a value it has from the mod: without the mod the load order "
                             "says something else there" % (o["plugin"], o["carried"]))
@@ -815,7 +825,8 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
 
     def held(field: tuple[str, bytes], src: plugin.Records, others: list[tuple[str, bytes]], there: plugin.Records) -> bool:
         """Is this field, as `src` wrote it, among `others`, as `there` wrote them? (plugin.same_field, WHY§65)"""
-        return any(t == field[0] and plugin.same_field(field[1], src, b, there) for t, b in others)
+        return any(t == field[0] and plugin.same_field(plugin.canonical(t, field[1]), src, plugin.canonical(t, b), there)
+                   for t, b in others)
 
     # 1. What the mods' plugins, and the patches made for them, change: as xEdit told it in the dry run.
     # record -> {"by", "kind", "fields": [(type, bytes, the plugin that wrote them so)], "named": the fields' types}
@@ -850,26 +861,66 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 entry = changes.setdefault(key, {"by": [], "kind": row.get("kind", ""), "fields": [], "named": set()})
                 entry["by"].append(name)
                 entry["fields"] += [(t, b, src) for t, b in changed]
+                entry.setdefault("all", []).extend((t, b, src) for t, b in mine if t in wanted)
                 entry["named"] |= wanted
 
         # 2. What each tool-made plugin carries of that. With it: what kinds of record the plugin holds at all, and
         # for the patcher framework which patchers made it and which plugins it was told to leave out (WHY§74).
         outputs = []
+        tool_plugins = []
+        for f in m.order:
+            r = m.plugins[f]
+            if not r.active or r.source is None or r.path is None or fold(r.name) in tf \
+                    or any(fold(x) in tf for x in r.masters):   # a dependant: the demaster itself deals with it
+                continue
+            ev = [e for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries) if e.kind != "editor"]
+            if ev and "plugins" in data.get(ev[0].tool, {}).get("reads", ["plugins"]):
+                tool_plugins.append((r, ev))
+        # A stake is told from the plugins xEdit loaded for the dry run: the mod, what depends on it and their
+        # masters. The rest of the load order was not there, and any plugin of it may have the last word on a
+        # record, or say the same as the mod. So for the records a tool's plugin holds, the whole load order is
+        # looked through (WHY§77): the leaving plugin must be the last of the plugins no tool made that holds the
+        # record, and only the fields in which the plugin next in line says something else are the mod's stake.
+        dropped: dict[tuple[str, int], dict] = {}
+        held_by_tools: set = set()
+        if judged:
+            for r, _ev in tool_plugins:
+                out = records_of(r.path)
+                if out is not None:
+                    held_by_tools |= out.index.keys() & changes.keys()
+        if held_by_tools:
+            made_names = {fold(r.name) for r, _ev in tool_plugins} | {
+                fold(r.name) for r in m.plugins.values() if r.source is not None and any(
+                    e.kind != "editor" for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries))}
+            gone = {fold(k) for k in (touched or {})} | tf
+            verdicts, cut = _whole_order(m, {k: changes[k] for k in held_by_tools}, gone, made_names, held,
+                                         time.monotonic() + WHOLE_ORDER_SECONDS)
+            for key, v in verdicts.items():
+                ch = changes[key]
+                if cut:
+                    continue                             # not looked through to the end: the stake stands as told
+                if not v["wins"]:
+                    ch["why_not"] = "%s, which loads after the mod and stays, has the last word on this record" % v["by"]
+                else:
+                    ch["fields"] = [(t, b, src) for t, b, src in ch.get("all", []) if t not in v["same"]]
+                    ch["named"] = {t for t, _b, _s in ch["fields"]}
+                    if not ch["fields"]:
+                        ch["why_not"] = "the plugin next in line, %s, says the same there as the mod" % (v["by"] or "the record's own plugin")
+                if "why_not" in ch:
+                    dropped[key] = changes.pop(key)
+            if dropped or cut:
+                log.info("tools: looked through the whole load order for %d record(s) that tools' plugins hold: %d %s "
+                         "the mod's stake%s", len(held_by_tools), len(held_by_tools) - len(dropped),
+                         "is" if len(held_by_tools) - len(dropped) == 1 else "are", " (not to the end)" if cut else "")
+                for key, ch in list(dropped.items())[:20]:
+                    log.info("tools:   %s %06X of %s is no stake: %s", ch["kind"], key[1], key[0], ch["why_not"])
         stake_kinds = Counter(ch["kind"] for ch in changes.values())
         groups = toolmade.synthesis_groups(toolmade.tool_folders(inst, "Synthesis"))
         if any(tools.of_executable(e.title, e.binary)[0] == "Synthesis" for e in inst.executables):
             log.info("tools: Synthesis's own settings file %s", ("names %d group(s) of patchers: %s" % (
                 len(groups), "; ".join("%s (%d patcher(s), %d plugin(s) left out)" % (g["group"], len(g["patchers"]), len(g["left_out"]))
                                        for g in groups[:12]))) if groups else "was not found beside its program")
-        for f in m.order:
-            r = m.plugins[f]
-            if not r.active or r.source is None or r.path is None or fold(r.name) in tf:
-                continue
-            if any(fold(x) in tf for x in r.masters):
-                continue                                 # a dependant: the demaster itself deals with it
-            ev = [e for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries) if e.kind != "editor"]
-            if not ev or "plugins" not in data.get(ev[0].tool, {}).get("reads", ["plugins"]):
-                continue
+        for r, ev in tool_plugins:
             out = records_of(r.path) if judged else None
             row = {"plugin": r.name, "mod": r.source, "tool": ev[0].tool, "strong": ev[0].strong, "how": ev[0].how,
                    "records": 0, "shared": 0, "carried": 0, "cut": out is None or out.cut or unsure, "details": [],
@@ -889,6 +940,8 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 held_kinds = Counter(changes[key]["kind"] for key in out.index.keys() & changes.keys())
                 row["stake_kinds"] = [[k, n, held_kinds.get(k, 0)] for k, n in stake_kinds.most_common() if k in kinds]
                 row["records"] = len(out.index)
+                row["no_stake"] = [{"kind": dropped[k]["kind"], "owner": k[0], "id": "%06X" % k[1], "why": dropped[k]["why_not"]}
+                                   for k in sorted(out.index.keys() & dropped.keys())][:DETAILS]
                 for key in out.index.keys() & changes.keys():
                     ch = changes[key]
                     theirs = out.fields(key) or []
@@ -901,7 +954,6 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                                                "changed": sorted(ch["named"])})
                 row["details"].sort(key=lambda d: (not d["carried"], d["kind"], d["owner"], d["id"]))
                 del row["details"][DETAILS:]
-            row["_keys"] = sorted(out.index.keys() & changes.keys()) if out is not None else []
             outputs.append(row)
             # Into the log too, so that a saved session shows what a verdict rests on (WHY§65).
             log.info("tools: %s (%s): holds %d record(s) in which the mod has a stake, %d with the mod's value in them%s",
@@ -910,47 +962,6 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 log.info("tools:   %s %s of %s, a stake of %s in %s: %s", d["kind"], d["id"], d["owner"],
                          ", ".join(d["by"]), ", ".join(d["changed"][:8]),
                          ("carries " + ", ".join(d["carried"][:8])) if d["carried"] else "none of it carried")
-        # 3. "Holds the mod's value" is told from the plugins xEdit loaded for the dry run: the mod, what depends on it
-        # and their masters. The rest of the load order was not there. Before such a finding counts, the whole load
-        # order is looked through for that record (WHY§76): does the mod really have the last word on it, and does
-        # the plugin next in line say something else?
-        hits = {key for o in outputs for d in o["details"] if d["carried"] for key in o["_keys"]
-                if "%06X" % key[1] == d["id"] and key[0] == d["owner"]}
-        if hits:
-            made_names = {fold(o["plugin"]) for o in outputs} | {
-                fold(r.name) for r in m.plugins.values() if r.source is not None and any(
-                    e.kind != "editor" for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries))}
-            gone = {fold(k) for k in (touched or {})} | tf
-            verdicts, cut = _whole_order(m, {k: changes[k] for k in hits}, gone, made_names, held,
-                                         time.monotonic() + WHOLE_ORDER_SECONDS)
-            for o in outputs:
-                for d in o["details"]:
-                    key = next((k for k in o["_keys"] if "%06X" % k[1] == d["id"] and k[0] == d["owner"]), None)
-                    v = verdicts.get(key) if key is not None else None
-                    if not d["carried"] or v is None:
-                        continue
-                    if not v["wins"]:
-                        d["note"] = "%s, which loads after the mod and stays, has the last word on this record: the tool did not build its copy from the mod's" % v["by"]
-                        d["carried"] = []
-                    else:
-                        still = [t for t in d["carried"] if t not in v["same"]]
-                        if len(still) < len(d["carried"]):
-                            d["note"] = "the plugin next in line, %s, says the same in %s: without the mod nothing changes there" % (
-                                v["by"] or "the record's own plugin", ", ".join(t for t in d["carried"] if t in v["same"]))
-                        d["carried"] = still
-                    if cut and d["carried"]:
-                        d["note"] = "the whole load order could not be looked through in the time ModTrap allows itself"
-                was = o["carried"]
-                o["carried"] = sum(1 for d in o["details"] if d["carried"])
-                o["details"].sort(key=lambda d: (not d["carried"], d["kind"], d["owner"], d["id"]))
-                if was != o["carried"]:
-                    log.info("tools: %s: looked through the whole load order: %d of %d record(s) with the mod's value "
-                             "stand%s", o["plugin"], o["carried"], was, " (not to the end)" if cut else "")
-                for d in o["details"]:
-                    if d.get("note"):
-                        log.info("tools:   %s %s of %s: %s", d["kind"], d["id"], d["owner"], d["note"])
-        for o in outputs:
-            o.pop("_keys", None)
     finally:
         for rec in opened.values():
             if rec is not None:

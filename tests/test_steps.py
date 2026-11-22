@@ -425,9 +425,9 @@ class ToolEvidence(unittest.TestCase):
         self.add_plugin("Later", "Later.esp", pf(2.0), "Synthesis.esp")
         deep = steps.look_deeper(model.build(instance.load(self.root)), ["Bramble"], told)
         rows = {o["plugin"]: o for o in deep["outputs"]}
-        self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (1, 0))
-        self.assertIn("Later.esp, which loads after the mod and stays, has the last word", rows["Synthesis.esp"]["details"][0]["note"])
-        self.assertNotIn("_keys", rows["Synthesis.esp"])
+        self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (0, 0))   # no stake after all
+        self.assertIn("Later.esp, which loads after the mod and stays, has the last word", rows["Synthesis.esp"]["no_stake"][0]["why"])
+        self.assertEqual(rows["Synthesis Gameplay.esp"]["shared"], 0)                # for every tool's plugin alike
         (self.root / "mods" / "Later" / "Later.esp").unlink()
 
     def test_the_next_in_line_saying_the_same_as_the_mod_is_no_trace_of_the_mod(self):
@@ -439,11 +439,36 @@ class ToolEvidence(unittest.TestCase):
         m = model.build(instance.load(self.root))
         deep = steps.look_deeper(m, ["Bramble"], told)
         rows = {o["plugin"]: o for o in deep["outputs"]}
-        self.assertEqual(rows["Synthesis.esp"]["carried"], 0)
-        self.assertIn("the plugin next in line, Earlier.esp, says the same in FLTV", rows["Synthesis.esp"]["details"][0]["note"])
+        self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (0, 0))
+        self.assertIn("the plugin next in line, Earlier.esp, says the same there as the mod", rows["Synthesis.esp"]["no_stake"][0]["why"])
         by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
-        lines = [ln for i in by["tool:Synthesis"]["items"] if "details" in i for ln in i["details"]["lines"]]
-        self.assertTrue(any("not the mod's doing: the plugin next in line, Earlier.esp" in ln for ln in lines))
+        self.assertNotIn("tool:Synthesis", by)                                        # nothing of the mod in it: cleared
+        syn = next(i for i in by["tools-clear"]["items"] if i["text"].startswith("Synthesis"))
+        lines = [ln for d in syn["evidence"] for ln in d["lines"]]
+        self.assertTrue(any("no stake of the mod's after all: the plugin next in line, Earlier.esp" in ln for ln in lines))
+
+    def test_unused_bytes_of_a_cells_place_on_the_grid_do_not_count(self):
+        """TL01§15: the last three bytes of XCLC are unused and hold what happened to be in memory; an older plugin
+        has no flags at all."""
+        new, other, old = b"\x09\x00\x00\x00\xfc\xff\xff\xff\x00\x11\x22\x33", b"\x09\x00\x00\x00\xfc\xff\xff\xff\x00\xaa\xbb\xcc", b"\x09\x00\x00\x00\xfc\xff\xff\xff"
+        self.assertEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", other))
+        self.assertEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", old))
+        self.assertNotEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", new[:8] + b"\x01" + new[9:]))   # a flag counts
+        self.assertEqual(plugin.canonical("FLTV", new), new)                          # any other field: as it is
+
+    def test_a_tools_plugin_that_named_the_mod_is_proof(self):
+        """WHY§77: ModTrap's demastered copy of a plugin a tool made, in ModTrap's own mod: the tool made it from the
+        mod's own records, and makes it anew."""
+        m = model.build(instance.load(self.root))
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        deep["outputs"] = [dict(o, mod="ModTrap - Bramble", carried=0, shared=0, details=[]) if o["plugin"] == "Synthesis Gameplay.esp"
+                           else dict(o, carried=0, shared=0, details=[]) for o in deep["outputs"] if o["tool"] == "Synthesis"]
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        syn = by["tool:Synthesis"]
+        self.assertEqual(syn["title"], "Run Synthesis again")
+        self.assertIn("Synthesis Gameplay.esp named the mod as a master", syn["why"])
+        self.assertIn("ModTrap's copy in “ModTrap - Bramble” then hides the new one", syn["why"])
 
     def test_only_groups_that_can_hold_a_wanted_kind_are_read(self):
         from modtrap import probe

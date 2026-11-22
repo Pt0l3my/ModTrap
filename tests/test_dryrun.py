@@ -404,6 +404,9 @@ class ReportTests(unittest.TestCase):
         e = fd["items"][0]["elements"][0]
         self.assertEqual((e["would"], e["array"], e["route"]), ("entry", "Properties", [1, 2, 0, 2, 7]))
         self.assertIn(e["array"], dryrun.SCRIPT_ARRAYS)
+        # The owner's setting: script properties are left to them.
+        fd = dryrun.parse_report("\r\n".join(lines), ["Bramble.esp"], ["Bramble"], ["Skyrim.esm"], script_props=False)["files"][0]
+        self.assertEqual((fd["reading"], fd["needs_you"]), ("needs you", 1))
 
 if __name__ == "__main__":
     unittest.main()

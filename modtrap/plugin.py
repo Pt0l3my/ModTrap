@@ -284,6 +284,15 @@ class Records:
         self.close()
 
 
+def canonical(ftype: str, data: bytes) -> bytes:
+    """A field as it counts, where the way it is stored says more than it means (XE02§, TL01§15). A cell's place on
+    the grid (XCLC) is two numbers and one byte of flags; the three bytes after that are unused and hold whatever
+    was in memory when the plugin was saved, and an older plugin has the two numbers only."""
+    if ftype == "XCLC" and len(data) in (8, 12):
+        return data[:8] + (data[8:9] if len(data) == 12 else b"\x00") + b"\x00\x00\x00"
+    return data
+
+
 def same_field(a: bytes, ra: Records, b: bytes, rb: Records) -> bool:
     """Do two fields of the same type, one from each plugin, hold the same? Equal bytes do, when the two plugins
     number their masters alike. Otherwise bytes may differ, or agree, only by how each plugin numbers the plugin a

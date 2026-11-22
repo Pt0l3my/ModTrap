@@ -277,6 +277,31 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertTrue(self.api.wait_mo2_gone(5, poll=0.01, ask_after=0.02, owners_too=True))
         self.assertEqual(asked, [here])
 
+    def test_another_modlists_mo2_stops_a_start_before_anything_is_begun(self) -> None:
+        """WHY§77: MO2 hands a command to the MO2 that is already open, whichever modlist that one is for."""
+        elsewhere = str(Path(self.tmp.name) / "Another List" / "ModOrganizer.exe")
+        self.api.program_paths = lambda image: [elsewhere]
+        self.assertEqual((self.api.mo2()["state"], self.api.mo2()["other"]), ("closed", True))
+        for path, body in (("/api/dryrun/start", {"mods": ["Bramble"]}), ("/api/probe/start", {}), ("/api/demaster/start", {}),
+                           ("/api/mo2/open", {})):
+            with self.assertRaises(Bad) as c:
+                self.api.post(path, body)
+            self.assertIn("Another Mod Organizer is open, for another modlist", str(c.exception))
+        self.assertIsNone(self.api.job)
+        self.assertEqual(snapshot(self.root), self.before)
+        self.api.program_paths = lambda image: []                 # closed: nothing stands in the way any more
+        self.assertFalse(self.api.mo2()["other"])
+
+    def test_the_owners_settings_are_kept_and_only_known_ones(self) -> None:
+        self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
+                                                        "follow": True, "script_props": True})
+        self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
+        self.assertTrue(self.api.state()["settings"]["auto_go"])
+        for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):
+            with self.assertRaises(Bad):
+                self.api.post("/api/settings", bad)
+        self.assertEqual(self.api.settings()["follow"], True)
+
     def test_an_update_without_a_restart_is_noticed_and_nothing_is_started(self) -> None:
         """WHY§67: the program in memory and the scripts on disk must be of one version."""
         self.assertFalse(self.api.state()["updated_on_disk"])

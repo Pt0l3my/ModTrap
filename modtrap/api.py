@@ -82,6 +82,22 @@ class HeaderCache:
         return got  # type: ignore[return-value]
 
 
+# What starts something through MO2's command line. MO2 hands such a command to a MO2 that is already open,
+# whichever modlist that one is for (MO01§9): with another modlist's MO2 open it would go to the wrong one (WHY§77).
+LAUNCHES_MO2 = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
+                          "/api/probe/start", "/api/mo2/open"))
+OTHER_MO2 = ("Another Mod Organizer is open, for another modlist. MO2 hands every command to the MO2 that is already "
+             "open, so ModTrap's would go to the wrong modlist. Close that MO2: ModTrap then goes on.")
+
+# The owner's settings (DESIGN§19): name -> default. Kept in ModTrap's own folder, for every session.
+SETTINGS = {
+    "auto_go": False,          # after the dry run, go ahead without asking when the plan leaves nothing to the owner
+    "close_mo2": False,        # close this modlist's MO2 without asking when a step needs it closed
+    "open_mo2_after": False,   # start MO2 again once a demaster is in place
+    "follow": True,            # show the Process tab when a demaster starts
+    "script_props": True,      # take script properties that point at the mod out (MT4); off: they are left to the owner
+}
+
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
                                 "/api/demaster/install", "/api/add/run", "/api/probe/start"))
 
@@ -1212,6 +1228,7 @@ class Api:
             out = {"name": NAME, "version": VERSION, "status": self.status, "message": self.message,
                    "changes": self.changes is not None,
                    "updated_on_disk": self.updated_on_disk(),
+                   "settings": self.settings(),
                    "version_differs": version.DIFFERS,
                    "save": self.saver.public(),
                    "tool": self.tooljob.public() if self.tooljob is not None else None,
@@ -1258,6 +1275,26 @@ class Api:
                 "issue_count": len(m.issues),
             })
         return out
+
+    def settings(self) -> dict:
+        kept = paths.load_settings().get("options")
+        kept = kept if isinstance(kept, dict) else {}
+        return {k: (kept[k] if isinstance(kept.get(k), bool) else d) for k, d in SETTINGS.items()}
+
+    def settings_set(self, body: dict) -> dict:
+        name, value = body.get("name"), body.get("value")
+        if name not in SETTINGS or not isinstance(value, bool):
+            raise Bad("that is not a setting ModTrap has")
+        now = self.settings()
+        now[name] = value
+        try:
+            kept = paths.load_settings()
+            kept["options"] = now
+            paths.save_settings(kept)
+        except OSError as e:
+            raise Bad("the setting could not be kept: %s" % logbook.why(e)) from None
+        log.info("setting “%s” is now %s", name, "on" if value else "off")
+        return now
 
     def tools_made(self) -> dict:
         """What the modlist's tools made (WHY§74): each tool-made plugin with its records by kind, and for the
@@ -1384,6 +1421,10 @@ class Api:
                       "started%s. Quit ModTrap and start it again first: until then the program in memory and the "
                       "scripts on disk are of different versions, and nothing is started."
                       % (VERSION, " (they are version %s now)" % on_disk if on_disk and on_disk != VERSION else ""))
+        if path in LAUNCHES_MO2 and self.model is not None and self.mo2().get("other"):
+            raise Bad(OTHER_MO2)
+        if path == "/api/settings":
+            return 200, self.settings_set(body), None
         if path in NEEDS_SAME_VERSION:
             log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":

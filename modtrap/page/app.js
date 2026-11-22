@@ -43,7 +43,8 @@ async function mo2Closed() {
   try { m = (await call("/api/state")).mo2 || m; } catch (e) { /* use what is known */ }
   if (!m || m.state !== "open") return true;         // closed; or it cannot be told, and the server then decides
   if (m.ours) return true;                            // ModTrap's own MO2 of the last run, leaving: the server waits for it
-  if (!await confirmBox("MO2 is open on this modlist. This step changes MO2's lists, and MO2 must be closed for it.\n\nClose MO2 now?")) return false;
+  if (!(state.settings || {}).close_mo2 &&
+      !await confirmBox("MO2 is open on this modlist. This step changes MO2's lists, and MO2 must be closed for it.\n\nClose MO2 now?")) return false;
   try { await call("/api/mo2/close", {}); } catch (e) { toast(e.message); return false; }
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 500));
@@ -58,10 +59,11 @@ function renderMo2() {
   const b = $("s-mo2"), m = state.mo2;
   b.hidden = !m;
   if (!m) return;
-  b.className = "chip link " + (m.state === "open" ? "warn" : m.state === "closed" ? "good" : "");
-  b.textContent = m.state === "open" ? "MO2 is open · close it…" : m.state === "closed" ? "MO2 is closed · open it" : "MO2: cannot tell if it is open";
+  b.className = "chip link " + (m.state === "open" || m.other ? "warn" : m.state === "closed" ? "good" : "");
+  b.textContent = m.other ? "Another modlist's MO2 is open" : m.state === "open" ? "MO2 is open · close it…" : m.state === "closed" ? "MO2 is closed · open it" : "MO2: cannot tell if it is open";
   b.title = m.state === "open" ? "ModTrap changes MO2's lists only while MO2 is closed. Reading and dry runs work either way."
-    : m.state === "closed" ? (m.other ? "A MO2 of another modlist is running; this modlist's MO2 is closed. " : "") + "Starts this modlist's MO2, to look at the result."
+    : m.other ? "A Mod Organizer for another modlist is open. MO2 hands every command to the one that is already open, so ModTrap starts nothing through MO2 until that one is closed."
+    : m.state === "closed" ? "Starts this modlist's MO2, to look at the result."
     : "ModTrap could not find out whether MO2 is running; it will not change MO2's lists until it can.";
 }
 
@@ -218,6 +220,34 @@ function renderTools(s) {
       el("tbody", {}, ...rows))));
 }
 
+// The Settings tab (DESIGN§19): how ModTrap goes about its work. Kept by the server, for every session.
+const SETTING_TEXT = [
+  ["auto_go", "After the dry run, go ahead without asking", "When the plan leaves nothing to you, the demaster goes on by itself: no “Go ahead” to press. If anything is left to you, or a plugin cannot be demastered, it still stops and asks. Off: it always shows the plan and waits."],
+  ["follow", "Show the Process tab when a demaster starts", "“Demaster Selected” takes you to the Process tab, where each stage and task is shown as it happens."],
+  ["close_mo2", "Close this modlist's MO2 without asking", "Some steps change MO2's lists and need MO2 closed (putting a demaster in place, Revert, adding a mod). On: ModTrap asks MO2 to close, as a click on its X does, without asking you first. It never ends MO2 by force. The one go closes MO2 for its last step either way: its plan says so."],
+  ["open_mo2_after", "Open MO2 again when a demaster is in place", "Starts this modlist's MO2 once the demaster is in place, so that you can look at the result."],
+  ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
+];
+function renderSettings() {
+  const box = $("settings-box");
+  if (!box) return;
+  const set = state.settings || {};
+  const text = JSON.stringify(set);
+  if (text === state.settingsText) return;
+  state.settingsText = text;
+  box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "Settings" }),
+    el("p", { class: "dim", text: "They are kept on this PC, in ModTrap's own folder, and hold for every session and modlist. What keeps your modlist safe is not a setting: the probe, the safe folder, the checks after xEdit, and Revert are always on." }),
+    ...SETTING_TEXT.map(([key, name, what]) => {
+      const box2 = el("input", { type: "checkbox", id: "set-" + key, checked: !!set[key] });
+      box2.addEventListener("change", async () => {
+        try { state.settings = await api("/api/settings", { name: key, value: box2.checked }); toast("Kept."); }
+        catch (e) { toast(e.message); box2.checked = !box2.checked; }
+        renderSettings();
+      });
+      return el("div", { class: "setting" }, box2, el("label", { class: "name", for: "set-" + key, text: name }), el("div", { class: "what", text: what }));
+    })));
+}
+
 // What the modlist's tools made (WHY§74): each tool-made plugin, who made it, and its records by kind.
 const KIND_WORDS = { NPC_: "characters", CELL: "cells", WRLD: "worldspaces", LAND: "landscape", REFR: "placed objects", ACHR: "placed characters",
   ARMO: "armour", ARMA: "armour parts", WEAP: "weapons", AMMO: "ammunition", ALCH: "potions and food", INGR: "ingredients", BOOK: "books", MISC: "items",
@@ -271,6 +301,7 @@ function renderState(s) {
   const ready = s.status === "ready";
   $("summary").hidden = !ready;
   $("tabs").hidden = !ready;
+  $("groups").hidden = !ready;
   $("steps").hidden = !ready;
   $("rescan").hidden = !ready;
   $("drop").classList.toggle("compact", ready);
@@ -401,6 +432,8 @@ function applyUi(ui) {
     filterPlugins();
     $("sel-count").textContent = state.picked.size;
     $("sel-count").classList.toggle("on", state.picked.size > 0);
+    $("group-count").textContent = state.picked.size;
+    $("group-count").classList.toggle("on", state.picked.size > 0);
     $("plan").hidden = true;
     renderSelection();
     const tabs = [...document.querySelectorAll("#tabs button")].map((b) => b.dataset.tab);
@@ -464,6 +497,7 @@ const BEING_READ = /being read/;
 
 async function demasterGo() {
   if (!state.changes || !state.picked.size) { showTab("selection"); return; }
+  if ((state.settings || {}).follow) showTab("process");            // the owner's setting: watch it where it shows
   if (state.probe && state.probe.state === "working") { goTab("tools"); return; }
   if (probeReason()) {
     if (!await confirmBox("Before ModTrap changes real plugins it proves its scripts on invented test plugins, in your own MO2 and xEdit (the probe).\n\n" +
@@ -474,7 +508,10 @@ async function demasterGo() {
       goTab("tools");
       toast("The probe has started. The demaster follows when it has passed.");
       tick();
-    } catch (e) { state.dmChain = ""; state.dmError = e.message; goTab("selection"); renderDemaster(true); }
+    } catch (e) {
+      if (OTHER_MO2.test(e.message)) { waitThen("mo2", demasterGo); return; }
+      state.dmChain = ""; state.dmError = e.message; goTab("selection"); renderDemaster(true);
+    }
     return;
   }
   // ModTrap reads the modlist again after a probe, a Revert or a Rescan. Until it has, nothing can start: the one
@@ -485,7 +522,8 @@ async function demasterGo() {
   goTab("selection");
   if (dryDone) {
     await askDemasterPlan();
-    if (state.dmChain === "ready") return;                             // the modlist is being read: it goes on by itself
+    autoGo();
+    if (state.dmChain === "wait") return;                              // the modlist is being read: it goes on by itself
     if (!state.dmError || !/dry run/.test(state.dmError)) return;      // the plan is shown, or something else is wrong
   }
   try {
@@ -499,40 +537,90 @@ async function demasterGo() {
     tick();
   } catch (e) {
     if (BEING_READ.test(e.message)) { waitForModlist(); return; }
+    if (OTHER_MO2.test(e.message)) { waitThen("mo2", demasterGo); return; }
     state.dmChain = ""; state.dmError = e.message; renderDemaster(true);
   }
 }
 
-function waitForModlist() {
-  state.dmChain = "ready";
+// The one go holds its place while something stands in its way, and takes the same step again once it is gone
+// (WHY§71, WHY§77): the modlist being read, or another modlist's MO2 being open.
+const OTHER_MO2 = /Another Mod Organizer is open/;
+const WAITS = {
+  modlist: { over: () => state.status === "ready", text: "ModTrap is reading the modlist again; the demaster goes on by itself when it has." },
+  mo2: { over: () => !(state.mo2 && state.mo2.other), text: "Another Mod Organizer is open, for another modlist. MO2 hands every command to the one that is already open, so ModTrap's would go to the wrong modlist. Close that MO2: the demaster goes on by itself, from the step it stopped at." },
+};
+function waitThen(kind, retry, quiet) {
+  state.dmChain = "wait";
+  state.dmWait = { kind: kind, retry: retry };
   state.dmError = "";
-  toast("ModTrap is reading the modlist again; the demaster goes on by itself when it has.");
+  if (!quiet) toast(WAITS[kind].text);
   renderDemaster(true);
+  state.processText = ""; renderProcess();
+}
+function waitForModlist() { waitThen("modlist", demasterGo); }
+function waitNote() {
+  const w = state.dmChain === "wait" && state.dmWait;
+  if (!w) return null;
+  const now = el("button", { type: "button", text: "Try again now" });
+  now.addEventListener("click", () => { tick(); });
+  const stop = el("button", { type: "button", text: "Stop waiting" });
+  stop.addEventListener("click", () => { state.dmChain = ""; state.dmWait = null; renderDemaster(true); state.processText = ""; renderProcess(); });
+  return el("p", { class: "wait-note", role: "status" }, "Paused: " + WAITS[w.kind].text, w.kind === "mo2" ? now : null, stop);
 }
 
 // What follows by itself: the plan after the dry run, and putting the plugins in place once they are verified.
 function demasterChain() {
   const job = state.job, d = state.demaster;
-  if (state.dmChain === "ready" && state.status === "ready" && !state.dmGoing) {
-    state.dmChain = ""; state.dmGoing = true;
-    demasterGo().finally(() => { state.dmGoing = false; });
+  if (state.dmChain === "wait" && state.dmWait) {
+    if (WAITS[state.dmWait.kind].over() && !state.dmGoing) {
+      const again = state.dmWait.retry;
+      state.dmChain = ""; state.dmWait = null; state.dmGoing = true;
+      renderDemaster(true); state.processText = "";
+      Promise.resolve(again()).finally(() => { state.dmGoing = false; });
+    }
     return;
   }
   if (state.dmChain === "probe" && state.probe) {
-    if (state.probe.state === "passed" && !probeReason()) state.dmChain = "ready";       // then the modlist is read again
+    if (state.probe.state === "passed" && !probeReason()) waitThen("modlist", demasterGo, true);   // then the modlist is read again
     if (state.probe.state === "failed") { state.dmChain = ""; toast("The probe did not pass: the Tools tab says where. Nothing real was changed."); }
   }
   if (state.dmChain === "dry" && job && job.id !== state.dmChainFrom) {
-    if (job.state === "done") { state.dmChain = ""; goTab("selection"); askDemasterPlan(); }
+    if (job.state === "done") { state.dmChain = ""; goTab("selection"); askDemasterPlan().then(autoGo); }
     else if (["failed", "stopped"].includes(job.state)) state.dmChain = "";
   }
   if (state.dmChain === "install" && d) {
-    if (d.state === "verified") { state.dmChain = ""; demasterCall("/api/demaster/install", { close_mo2: true }, "In place. ModTrap is reading the modlist again.", true); }
+    if (d.state === "verified") {
+      state.dmChain = "";
+      demasterCall("/api/demaster/install", { close_mo2: true }, "In place. ModTrap is reading the modlist again.", true).then(() => {
+        if ((state.settings || {}).open_mo2_after && state.demaster && state.demaster.state === "installed") call("/api/mo2/open", {}).catch((e) => toast(e.message));
+      });
+    }
     else if (d.state === "failed") state.dmChain = "";
   }
 }
 
-function planGoAhead() { state.dmChain = "install"; return demasterCall("/api/demaster/start", {}, "The demaster has started: xEdit opens through MO2."); }
+async function planGoAhead() {
+  try { await api("/api/demaster/start", {}); }
+  catch (e) {
+    if (OTHER_MO2.test(e.message)) { waitThen("mo2", planGoAhead); return; }     // the plan stays; the step is taken again
+    state.dmError = e.message; state.dmPlan = null; await tick(); renderDemaster(true); return;
+  }
+  state.dmChain = "install"; state.dmError = ""; state.dmPlan = null;
+  toast("The demaster has started: xEdit opens through MO2.");
+  state.gen = (state.gen || 0) + 1;
+  await tick();
+  renderDemaster(true);
+}
+// The owner's setting (DESIGN§19): after the dry run, go ahead without asking, but only when the plan leaves
+// nothing to them. Anything left to the owner, and the plan waits for them as always.
+function autoGo() {
+  const p = state.dmPlan, set = state.settings || {};
+  if (!p || !set.auto_go || state.dmChain === "wait") return;
+  if ((p.needs_you || []).length || p.blocked) { toast("The plan leaves something to you, so ModTrap asks before going on."); return; }
+  toast("Nothing in the plan is left to you: going ahead, as set in Settings.");
+  planGoAhead();
+}
+
 function planNotNow() { state.dmPlan = null; renderDemaster(true); state.processText = ""; renderProcess(); }
 async function putInPlace() {
   const d = state.demaster;
@@ -587,6 +675,7 @@ function renderDemaster(force) {
       ...p.notes.map((n) => el("p", { class: "dim", text: n })),
       el("div", { class: "actions" }, go, cancel)));
   }
+  if (waitNote()) cards.push(el("div", { class: "card" }, waitNote()));
   if (state.dmError) cards.push(el("div", { class: "card" }, el("p", { class: "would-needs", text: state.dmError })));
   if (d && d.state === "working") cards.push(el("div", { class: "card installer" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " The demaster is running"),
     el("p", { class: "dim", text: "xEdit is open through MO2 and closes by itself. Leave it alone. When every new plugin is checked, ModTrap puts them in place." }),
@@ -1147,6 +1236,7 @@ function togglePick(name, on) {
     if (box) box.checked = on;
   }
   $("sel-count").textContent = state.picked.size;
+  $("group-count").textContent = state.picked.size; $("group-count").classList.toggle("on", state.picked.size > 0);
   $("sel-count").classList.toggle("on", state.picked.size > 0);
   updateDryButton();
   $("plan").hidden = true;
@@ -1690,12 +1780,15 @@ function renderProcess() {
   const tool = state.tool;
   const text = JSON.stringify(stages) + "#" + [state.status, state.dmChain || "", state.dmPlan ? 1 : 0, state.picked.size, state.changes ? 1 : 0,
     state.changes ? probeReason() : "", state.demaster ? state.demaster.state : "", tool ? tool.state + tool.title : "",
+    state.dmWait ? state.dmWait.kind : "",
     state.session && state.session.locked ? 1 : 0].join("|");
   const going = stages.find((s) => s.state === "going"), failed = stages.find((s) => s.state === "failed");
   const yours = !going && !failed && stages.find((s) => s.state === "yours" && s.key !== "after");
   const dot = $("process-dot");
   dot.hidden = !(going || failed || yours);
   dot.className = "live-dot" + (failed && !going ? " bad" : yours ? " yours" : "");
+  const gd = $("group-dot");
+  gd.hidden = dot.hidden; gd.className = dot.className;
   if (text === state.processText) return;
   state.processText = text;
   const flow = $("process-flow");
@@ -1704,6 +1797,10 @@ function renderProcess() {
     : after && after.state === "yours" && stages.every((s) => s === after || s.state === "done") ? "ModTrap's part is done. Yours now: " + after.title : "Process";
   $("process-intro").hidden = !stages.length;
   if (!stages.length) { flow.replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "Open a modlist and tick a mod: its demaster shows here as it goes." }))); return; }
+  const paused = waitNote(), pw = $("process-wait");
+  pw.hidden = !paused;
+  pw.replaceChildren(...(paused ? [paused] : []));
+  if (paused) $("process-summary").textContent = "Paused: waits for you";
   flow.replaceChildren(...stages.map((s, i) => {
     const word = STAGE_WORD[s.state] || STAGE_WORD.waiting;
     const title = el("button", { type: "button", text: s.title, title: "Go to where this stage is worked" });
@@ -2218,7 +2315,19 @@ async function pollAdd(force) {
 // --- tabs, the log, and the loop -------------------------------------------------------------------------------------
 
 function showTab(name) {
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  // Two rows (DESIGN§4): the section the tab belongs to, and that section's tabs.
+  const mine = document.querySelector('#tabs button[data-tab="' + name + '"]');
+  const group = mine ? mine.dataset.group : "modlist";
+  state.groupTab = state.groupTab || {};
+  state.groupTab[group] = name;
+  let shown = 0;
+  document.querySelectorAll("#tabs button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === name);
+    b.hidden = b.dataset.group !== group;
+    if (!b.hidden) shown++;
+  });
+  $("tabs").classList.toggle("single", shown < 2);
+  document.querySelectorAll("#groups button").forEach((b) => b.classList.toggle("on", b.dataset.group === group));
   document.querySelectorAll(".tab").forEach((t) => { t.hidden = t.id !== "tab-" + name; });
   state.tab = name;
   updateTray();
@@ -2273,6 +2382,8 @@ async function tick() {
   state.changes = !!s.changes;
   state.mo2 = s.mo2 || null;
   renderMo2();
+  state.settings = s.settings || {};
+  renderSettings();
   state.process = s.process || [];
   renderProcess();
   const up = $("updated");
@@ -2467,6 +2578,9 @@ $("rescan").addEventListener("click", async () => {
   tick();
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+const GROUP_FIRST = { modlist: "mods", demaster: "selection", add: "add", record: "history", settings: "settings" };
+document.querySelectorAll("#groups button").forEach((b) => b.addEventListener("click", () =>
+  showTab((state.groupTab || {})[b.dataset.group] || GROUP_FIRST[b.dataset.group])));
 $("dry-run").addEventListener("click", showPlan);
 $("demaster").addEventListener("click", demasterGo);
 $("process-go").addEventListener("click", demasterGo);

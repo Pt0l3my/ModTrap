@@ -282,7 +282,9 @@ ARRAY_ELEMENTS = ("etArray", "etSubRecordArray")      # xEdit's names for an ele
 ARRAY_VALUES = ("dtArray", "dtSubRecordArray")         # and for a value that is one (a list inside one field)
 
 
-def _safe_array(signature: str, array_name: str) -> bool:
+def _safe_array(signature: str, array_name: str, script_props: bool = True) -> bool:
+    if not script_props and array_name.strip() in SCRIPT_ARRAYS:
+        return False                                  # the owner's setting: script properties are left to them
     return any((sig in ("*", signature)) and array_name.strip() == name for sig, name in SAFE_ARRAYS)
 
 
@@ -382,7 +384,7 @@ def resolve_part(key: tuple[str, str, str], hard: list[dict], parts: dict, entri
 
 
 def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[str] = (),
-                 primary: Iterable[str] = ()) -> dict:
+                 primary: Iterable[str] = (), script_props: bool = True) -> dict:
     """The script's report as the page shows it: per dependant, what needs a trapped plugin and what ModTrap would
     do about each (MT4): "record" (the dependant's copy of a trapped plugin's own record: taken out), "entry" (an
     entry of a list that is safe to shorten: taken out), "needs you" (anything else).
@@ -422,7 +424,7 @@ def parse_report(text: str, trapped: Iterable[str] = (), trapped_mods: Iterable[
         elif kind == "E" and len(f) >= 7 and (f[1], f[2]) in records:
             rec = records[(f[1], f[2])]
             c = read_chain(f[6])
-            safe = c["kind"] == "entry" and _safe_array(rec["signature"], c["array"])
+            safe = c["kind"] == "entry" and _safe_array(rec["signature"], c["array"], script_props)
             rec["elements"].append({"kind": c["kind"], "entry": c["entry"], "index": c["index"], "array": c["array"],
                                     "array_length": c["array_length"], "path": f[3], "target_file": f[4],
                                     "target_form": f[5], "would": "entry" if safe else "needs you",
@@ -785,7 +787,9 @@ class Job:
             if elapsed > TIME_LIMIT:
                 raise Refused("the dry run took longer than %d minutes; ModTrap stopped waiting" % (TIME_LIMIT // 60))
         self.state = "checking"
-        self.result = parse_report(_read(report), p.trapped, p.trapped_mods, self.model.instance.primary)
+        options = paths.load_settings().get("options")
+        self.result = parse_report(_read(report), p.trapped, p.trapped_mods, self.model.instance.primary,
+                                   script_props=not (isinstance(options, dict) and options.get("script_props") is False))
         board.settle("dry", "close")
         board.mark("dry", "close", process.GOING)
         close_xedit(image, self._running, self._closer, self._poll, mo2_was_running=mo2_was_running)   # XE01§11
