@@ -664,3 +664,11 @@ service does not answer as expected.
 **A source without typing (MT45, WHY§109).** Where no record names a mod's source, ModTrap reads the mark the
 browser left on the archive the mod was installed from, if it still lies in MO2's downloads folder. A mod ModTrap
 adds gets its source written into its own record, so that it can be asked about afterwards like any other.
+
+**Manual update, favourites, the site's window (MT46, WHY§110, WHY§111).** A mod's menu has "Manual update…", a box
+with a coloured drop zone and "Add file…" for an archive the owner downloaded themselves, which goes to Add mods as
+the mod's newer version; and "Mark as favourite", the owner's own mark, kept in ModTrap's folder. The row of states
+is named "Filter:" and ends with "★ Favourites". A site's page for a download opens in a small window beside ModTrap
+(a setting, on), cut loose from ModTrap; a second setting, off, keeps it tied for Nexus, GitHub and LoversLab so
+that ModTrap can close it. A download is known by MO2's numbers, the browser's mark, its exact name, or the mod's
+number and the upload's time in its name; a storage code given for a name is never shown or waited for.

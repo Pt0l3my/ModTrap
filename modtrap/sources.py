@@ -198,12 +198,12 @@ def given_load() -> dict:
         with open(paths.home() / GIVEN, "rb") as f:
             got = json.loads(f.read().decode("utf-8"))
         if got.get("format") == "modtrap-given/1":
-            for k in ("links", "archives", "mods"):
+            for k in ("links", "archives", "mods", "favourites"):
                 got.setdefault(k, {})
             return got
     except (OSError, ValueError):
         pass
-    return {"format": "modtrap-given/1", "links": {}, "archives": {}, "mods": {}}
+    return {"format": "modtrap-given/1", "links": {}, "archives": {}, "mods": {}, "favourites": {}}
 
 
 def given_save(given: dict) -> None:
@@ -359,6 +359,9 @@ class _Inflate:
         return False
 
     def flush(self):
+        pass
+
+    def close(self):
         pass
 
     def read(self, n: int = -1) -> bytes:

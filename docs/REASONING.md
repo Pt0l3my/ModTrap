@@ -132,6 +132,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 107 | 2026-11-22 | On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made | FACT | #updates #page |
 | 108 | 2026-11-22 | The owner was right that a scan needs no key: Nexus's newer public service answers without one; the scan is rebuilt on it, the key kept only for fetching and as a fallback | DECIDED | #updates #network |
 | 109 | 2026-11-22 | A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about | DECIDED | #updates #add |
+| 110 | 2026-11-22 | A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name | FACT | #updates #network |
+| 111 | 2026-11-22 | A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting | DECIDED | #updates #page #safety |
 
 ## Entries
 
@@ -2802,3 +2804,57 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   getting its source from the mark while a mod with a record keeps its own; the record of a newer version read
   back by ModTrap's own reader; the hand-over through Add mods). The reading of a real mark on Windows is not
   checked.
+
+### 110. A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name
+
+`2026-11-22` · FACT · `#updates #network` · refs: MT46, MT42, MT44, TL01§29, WHY§106, WHY§108, WHY§109
+
+- The owner's session file at 0.3.38 shows the scan without a key working on the real list: 3,000 distinct mods
+  asked when they last had a new file, the files of 2,190 asked for, none left, in 500 questions and 184.4 s.
+- The same file shows why a download started on Nexus's page was not taken. For the mod the owner updated, the
+  public service's `uri` of the newer file was not a file's name but a code of three short parts and a long one,
+  divided by slashes: where the file is stored. ModTrap showed that code as the file's name and waited for a
+  download of exactly that name, which no browser writes. LIKELY: the service gives such codes for files uploaded
+  through Nexus's newer uploader; older files still carry a name.
+- The files question now also asks each file's `name`, its name on the mod's page. That is what the owner is
+  shown; where it is empty too, "the mod's newer file". A `uri` counts as a file's name only where it ends as an
+  archive does.
+- A download is now known, in this order: by the numbers MO2 writes beside an archive in its own folder; by the
+  browser's mark on the file (WHY§109), where the page it came from is the mod's page at Nexus, same game and same
+  number; by the exact name, where one is known; by the mod's number and the upload's time, which Nexus puts at
+  the end of every download's name ("…-<mod's number>-<version>-<time>.7z") and which the service gives as the
+  file's `date`. A name of that shape that fits no waited mod is nobody's: before this, the installed file
+  downloaded again would have been taken as the newer one, by the likeness of its name (found by a new test).
+- Only where one mod alone is waited for, and nothing above speaks, an archive is taken whose name begins as the
+  file's name on the page does, or as the installed archive's.
+- Checked: tests (a storage code is never shown or waited for; the download known by number and time while the
+  installed file and another mod's file are passed by; known by the mark whatever its name, another page's file
+  left; the one-mod fallback), and in a browser against a stand-in service: the file dropped into the watched
+  folder under a name ModTrap was never told is taken to Add mods. Not checked: a real download on the owner's PC.
+
+### 111. A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting
+
+`2026-11-22` · DECIDED · `#updates #page #safety` · refs: MT46, MT40, MT42, WHY§105, WHY§106
+
+- The owner asked whether Nexus's page must open at all without a key, and otherwise to stay on ModTrap's tab.
+- It must: the public service names a mod's files and gives no address to fetch one from; the address is made by
+  Nexus's page for the signed-in browser, or by the keyed service for a paying account only (WHY§105). ModTrap
+  takes no password and does not act as the owner's browser (the secrets policy), so the press on Nexus's page
+  stays the owner's.
+- A page cannot open a tab behind itself: browsers put a new tab or window in front. The nearest thing is a small
+  window beside ModTrap, opened on the owner's press, which leaves ModTrap's tab as it is. It is opened empty at
+  the press itself, because a browser lets a page open a window only then, and sent to the address once ModTrap's
+  answer names it; it is closed again where ModTrap fetches the file itself.
+- Found in a browser: a window whose tie to ModTrap is cut (`opener` set to nothing, as "noopener" does) cannot be
+  closed by ModTrap afterwards, nor found again by its name. And a window whose tie is kept gives the site's page
+  a handle on ModTrap's tab, by which it may send that tab to any address: the known danger "noopener" exists
+  against. There is no third way: any window a page may close is one that can reach the page.
+- DECIDED: cut loose by default; the owner closes the window. A second setting, off, keeps the tie, only for
+  addresses at Nexus, GitHub and LoversLab; ModTrap then closes the window when the file is here or the waiting
+  ends, uses the one window for the next mod, and holds a "leave this page?" question on its own tab while such a
+  window is open, so that the tab cannot be sent anywhere unseen. Any other address is always cut loose.
+- What the tie could cost at worst: ModTrap's tab replaced by another page. ModTrap's server answers only its own
+  page (requests of another origin are refused), so nothing of the modlist could be changed through it.
+- Checked in a browser against a stand-in page: cut loose, the page sees no opener and stays open after "stop
+  waiting"; tied, the page sees its opener, is closed on "stop waiting" and when the file arrives. The page test
+  that forbids outside addresses and inline code still holds.

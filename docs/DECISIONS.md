@@ -37,6 +37,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   all the way: a setting lets a newer file be added without asking where its plan leaves nothing open).
   MT44 (a scan for updates needs no key). MT45 (a source without typing: the mark a browser leaves on a download, and
   a mod ModTrap adds keeps its source).
+  MT46 (a "Manual update" box and favourites in a mod's menu, a Favourites filter; a site's page for a download in a
+  small window of its own, so that ModTrap's tab stays).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -964,3 +966,37 @@ not provide the source."
   numbers at Nexus, or its web address. A newer version takes over the older one's source, and the owner's own
   source link is kept for it too. So a mod stays askable after ModTrap has updated it.
 - The owner's own link (MT38) still comes before everything; a link to a release's page now records the release.
+
+## MT46
+
+**Manual update, favourites, and staying on ModTrap's tab** · *2026-11-22 · The owner's request*
+
+**Owner's words.** "can you also add: 1. in the right click menu of a mod, "Manual update". Clicking on that will open
+a pop up UI window with colored file drop zone and "Add file" button. 2. also in right click menu, "Mark as Favorite".
+Clicking on this will mark the mod as a favorite. 3. Add a Favorite to states (should be renamed filter I suppose), so
+clicking on that will show only mod rows that have been marked as favorite." And, after updating a mod: "ModTrap
+opened Nexus download page for the mode (the one where the file is being downloaded). Is that necessary? Can it be done
+without opening nexus download browser tab (without nexus key that is)? If not, then make it so when the nexus page is
+opened, stay on ModTrap browser tab (could be a setting). The nexus page was opened but couldn't fetch the mod file."
+
+**Settled** (WHY§110, WHY§111; the owner may overrule any of it):
+
+- **Manual update.** A mod's menu has "Manual update…": a box of ModTrap's own with a coloured drop zone and an "Add
+  file…" button, for an archive the owner downloaded themselves. The file goes to Add mods as the mod's newer version
+  (MT41); the box changes nothing.
+- **Favourites.** A mod's menu has "Mark as favourite" and, for a favourite, "Remove from favourites". The mark is the
+  owner's own, kept in ModTrap's folder for that modlist; nothing of the mod is touched. A favourite shows a star
+  before its name on the Updates tab.
+- **The filter.** The row of states is named "Filter:" and ends with "★ Favourites", which shows only the favourites
+  and works together with the other filters.
+- **The site's page.** Without a key of a paying account Nexus gives a file only through its page, in the browser
+  where the owner is signed in (MT40, WHY§105); ModTrap cannot do without that page. A setting, on, opens it in a
+  small window beside ModTrap, so that ModTrap's tab stays as it is. A browser gives a page no way to open a tab
+  behind the one in front.
+- **Closing that window.** A second setting, off, lets ModTrap close the window itself when the file is here or the
+  waiting ends. It is off because the window must then stay tied to ModTrap's tab, and a tied page can send the tab
+  that opened it elsewhere; with it on, the tie is kept only for Nexus, GitHub and LoversLab, and the browser asks
+  before ModTrap's tab goes anywhere while such a window is open.
+- **The file that was not taken.** Nexus's public service gave a storage code where the file's name was expected, so
+  ModTrap waited for a name no download carries. A download is now known by the browser's mark on it, or by the mod's
+  number and the upload's time in its name; the storage code is never shown or waited for.

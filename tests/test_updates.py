@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 import time
+import types
 import unittest
 import zipfile
 from pathlib import Path
@@ -751,7 +752,7 @@ def public_service(mods: dict, game_id: int = 1704, asked: list | None = None):
         if "modFiles" in query:
             out = {}
             for alias, mod_id in _re.findall(r'(m\d+): modFiles\(modId: "(\d+)"', query):
-                out[alias] = [{"fileId": f[0], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5]}
+                out[alias] = [{"fileId": f[0], "name": f[6] if len(f) > 6 else f[1], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5]}
                               for f in mods[int(mod_id)]["files"]]
             return 200, {}, {"data": out}
         return 200, {}, {"errors": [{"message": "not a question this stand-in knows"}], "data": None}
@@ -872,6 +873,110 @@ class WithoutAKey(unittest.TestCase):
         self.net.public = public_service({}, asked=qs)
         updates.scan(rows, "", self.net, updates.load(), now=1_800_000_000, pause=0)
         self.assertEqual([q for q in qs if "#" in q or "x\")" in q], [])
+
+
+class TheDownloadsOwnName(unittest.TestCase):
+    """WHY§110: Nexus's public service may give a storage code where a file's name is expected. The file is then
+    shown by its name on the mod's page, and its download is known by the browser's mark on it, or by the mod's
+    number and the upload's time in the name the site gives the download."""
+
+    T_OLD, T_NEW = 1774355307, 1778020881
+
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        self.browser = Path(self.tmp.name) / "Browser Downloads"
+        self.browser.mkdir()
+        self.up = updating.Updating(net=FakeNet({}))
+        self.up.set_downloads_folder(str(self.browser))
+        self.model = types.SimpleNamespace(instance=types.SimpleNamespace(downloads_dir=None))
+        self.staged = []
+        self.row = dict(Verdicts.row(self), mod="Quill", mod_id=4321, files=[735000], archive="Quill-4321-6-0-%d.zip" % self.T_OLD)
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def verdict(self, uri="ab/cd/ef/0123456789abcdef", page_name="Quill Main File"):
+        kept = {"files": [[735000, "Quill-4321-6-0-%d.zip" % self.T_OLD, "6.0", 7, self.T_OLD, 42, "Quill Main File"],
+                          [749043, uri, "6.11", 1, self.T_NEW, 42, page_name]], "chain": [], "asked": 1}
+        return updates.nexus_verdict(self.row, kept)
+
+    def looks(self, times=3):
+        stage = lambda path, name, mod, version, meta: self.staged.append((name, mod, version, meta)) or {"id": "s%d" % len(self.staged), "name": mod}
+        for _ in range(times):
+            self.up._looked = 0
+            self.up.look(self.model, stage)
+
+    def test_a_storage_code_is_never_shown_or_waited_for_as_a_files_name(self):
+        v = self.verdict()
+        self.assertEqual((v["state"], v["file"], v["file_name"], v["time"], v["file_id"]), ("update", "Quill Main File", "", self.T_NEW, 749043))
+        self.assertNotIn("ab/cd", v["text"])
+        self.assertEqual(self.verdict(page_name="")["file"], "the mod's newer file")                 # no name on the page either
+        v = self.verdict(uri="Quill-4321-6-11-%d.zip" % self.T_NEW)
+        self.assertEqual(v["file_name"], "Quill-4321-6-11-%d.zip" % self.T_NEW)                     # a real name is kept as before
+        self.assertEqual(updates.how_to_get(self.row, self.verdict(), {}, True, True)["name"], "Quill Main File")
+
+    def test_the_download_is_known_by_the_mods_number_and_the_uploads_time_in_its_name(self):
+        self.up._expect(self.row, self.verdict())
+        data = a_zip({"readme.txt": b"x"})
+        fx.write(self.browser / ("Quill-4321-6-0-%d.zip" % self.T_OLD), data)                       # the installed file, downloaded again
+        fx.write(self.browser / ("Reed-5000-6-11-%d.zip" % self.T_NEW), data)                       # another mod's
+        fx.write(self.browser / "Unrelated.zip", data)
+        self.looks()
+        self.assertEqual((self.staged, list(self.up.waiting)), ([], ["Quill"]))
+        fx.write(self.browser / ("A Name Nobody Told-4321-6-11-%d (1).zip" % self.T_NEW), data)
+        self.looks()
+        self.assertEqual([(n, m, v) for n, m, v, _ in self.staged], [("A Name Nobody Told-4321-6-11-%d (1).zip" % self.T_NEW, "Quill", "6.11")])
+        self.assertEqual(self.staged[0][3], {"mod_id": 4321, "file_id": 749043, "version": "6.11"})
+        self.assertEqual((self.up.waiting, self.up.fetching["Quill"]["state"]), ({}, "done"))
+
+    def test_the_download_is_known_by_the_browsers_mark_whatever_its_name(self):
+        self.up._expect(self.row, self.verdict())
+        other = dict(self.row, mod="Reed", mod_id=5000, archive="Reed-5000-1-0-%d.zip" % self.T_OLD)
+        self.up._expect(other, dict(self.verdict(), file_id=901))
+        mark = "[ZoneTransfer]\r\nZoneId=3\r\nReferrerUrl=https://www.nexusmods.com/skyrimspecialedition/mods/%d?tab=files&file_id=1\r\nHostUrl=https://cdn.example.invalid/x\r\n"
+        marks = {"renamed.zip": mark % 4321, "elsewhere.zip": mark % 9999}
+        self.up.mark_reader = lambda path: marks.get(Path(path).name, "")
+        data = a_zip({"readme.txt": b"x"})
+        fx.write(self.browser / "elsewhere.zip", data)                                               # from another mod's page: nobody's
+        fx.write(self.browser / "renamed.zip", data)
+        self.looks()
+        self.assertEqual([(n, m) for n, m, _v, _ in self.staged], [("renamed.zip", "Quill")])
+        self.assertEqual(list(self.up.waiting), ["Reed"])
+
+    def test_one_mod_waited_for_takes_an_archive_named_as_its_file_is_on_the_page(self):
+        self.up._expect(self.row, self.verdict())
+        data = a_zip({"readme.txt": b"x"})
+        fx.write(self.browser / "Something Else Entirely.zip", data)
+        self.looks()
+        self.assertEqual(self.staged, [])
+        fx.write(self.browser / "Quill Main File 6.11.zip", data)
+        self.looks()
+        self.assertEqual([(n, m) for n, m, _v, _ in self.staged], [("Quill Main File 6.11.zip", "Quill")])
+
+
+class Favourites(Sources):
+    """MT46: the owner's own mark on a mod, kept in ModTrap's folder for that modlist, shown and counted with the rows."""
+
+    def test_a_mod_is_marked_and_unmarked_and_the_rows_tell(self):
+        a = api.Api()
+        a.running = lambda image: False
+        a.updating.net = FakeNet({})
+        a.open(str(self.root), wait=True)
+        name = a.get("/api/updates", {})[1]["rows"][0]["mod"]
+        self.assertEqual(a.get("/api/updates", {})[1]["counts"].get("fav", 0), 0)
+        self.assertEqual(a.post("/api/updates/favourite", {"mod": name, "on": True})[1], {"favourite": True, "count": 1})
+        st = a.get("/api/updates", {})[1]
+        self.assertEqual(([r["mod"] for r in st["rows"] if r["fav"]], st["counts"]["fav"]), ([name], 1))
+        self.assertEqual(list(sources.given_load()["favourites"].values()), [[sources.fold(name)]])
+        a.post("/api/updates/favourite", {"mod": name, "on": False})
+        st = a.get("/api/updates", {})[1]
+        self.assertEqual(([r["mod"] for r in st["rows"] if r["fav"]], st["counts"]["fav"]), ([], 0))
+        with self.assertRaises(api.Bad):
+            a.post("/api/updates/favourite", {"mod": "No Such Mod", "on": True})
 
 
 class TheKeyAndThePage(unittest.TestCase):

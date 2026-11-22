@@ -104,6 +104,8 @@ SETTINGS = {
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
+    "site_window": True,       # a site's page for a download opens in a small window of its own (MT46)
+    "site_window_closes": False,   # that window stays tied to ModTrap's tab, so that ModTrap can close it (MT46, WHY§111)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -509,6 +511,11 @@ class Api:
                 if isinstance(body.get("mod"), str):
                     self.updating.seen(body["mod"])
                 return {}
+            if what == "favourite":
+                mod, on = body.get("mod"), body.get("on")
+                if not isinstance(mod, str) or not isinstance(on, bool) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):
+                    raise Bad("that is not a mod of this modlist")
+                return self.updating.set_favourite(key, mod, on)
             if what == "link":
                 mod, url = body.get("mod"), body.get("url", "")
                 if not isinstance(mod, str) or not isinstance(url, str) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):

@@ -239,7 +239,10 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
         if mine and mine == kept["updated"]:
             return {"state": "current", "text": "the installed file is the mod's newest: nothing was uploaded after it", "newest": "", "file": "", "when": "", "asked": asked}
         return {"state": "not asked", "text": "Nexus has not been asked for this mod's files yet", "newest": "", "file": "", "when": "", "asked": ""}
-    files = {f[0]: {"id": f[0], "name": f[1], "version": f[2], "state": f[3], "time": f[4], "group": f[5] if len(f) > 5 else 0} for f in kept.get("files", [])}
+    # "name" is what the file is downloaded as, where the service gives that; for newer uploads it gives a storage
+    # code instead (WHY§110), so "label", the file's name on its page, is what is shown.
+    files = {f[0]: {"id": f[0], "name": f[1], "version": f[2], "state": f[3], "time": f[4], "group": f[5] if len(f) > 5 else 0,
+                    "label": (f[6] if len(f) > 6 and f[6] else f[1] if ARCHIVE.search(f[1]) else "the mod's newer file")} for f in kept.get("files", [])}
     chain = {c[0]: c for c in kept.get("chain", [])}
     installed = [i for i in row.get("files", []) if i in files or i in chain or any(c[1] == i for c in chain.values())]
     how = "by the file's number"
@@ -255,10 +258,10 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
                     "newest": "", "file": "", "when": "", "asked": asked}
         if row.get("version") and any(same_version(row["version"], f["version"]) for f in mains):
             return {"state": "current", "text": "the installed version is that of a main file (the file itself could not be told)",
-                    "newest": mains[0]["version"], "file": mains[0]["name"], "when": _day(mains[0]["time"]), "asked": asked}
+                    "newest": mains[0]["version"], "file": mains[0]["label"], "when": _day(mains[0]["time"]), "asked": asked}
         return {"state": "maybe", "text": "the installed file could not be told among the mod's files; its main file is version %s, of %s, and "
                                           "the installed version reads %s" % (mains[0]["version"] or "(none given)", _day(mains[0]["time"]), row.get("version") or "(none given)"),
-                "newest": mains[0]["version"], "file": mains[0]["name"], "when": _day(mains[0]["time"]), "asked": asked}
+                "newest": mains[0]["version"], "file": mains[0]["label"], "when": _day(mains[0]["time"]), "asked": asked}
     best = None
     unsure = None
     for i in installed:
@@ -291,12 +294,13 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
                 unsure = later
     if best is not None:
         return {"state": "update", "text": "a newer file replaced the installed one (%s): %s, version %s, of %s" % (
-            how, best["name"], best["version"] or "(none given)", _day(best["time"])),
-                "newest": best["version"], "file": best["name"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"]}
+            how, best["label"], best["version"] or "(none given)", _day(best["time"])),
+                "newest": best["version"], "file": best["label"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"],
+                "file_name": best["name"] if ARCHIVE.search(best["name"]) else "", "time": best["time"]}
     if unsure is not None:
         return {"state": "maybe", "text": "the installed file is marked old or is no longer listed, with no word of what replaced it; a later "
-                                          "main file is there: %s, version %s, of %s" % (unsure["name"], unsure["version"] or "(none given)", _day(unsure["time"])),
-                "newest": unsure["version"], "file": unsure["name"], "when": _day(unsure["time"]), "asked": asked}
+                                          "main file is there: %s, version %s, of %s" % (unsure["label"], unsure["version"] or "(none given)", _day(unsure["time"])),
+                "newest": unsure["version"], "file": unsure["label"], "when": _day(unsure["time"]), "asked": asked}
     return {"state": "current", "text": "no newer file replaced the installed one (%s)" % how, "newest": "", "file": "", "when": "", "asked": asked}
 
 
@@ -436,7 +440,7 @@ def _scan_public(rows: list[dict], wanted: dict, net: Net, store: dict, now: flo
         say("asking Nexus for the files of mod %d of %d" % (min(at + len(part), len(need)), len(need)))
 
         def files_of(some):
-            return "{ %s }" % " ".join('m%d: modFiles(modId: "%d", gameId: "%d") { fileId uri version categoryId date groupId }' % (i, k[1], games[k[0]])
+            return "{ %s }" % " ".join('m%d: modFiles(modId: "%d", gameId: "%d") { fileId name uri version categoryId date groupId }' % (i, k[1], games[k[0]])
                                        for i, k in enumerate(some))
         data, why = ask(files_of(part))
         answers: dict[tuple[str, int], object] = {}
@@ -463,7 +467,7 @@ def _scan_public(rows: list[dict], wanted: dict, net: Net, store: dict, now: flo
             for f in got:
                 try:
                     files.append([int(f["fileId"]), str(f.get("uri") or ""), str(f.get("version") or ""), int(f.get("categoryId") or 0),
-                                  int(f.get("date") or 0), int(f.get("groupId") or 0)])
+                                  int(f.get("date") or 0), int(f.get("groupId") or 0), str(f.get("name") or "")])
                 except (KeyError, TypeError, ValueError):
                     continue
             rec.update(files=files, chain=[], asked=int(now), via="public")
@@ -702,7 +706,7 @@ def how_to_get(row: dict, v: dict, store: dict, key: bool, premium: bool | None)
             return {"open": page, "why": "no Nexus key is kept, so the download goes through Nexus's page and MO2"}
         if premium is False:
             return {"open": page, "why": "Nexus lets a program start a download only for a Premium account, so it goes through Nexus's page and MO2"}
-        return {"fetch": "nexus", "file_id": v["file_id"], "name": v.get("file") or "", "version": v.get("newest") or "", "page": page}
+        return {"fetch": "nexus", "file_id": v["file_id"], "name": v.get("file_name") or v.get("file") or "", "version": v.get("newest") or "", "page": page}
     if row["host"] == "github" and row.get("repo"):
         kept = store["github"].get(row["repo"].lower())
         got = github_asset(row, kept)
@@ -710,8 +714,8 @@ def how_to_get(row: dict, v: dict, store: dict, key: bool, premium: bool | None)
             return {"open": page, "why": "the newest release has no file, or several, and ModTrap cannot tell which is this mod's"}
         return {"fetch": "github", "url": got[1], "name": got[0], "version": (kept or {}).get("tag", ""), "page": page}
     if row["host"] == "loverslab":
-        return {"open": page, "why": "LoversLab gives files only to your logged-in browser; download it there, then use “Install a downloaded archive as its newer version” in the mod's menu"}
-    return {"open": page, "why": "ModTrap cannot fetch from there; download it in your browser, then use “Install a downloaded archive as its newer version” in the mod's menu"}
+        return {"open": page, "why": "LoversLab gives files only to your logged-in browser; download it there, then use “Manual update” in the mod's menu"}
+    return {"open": page, "why": "ModTrap cannot fetch from there; download it in your browser, then use “Manual update” in the mod's menu"}
 
 
 def fetch(how: dict, row: dict, key: str, net: Net, folder: Path, progress=None, stopped=None) -> dict:
