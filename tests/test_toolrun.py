@@ -76,6 +76,19 @@ class Tools(unittest.TestCase):
         self.api.post("/api/tool/start", {"title": "Invented Patcher"})
         t = self.ended()
         self.assertEqual((t["state"], t["changed_count"]), ("done", 0))
+        self.assertEqual((t["profile"], t["hint"]), ("Default", ""))             # which MO2 profile it was given; no hint known
+
+    def test_what_is_known_about_a_tool_that_wrote_nothing_is_said(self) -> None:
+        """TL01§16: the patcher framework that closes without output most often could not build its patchers
+        inside MO2. That is data, said as a hint, only when it wrote nothing."""
+        ini = self.root / "ModOrganizer.ini"
+        ini.write_bytes(ini.read_bytes().replace(b"title=Invented Patcher", b"title=Synthesis").replace(b"Patcher.exe", b"Synthesis.exe"))
+        self.api.open(str(self.root), wait=True)
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertEqual(t["changed_count"], 0)
+        self.assertIn("build them outside MO2", t["hint"])
+        self.assertIn("Synthesis's own and has nothing to do with MO2's profiles", t["hint"])
 
     def test_a_tool_with_switches_of_its_own_runs_and_closes_by_itself(self) -> None:
         """WHY§84: the switches are added to the arguments MO2 has for the tool (MO2's -a replaces those), unless the

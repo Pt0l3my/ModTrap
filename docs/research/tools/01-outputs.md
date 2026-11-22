@@ -262,3 +262,15 @@ Read in the tools' public sources (both GPL-3.0: facts only, nothing copied), ea
   building inside MO2 crashed the compiler. Not established: whether the same shows from MO2's own Run button on
   that PC, and whether the owner's version has the setting named above.
 
+## 17. A second failure of the patcher framework inside MO2, and what MO2 hands a tool (2026-11-22)
+
+- **FACT (the owner's PC, a picture of the framework's window).** On the next start through MO2 every patcher
+  again showed "Blocking Error", with another error: "Error compiling", a Windows error 5, "Access is denied",
+  raised where the framework starts the build program and makes the pipes to read its output. So the failure
+  is not always the compiler's crash of §16; both come while the patchers are built, before a load order is read.
+- **FACT (MO2, `src/spawn.cpp:421-435` and `:463-466` at commit `4ba22f0`).** MO2 starts a program with no
+  handles passed on, unless MO2 itself redirects the program's output. What a `run` command's own start gave MO2
+  (ModTrap gives it none to read or write) therefore does not reach the tool: in that respect a tool started
+  through ModTrap gets what MO2's Run button gives it.
+- **Not established.** Why building fails inside MO2 on this PC, and whether it does from MO2's own Run button.
+

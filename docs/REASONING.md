@@ -109,6 +109,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 84 | 2026-11-22 | A tool's run ends when the tool has gone: MO2's leftover message is closed; a tool with switches of its own runs and closes by itself; the patcher framework's compiler crash is its own, under MO2 | DECIDED | #tools #mo2 #process |
 | 85 | 2026-11-22 | The log panes keep to the latest line until the owner scrolls away, and take it up again at the bottom | DECIDED | #page |
 | 86 | 2026-11-22 | The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after | DECIDED | #steps #tools |
+| 87 | 2026-11-22 | 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing | FACT | #revert #page #tools |
 
 ## Entries
 
@@ -1969,6 +1970,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   byte for byte as before the demaster, by Revert and by the finishing press (with the plugins unlisted, and added
   at the end); in a browser, both.
 - Not checked: on the owner's PC.
+- **Later (2026-11-22, the session file of 0.3.16).** Checked on the owner's PC: the finishing press put ten
+  plugins back and the modlist read no problem where it had read 12; a new demaster and its Revert, with a tool
+  run through MO2 in between, ended at 3,751 plugins and no problem, ten plugins back at their places (WHY§87).
 
 ### 84. A tool's run ends when the tool has gone: MO2's leftover message is closed; a tool with switches of its own runs and closes by itself; the patcher framework's compiler crash is its own, under MO2
 
@@ -2018,6 +2022,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   Both panes: the log, and the dry run's lines.
 - Checked in a browser: at the start, with lines coming, scrolled away, another tab and back, scrolled down
   again, and lines that came while the tab was not shown.
+- **Later (2026-11-22).** The owner, on 0.3.16: the log "isn't showing automatically the latest entry at the
+  bottom of terminal log after a ModTrap launch". Not reproduced in a browser here; made independent of the
+  order in which things are shown (WHY§87).
 
 ### 86. The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after
 
@@ -2042,3 +2049,35 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   is kept; it states what was looked at and found.
 - Checked: tests (the two steps before and during the dry run; the tool's step from the dry run on, with the
   plugin demastered in the plan or not); in a browser, before the dry run and after the demaster.
+
+### 87. 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing
+
+`2026-11-22` · FACT · `#revert #page #tools` · refs: WHY§83, WHY§84, WHY§85, TL01§16, TL01§17, DESIGN§14, DESIGN§18
+
+- FACT (the session file of 0.3.16). The Revert left unfinished by 0.3.15 was finished (WHY§83). A new one go ran
+  clean to "in place"; the row of tools then started the patcher framework and not the behaviour engine; the
+  framework wrote nothing; MO2's message after it was closed by ModTrap and the run ended; Revert ended clean.
+- FACT. The behaviour engine was passed over because its step was still ticked "I have done this" from the
+  demaster before, which had been reverted. A tick was kept by the ticked mods and the step alone.
+- DECIDED. A tick on a tool's step or on the play test belongs to the demaster in place: when that demaster is
+  reverted, or another is put in place, those ticks go. The page keeps the job the ticks were made for.
+- The owner: the behaviour engine, started by ModTrap, did its work and closed by itself (WHY§84, on their PC).
+- The log pane (WHY§85's Later line). DECIDED: a pane takes its place again whenever it comes into view or
+  changes size, whatever made it so (its tab, the page shown after a start), and only a move up by the owner
+  stops the following; a log read afresh follows again. LIKELY cause, not established: the Log tab was put back
+  as the session's last tab before the page's body was in view, and no line came afterwards to move it.
+- The owner: "Synthesis opens default JoJ profile, not the custom one I made to be modified. it seems it's not
+  being seen by synthesis at all." FACT (TL01§14): the name shown there is a profile of the framework's own, kept
+  in its settings file; it names the game's Data folder and holds the groups of patchers. Which mods and load
+  order it reads is MO2's doing. FACT (the session file): ModTrap started it with MO2's profile of the session,
+  and it was that profile's plugin lists MO2 wrote during the run (WHY§83).
+- FACT (the owner's picture). This time the patchers failed earlier than before: "Access is denied" when the
+  framework started the build program, where the time before the compiler had crashed (TL01§16). Both lie before
+  any load order is read. FACT (TL01§17): MO2 hands a tool the same whether started by its Run button or by its
+  `run` command, as far as handles go. Not established: whether the framework builds its patchers from MO2's own
+  Run button on this PC; asked of the owner twice.
+- DECIDED. What is known about a tool that closes without output is data and is said as a hint on the tool's card
+  and in the log, for the framework: its own answer to a failed build inside MO2 (build outside MO2 once). The
+  card also names the MO2 profile the tool was started with.
+- Checked: tests (the hint and the profile); in a browser, the ticks gone after Revert, the panes with a long
+  restored log, opened early, late, and put back as the last tab.

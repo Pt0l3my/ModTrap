@@ -391,6 +391,7 @@ function currentUi() {
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
+    ticksJob: state.ticksJob === undefined ? null : state.ticksJob,
     adding: [...(state.adding || [])], staged: [...(state.staged || [])],
   };
 }
@@ -419,6 +420,7 @@ function applyUi(ui) {
     $("p-problems").checked = !!ui.pProblems; $("p-deps").checked = !!ui.pDeps;
     state.collapsed = new Set(Array.isArray(ui.collapsed) ? ui.collapsed : []);
     state.stepsDone = ui.stepsDone && typeof ui.stepsDone === "object" ? ui.stepsDone : {};
+    state.ticksJob = typeof ui.ticksJob === "string" ? ui.ticksJob : undefined;
     state.stepsText = "";
     state.adding = (Array.isArray(ui.adding) ? ui.adding : []).filter((n) => { const m = findMod(n); return m && m.kind === "mod"; });
     state.staged = (Array.isArray(ui.staged) ? ui.staged : []).filter((x) => typeof x === "string").slice(0, 20);
@@ -1670,6 +1672,21 @@ const STEP_STATE = {
   "waiting": ["waits for the steps above", ""], "waiting for the dry run": ["waits for the dry run", ""],
 };
 
+// "I have done this" on a tool's step or on the play test says: done after the demaster that is in place. A
+// Revert takes that away, and so does a new demaster: the ticks go with the demaster they were made for (WHY§87).
+function ticksOfThisDemaster() {
+  if (state.status !== "ready" || !state.demaster || !state.session) return;
+  const placed = (state.demaster.jobs || []).find((j) => j.state === "installed");
+  const now = placed ? placed.job : "";
+  if (state.ticksJob !== undefined && state.ticksJob !== now) {
+    const ticks = state.stepsDone || {};
+    let gone = 0;
+    for (const k of Object.keys(ticks)) if (/::(tool:|play$)/.test(k)) { delete ticks[k]; gone++; }
+    if (gone) { state.stepsText = ""; state.stepsKey = ""; state.processText = ""; }
+  }
+  if (state.ticksJob !== now) { state.ticksJob = now; saveUi(); }
+}
+
 function stepKey(k) { return [...state.picked].sort().join("|") + "::" + k; }
 
 // Starting one of the modlist's tools through MO2 (DESIGN§16.8): the button, and what came of it.
@@ -1698,10 +1715,12 @@ function toolCard() {
   return el("div", { class: "card" + (going ? " installer" : "") },
     el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? (t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
       t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
-    going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago. ModTrap is waiting, and changes nothing meanwhile." }) : null,
+    going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago" + (t.profile ? ", through MO2 with its profile “" + t.profile + "”" : "") + ". ModTrap is waiting, and changes nothing meanwhile." }) : null,
     t.state === "done" ? el("p", { class: t.changed_count ? "would-record" : "would-needs", text: t.changed_count ?
       plural(t.changed_count, "file") + " of its output " + (t.changed_count === 1 ? "was" : "were") + " written" + (t.output_mod ? " (its output goes to “" + t.output_mod + "”)" : "") + ". ModTrap has read the modlist again." :
       "None of its output files changed. If you meant it to build its output, it may not have been run to the end." }) : null,
+    t.state === "done" && !t.changed_count && t.hint ? el("p", { class: "dim", text: t.hint }) : null,
+    t.state === "done" && t.profile ? el("p", { class: "dim", text: "It was started through MO2 with MO2's profile “" + t.profile + "”: that profile's mods and load order are what it was given." }) : null,
     t.changed_count ? el("details", {}, el("summary", { text: "The files" }), el("ul", {}, ...t.changed.map((c) => el("li", { class: "mono", text: c })))) : null,
     going ? el("div", { class: "actions" }, stop) : null);
 }
@@ -2484,16 +2503,23 @@ function showTab(name) {
 const PANES = { "log": { follow: true, top: 0 }, "job-log": { follow: true, top: 0 } };
 function paneFollow(id) {
   const p = $(id), s = PANES[id];
-  if (!p || !p.offsetParent) return;                       // not shown: set when its tab opens
+  if (!p || !p.offsetParent) return;                       // not shown: set when it comes into view
   p.scrollTop = s.follow ? p.scrollHeight : s.top;
+  s.top = p.scrollTop;
 }
 function paneWatch(id) {
   const p = $(id);
   p.addEventListener("scroll", () => {
     if (!p.offsetParent) return;
-    PANES[id].follow = p.scrollTop + p.clientHeight >= p.scrollHeight - 30;
-    PANES[id].top = p.scrollTop;
+    const s = PANES[id], atEnd = p.scrollTop + p.clientHeight >= p.scrollHeight - 30;
+    // Only the owner's own move away from the end stops the following: a move up. Lines that come, a pane that
+    // is emptied or shown again, and a window that changes size also move it, and mean nothing.
+    if (atEnd) s.follow = true; else if (p.scrollTop < s.top - 1) s.follow = false;
+    s.top = p.scrollTop;
   });
+  // A pane that comes into view (its tab opens, the page is shown after a start) or changes size takes its place
+  // again: the last line if it follows, else where it was left.
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => paneFollow(id)).observe(p);
 }
 
 async function pollLog() {
@@ -2554,6 +2580,7 @@ async function tick() {
   }
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
+  ticksOfThisDemaster();
   demasterChain();
   state.save = s.save || null;
   renderSave();
@@ -2566,6 +2593,7 @@ async function tick() {
     state.jobSeen = "";
     $("log").replaceChildren();
     $("job-log").replaceChildren();
+    for (const k in PANES) { PANES[k].follow = true; PANES[k].top = 0; }       // a log read afresh: its latest line
   }
   const key = s.status === "ready" ? (s.session ? s.session.id : "") + "|" + s.folder + "|" + s.profile + "|" + s.mods + "|" + s.plugins + "|" + s.issue_count + "|" + (state.gen || 0) : "";
   if (s.status === "ready" && (key !== state.loaded || was !== "ready")) {

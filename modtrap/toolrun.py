@@ -81,6 +81,9 @@ class ToolJob:
         self.inst, self.title = inst, title
         self._dismiss, self._grace = dismiss, grace
         self.arguments, self.switches = self_run_arguments(title, exe.binary, exe.arguments) if self_run else ("", [])
+        name, _kind = tools.of_executable(title, exe.binary)
+        # What is known about this tool closing without having written anything (data, TL01§16): said then, as a hint.
+        self.hint = str(next((t for t in tools.load() if t["tool"] == name), {}).get("wrote_nothing", ""))
         self.image = Path(exe.binary.replace("\\", "/")).name
         self.mo2 = inst.root / dryrun.MO2_EXE
         if not self.mo2.is_file():
@@ -115,7 +118,8 @@ class ToolJob:
     def public(self) -> dict:
         return {"title": self.title, "state": self.state, "message": self.message, "output_mod": self.output_mod,
                 "seconds": int((self.ended or time.time()) - self.started), "changed": self.changed[:200],
-                "changed_count": len(self.changed), "by_itself": bool(self.switches)}
+                "changed_count": len(self.changed), "by_itself": bool(self.switches), "profile": self.inst.profile,
+                "hint": self.hint if self.state == "done" and not self.changed else ""}
 
     def _run(self) -> None:
         try:
@@ -203,6 +207,8 @@ class ToolJob:
         else:
             log.warn("“%s” closed after %d s and none of its output files changed: it may not have been run to "
                      "the end", self.title, took)
+            if self.hint:
+                log.info("%s", self.hint)
 
 
 __all__ = ["ToolJob", "Refused"]
