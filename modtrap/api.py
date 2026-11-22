@@ -103,6 +103,7 @@ SETTINGS = {
     "tool_prebuild": True,     # and patchers its last log shows as not built are built outside MO2 first (MT28)
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
+    "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -433,8 +434,20 @@ class Api:
                 pass
         return sessions.modlist_key(self.folder or "."), added
 
+    def stage_where_it_lies(self, path: Path, name: str, updates: str, version: str) -> dict:
+        """An archive the owner downloaded, found in a watched folder (MT42): read where it lies, not copied, not
+        moved, and marked as a newer version of the mod it was downloaded for."""
+        self._need()
+        name = self._archive_name(name)
+        rec = self._new_staged(name, "downloads", updates=updates, version=version)
+        rec["state"] = "unpacking"
+        self._save_staged(rec)
+        threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
+        return self._staged_public(rec)
+
     def updates_state(self) -> dict:
-        return self.updating.account(self._need(), *self._updates_for())
+        return self.updating.account(self._need(), *self._updates_for(),
+                                     stage=self.stage_where_it_lies if self.changes is not None and self.session is not None else None)
 
     def updates_upload(self, query: dict, length: int, stream) -> dict:
         """The list of a dropped Wabbajack file, as its bytes (WHY§103)."""
@@ -482,6 +495,15 @@ class Api:
                 else:
                     only_open = False
                 return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open)
+            if what == "folder":
+                path = body.get("path", "")
+                if not isinstance(path, str) or len(path) > 1000:
+                    raise Bad("give the folder's path")
+                return self.updating.set_downloads_folder(path)
+            if what == "wait":
+                if isinstance(body.get("mod"), str):
+                    self.updating.stop_waiting(body["mod"])
+                return {}
             if what == "seen":
                 if isinstance(body.get("mod"), str):
                     self.updating.seen(body["mod"])

@@ -295,6 +295,7 @@ class TheListAsTheModlist(Sources):
                     return
                 time.sleep(0.02)
 
+        wait()                                                                    # the scan begun at launch, if any
         a.post("/api/updates/scan", {})
         wait()
         first = len([u for u, _h in a.updating.net.asked if "/mods/4321/files" in u])
@@ -372,6 +373,7 @@ class FetchingANewerFile(unittest.TestCase):
         self.fail("it did not come about")
 
     def scanned(self, key=True):
+        self.wait(lambda st: st["scan"]["state"] != "going")                      # the scan begun at launch, if any
         if key:
             self.api.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
         self.api.post("/api/updates/scan", {})
@@ -433,6 +435,79 @@ class FetchingANewerFile(unittest.TestCase):
         self.assertEqual(self.api.post("/api/updates/get", {"mod": "Lantern"})[1], {"going": True})
         st = self.wait(lambda st: st["fetching"].get("Lantern", {}).get("state") in ("done", "failed", "open"))
         self.assertEqual((st["fetching"]["Lantern"]["state"], st["fetching"]["Lantern"]["name"]), ("done", "Lantern (v2.1)"))
+
+    def test_a_download_started_in_the_browser_is_taken_from_the_watched_folders(self):
+        """MT42: the page is opened, the owner presses download there, and ModTrap takes the archive from MO2's
+        downloads folder (by the numbers MO2 writes beside it) or from the browser's (by the file's name)."""
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        self.net.answers["users/validate"] = (200, {}, {"user_id": 1, "is_premium": False})
+        browser = Path(self.tmp.name) / "Browser Downloads"
+        browser.mkdir()
+        self.api.post("/api/updates/folder", {"path": str(browser)})
+        self.scanned()
+        got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
+        self.assertTrue(got["watching"])
+        st = self.api.get("/api/updates", {})[1]
+        self.assertEqual(list(st["watch"]["waiting"]), ["Quill"])
+        self.assertEqual(st["watch"]["folder"], str(browser))
+        data = self.net.files[self.cdn]
+        # An older file, an unfinished one, and one of another mod are passed by.
+        fx.write(browser / "Quill-4321-1-4.zip.crdownload", data)
+        fx.write(browser / "something else.zip", data)
+        old = fx.write(browser / "Quill-4321-1-2.zip", data)
+        os.utime(old, (time.time() - 3600, time.time() - 3600))
+        self.api.updating._looked = 0
+        self.api.get("/api/updates", {})
+        self.assertEqual(list(self.api.get("/api/updates", {})[1]["watch"]["waiting"]), ["Quill"])
+        # The download itself, as the browser names it; taken at the second look, once its size stands.
+        fx.write(browser / "Quill-4321-1-4 (1).zip", data)
+        for _ in range(3):
+            self.api.updating._looked = 0
+            st = self.api.get("/api/updates", {})[1]
+        self.assertEqual((st["fetching"]["Quill"]["state"], st["fetching"]["Quill"]["name"]), ("done", "Quill (1.4)"))
+        self.assertEqual(st["watch"]["waiting"], {})
+        self.assertTrue((browser / "Quill-4321-1-4 (1).zip").is_file())            # the owner's file stays where it is
+        # MO2's own downloads folder, by the numbers in the file MO2 keeps beside the archive.
+        self.api.post("/api/updates/seen", {"mod": "Quill"})
+        self.api.post("/api/updates/get", {"mod": "Quill"})
+        downloads = self.root / "downloads"
+        fx.write(downloads / "renamed by mo2.zip", data)
+        fx.write(downloads / "renamed by mo2.zip.meta", meta(gameName="SkyrimSE", modID=4321, fileID=113, version="1.4"))
+        fx.write(downloads / "another mod.zip", data)
+        fx.write(downloads / "another mod.zip.meta", meta(gameName="SkyrimSE", modID=9, fileID=1))
+        for _ in range(3):
+            self.api.updating._looked = 0
+            st = self.api.get("/api/updates", {})[1]
+        self.assertEqual(st["fetching"]["Quill"]["state"], "done")
+        # Waiting can be stopped, and ends by itself.
+        self.api.post("/api/updates/seen", {"mod": "Quill"})
+        self.api.post("/api/updates/get", {"mod": "Quill"})
+        self.api.post("/api/updates/wait", {"mod": "Quill"})
+        self.assertEqual(self.api.get("/api/updates", {})[1]["watch"]["waiting"], {})
+        self.api.post("/api/updates/get", {"mod": "Quill"})
+        self.api.updating.waiting["Quill"]["since"] -= updating.WAIT_SECONDS + 10
+        self.api.updating._looked = 0
+        st = self.api.get("/api/updates", {})[1]
+        self.assertIn("stopped waiting", st["fetching"]["Quill"]["error"])
+        with self.assertRaises(api.Bad):
+            self.api.post("/api/updates/folder", {"path": str(browser / "no such folder")})
+
+    def test_a_site_without_a_name_to_go_by_takes_the_one_archive_that_comes(self):
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        browser = Path(self.tmp.name) / "Browser Downloads"
+        browser.mkdir()
+        self.api.post("/api/updates/folder", {"path": str(browser)})
+        self.wait(lambda st: st["scan"]["state"] != "going")
+        row = next(r for r in self.api.get("/api/updates", {})[1]["rows"] if r["mod"] == "Old Lantern")
+        self.assertEqual(row["get"], "https://www.loverslab.com/files/file/1234-old-lantern/")       # the button is there for it too
+        self.api.post("/api/updates/get", {"mod": "Old Lantern"})
+        fx.write(browser / "Old Lantern v3.7z.zip", a_zip({"Lantern.esp": (self.root / "mods" / "Lantern" / "Lantern.esp").read_bytes()}))
+        for _ in range(3):
+            self.api.updating._looked = 0
+            st = self.api.get("/api/updates", {})[1]
+        self.assertEqual((st["fetching"]["Old Lantern"]["state"], st["fetching"]["Old Lantern"]["name"]), ("done", "Old Lantern (new)"))
 
     def test_an_archive_the_owner_downloaded_is_taken_as_a_newer_version_of_the_mod_named(self):
         data = a_zip({"Lantern.esp": (self.root / "mods" / "Lantern" / "Lantern.esp").read_bytes()})
@@ -638,6 +713,10 @@ class TheKeyAndThePage(unittest.TestCase):
         self.assertEqual((quill["host"], quill["state"], quill["page"]), ("nexus", "not asked", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
         self.assertEqual(a.updating.net.asked, [])                           # no key, no GitHub mod: nothing asked at launch
         a.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
+        for _ in range(200):                                                      # a scan begun at launch, if any
+            if a.get("/api/updates", {})[1]["scan"]["state"] != "going":
+                break
+            time.sleep(0.02)
         a.post("/api/updates/scan", {})
         for _ in range(200):
             if a.get("/api/updates", {})[1]["scan"]["state"] != "going":

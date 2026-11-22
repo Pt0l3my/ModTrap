@@ -33,7 +33,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   the modlist does, with an Update column and a button that leads to the newer file).
   MT40 (answered the same day: ModTrap fetches a newer file where the host gives it to a program, and installs through
   Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
-- **Open.** MT42 (sign-in through the sites' own pages, or watching the Downloads folder). MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+  MT42 (answered: ModTrap watches the Downloads folders for a file the owner fetched in the browser). MT43 (one press
+  all the way: a setting lets a newer file be added without asking where its plan leaves nothing open).
+- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -892,3 +894,31 @@ Options:
 
 **Recommendation: A now**, and B only if pasting the key bothers the owner. A is what gives the missing piece: a
 file the owner fetched in the browser getting into ModTrap without a second step.
+
+**Answered, 2026-11-22: A.** The owner: "Yes I would go with A, but is it totally not possible to download and
+install/update with a single click on download button?" Done in 0.3.35 (WHY§106):
+
+- Where ModTrap cannot fetch a file itself, the button opens the mod's page and ModTrap waits, for 45 minutes,
+  for the archive to appear in MO2's downloads folder or in the folder the browser saves to (Windows' own
+  Downloads folder, or one the owner names). Once the file is whole it goes to Add mods as the mod's newer
+  version. ModTrap reads it where it lies and moves or deletes nothing.
+- A file in MO2's folder is known by the numbers MO2 writes beside it; one in the browser's folder by the name
+  Nexus gives the file. For a site with no name to go by, ModTrap takes a new archive only while it waits for
+  that one mod alone; otherwise the mod's menu serves.
+- Sites that cannot be asked for versions (LoversLab, any other address) have the button too: it opens the page
+  and waits likewise.
+
+## MT43
+
+**One press all the way** · *2026-11-22 · From the owner's question under MT42*
+
+**Settled** (WHY§106; the owner may overrule any of it):
+
+- A setting, off to begin with: "Add a newer file without asking, when its plan leaves nothing to you". With it
+  on, a press on a mod's update button ends with the newer version added and the older one disabled.
+- With a Premium account's key, and for GitHub, that is one press. For a free Nexus account and for LoversLab it
+  is that press and the press on the site's own download button: the site asks for that one, and ModTrap cannot
+  and does not press it.
+- ModTrap still stops and shows the plan when the archive has an installer with questions, when something the
+  mod needs is missing, or when more than that one mod is on the Add mods list. The check after the add, and
+  Revert, are as for every add.

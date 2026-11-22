@@ -128,6 +128,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 103 | 2026-11-22 | A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list | DECIDED | #updates #page |
 | 104 | 2026-11-22 | The Updates tab is laid out as the modlist: priority, separators, MO2's notes; an Update column whose button opens the newer file's own page for a download through MO2; ModTrap still downloads nothing | DECIDED | #updates #page |
 | 105 | 2026-11-22 | The update button fetches the newer file where the host gives one to a program (Nexus for a paying account's key, GitHub), else opens its page; the file goes to Add mods as a newer version: right above the old mod, which is disabled; LoversLab only through the owner's browser | DECIDED | #updates #add #network |
+| 106 | 2026-11-22 | ModTrap watches MO2's and the browser's Downloads folders for a file the owner fetched on a site, and a setting lets a newer file be added without asking: one press where the host lets a program fetch, one more on the site where it does not | DECIDED | #updates #add #page |
 
 ## Entries
 
@@ -2669,3 +2670,35 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   session file (tests hold this). Said plainly to the owner: any program running as the owner's Windows account
   could read it, as with MO2's own; the key can be withdrawn on Nexus at any time; and the Windows part of the
   keeping has run only in tests on another system so far, where it fails closed (no key kept) if Windows refuses.
+
+### 106. ModTrap watches MO2's and the browser's Downloads folders for a file the owner fetched on a site, and a setting lets a newer file be added without asking: one press where the host lets a program fetch, one more on the site where it does not
+
+`2026-11-22` · DECIDED · `#updates #add #page` · refs: MT42, MT43, MT40, MT41, TL01§28, MO01§12, MO01§14, WHY§105, DESIGN§20
+
+- The owner chose the watch (MT42, option A) and asked whether one press can do it all.
+- The watch is what Wabbajack does for files fetched by hand (TL01§28), in ModTrap's own code. ModTrap looks only
+  while it waits for a download, every two seconds, into two folders: MO2's downloads folder and the browser's.
+  A file counts when it is an archive, newer than the press that opened the page, not under a name an unfinished
+  download has, of the same size at two looks, and openable.
+- Which mod a file is for. In MO2's folder: the mod's and the file's number in the record MO2 writes beside the
+  archive (MO01§12). In the browser's folder: the file's name as Nexus gives it, also with the " (1)" a browser
+  adds. REJECTED: taking any new archive for the one mod waited for when its name is known and differs: the
+  owner may well download something else meanwhile, and with the setting below a wrong archive would be added.
+  Only a site that gives no name to go by (LoversLab) has the one new archive taken, and only while that mod
+  alone is waited for.
+- The browser's folder is asked of Windows (its Downloads folder can be moved); the owner can name another. Its
+  path is shown on the page and never written to the log: it holds the owner's Windows name.
+- One press (MT43). What stood between a file being here and it being added were two presses on Add mods. A
+  setting, off to begin with, lets the page go on by itself: when the staged archive is unpacked and analysed,
+  is the only thing on the list, has no installer with questions and lacks nothing it needs, the page asks for
+  the plan and runs it. Everything else of an add is unchanged: MO2 must be closed (the page asks, or closes it
+  with the owner's setting for that), the modlist is read again afterwards, a failure puts all back.
+- What cannot be made one press, said to the owner plainly: a free Nexus account and LoversLab hand out a file
+  only on a press on their own page. ModTrap does not press buttons on a site for the owner.
+- FACT, a fault in a test of this work and not in ModTrap: a test started its scan while the scan begun at launch
+  was still going, and so sometimes counted the wrong one. It failed about one run in ten. The tests now wait for
+  the launch scan first.
+- Checked: tests (the browser's folder by name, with an unfinished file, an older one and another mod's passed
+  by; MO2's folder by numbers; a site with no name; stopping and the end of waiting); in a browser both ways to
+  the end: a Premium account in one press, a free one with the file saved as the browser saves it, each ending
+  with the newer version above the disabled older one.

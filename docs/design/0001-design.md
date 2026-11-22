@@ -647,3 +647,11 @@ why: Nexus without a key or for another kind of account, LoversLab and other sit
 the owner downloaded and names through the mod's menu, go to Add mods (§16) as a newer version of the mod: placed
 right above the old one, which is disabled and not deleted; a plugin the load order already names keeps its place.
 Nothing is changed before the owner has seen the plan and gone ahead; Revert puts all of it back.
+
+**A download started in the browser (MT42, WHY§106).** Where the button opens a page, ModTrap waits 45 minutes for
+the archive in MO2's downloads folder or the folder the browser saves to, and takes it to Add mods once it is
+whole, read where it lies. The row shows that ModTrap is waiting, with a way to stop.
+
+**One press all the way (MT43).** With the setting "Add a newer file without asking, when its plan leaves nothing
+to you", the add of a newer version goes ahead by itself when it is the only thing on the Add mods list, has no
+installer with questions and lacks nothing. Otherwise it waits on the Add mods tab as before.
