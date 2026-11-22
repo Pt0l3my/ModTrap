@@ -599,3 +599,8 @@ just introduces more error."
 place, a run of that tool that it started and that wrote its output; every Revert and every new demaster asks for
 the tools again (WHY§91). A tick stays only where no such record can exist.
 
+**Note, 2026-11-22.** Asked whether a run the owner makes from MO2 itself should be told from the tool's output
+files and counted: "I don't care, we only want our ModTrap to do its job flawlessly, what the user does outside the
+ModTrap is irrelevant and can't take responsibility." So it is not built: only a run ModTrap started counts, and what
+is done outside ModTrap is neither looked for nor answered for.
+

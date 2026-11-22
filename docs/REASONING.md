@@ -2211,3 +2211,6 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests (the note kept only with a demaster in place and gone with its Revert; the step done from the
   note and each tool by its own; no tick for a tool ModTrap starts, a tick where it starts none); in a browser,
   one go with the row of tools, the step done without a tick, to do again after Revert.
+- **Later (2026-11-22).** The owner on runs made outside ModTrap: not ModTrap's business (MT29's note). The
+  "not built" above stays not built, by decision.
+
