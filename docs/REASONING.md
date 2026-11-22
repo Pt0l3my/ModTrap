@@ -100,6 +100,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 75 | 2026-11-22 | The demaster ran clean on 0.3.7; what is proven on one mod only, and what "any mod" still needs | FACT | #process #method |
 | 76 | 2026-11-22 | A second mod: the tool check looked at part of the load order, the Process tab hid what was left to the owner, and a script property is the first new shape | DECIDED | #tools #steps #page #xedit #process |
 | 77 | 2026-11-22 | Another modlist's MO2, settings, tabs in sections; and the cell stakes were three unused bytes: every stake a tool holds is now checked against the whole load order | DECIDED | #mo2 #page #tools #steps #process |
+| 78 | 2026-11-22 | The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run | FACT | #tools #steps #process |
 
 ## Entries
 
@@ -1809,3 +1810,26 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   sure", and the step says that ModTrap's copy then hides the tool's new one.
 - Not checked: any of it on the owner's PC. The reading script still counts unused bytes; changing it would ask
   for the probe again, and is left for the next change to the scripts.
+
+### 78. The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run
+
+`2026-11-22` · FACT · `#tools #steps #process` · refs: MT17, MT24, DESIGN§14, TL01§15, WHY§77
+
+- The owner, on version 0.3.10: "still asking for dyndolod. why is that? Should we implement something else?"
+- FACT (the session file): WHY§77's look through the whole load order worked for five of six cells: each has a
+  later plugin that stays and has the last word, named in the evidence. One cell stayed, in the grid field,
+  "the same" in three of the generator's plugins.
+- FACT (my slip): the look compared only the fields that differ, by bytes, from the mod's own master. With the
+  unused bytes left out (TL01§15) that field no longer differed from the master, so it was not compared with
+  the plugin next in line at all; and then it was counted from xEdit's telling all the same. The one case the
+  change was made for was the one it passed over.
+- DECIDED: the look compares every field xEdit named. A test holds the case: a field that differs in nothing
+  that counts is no stake, whatever holds the same bytes.
+- DECIDED: where a tool's plugin holds the mod's value, the evidence shows the three values side by side: the
+  mod's, the tool's plugin's, and the next in line's with its plugin; a cell's grid field in words. They go into
+  the log too. A finding can then be judged by eye, by the owner and from a saved session.
+- OPEN (MT24): if such a finding is ever real, a run of a generator that takes hours is a heavy answer to one
+  field in one record. ModTrap could put the field right itself, in a copy of the tool's plugin, as it does for
+  a patch (MT4, case C). Asked of the owner.
+- Not checked: on the owner's PC. Whether the last cell falls away depends on its flags byte, which the next
+  session file will show.
