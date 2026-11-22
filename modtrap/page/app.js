@@ -1791,7 +1791,11 @@ function stepItem(it) {
   if (it.details) return el("li", { class: "plain" }, evidenceFold(it.details));
   if (it.text) return el("li", {}, it.text, ...(it.evidence || []).map(evidenceFold));
   if (it.tool) return el("li", {}, "“" + it.tool + "” in MO2's list of tools  ", toolButton(it.tool));
-  if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }), el("span", { class: "dim", text: "  names " + it.names.join(", ") }));
+  if (it.file) return el("li", {}, modLink(it.mod), ": ", el("span", { class: "mono", text: it.file }),
+    it.kind ? el("span", { class: "dim", text: "  " + it.kind }) : null,
+    el("span", { class: "dim", text: "  names " + it.names.join(", ") + (it.count ? " in " + plural(it.count, "line") : "") }),
+    it.verdict ? el("span", { class: "tag " + (it.open ? "warn" : "good"), text: it.verdict }) : null,
+    it.evidence ? evidenceFold(it.evidence) : null);
   if (it.master) return el("li", {}, pluginLink(it.plugin), " needs ", el("span", { class: "mono", text: it.master }),
     el("span", { class: "tag " + (it.what === "missing" ? "bad" : "warn"), text: it.what === "missing" ? "missing" : "not active" }));
   if (it.plugin) {
@@ -1902,6 +1906,11 @@ function afterStage() {
   const placed = (state.process || []).some((s) => s.key === "install" && s.state === "done") || !state.changes;
   if (!placed) for (const t of tasks) if (t.state === "yours") t.state = "waiting";
   const all = stageState(tasks);
+  if (placed && (d.checks || []).length) {
+    const passed = d.checks.filter((c) => c.ok).length;
+    tasks.push({ key: "checks", text: d.checked ? "ModTrap's checks after the demaster: all " + d.checks.length + " passed" : "ModTrap's checks after the demaster: " + passed + " of " + d.checks.length + " passed so far",
+      note: d.checks.map((c) => (c.ok ? "✓ " : "· ") + c.text).join("  "), state: d.checked ? "done" : "waiting" });
+  }
   return { key: "after", title: "After the demaster", who: "you", tasks: tasks, state: !placed && all !== "done" ? "waiting" : all, note: "The tools to run again, and what only you can judge. The Steps tab has the reasons and the evidence." };
 }
 
@@ -2009,7 +2018,9 @@ function renderProcess() {
   const flow = $("process-flow");
   $("process-summary").textContent = !stages.length ? "Process" : going ? "Now: " + going.title : failed ? "Stopped at: " + failed.title
     : yours ? "Waits for you: " + yours.title : stages.every((s) => s.state === "done") ? "Everything is done"
-    : after && after.state === "yours" && stages.every((s) => s === after || s.state === "done") ? "ModTrap's part is done. Yours now: " + after.title : "Process";
+    : after && after.state === "yours" && stages.every((s) => s === after || s.state === "done")
+      ? ((state.stepsData || {}).checked ? "The demaster is complete and checked. Left to you: " + (((state.stepsData || {}).left_to_owner || []).map((t) => t.charAt(0).toLowerCase() + t.slice(1)).join("; ") || "nothing")
+        : "ModTrap's part is done. Yours now: " + after.title) : "Process";
   $("process-intro").hidden = !stages.length;
   if (!stages.length) { flow.replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "Open a modlist and tick a mod: its demaster shows here as it goes." }))); return; }
   const paused = waitNote(), pw = $("process-wait");

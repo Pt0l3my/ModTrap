@@ -390,3 +390,29 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`, and i
   compiler as a server, by a command line that names `VBCSCompiler.dll`. Both names are what ModTrap adds to
   MO2's list (MO01§11, WHY§94).
 
+## 23. Settings files of two frameworks that work while the game runs: a line's layout, and a plugin that is not loaded (2026-11-22)
+
+Read in the frameworks' public sources, facts only, nothing copied: Spell Perk Item Distributor (MIT) at commit
+`105725c`, Keyword Item Distributor (GPL-3.0) at commit `99adaaa`. The version a modlist carries may differ.
+
+- **FACT (both).** Such a file is named by its ending (`_DISTR.ini`, `_KID.ini`). A line is a key, an equals
+  sign, and fields divided by `|`: the first field is the thing the line gives or works on, later fields are
+  conditions (KID: `src/LookupConfigs.cpp:17-45`). A condition that begins with `-` leaves out what it names
+  (KID: `include/Data/BaseFilters.h:61-63`, an "exclude" mark on a rule); conditions joined by `+` must all hold.
+  A form of a plugin is written as a number, `~`, and the plugin's file name; a plugin's name alone stands for
+  everything of that plugin.
+- **FACT (SPID, `SPID/src/FormData.h:307-357`).** A condition whose form or plugin cannot be found is passed
+  over, with a line in the framework's own log ("SKIP - mod cannot be found", "SKIP - formID doesn't exist").
+  A list of conditions then counts as usable when every one of them was found, or, for a list of which one is
+  enough, when at least one was.
+- **FACT (SPID, `SPID/src/FormData.h:611-616`).** An entry is kept only when each of its three lists of
+  conditions is usable: those that must all hold, those that leave out, those of which one is enough. So an
+  entry whose only exclusion names a plugin that is not loaded is dropped whole, in this version; with a second
+  exclusion that is found, it goes on without the first.
+- **FACT (KID, `include/Data/BaseFilters.h:73-90`).** A condition that cannot be found is noted for the log as
+  "SKIP - (mod not found)" or "(form not found)" and is not used.
+- **LIKELY.** A line whose first field names the plugin has nothing to give once the plugin is gone, and a line
+  that reaches only the plugin's things reaches nothing: neither changes what happens to anything else.
+- **Not read.** FormList Manipulator and Base Object Swapper (their sources were not at hand), and any settings
+  file of another kind: ModTrap leaves those to the owner.
+

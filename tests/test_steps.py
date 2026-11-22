@@ -118,7 +118,10 @@ class StepsTests(unittest.TestCase):
         m = self.build()
         deep = steps.look_deeper(m, ["Bramble"])
         self.assertEqual([(r["mod"], r["shared"], r["files"]) for r in deep["replacements"]], [("Bramble Hotfix", 2, 2)])
-        self.assertEqual(deep["mentions"], [{"mod": "Quill", "file": "SKSE/Plugins/Quill_DISTR.ini", "names": ["Bramble.esp"]}])
+        got = deep["mentions"]
+        self.assertEqual([(x["mod"], x["file"], x["names"], x["kind"], x["count"], x["leaves_out"], x["unread"]) for x in got],
+                         [("Quill", "SKSE/Plugins/Quill_DISTR.ini", ["Bramble.esp"], "Spell Perk Item Distributor", 1, 0, 0)])
+        self.assertEqual([ln["where"] for ln in got[0]["lines"]], ["gives"])
 
     def test_steps_before_and_after(self):
         m = self.build()
@@ -192,14 +195,51 @@ class StepsTests(unittest.TestCase):
         self.assertEqual((after["tool:Pandora Behaviour Engine"]["state"], after["tool:Pandora Behaviour Engine"]["manual"]), ("done", False))
         self.assertIn("“Invented Behaviour Engine”, 2026-01-01 10:00:00, 4 file(s)", after["tool:Pandora Behaviour Engine"]["note"])
         self.assertEqual(after["tool:Invented Patcher"]["state"], "to do")              # each tool by its own run
-        self.assertEqual((after["play"]["manual"], after["mentions"]["manual"]), (True, True))   # what no record can show
+        # The settings files that name the plugin are read by ModTrap (WHY§95): here every line only gives something
+        # of the mod's, so the step is ModTrap's and done, with no tick.
+        self.assertEqual((after["play"]["manual"], after["mentions"]["manual"], after["mentions"]["state"], after["mentions"]["who"]),
+                         (True, False, "done", "ModTrap"))
+        self.assertEqual(after["mentions"]["items"][0]["verdict"], "nothing to do")
         # Started without the switch ModTrap starts no tool: there the owner still ticks it off.
         looking = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep)["steps"]}
         self.assertTrue(looking["tool:Pandora Behaviour Engine"]["manual"])
         # Every step says truly who does it (WHY§58): ModTrap, the owner, or ModTrap starting a tool the owner runs.
         self.assertEqual({k: v["who"] for k, v in by.items() if not k.startswith("tool:")},
                          {"dry": "ModTrap", "switch-off": "ModTrap", "demaster": "ModTrap", "disable": "ModTrap",
-                          "mentions": "you", "health": "ModTrap", "play": "you"})
+                          "mentions": "ModTrap", "health": "ModTrap", "play": "you"})
+
+    def test_where_a_line_of_a_settings_file_names_the_plugin(self):
+        """TL01§23, WHY§95: by the layout these frameworks share. Invented lines."""
+        w = lambda line: steps.where_named(line, "bramble.esp", "pipes")
+        self.assertEqual(w("Spell = 0x800~Bramble.esp|ActorTypeNPC"), "gives")
+        self.assertEqual(w("Keyword = InventedKeyword|Armor|0x801~Bramble.esp"), "reaches")
+        self.assertEqual(w("Keyword = InventedKeyword|Armor|OtherThing,Bramble.esp"), "reaches")
+        self.assertEqual(w("Keyword = InventedKeyword|Armor|OtherThing+0x801~Bramble.esp"), "reaches")
+        self.assertEqual(w("Keyword = InventedKeyword|Armor|-0x801~Bramble.esp"), "leaves out")
+        self.assertEqual(w("Keyword = InventedKeyword|Armor|OtherThing+-Bramble.esp|NONE|100"), "leaves out")
+        self.assertEqual(w("  ; Spell = 0x800~Bramble.esp"), "comment")
+        self.assertEqual(w("# about Bramble.esp"), "comment")
+        self.assertEqual(steps.where_named("something Bramble.esp", "bramble.esp", ""), "")     # a kind ModTrap does not read
+        self.assertEqual([k["framework"] for k in steps.mention_kinds()][:2], ["Spell Perk Item Distributor", "Keyword Item Distributor"])
+
+    def test_a_line_that_leaves_the_mod_out_or_a_file_of_an_unknown_kind_stays_the_owners(self):
+        m0 = self.build()
+        fx.write(self.root / "mods" / "Quill" / "SKSE" / "Plugins" / "Quill_KID.ini",
+                 b"; a comment that names Bramble.esp\r\nKeyword = InventedKeyword|Armor|-0x801~Bramble.esp\r\nKeyword = Other|Armor|0x802~Bramble.esp\r\n")
+        fx.write(self.root / "mods" / "Quill" / "SKSE" / "Plugins" / "QuillSettings.json", b'{"watch": "Bramble.esp"}')
+        m = self.build()
+        deep = steps.look_deeper(m, ["Bramble"])
+        by_file = {x["file"].rsplit("/", 1)[-1]: x for x in deep["mentions"]}
+        self.assertEqual((by_file["Quill_KID.ini"]["count"], by_file["Quill_KID.ini"]["leaves_out"], by_file["Quill_KID.ini"]["unread"]), (2, 1, 0))
+        self.assertEqual((by_file["QuillSettings.json"]["kind"], by_file["QuillSettings.json"]["unread"]), ("", 1))
+        st = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], dry_done("Bramble"), deep, auto=True, tools_run={})["steps"]}["mentions"]
+        self.assertEqual((st["state"], st["who"], st["manual"]), ("to do", "you", True))
+        self.assertIn("Look at 2 settings file(s)", st["title"])
+        self.assertEqual([(i["file"].rsplit("/", 1)[-1], i["open"]) for i in st["items"]],
+                         [("Quill_KID.ini", 1), ("QuillSettings.json", 1), ("Quill_DISTR.ini", 0)])     # what is to look at comes first
+        self.assertIn("leaves the mod's things out", " ".join(st["items"][0]["evidence"]["lines"]))
+        self.assertNotIn("a comment", " ".join(st["items"][0]["evidence"]["lines"]))             # a line switched off is not shown
+        del m0
 
     def test_the_modlist_itself_shows_the_steps_done(self):
         b = plugin.build
@@ -223,6 +263,32 @@ class StepsTests(unittest.TestCase):
         by = {x["key"]: x for x in s["steps"]}
         self.assertEqual((by["disable"]["state"], by["health"]["state"], by["play"]["state"]), ("done", "done", "to do"))
         self.assertTrue(s["complete"])
+
+    def test_the_checks_after_the_demaster_are_one_account_of_facts(self):
+        """WHY§95: with the mod out, what ModTrap read or recorded is told as checks, each passed or not; "checked"
+        only when all are, and what is left to the owner is named."""
+        b = plugin.build
+        mods = self.root / "mods"
+        fx.write(mods / "Lantern" / "Lantern.esp", b(("Skyrim.esm",)))
+        fx.write(mods / "Tool Output" / "Generated.esp", b(("Skyrim.esm", "Quill.esp")))
+        pl = self.root / "profiles" / "Default" / "plugins.txt"
+        pl.write_bytes(pl.read_bytes().replace(b"*BrambleLanternPatch.esp", b"BrambleLanternPatch.esp")
+                       .replace(b"*Collection - Bramble.esp", b"Collection - Bramble.esp").replace(b"*Bramble.esp\r\n", b""))
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Bramble\r\n", b"-Bramble\r\n").replace(b"+Bramble Hotfix", b"-Bramble Hotfix"))
+        lo = self.root / "profiles" / "Default" / "loadorder.txt"
+        lo.write_bytes(lo.read_bytes().replace(b"Bramble.esp\r\n", b"", 1))
+        m = self.build()
+        deep = steps.look_deeper(m, ["Bramble"])
+        s = steps.compile_steps(m, ["Bramble"], None, deep, auto=True, tools_run={})
+        texts = [c["text"] for c in s["checks"]]
+        self.assertIn("The load order has no missing or inactive master", texts)
+        self.assertIn("Pandora Behaviour Engine has had its run since the demaster, and wrote its output", texts)
+        self.assertFalse(s["checked"])                                              # the engine has not run yet
+        s = steps.compile_steps(m, ["Bramble"], None, deep, auto=True,
+                                tools_run={"Invented Behaviour Engine": {"when": "2026-01-01T10:00:00", "files": 2}})
+        self.assertTrue(s["checked"] and all(c["ok"] for c in s["checks"]))
+        self.assertEqual(s["left_to_owner"], ["Start the game and look for anything odd"])
 
     def test_through_the_api_the_deep_part_arrives_later(self):
         a = api.Api()

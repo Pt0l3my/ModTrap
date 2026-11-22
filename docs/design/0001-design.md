@@ -347,6 +347,12 @@ ModTrap has noted a run of it, with its output written, since the demaster in pl
 new demaster asks for it again. "I have done this" is left for what no record can show (the play test, settings
 files to look at, a tool outside MO2's list), and a play-test tick goes with the demaster it was made for.
 
+**The settings files, and the checks after (MT33, WHY§95).** Settings files of other mods that name a ticked plugin
+are read line by line; the step is ModTrap's and done where every line only gives something of the mod's or reaches
+only its things, and the owner's where a line leaves the mod's things out or the file is of a kind ModTrap has not
+read the handling of. With the demaster in place the steps carry one account of ModTrap's checks (masters, mods
+disabled, each tool's noted run, the settings files): "complete and checked" only when all hold.
+
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
 plugins concerned. Once it is done the steps are stated from what was read. A verdict on a tool does not change

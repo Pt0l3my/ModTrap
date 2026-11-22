@@ -24,7 +24,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
   right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
   by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning). MT31 (a tool with only a button
-  is run by ModTrap pressing it). MT32 (a compiler that crashes inside MO2 is put on MO2's list of programs it leaves alone).
+  is run by ModTrap pressing it). MT32 (a compiler that crashes inside MO2 is put on MO2's list of programs it leaves alone). MT33 (ModTrap reads
+  the settings files that name the plugin, and gives one account of its checks after the demaster).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -655,4 +656,19 @@ it, on what ModTrap is for: "we only want our ModTrap to do its job flawlessly".
   page, is the way back.
 - After a tool closed without output, the row of tools starts it once more, at most twice, only for a stated
   reason.
+
+## MT33
+
+**The settings files that name the plugin, and checks after the demaster** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "looks like the demaster went through fine, MO2 has no warnings. Could this step be done by
+ModTrap as well? Could we implement after demaster checks?"
+
+**Settled under that freedom** (WHY§95, TL01§23; the owner may overrule any of it):
+
+- ModTrap reads those files line by line and settles the step itself where every line only gives something of the
+  mod's or reaches only the mod's things. A line that leaves the mod's things out, and a file of a kind whose
+  handling ModTrap has not read, stay the owner's, with the lines shown.
+- After a demaster ModTrap gives one account of its checks, each a fact it read or recorded, and says the
+  demaster is complete and checked only when all hold, naming what is left to the owner.
 
