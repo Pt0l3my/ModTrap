@@ -116,6 +116,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 91 | 2026-11-22 | A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist | DECIDED | #steps #tools #page |
 | 92 | 2026-11-22 | ModTrap tells its own reading and scanning; while any of it goes, nothing is started: greyed on the page, refused by the server, waited for by the one go | DECIDED | #page #process #safety |
 | 93 | 2026-11-22 | 0.3.21 on the owner's PC: versions set, patchers built outside MO2 and taken as built inside; the framework then waited for its run button, which ModTrap now presses, closing it on its log's word | DECIDED | #tools #mo2 #process |
+| 94 | 2026-11-22 | The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason | DECIDED | #tools #mo2 #safety |
 
 ## Entries
 
@@ -2288,3 +2289,41 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   closed; a run without an end in the log never closed; the setting off; the helper answering in one line and
   pressing nothing where it cannot).
 - Not checked: the press itself, on a PC. The owner's next run is its first.
+- **Later (2026-11-22, the session file of 0.3.23).** Checked on the owner's PC: 31 seconds after the start
+  ModTrap pressed the run button, the run began at that second, the log stated its end 26 seconds later, and the
+  window closed when asked. The helper worked as written (WHY§94 for what the run then did).
+
+### 94. The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason
+
+`2026-11-22` · DECIDED · `#tools #mo2 #safety` · refs: MT32, MO01§11, TL01§22, WHY§90, WHY§93, MT14, MT15
+
+- The owner, with the session file of 0.3.23: "Synthesis started patching this time, but it had errors and then
+  closed on its own."
+- FACT (the session file). The press, the reading of the run's end and the closing all happened as meant
+  (WHY§93's Later line). The run itself failed in its first group, in 26 seconds, and wrote nothing.
+- FACT (the framework's log, TL01§22). Version 0.35.5 builds every patcher again as the first thing of a run,
+  whatever was built before; the builds made outside MO2 were only what let it show itself ready. For three
+  patchers the build tool decided to compile, and the compiler ended with the access violation, as in every
+  build inside MO2 on this PC and in none outside it.
+- FACT (MO01§11). MO2 hooks each program a hooked program starts, unless its name is on a list MO2 keeps in its
+  settings ("Executables Blacklist"): such a program is started and left alone.
+- LIKELY. The compiler crashes because it is hooked: the crash shows only inside MO2, the framework's own source
+  names MO2's virtual file system for it (TL01§16), and the compiler reads nothing of the modlist (its sources
+  and libraries lie in the user's temporary and package folders), so it loses nothing by being left alone. Not
+  established until a run with the compiler on the list goes through.
+- DECIDED (MT32). When a tool's own newest log shows the compiler's crash (the line is data), ModTrap adds the
+  compiler, by the two names it is started under, to MO2's list before it starts the tool: one value of one
+  section of MO2's settings file, every other byte kept (`mo2fix`). Only with MO2 closed, since MO2 writes its
+  settings when it closes; a copy of the file as it was goes into the session's folder first; the change is in
+  the History; a setting, on by default, turns it off. Where the file names no list, MO2's default list is
+  written with the addition, so nothing MO2 left alone before is hooked now.
+- DECIDED. After a tool has closed without output, the row of tools starts it once more, at most twice, when
+  there is a stated reason that is not a guess: something ModTrap sets right before a start is still to be set
+  right (versions, builds, this list), which that very run has shown; or the tool's log shows Windows refusing
+  it a start, of the kind seen to pass (WHY§93). Otherwise the row ends as before.
+- Not solved by this, if it shows again: Windows refusing the framework itself the start of a program ("Access
+  is denied") in the middle of a run. The framework's newer versions run a built patcher directly and try a
+  refused start again (TL01§22); 0.35.5 does neither.
+- Checked: tests (the value added with MO2 closed and not with it open, the file as it was kept, every other
+  byte the same, the default list kept, only plain program names ever written; the reasons for one more start).
+- Not checked: on the owner's PC, and whether the compiler then goes through.

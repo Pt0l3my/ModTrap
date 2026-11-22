@@ -1,6 +1,6 @@
 {
  "format": "modtrap-tools/1",
- "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes. 'self_run' names the switches of the tool's own with which it does its work and closes without being touched, where it has such; ModTrap adds them to the arguments MO2 has for the tool when the owner's setting says so (WHY§84). 'wrote_nothing' is what is known about the tool closing without having written anything, said to the owner as a hint when that happens, with its source in the research note. 'log' names the folder beside the tool's program where it keeps logs of its own, and the signs ModTrap looks for in the log of a run it started: a pattern, and the sentence said when it shows (WHY§88). In 'self_run', 'press' names a button of the tool's own window that ModTrap presses when the tool has no switch for it, with the lines of the tool's log that say a run began and ended (WHY§93).",
+ "about": "How the tools of a modlist name and mark the plugins they make (TL01). ModTrap's data, not code: one entry a tool, each with where the fact was read and how sure it is. 'kind' decides what ModTrap proposes for such a plugin when a mod it depends on is taken out: a patcher's or generator's output is made again by running the tool; an editor's output cannot be made again by ModTrap and is demastered. 'reads' says what a tool builds its output from (plugins, meshes, textures, lod): a mod that brings such files makes the output stale, and the tool is to run again (DESIGN§16.6); 'reads_if' words the condition when that depends on what the mod changes. 'does' says in a sentence what the tool is for, as the page tells the owner. “writes” says how the tool writes its plugin: “xedit” for a tool built on xEdit, whose records are written as xEdit writes them, “own” for a tool with a writer of its own, whose records cannot be compared with another plugin's by their bytes. 'self_run' names the switches of the tool's own with which it does its work and closes without being touched, where it has such; ModTrap adds them to the arguments MO2 has for the tool when the owner's setting says so (WHY§84). 'wrote_nothing' is what is known about the tool closing without having written anything, said to the owner as a hint when that happens, with its source in the research note. 'log' names the folder beside the tool's program where it keeps logs of its own, and the signs ModTrap looks for in the log of a run it started: a pattern, and the sentence said when it shows (WHY§88). In 'self_run', 'press' names a button of the tool's own window that ModTrap presses when the tool has no switch for it, with the lines of the tool's log that say a run began and ended (WHY§93). 'mo2_leave_alone' names programs a tool starts that crash when MO2 hooks them, with the line of the tool's log that shows it: ModTrap adds them to MO2's own list of programs it leaves alone (WHY§94). 'passing' is a line of the tool's log that shows a refusal of the kind that passes, after which one more start is worth it.",
  "tools": [
   {
    "tool": "Wrye Bash",
@@ -116,7 +116,17 @@
     "says": "Synthesis has no switch to run its patchers, only its run button: ModTrap presses that button once Synthesis has it ready, and asks the window to close when Synthesis's own log says the run has finished.",
     "label": "FACT (the button's name and both log lines read in its source); not yet seen on a PC",
     "source": "TL01§21"
-   }
+   },
+   "mo2_leave_alone": {
+    "when": "\\\"csc\\.exe\\\" exited with code -1073741819",
+    "programs": [
+     "csc.exe",
+     "VBCSCompiler.dll"
+    ],
+    "label": "LIKELY (the crash shows only inside MO2; MO2 leaves a listed program unhooked)",
+    "source": "TL01§22"
+   },
+   "passing": "Win32Exception \\(5\\): Access is denied"
   },
   {
    "tool": "ParallaxGen (PGPatcher)",

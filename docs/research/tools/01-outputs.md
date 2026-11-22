@@ -369,3 +369,24 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`, and i
   window) and whether it is enabled, and a button can be pressed through it. ModTrap's helper goes by exactly
   these, and checks itself before pressing (WHY§93). Not yet seen working on a PC.
 
+## 22. What a run of the patcher framework does first, in the owner's version and in the current source (2026-11-22)
+
+- **FACT (the owner's log, version 0.35.5, a run begun by its run button inside MO2).** In the same second as
+  "Starting Pipeline Run" the log shows `dotnet build "<patcher>.csproj" --runtime win-x64 -c Release` for each
+  patcher of the group, though each had been taken as built seconds before ("Short circuiting …"). Three of the
+  builds ended "Build FAILED" with the compiler's exit code -1073741819 after "All projects are up-to-date for
+  restore"; the log's own trace names the place as the preparing of a patcher for a run
+  (`SolutionPatcherPrep.cs:42` of that version). The run ended 26 seconds after it began; "Finished patcher run"
+  follows the errors.
+- **FACT (the same log and those of §18).** The compiler's crash shows in every session inside MO2 in which a
+  compile was made, and in no session outside MO2.
+- **FACT (Synthesis's source at commit `14cf3fa`,
+  `Synthesis.Bethesda.Execution/Patchers/Running/Git/GitPatcherRunner.cs:36-55`).** The current source runs a
+  patcher's built program directly, by the path its build record names, and wraps that start in a retry "on
+  transient spawn failure" that is named for MO2. So what failed on the owner's PC (building again at a run, and
+  a refused start) is what later versions were changed to avoid.
+- **FACT (the compiler's error line).** The program that crashed is named `csc.exe` by the build tool.
+  LIKELY (the .NET build tools as published; not read in a file here): the build tool may also start the
+  compiler as a server, by a command line that names `VBCSCompiler.dll`. Both names are what ModTrap adds to
+  MO2's list (MO01§11, WHY§94).
+

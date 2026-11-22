@@ -122,6 +122,7 @@ class ToolJob:
         self._binary, self._keep_logs = exe.binary, keep_logs
         self.own_log: dict | None = None        # what the tool's own log of this run says (toollog, WHY§88)
         self.before: list[str] = []             # what ModTrap set right in the tool's own settings before the start (WHY§89)
+        self.retry = ""                         # after a run without output: why one more start is worth it, or "" (WHY§94)
         # Something to do before the start, in this job's own time (building a tool's patchers outside MO2, WHY§90):
         # called with a function that waits and says whether the owner stopped the job; returns what was done, in
         # words, or raises Refused when the start is not to go on.
@@ -175,7 +176,7 @@ class ToolJob:
                 "seconds": int((self.ended or time.time()) - self.started), "changed": self.changed[:200],
                 "changed_count": len(self.changed), "by_itself": bool(self.switches) or self.drive in ("wait", "pressed", "finished"),
                 "drive": self.drive, "drive_note": self.drive_note, "profile": self.inst.profile,
-                "hint": self.hint if self.state == "done" and not self.changed else "", "own_log": self.own_log, "before": list(self.before)}
+                "hint": self.hint if self.state == "done" and not self.changed else "", "own_log": self.own_log, "before": list(self.before), "retry": self.retry}
 
     def _own_log(self) -> str:
         spec = toollog.spec_for(self.title, self._binary)

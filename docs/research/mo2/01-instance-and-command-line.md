@@ -128,3 +128,20 @@ Cited as `file:line` under `src/`. Read only; nothing copied.
   The message after a failed run is shown by another call, with MO2's message caption. LIKELY: the two can be
   told apart by caption, which is what ModTrap goes by when it closes only the message (WHY§84).
 
+## 11. The programs MO2's virtual file system leaves alone (2026-11-22)
+
+- **FACT (MO2, `src/settings.cpp:288-302` at commit `4ba22f0`).** MO2 keeps a list of program names in its
+  settings file, section `Settings`, key `executable_blacklist`, the names joined by semicolons. While the file
+  does not hold the key, the list is ten names of browsers, launchers and the like that the source gives.
+- **FACT (`src/usvfsconnector.cpp:157-161`, `src/settingsdialogworkarounds.cpp:84-110`, same commit).** MO2 hands
+  each name to its virtual file system when it sets that up. The owner edits the list in MO2's settings, on the
+  Workarounds page ("Executables Blacklist"); MO2's own words there: to keep programs from reaching the virtual
+  file system, since hooking a program not meant for it may disturb it.
+- **FACT (usvfs, `src/usvfs_dll/hooks/kernel32.cpp:310-337` at commit `57f1ea5`).** When a hooked program
+  starts another, usvfs starts it and then puts its hook into it, unless the new program is on the list.
+- **FACT (usvfs, `src/usvfs_dll/sharedparameters.cpp:153-189` at the same commit).** A program is on the list when the path of its file ends with
+  a backslash and a listed name, or when its command line holds a backslash and a listed name; letter case does
+  not count.
+- **LIKELY.** A program on the list, started inside MO2, runs as if started outside it: it sees none of the
+  modlist's files and is not touched by the hook.
+

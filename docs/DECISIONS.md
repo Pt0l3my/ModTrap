@@ -24,7 +24,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
   right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
   by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning). MT31 (a tool with only a button
-  is run by ModTrap pressing it).
+  is run by ModTrap pressing it). MT32 (a compiler that crashes inside MO2 is put on MO2's list of programs it leaves alone).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -632,4 +632,22 @@ did not start synthesis. It seems Synthesis was ready to run (no errors this tim
 - Any doubt (no such button, several, a press that starts nothing, no end in the log) leaves the tool open and
   the owner's, with the reason said.
 - The same setting as for tools with switches turns it off.
+
+## MT32
+
+**A compiler that crashes inside MO2 goes on MO2's list of programs it leaves alone** · *2026-11-22 · Under MT17: the result is the owner's, the how is ModTrap's*
+
+**Owner's words.** "Synthesis started patching this time, but it had errors and then closed on its own." Before
+it, on what ModTrap is for: "we only want our ModTrap to do its job flawlessly".
+
+**Settled under that freedom** (WHY§94, MO01§11, TL01§22; the owner may overrule any of it):
+
+- When a tool's own log shows its compiler crashing inside MO2, ModTrap adds the compiler to MO2's "Executables
+  Blacklist", in MO2's settings file, before it starts the tool again.
+- Only with MO2 closed; a copy of MO2's settings file as it was is kept with the session; the change is in the
+  History; a setting, on by default, turns it off.
+- It is MO2's own setting, outside any demaster: Revert does not undo it. The kept copy, or MO2's Workarounds
+  page, is the way back.
+- After a tool closed without output, the row of tools starts it once more, at most twice, only for a stated
+  reason.
 

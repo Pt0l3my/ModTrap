@@ -346,7 +346,7 @@ class Tools(unittest.TestCase):
         self.assertTrue(opened[0][0].endswith("Synthesis.exe") and len(opened[0]) == 1)       # by itself: no MO2, no arguments
         self.assertEqual(self.commands[0][1:], ["-p", "Default", "run", "-e", "Synthesis"])    # then through MO2
         self.assertTrue(all(r.is_file() for r in records))
-        self.assertIn("opened it by itself, outside MO2, where it built them (2 of 2", t["before"][0])
+        self.assertIn("opened it by itself, outside MO2, where it built them (2 of 2", " ".join(t["before"]))
         self.assertEqual((tool_dir / "PipelineSettings.json").read_bytes(), settings)          # put back as it was
         self.assertIsNone(toolfit.unbuilt(tool_dir))
         # Built now: the next start opens nothing outside MO2.
@@ -371,7 +371,7 @@ class Tools(unittest.TestCase):
         self.api.post("/api/settings", {"name": "tool_prebuild", "value": False})
         self.api.post("/api/tool/start", {"title": "Synthesis"})
         t = self.ended()
-        self.assertEqual((t["state"], opened, t["before"]), ("done", [], []))
+        self.assertEqual((t["state"], opened, [b for b in t["before"] if "outside MO2" in b]), ("done", [], []))
 
     def _pressing(self, tool_dir: Path, lands: bool = True, finishes: bool = True, ready_after: int = 2):
         """The framework started through MO2, with ModTrap driving it: a stand-in for the helper that presses its run
@@ -450,6 +450,66 @@ class Tools(unittest.TestCase):
         self.assertEqual((t["state"], t["drive"], seen["presses"], seen["closes"]), ("running", "pressed", 1, 0))
         closed.write_bytes(b"")
         self.ended()
+
+    def test_a_compiler_that_crashes_inside_mo2_is_put_on_mo2s_list_of_programs_it_leaves_alone(self) -> None:
+        """MT32, WHY§94: the framework's last log shows the compiler crashing. Before the next start ModTrap adds the
+        compiler to MO2's own list (one value of MO2's settings file), with MO2 closed and the file as it was kept;
+        and after a run without output it says that one more start is worth it."""
+        from modtrap import mo2fix
+        crash = ['x [INF] Mutagen version: 0.10.0', 'x [INF] Synthesis version: 1.2.3',
+                 'x [ERR] error MSB6006: "csc.exe" exited with code -1073741819. [Invented.csproj]']
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"), log_lines=crash)
+        ini = self.root / "ModOrganizer.ini"
+        before = ini.read_bytes()
+        self.assertEqual(mo2fix.listed(self.root), (list(mo2fix.DEFAULT), False))
+        # MO2 open: its settings are left alone, and the reason is said.
+        ini.write_bytes(ini.read_bytes().replace(b"[customExecutables]", b"[Settings]\r\nstyle=dark.qss\r\n\r\n[customExecutables]"))
+        before = ini.read_bytes()
+        self.api.open(str(self.root), wait=True)
+        self.api.program_paths = lambda image: [str(self.root / "ModOrganizer.exe")]
+        self.api.ask_close = lambda program: False
+        self.api.wait_mo2_gone = lambda **kw: False
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertIn("MO2 is open", " ".join(t["before"]))
+        self.assertEqual(ini.read_bytes(), before)
+        self.assertIn("the compiler is to be added", t["retry"])                     # one more start is worth it
+        # MO2 closed: added, kept, recorded; every other byte of the file as it was.
+        self.api.program_paths = lambda image: []
+        (tool_dir / "logs" / "the last run.log").write_text("\n".join(crash) + "\n", encoding="utf-8")
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertIn("ModTrap added csc.exe and VBCSCompiler.dll to that list", " ".join(t["before"]))
+        now = ini.read_bytes()
+        line = b'executable_blacklist="' + ";".join(mo2fix.DEFAULT).encode() + b';csc.exe;VBCSCompiler.dll"\r\n'
+        self.assertIn(line, now)
+        self.assertEqual(now.replace(line, b""), before)                              # every other byte as it was
+        kept = [k for k in (self.api.store.dir(self.api.session.id) / "tool-settings").iterdir() if k.name.endswith("ModOrganizer.ini")]
+        self.assertEqual([k.read_bytes() for k in kept], [before])
+        self.assertIn("mo2 settings changed", [e["kind"] for e in self.api.get("/api/history", {})[1]["events"][:3]])
+        self.assertEqual(instance.load(self.root).executables[0].title, "xEdit")       # MO2's settings still read as before
+        # Named now: nothing more to add, and no reason of that kind to start again.
+        self.assertEqual(mo2fix.missing(self.root, ["csc.exe", "VBCSCompiler.dll"]), [])
+        (tool_dir / "logs" / "the last run.log").write_text("\n".join(crash) + "\n", encoding="utf-8")
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertEqual((t["before"], t["retry"]), ([], ""))
+        self.assertEqual(ini.read_bytes(), now)
+        # The setting off: said, not done.
+        ini.write_bytes(before)
+        self.api.post("/api/settings", {"name": "mo2_leave_alone", "value": False})
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        self.assertIn("Left as it is", " ".join(self.ended()["before"]))
+        self.assertEqual(ini.read_bytes(), before)
+
+    def test_a_refusal_of_the_kind_that_passes_is_a_reason_for_one_more_start(self) -> None:
+        tool_dir = self._framework(versions=("0.10.0", "1.2.3"), log_lines=[
+            "x [INF] Mutagen version: 0.10.0", "x [ERR] Error: System.ComponentModel.Win32Exception (5): Access is denied."])
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        self.assertIn("of the kind that passes", self.ended()["retry"])
+        (tool_dir / "logs" / "the last run.log").write_text("x [INF] Mutagen version: 0.10.0\n", encoding="utf-8")
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        self.assertEqual(self.ended()["retry"], "")
 
     def test_the_helper_that_presses_answers_in_one_line_and_presses_nothing_where_it_cannot(self) -> None:
         """WHY§93: the helper is a program of its own. Here (not Windows) it must say so and press nothing; asked the

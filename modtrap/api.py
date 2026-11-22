@@ -101,6 +101,7 @@ SETTINGS = {
     "tools_self": True,        # a tool with switches of its own to work and close by itself is started with them (WHY§84)
     "tool_versions": True,     # before the patcher framework starts: library versions its last log shows as not fitting are set right (MT27)
     "tool_prebuild": True,     # and patchers its last log shows as not built are built outside MO2 first (MT28)
+    "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -528,12 +529,14 @@ class Api:
                         pass
                     if self.changes is not None:
                         self.changes.tool_ran(title, len(job.changed))     # what makes its step done (WHY§91)
+                    if not job.changed:
+                        job.retry = self._worth_again(exe, job)            # said to the page: the row may start it once more
                 if job.state == "done" and self.folder and self.status == "ready":
                     self.open(self.folder, self.profile or None, session=self.session, wait=True)   # its output, read again
                     if self.changes is not None:
                         self.changes.retire_remade()         # a copy of ModTrap's that the run made needless (WHY§80)
             job.on_end = ended
-            job.before = self._fit_tool(exe, job.image)
+            job.before = self._fit_tool(exe, job.image) + self._leave_alone(exe, job.image)
             gap = self._unbuilt_tool(exe)
             if gap is not None:
                 job.prepare = lambda wait: self._prebuild_tool(exe, gap, wait)
@@ -577,6 +580,103 @@ class Api:
         except Exception as e:
             log.warn("the library versions of “%s” could not be checked or set: %s", exe.title, logbook.why(e))
             return []
+
+    def _tool_log_text(self, exe) -> tuple[str, str]:
+        """The tool's own newest log, whenever written: (its text, its name), ("", "") when there is none."""
+        from . import toollog
+        spec = toollog.spec_for(exe.title, exe.binary)
+        if spec is None:
+            return "", ""
+        folder = Path(exe.binary.replace("\\", "/")).parent / str(spec["folder"])
+        path = toollog.newest(folder, str(spec.get("pattern", "*.log")), 0.0)
+        try:
+            return (toollog.read(path), path.name) if path is not None else ("", "")
+        except OSError:
+            return "", ""
+
+    def _leave_alone_spec(self, exe) -> tuple[list[str], str] | None:
+        """For a tool whose data names it (TL01§22): the programs MO2 should leave alone, if the tool's newest log
+        shows the crash that calls for it, and that log's name."""
+        name, _kind = tools.of_executable(exe.title, exe.binary)
+        spec = next((t for t in tools.load() if t["tool"] == name), {}).get("mo2_leave_alone")
+        if not isinstance(spec, dict):
+            return None
+        text, log_name = self._tool_log_text(exe)
+        try:
+            if not text or not re.search(str(spec["when"]), text):
+                return None
+        except (re.error, KeyError):
+            return None
+        return [str(x) for x in spec.get("programs", [])], log_name
+
+    def _leave_alone(self, exe, image: str) -> list[str]:
+        """Before a tool is started (MT32, WHY§94): if its own newest log shows a compiler crashing inside MO2, the
+        compiler is added to MO2's list of programs its virtual file system leaves alone, in MO2's settings file,
+        with a copy of the file kept first. Only with MO2 closed, and unless the owner's setting says no. Returns
+        what was done or found, in words. Never raises."""
+        from . import history, mo2fix
+        try:
+            m = self.model
+            got = self._leave_alone_spec(exe)
+            if m is None or got is None or self.running(image):
+                return []
+            programs, log_name = got
+            need = mo2fix.missing(m.instance.root, programs)
+            if not need:
+                return []
+            what = ("its last log (%s) shows the compiler crashing when started inside MO2; MO2's list of programs it "
+                    "leaves alone does not name %s" % (log_name, " or ".join(need)))
+            if self.settings().get("mo2_leave_alone") is False or self.session is None:
+                log.warn("“%s”: %s. Left as it is: the setting to add them is off", exe.title, what)
+                return ["%s%s. Left as it is: the setting to add them is off" % (what[0].upper(), what[1:])]
+            self.wait_mo2_gone(seconds=10.0)
+            if self.mo2()["state"] != "closed":
+                why = ("MO2 is open, and writes its settings when it closes: close MO2, then start the tool from here again"
+                       if self.mo2()["state"] == "open" else "ModTrap cannot tell on this PC whether MO2 is closed, so it leaves MO2's settings alone")
+                log.warn("“%s”: %s. %s", exe.title, what, why)
+                return ["%s%s. %s" % (what[0].upper(), what[1:], why)]
+            done = mo2fix.add(m.instance.root, need, self.store.dir(self.session.id) / "tool-settings")
+            if not done["added"]:
+                return []
+            history.History(self.store.dir(self.session.id)).add(
+                "mo2 settings changed", file=mo2fix.INI, was="not on the list of programs MO2 leaves alone",
+                now="added: " + ", ".join(done["added"]), kept=done["kept"],
+                why="“%s”'s last log (%s) shows the compiler crashing inside MO2" % (exe.title, log_name))
+            text = ("%s%s. ModTrap added %s to that list, in MO2's settings file (Settings, Workarounds, Executables "
+                    "Blacklist in MO2); a copy of the file as it was is kept with this session (%s)" % (
+                        what[0].upper(), what[1:], " and ".join(done["added"]), done["kept"]))
+            log.info("“%s”: %s", exe.title, text)
+            return [text]
+        except Exception as e:
+            log.warn("MO2's list of programs it leaves alone could not be checked or changed: %s", logbook.why(e))
+            return []
+
+    def _worth_again(self, exe, job) -> str:
+        """After a tool closed without output: is there a reason to start it once more that is not a guess? Either
+        something ModTrap sets right before a start is still to be set right (a remedy its last run called for),
+        or its log shows a refusal by Windows of the kind that passes. "" when neither. Never raises."""
+        from . import toolfit
+        try:
+            if toolfit.is_tool(exe.title, exe.binary):
+                folder = Path(exe.binary.replace("\\", "/")).parent
+                if self.settings().get("tool_versions") is not False and toolfit.check(folder):
+                    return "its library versions are to be set right first"
+                if self.settings().get("tool_prebuild") is not False and toolfit.unbuilt(folder):
+                    return "its patchers are to be built outside MO2 first"
+            got = self._leave_alone_spec(exe)
+            if got is not None and self.settings().get("mo2_leave_alone") is not False and self.model is not None:
+                from . import mo2fix
+                if mo2fix.missing(self.model.instance.root, got[0]):
+                    return "the compiler is to be added to the programs MO2 leaves alone first"
+            name, _kind = tools.of_executable(exe.title, exe.binary)
+            passing = next((t for t in tools.load() if t["tool"] == name), {}).get("passing")
+            if isinstance(passing, str) and passing:
+                text, _n = self._tool_log_text(exe)
+                if re.search(passing, text):
+                    return "its log shows Windows refusing it a start, of the kind that passes"
+        except Exception:
+            pass
+        return ""
 
     def _unbuilt_tool(self, exe) -> dict | None:
         """For the patcher framework: what its newest log names as not built, if the owner's setting lets ModTrap
