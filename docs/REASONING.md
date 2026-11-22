@@ -97,6 +97,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 72 | 2026-11-21 | The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list | FACT | #xedit #tools #steps #process |
 | 73 | 2026-11-21 | "Are you 100% sure?" No: the patcher was cleared by comparing bytes it writes in its own form. A patcher is now cleared only where it can be ruled out | DECIDED | #tools #steps #process |
 | 74 | 2026-11-22 | What each tool made, from its own files: the patchers behind each output, what was left out, and every tool-made plugin's records by kind | DECIDED | #tools #steps #page |
+| 75 | 2026-11-22 | The demaster ran clean on 0.3.7; what is proven on one mod only, and what "any mod" still needs | FACT | #process #method |
 
 ## Entries
 
@@ -1710,3 +1711,29 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   owner as a separate check.
 - Checked: tests on invented plugins and an invented settings file; the table in a browser. Not checked: the
   owner's real settings file.
+
+### 75. The demaster ran clean on 0.3.7; what is proven on one mod only, and what "any mod" still needs
+
+`2026-11-22` · FACT · `#process #method` · refs: MT4, MT17, MT21, DESIGN§5, DESIGN§9, WHY§72, WHY§74
+
+- The owner: "does that look okay so far? I just wanted to ask that whether you have been tuning the tool to be
+  able to demaster or add any mod (not just SDA)?"
+- FACT (the session file, version 0.3.7): dry run of 17 dependants in five minutes, 12 patches switched off, 5
+  plugins changed and verified, in place, the load order clean. No error box this time; OK was pressed half a
+  minute after xEdit's start (WHY§72).
+- FACT: the saved session's summary file was not valid JSON: a tool's own arguments hold a quoted path, and
+  cleaning the written text took the backslash of the escaped quote for part of the path. It is now cleaned
+  value by value.
+- FACT, on "any mod": nothing in ModTrap names this mod. Its rules are about kinds of dependence (MT4), its
+  tests use invented plugins, and the probe proves the machinery on any PC. But every fault found on a real
+  modlist so far was found through this one mod and its 17 dependants. The record shapes they hold (dialogue,
+  quests, cells, lists, conditions, a material's parent) are the shapes proven. Others are not yet met on a
+  real list: a navmesh that leans on the mod, a required single field (a character's race, an outfit), script
+  properties, a mod with several plugins, a mod that is a master of hundreds.
+- FACT: what is not recognised is not changed. Such a part is "needs you", its plugin is left as it is, and the
+  mod stays enabled (DESIGN§5). So an unmet shape costs a demaster that stops short, not a broken plugin.
+- FACT: adding mods (MT21) is built and tested on stand-ins and has not been run on the owner's list.
+- METHOD proposed to the owner: dry runs only, of a few mods of other kinds (they change nothing), and their
+  session files; what falls under "needs you" there says what to build next.
+- KNOWN GAP: a mod that others lean on without naming it as a master (a script that asks for its plugin by
+  name) is found only in settings files today, not in compiled scripts.

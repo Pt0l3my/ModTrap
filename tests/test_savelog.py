@@ -180,6 +180,12 @@ class Saving(unittest.TestCase):
             self.assertNotIn(home.replace("/", "\\\\").encode(), data, name)
         self.assertIn(b"out=<modtrap>/sessions/", files["jobs/%s/script/modtrap-job.txt" % job])
         about = json.loads(files["about.json"])
+        # A summary that holds a quoted path inside a text (a tool's own arguments) is cleaned value by value: cleaned
+        # as plain text, the backslash of the escaped quote was taken for part of the path and the file broke.
+        cleaner = savelog.Cleaner([], user="")
+        text = json.dumps({"xedit": {"own_arguments": '-D:"C:\\Invented\\Data" -pseudoesl'}})
+        back = json.loads(savelog._clean_text_item("about.json", text, cleaner))
+        self.assertEqual(back["xedit"]["own_arguments"], '-D:"<path>/Data" -pseudoesl')
         self.assertEqual((about["name"], about["modlist"]["mods"], about["session"]["name"]), ("ModTrap", 7, "Example List"))
         self.assertEqual(json.loads(files["session/session.json"])["folder"], "<modlist>")
         self.assertIn(b"+Bramble", files["profile/modlist.txt"])
