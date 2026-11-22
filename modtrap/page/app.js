@@ -167,6 +167,8 @@ function showWork() {
   chip.replaceChildren(...(busy ? [el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + atWork() + "…"] : ["ModTrap is ready"]));
   chip.title = busy ? "Until this has finished, the buttons that change the modlist or start a program are greyed." : "ModTrap has finished reading and scanning: everything can be started.";
 }
+// The page's fixed buttons are gated by the same words as the ones made here, so that none is forgotten (WHY§100).
+document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); });
 document.addEventListener("click", (ev) => {
   const b = ev.target && ev.target.closest ? ev.target.closest("button.gated") : null;
   if (!b || !document.body.classList.contains("unsettled")) return;

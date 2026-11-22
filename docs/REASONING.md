@@ -122,6 +122,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 97 | 2026-11-22 | Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open | DECIDED | #steps #page #tools |
 | 98 | 2026-11-22 | A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed | DECIDED | #steps #tools #page |
 | 99 | 2026-11-22 | The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure | DECIDED | #steps #tools #log |
+| 100 | 2026-11-22 | On the owner's list the scanner is whole in 20 s, then 3 s; the demaster of 0.3.29 went through clean; the Process tab's own Demaster button was not greyed while ModTrap scanned | FACT | #page #steps #process |
 
 ## Entries
 
@@ -2495,3 +2496,27 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests with invented files (folders at any depth, the older layout's folder, conditions nested, on one
   line, unknown, unsound; the two unsettled; a file and a folder that cannot be opened and what the log says; a
   second look that fails the same way; a scanner that raises); the card and a whole demaster in a browser.
+
+### 100. On the owner's list the scanner is whole in 20 s, then 3 s; the demaster of 0.3.29 went through clean; the Process tab's own Demaster button was not greyed while ModTrap scanned
+
+`2026-11-22` · FACT · `#page #steps #process` · refs: WHY§92, WHY§98, WHY§99, MT30, MT36
+
+- The owner, with a session file of 0.3.29: "the demaster button isn't greyed out in process page header whilst
+  ModTrap is still doing its post launch scans. How do the logs look, was the demaster flawless?"
+- FACT (the session's log). The scanner's first look after launch: 3,488 sources, 30,933 folders listed, 168
+  folders of animation replacers, 11,549 settings files in force (6,918 in SKSE/Plugins, 3,999 in animation
+  replacers' folders, 630 in top folders, 2 in FLM), 973 hidden, 37.5 MB read, whole, 20.2 s of which the listing
+  3.4 s. Every later look: 2.5 to 3.3 s, with one or two files read anew and some 10,750 folders passed by.
+- FACT. The whole demaster in one go went through: dry run, 7 plugins demastered and verified, 3 mods disabled,
+  the behaviour tool run by its switches (33 files), the patcher framework run by its button (3 files), 0
+  problems in the load order after each reading. One settings file named a ticked plugin before the patcher
+  framework's run and was that tool's own output; after the run it no longer did. One file is left that names a
+  plugin, of a kind ModTrap reads, with nothing to do.
+- FACT. After the dry run MO2 took longer to close than the 16 s it was given, as once before; the demaster's own
+  start closed it. It now gets 30 s, and a message that shows only then is closed as the first is.
+- FACT, the fault. The gate (WHY§92) marks buttons by their words as the script makes them. The Process tab's
+  "Demaster Selected" is a fixed button of the page and did not carry the mark; the same button on the Selection
+  tab did. The server would have refused the start all the same (MT30), so nothing could go wrong, but the button
+  looked ready.
+- Fixed: the button carries the mark; at its start the page marks every fixed button by the same words; a test
+  holds every fixed button with such words to the mark.

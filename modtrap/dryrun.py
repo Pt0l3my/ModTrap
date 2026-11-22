@@ -545,7 +545,7 @@ def close_program(image: str, force: bool = False) -> None:
         pass
 
 
-MO2_LEAVING = 12.0             # seconds MO2 gets to close once its message has been closed (the owner's PC: 4 to 8)
+MO2_LEAVING = 30.0             # seconds MO2 gets to close once its message has been closed (the owner's PC: 4 to 8, twice over 16)
 MO2_GRACE = 4.0                # seconds a MO2 that ModTrap's own command started gets to close by itself
 PRESS_EVERY = 1.5              # seconds between looks for xEdit's "Module Selection" window
 PRESS_LIMIT = 8                # presses of its OK in one run, at most
@@ -630,8 +630,14 @@ def close_xedit(image: str, running: Callable[[str], bool | None], closer: Calla
         if running(MO2_EXE) is not True:
             log.info("MO2 closed when asked.")
             return
+        try:
+            if dismissed < 5 and dismiss(MO2_EXE):          # a message that shows only now is closed as the first was
+                dismissed += 1
+                end = max(end, time.time() + MO2_LEAVING)
+        except Exception:
+            pass
         time.sleep(wait)
-    log.warn("MO2 is still open: press OK on its message, or close it.")
+    log.warn("MO2 is still open: press OK on its message, or close it. Whatever needs MO2 closed asks it to close again first.")
 
 
 def launch(cmd: list[str], cwd: str) -> subprocess.Popen:
