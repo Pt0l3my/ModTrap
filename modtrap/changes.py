@@ -9,6 +9,7 @@ history.
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -16,15 +17,20 @@ from pathlib import Path
 
 import json
 
-from . import addjob, demaster, dryrun, history, logbook, paths, probejob, safe
+import shutil
+
+from . import addjob, demaster, dryrun, history, logbook, paths, plugin, probejob, safe
 from . import process
 from .instance import fold
 from .server import Bad
 
 log = logbook.get("add")
+TOOL_KEEP_FILES = 5000                 # a tool's output is kept for Revert up to this many files
+TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is to be made again after a Revert
+
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
-         "/api/demaster/drop", "/api/jobs/clear",
+         "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
 
 
@@ -381,12 +387,125 @@ class Changes:
                 reverted = bool(safe.Safe(d / "safe").reverted)
             except safe.Refused:
                 reverted = False
+            retired = [n for n in done.get("retired", []) if isinstance(n, str)]
+            # ModTrap's copies that hide a plugin made anew (WHY§56), and for each whether the copy can go: the new
+            # original must stand without the mod (WHY§80).
+            remade = [] if reverted else self._remade(d, [n for n in done.get("plugins", []) if n not in retired],
+                                                    data.get("trapped", []))
             out.append({"job": d.name, "when": data.get("when", ""), "mods": data.get("mods", []),
                         "mod_name": done.get("mod", ""), "plugins": done.get("plugins", []),
                         "disabled": done.get("disabled", []), "deactivated": done.get("deactivated", []),
-                        "state": "reverted" if reverted else "installed",
-                        "stale": [] if reverted else self._stale(d, done.get("plugins", []))})
+                        "state": "reverted" if reverted else "installed", "retired": retired,
+                        "stale": [x["plugin"] for x in remade], "remade": remade})
         return out
+
+    def _remade(self, job_dir: Path, plugins: list[str], trapped: list[str]) -> list[dict]:
+        """The demastered plugins whose original a tool has made anew, each with whether ModTrap's copy of it can be
+        retired: the original as it is now names no ticked plugin as a master, and every master it names is in the
+        load order and active. {"plugin", "ok", "why", "original"}."""
+        names = self._stale(job_dir, plugins)
+        if not names:
+            return []
+        try:
+            where = {fold(Path(i["path"]).name): Path(i["path"]) for i in safe.Safe(job_dir / "safe").items}
+        except safe.Refused:
+            where = {}
+        m = self.api.model
+        tf = {fold(t) for t in trapped}
+        out = []
+        for name in names:
+            orig = where.get(fold(name))
+            ok, why = False, "its original could not be found"
+            if orig is not None:
+                masters = None
+                try:
+                    masters = plugin.read(orig).masters
+                except (plugin.Unreadable, OSError) as e:
+                    why = "the new original cannot be read: %s" % logbook.why(e)
+                if masters is not None:
+                    still = [x for x in masters if fold(x) in tf]
+                    absent = [x for x in masters if m is not None and (m.row(x) is None or not m.row(x).active)]
+                    if still:
+                        why = "the new original still names %s as a master: it was made while the mod was enabled" % ", ".join(still)
+                    elif absent:
+                        why = "the new original names a master that is missing or not active: %s" % ", ".join(absent[:4])
+                    else:
+                        ok, why = True, "the new original stands without the mod"
+            out.append({"plugin": name, "ok": ok, "why": why, "original": orig.parent.name if orig is not None else ""})
+        return out
+
+    def demaster_retire(self, body: dict, quiet: bool = False) -> dict:
+        """Takes ModTrap's own demastered copy of a plugin out of ModTrap's mod once a tool has made the plugin anew
+        without the mod (WHY§80): the copy has the higher priority and would hide the new one. The copy is moved
+        into the job's folder, not deleted; nothing else is touched, and the plugin keeps its place in the load
+        order under its new provider."""
+        api = self.api
+        name = body.get("job")
+        wanted = body.get("plugins")
+        if not isinstance(name, str) or not re.fullmatch(r"demaster-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
+            raise Bad("that is not one of this session's demasters")
+        api.wait_mo2_gone()
+        gone = []
+        with self._lock:
+            api._need()
+            if api._busy() or self.busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.closed() is not True:
+                raise Bad("MO2 must be closed while ModTrap takes its copy out of its mod. Close MO2, then go on.")
+            job = next((j for j in self.demaster_jobs() if j["job"] == name), None)
+            if job is None or job["state"] != "installed":
+                raise Bad("that demaster is not in place")
+            can = [x for x in job["remade"] if x["ok"] and (not isinstance(wanted, list) or x["plugin"] in wanted)]
+            if not can:
+                if quiet:
+                    return {"retired": []}
+                raise Bad("no copy of ModTrap's can be retired there: " + ("; ".join(
+                    "%s: %s" % (x["plugin"], x["why"]) for x in job["remade"]) or "no original has been made anew"))
+            work = self._jobs_dir() / name
+            mod_dir = api.model.instance.mods_dir / job["mod_name"]
+            hist = history.History(api.store.dir(api.session.id))
+            for x in can:
+                src, dst = mod_dir / x["plugin"], work / "retired" / x["plugin"]
+                try:
+                    if not src.is_file():
+                        continue
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(src, dst)
+                    if safe.sha256(dst) != safe.sha256(src):
+                        raise OSError("the copy kept in the job's folder is not whole")
+                    src.unlink()
+                except OSError as e:
+                    raise Bad("%s could not be retired: %s. What was retired before it stays so." % (x["plugin"], logbook.why(e))) from None
+                gone.append(x["plugin"])
+                hist.add("copy retired", plugin=x["plugin"], mod=job["mod_name"], now_in=x["original"],
+                         why="a tool made the plugin anew, without the mod")
+                log.info("ModTrap's copy of %s is retired from “%s”: the plugin a tool made anew in “%s” now counts",
+                         x["plugin"], job["mod_name"], x["original"])
+            if gone:
+                try:
+                    with open(work / "installed.json", "rb") as f:
+                        done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
+                    done["retired"] = sorted(set(done.get("retired", [])) | set(gone))
+                    paths.write_atomic(work / "installed.json", (json.dumps(done, indent=1) + "\n").encode("utf-8"))
+                except (OSError, ValueError) as e:
+                    log.warn("the retiring could not be written down: %s", logbook.why(e))
+        if gone:
+            api.open(api.folder, api.profile or None, session=api.session)
+        return {"retired": gone}
+
+    def retire_remade(self) -> None:
+        """After a tool's run that ModTrap started: every copy of ModTrap's that the run made needless is retired,
+        if the owner's setting says so. Never raises: a tool's run must end cleanly whatever comes of this."""
+        try:
+            if self.api.settings().get("retire_copies") is False:
+                return
+            for job in self.demaster_jobs():
+                if job["state"] == "installed" and any(x["ok"] for x in job["remade"]):
+                    self.demaster_retire({"job": job["job"]}, quiet=True)
+        except Bad as e:
+            log.warn("ModTrap's copy was not retired by itself: %s", e)
+        except Exception as e:
+            log.warn("ModTrap's copy was not retired by itself: %s", logbook.why(e))
 
     def _stale(self, job_dir: Path, plugins: list[str]) -> list[str]:
         """The demastered plugins whose original has changed since. ModTrap's copy lies in ModTrap's own mod, above
@@ -443,9 +562,16 @@ class Changes:
                     what = demaster.undo_by_line(m.instance.profiles_dir / m.instance.profile, the_safe, done)
                 except (OSError, ValueError) as e:
                     raise Bad("this demaster's record cannot be read: %s" % logbook.why(e)) from None
+            # Back to how things stood before the demaster, whatever came after it (WHY§81): a plugin ModTrap
+            # demastered that a tool has since made anew gets its original back, and so does a tool's output that
+            # ModTrap kept before it started the tool. What is there now is set aside in the job's folder first.
+            m = api._need()
+            originals = self._originals_back(the_safe, work, m.instance.profiles_dir / m.instance.profile)
+            tools_back = self._tools_back(work)
+            what["restore"] = list(what["restore"]) + originals
             history.History(api.store.dir(api.session.id)).add(
                 "reverted", why="the owner asked", job=name, restored=[Path(p).name for p in what["restore"]],
-                removed=[Path(p).name for p in what["remove"]])
+                removed=[Path(p).name for p in what["remove"]], tools=tools_back["titles"], not_kept=tools_back["not_kept"])
             # Whatever the page still shows of a demaster describes the modlist as it was before this Revert: the
             # one that was reverted, or one still waiting to be put in place (WHY§62). It goes.
             if self.dm is not None and (self.dm.dir.name == name or self.dm_state in ("verified", "failed")):
@@ -455,7 +581,143 @@ class Changes:
         process.BOARD.drop("dry", "change", "install")     # put back: the Process tab shows a demaster still to come
         api.open(api.folder, api.profile or None, session=api.session)
         return {"job": name, "restored": len(what["restore"]), "removed": len(what["remove"]),
-                "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])]}
+                "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])],
+                "tools": tools_back["titles"], "tools_not_kept": tools_back["not_kept"], "set_aside": tools_back["aside"] + len(originals)}
+
+    # --- a strong Revert (WHY§81) ------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _aside(path: Path, folder: Path) -> None:
+        """Moves a file that is about to be replaced into the job's folder, so that nothing made since is lost."""
+        folder.mkdir(parents=True, exist_ok=True)
+        dst, n = folder / path.name, 2
+        while dst.exists():
+            dst, n = folder / ("%s.%d" % (path.name, n)), n + 1
+        shutil.copy2(path, dst)
+
+    def _originals_back(self, the_safe: safe.Safe, work: Path, profile_dir: Path) -> list[str]:
+        """Every plugin whose original ModTrap copied into the safe folder and that is no longer that original (a
+        tool has made it anew, or it is gone) is put back as it was. The profile's lists are not touched here."""
+        back = []
+        for item in the_safe.items:
+            p = Path(item["path"])
+            if p.parent == profile_dir:
+                continue
+            try:
+                if p.is_file() and safe.sha256(p) == item["sha256"]:
+                    continue
+                src = the_safe.files / item["copy"]
+                if safe.sha256(src) != item["sha256"]:
+                    log.warn("the safe folder's copy of %s is no longer what was taken; it was not put back", p.name)
+                    continue
+                if p.is_file():
+                    self._aside(p, work / "set-aside-by-revert")
+                p.parent.mkdir(parents=True, exist_ok=True)
+                tmp = p.with_name(p.name + ".modtrap-revert")
+                shutil.copy2(src, tmp)
+                os.replace(tmp, p)
+                back.append(str(p))
+                log.info("%s is put back as it was before the demaster; what a tool made of it since is kept in the job's folder", p.name)
+            except OSError as e:
+                log.warn("%s could not be put back as it was: %s", p.name, logbook.why(e))
+        return back
+
+    def before_tool(self, title: str, made: list[Path], folder: Path | None) -> None:
+        """Before ModTrap starts a tool while a demaster is in place: a copy of what the tool is about to write over
+        (its output mod's files and the plugins it made) goes into that demaster's folder, once for each tool, so
+        that Revert can bring the modlist back to how it stood before the demaster. Too large an output is not
+        kept, and Revert then says that the tool is to run again. Never raises."""
+        try:
+            job = next((j for j in self.demaster_jobs() if j["state"] == "installed"), None)
+            if job is None:
+                return
+            work = self._jobs_dir() / job["job"] / "tool-before" / re.sub(r"[^A-Za-z0-9._-]+", "_", title)[:60]
+            if (work / "manifest.json").is_file():
+                return                                   # the first copy is the state before the demaster's tools
+            files: list[Path] = []
+            if folder is not None and folder.is_dir():
+                for here, _dirs, names in os.walk(folder):
+                    files += [Path(here) / n for n in names]
+                    if len(files) > TOOL_KEEP_FILES:
+                        break
+            files += [x for x in made if x.is_file() and x not in files]
+            total = 0
+            for f in files:
+                try:
+                    total += f.stat().st_size
+                except OSError:
+                    pass
+            work.mkdir(parents=True, exist_ok=True)
+            record: dict = {"title": title, "folder": str(folder) if folder is not None else "", "files": [],
+                            "when": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            if len(files) > TOOL_KEEP_FILES or total > TOOL_KEEP_BYTES:
+                record["skipped"] = "%d file(s), %d MB: more than ModTrap keeps a copy of" % (len(files), total // (1024 * 1024))
+                log.warn("“%s”: its output is too large to keep a copy of (%s). After a Revert, run it again.", title, record["skipped"])
+            else:
+                for i, f in enumerate(files):
+                    copy = "%05d-%s" % (i + 1, f.name)
+                    (work / "files").mkdir(exist_ok=True)
+                    shutil.copy2(f, work / "files" / copy)
+                    record["files"].append({"path": str(f), "copy": copy, "sha256": safe.sha256(f)})
+                log.info("“%s”: a copy of its output as it is now (%d file(s)) is kept with the demaster, for Revert", title, len(files))
+            paths.write_atomic(work / "manifest.json", (json.dumps(record, indent=1) + "\n").encode("utf-8"))
+        except Exception as e:
+            log.warn("a copy of “%s”'s output could not be kept for Revert: %s", title, logbook.why(e))
+
+    def _tools_back(self, work: Path) -> dict:
+        """Puts back each tool's output that was kept before ModTrap started the tool (`before_tool`): files changed
+        since are replaced by the kept ones, files the run added are set aside. What was too large to keep is named."""
+        out = {"titles": [], "not_kept": [], "aside": 0}
+        base = work / "tool-before"
+        try:
+            kept = sorted((d for d in base.iterdir() if (d / "manifest.json").is_file()), reverse=True)
+        except OSError:
+            return out
+        for d in kept:
+            try:
+                with open(d / "manifest.json", "rb") as f:
+                    rec = json.loads(f.read(64 * 1024 * 1024).decode("utf-8"))
+            except (OSError, ValueError):
+                continue
+            title = str(rec.get("title", d.name))
+            if rec.get("skipped"):
+                out["not_kept"].append(title)
+                continue
+            aside = work / "set-aside-by-revert" / d.name
+            known = set()
+            changed = 0
+            for item in rec.get("files", []):
+                p = Path(item["path"])
+                known.add(str(p))
+                try:
+                    if p.is_file() and safe.sha256(p) == item["sha256"]:
+                        continue
+                    if p.is_file():
+                        self._aside(p, aside)
+                        out["aside"] += 1
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = p.with_name(p.name + ".modtrap-revert")
+                    shutil.copy2(d / "files" / item["copy"], tmp)
+                    os.replace(tmp, p)
+                    changed += 1
+                except OSError as e:
+                    log.warn("%s of “%s” could not be put back: %s", p.name, title, logbook.why(e))
+            folder = Path(rec["folder"]) if rec.get("folder") else None
+            if folder is not None and folder.is_dir():
+                for here, _dirs, names in os.walk(folder):
+                    for n in names:
+                        p = Path(here) / n
+                        if str(p) not in known:               # the run added it: out of the way, kept
+                            try:
+                                self._aside(p, aside)
+                                p.unlink()
+                                out["aside"] += 1
+                                changed += 1
+                            except OSError as e:
+                                log.warn("%s of “%s” could not be set aside: %s", n, title, logbook.why(e))
+            out["titles"].append(title)
+            log.info("“%s”: its output is put back as it was before the demaster (%d file(s) changed back or set aside)", title, changed)
+        return out
 
     def _drop(self, why: str) -> None:
         """Forgets the demaster in hand that was not put in place. Its files stay in its job folder; nothing in
@@ -507,6 +769,8 @@ class Changes:
             return self.demaster_revert(body)
         if path == "/api/demaster/drop":
             return self.demaster_drop(body)
+        if path == "/api/demaster/retire":
+            return self.demaster_retire(body)
         if path == "/api/jobs/clear":
             return self.jobs_clear(body)
         if path == "/api/add/plan":

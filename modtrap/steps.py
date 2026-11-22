@@ -549,6 +549,8 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             d["kind"], d["id"], d["owner"], ", ".join(d["by"]), ", ".join(d["changed"][:8]),
             ("this plugin holds the same " + ", ".join(d["carried"][:8])) if d["carried"]
             else "this plugin holds none of it") for d in o["details"]]
+        lines += ["    %s · the mod: %s · this plugin: %s · next in line (%s): %s" % (x["field"], x["mod"], x["tool"], x["next_by"], x["next"])
+                  for d in o["details"] for x in d.get("values", [])]
         lines += ["%s %s of %s · no stake of the mod's after all: %s" % (x["kind"], x["id"], x["owner"], x["why"])
                   for x in o.get("no_stake", [])]
         if o["carried"]:
@@ -726,6 +728,19 @@ def look_deeper(m: model.Model, mod_names: list[str], touched: dict | None = Non
     return out
 
 
+def show_field(ftype: str, data: bytes) -> str:
+    """A short field in words or bytes, for the evidence: what the mod, the tool's plugin and the plugin next in
+    line each say. Only what is needed to judge; a long field is told by its length."""
+    if ftype == "XCLC" and len(data) in (8, 12):
+        x, y = int.from_bytes(data[0:4], "little", signed=True), int.from_bytes(data[4:8], "little", signed=True)
+        return "cell (%d, %d), land flags %s" % (x, y, "0x%02X" % data[8] if len(data) == 12 else "none")
+    if not data:
+        return "nothing"
+    if len(data) <= 16:
+        return " ".join("%02X" % c for c in data)
+    return "%d bytes" % len(data)
+
+
 WHOLE_ORDER_SECONDS = 60.0     # looking through the whole load order for a few records, at most
 
 
@@ -739,7 +754,7 @@ def _whole_order(m: model.Model, wanted: dict, gone: set[str], made: set[str], h
     owners = {k[0] for k in wanted}
     place = {f: i for i, f in enumerate(m.order)}
     last_gone = {k: max((place.get(fold(n), -1) for n in ch["by"]), default=-1) for k, ch in wanted.items()}
-    out = {k: {"wins": True, "by": "", "same": set(), "at": -1} for k in wanted}
+    out = {k: {"wins": True, "by": "", "same": set(), "at": -1, "next": {}} for k in wanted}
     cut = False
     for f in m.order:
         r = m.plugins[f]
@@ -756,8 +771,12 @@ def _whole_order(m: model.Model, wanted: dict, gone: set[str], made: set[str], h
                 cut = cut or there.cut
                 for key in there.index.keys() & wanted.keys():
                     theirs = there.fields(key) or []
-                    out[key].update(by=r.name, at=place[f], same={
-                        t for (t, b, src) in wanted[key]["fields"] if held((t, b), src, theirs, there)})
+                    # Every field xEdit named, not only those that differ from the mod's own master by bytes: a
+                    # field can differ from that master in nothing that counts and still be told (WHY§78).
+                    mine = wanted[key].get("all") or wanted[key]["fields"]
+                    out[key].update(by=r.name, at=place[f],
+                                    same={t for (t, b, src) in mine if held((t, b), src, theirs, there)},
+                                    next={t: b for t, b in theirs if any(t == x[0] for x in mine)})
         except (plugin.Unreadable, OSError):
             cut = True
     for key, v in out.items():
@@ -899,6 +918,7 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 ch = changes[key]
                 if cut:
                     continue                             # not looked through to the end: the stake stands as told
+                ch["next"] = (v["by"], v["next"])
                 if not v["wins"]:
                     ch["why_not"] = "%s, which loads after the mod and stays, has the last word on this record" % v["by"]
                 else:
@@ -949,9 +969,17 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                     row["shared"] += 1
                     row["carried"] += bool(same)
                     if len(row["details"]) < DETAILS or same:
-                        row["details"].append({"kind": ch["kind"], "owner": key[0], "id": "%06X" % key[1],
-                                               "by": sorted(set(ch["by"])), "carried": same,
-                                               "changed": sorted(ch["named"])})
+                        det = {"kind": ch["kind"], "owner": key[0], "id": "%06X" % key[1],
+                               "by": sorted(set(ch["by"])), "carried": same, "changed": sorted(ch["named"])}
+                        if same:
+                            # The values themselves, so that the finding can be judged at a glance (WHY§78).
+                            by_next, next_fields = ch.get("next", ("", {}))
+                            det["values"] = [{"field": t,
+                                              "mod": show_field(t, next((b for x, b, _s in ch["fields"] if x == t), b"")),
+                                              "tool": show_field(t, next((b for x, b in theirs if x == t), b"")),
+                                              "next": show_field(t, next_fields[t]) if t in next_fields else "nothing",
+                                              "next_by": by_next or "no other plugin"} for t in same[:4]]
+                        row["details"].append(det)
                 row["details"].sort(key=lambda d: (not d["carried"], d["kind"], d["owner"], d["id"]))
                 del row["details"][DETAILS:]
             outputs.append(row)
@@ -962,6 +990,9 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 log.info("tools:   %s %s of %s, a stake of %s in %s: %s", d["kind"], d["id"], d["owner"],
                          ", ".join(d["by"]), ", ".join(d["changed"][:8]),
                          ("carries " + ", ".join(d["carried"][:8])) if d["carried"] else "none of it carried")
+                for x in d.get("values", []):
+                    log.info("tools:     %s: the mod has %s; this plugin has %s; next in line (%s) has %s",
+                             x["field"], x["mod"], x["tool"], x["next_by"], x["next"])
     finally:
         for rec in opened.values():
             if rec is not None:

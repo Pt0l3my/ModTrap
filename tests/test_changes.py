@@ -294,7 +294,8 @@ class DemasterThroughThePage(unittest.TestCase):
 
     def test_the_owners_settings_are_kept_and_only_known_ones(self) -> None:
         self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
-                                                        "follow": True, "script_props": True})
+                                                        "follow": True, "script_props": True, "retire_copies": True,
+                                                        "auto_tools": False})
         self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
         self.assertTrue(self.api.state()["settings"]["auto_go"])
         for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):
@@ -413,6 +414,97 @@ class DemasterThroughThePage(unittest.TestCase):
         after = self.api.get("/api/history", {})[1]
         self.assertEqual((after["jobs"], after["events"][0]["kind"]), ([], "reverted"))
         self.assertTrue((self.api.changes._jobs_dir() / jobs[0]["job"] / "plan.json").is_file())
+
+    def test_modtraps_copy_is_retired_once_a_tool_has_made_the_plugin_anew(self) -> None:
+        """WHY§80: ModTrap's demastered copy has the higher priority and would hide the plugin a tool makes anew.
+        It goes only when the new original stands without the mod; it is kept in the job's folder, not deleted."""
+        from modtrap import plugin
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        job = self.api.state()["demaster"]["jobs"][0]
+        mine = self.root / "mods" / "ModTrap - Bramble" / "Generated.esp"
+        original = self.root / "mods" / "Tool Output" / "Generated.esp"
+        self.assertTrue(mine.is_file() and original.is_file())
+        self.assertEqual((job["remade"], job["retired"]), ([], []))
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/retire", {"job": job["job"]})          # nothing was made anew
+        # A tool run while the mod was still named: the new original needs the mod. ModTrap's copy stays.
+        original.write_bytes(original.read_bytes() + b" made again, still with the mod")
+        job = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual([(x["plugin"], x["ok"]) for x in job["remade"]], [("Generated.esp", False)])
+        self.assertIn("still names Bramble.esp as a master", job["remade"][0]["why"])
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/retire", {"job": job["job"]})
+        self.assertTrue(mine.is_file())
+        # The tool's run without the mod: the new original names the game's plugin only.
+        original.write_bytes(plugin.build(("Skyrim.esm",)))
+        job = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual([(x["plugin"], x["ok"], x["original"]) for x in job["remade"]], [("Generated.esp", True, "Tool Output")])
+        self.mo2_running = True
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/retire", {"job": job["job"]})          # MO2 is open
+        self.mo2_running = False
+        got = self.api.post("/api/demaster/retire", {"job": job["job"]})[1]
+        self.ready()
+        self.assertEqual(got, {"retired": ["Generated.esp"]})
+        self.assertFalse(mine.exists())
+        self.assertTrue((self.api.changes._jobs_dir() / job["job"] / "retired" / "Generated.esp").is_file())   # kept
+        m = model.build(instance.load(self.root))
+        self.assertEqual((m.row("Generated.esp").source, m.issues), ("Tool Output", []))      # the new one counts, in its place
+        job = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual((job["retired"], job["remade"], job["stale"]), (["Generated.esp"], [], []))
+        self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "copy retired")
+        # After a tool's run that ModTrap started this happens by itself, unless the owner's setting says no.
+        self.api.changes.retire_remade()                                          # nothing left to retire: no harm
+
+    def test_revert_brings_back_the_state_before_the_demaster_whatever_came_after(self) -> None:
+        """WHY§81: after the demaster a tool ran (started by ModTrap), made a demastered plugin anew, changed and added
+        files in its output mod; ModTrap retired its copy; MO2 rewrote the lists. Revert still ends where it began."""
+        from modtrap import plugin
+        lists_before = {k: (self.root / k).read_bytes() for k in
+                        ("profiles/Default/modlist.txt", "profiles/Default/plugins.txt", "profiles/Default/loadorder.txt")}
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        job = self.api.state()["demaster"]["jobs"][0]
+        out_mod = self.root / "mods" / "Tool Output"
+        original = out_mod / "Generated.esp"
+        # ModTrap starts the tool: what the tool may write over is kept first, once.
+        self.api.changes.before_tool("Invented Tool", [original], out_mod)
+        kept = self.api.changes._jobs_dir() / job["job"] / "tool-before" / "Invented_Tool" / "manifest.json"
+        self.assertTrue(kept.is_file())
+        # The tool's run: the plugin anew without the mod, a file changed, a file added.
+        original.write_bytes(plugin.build(("Skyrim.esm",)))
+        (out_mod / "meta.ini").write_bytes(b"[General]\r\nchanged by the tool\r\n") if (out_mod / "meta.ini").is_file() else None
+        (out_mod / "made by the run.txt").write_bytes(b"new")
+        self.api.changes.before_tool("Invented Tool", [original], out_mod)       # a second start keeps the first copy
+        self.assertNotIn("made by the run.txt", kept.read_text(encoding="utf-8"))
+        self.api.post("/api/demaster/retire", {"job": job["job"]})
+        self.ready()
+        # MO2 ran in between and wrote its lists again: the whole-file way back is closed, the line-by-line one is taken.
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"# This file was automatically generated by Mod Organizer.", b"# This file was automatically generated by Mod Organizer. "))
+        # Clearing the job history never takes a job in place away: its Revert stays.
+        self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 0})
+        back = self.api.post("/api/demaster/revert", {"job": job["job"]})[1]
+        self.ready()
+        self.assertEqual((back["how"], back["tools"], back["tools_not_kept"]), ("by line", ["Invented Tool"], []))
+        lists = {"profiles/Default/modlist.txt", "profiles/Default/plugins.txt", "profiles/Default/loadorder.txt"}
+        self.assertEqual({k: v for k, v in snapshot(self.root).items() if k not in lists},
+                         {k: v for k, v in self.before.items() if k not in lists})    # every file as it was, dates and all
+        now = {k: (self.root / k).read_bytes() for k in lists}
+        now["profiles/Default/modlist.txt"] = now["profiles/Default/modlist.txt"].replace(b"Organizer. ", b"Organizer.")   # MO2's own touch aside
+        self.assertEqual(now, lists_before)                                          # and the three lists say what they said
+        aside = self.api.changes._jobs_dir() / job["job"] / "set-aside-by-revert"
+        self.assertTrue((aside / "Generated.esp").is_file() and (aside / "Invented_Tool" / "made by the run.txt").is_file())   # nothing lost
+        m = model.build(instance.load(self.root))
+        self.assertTrue(m.instance.mod("Bramble").enabled)
+        self.assertEqual(m.issues, [])
 
     def test_revert_after_mo2_rewrote_the_lists_goes_line_by_line(self) -> None:
         self.dry_run()

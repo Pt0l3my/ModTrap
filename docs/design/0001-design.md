@@ -251,6 +251,12 @@ can only be tested on the owner's PC (WHY§6); everything around it is tested he
   disabled are enabled, the plugins it deactivated are activated, the line of ModTrap's own mod is taken out and
   the plugins it wrote are removed if still as written. Everything else in the lists stays as it is.
 
+**Revert ends where the demaster began (WHY§81).** Beside the lists and ModTrap's own mod, Revert puts back every
+plugin of the safe folder that a tool has made anew since, and the output of each tool ModTrap started after the
+demaster, as it was kept just before the tool ran (up to 5,000 files and one gibibyte for a tool; a larger output is
+named as one to make again). What is there at the time is set aside in the job's folder. A job in place is never
+cleared from the job history; its Revert stays.
+
 ## 12. History
 
 A dated, append-only record in ModTrap's work folder, shown on the page, of everything ModTrap changed in the
@@ -296,6 +302,12 @@ order around it has changed since.
   behaviours, LOD meshes and textures, texture atlases. ModTrap looks at what kinds of files the trapped mod itself
   contains (by folder and file name only) and, where a kind matches what one of the instance's tools consumes, adds
   a "may need a re-run" step that says why. These are hints, worded as such.
+
+**ModTrap's copy of a tool's plugin (WHY§80).** A plugin a tool made that named the mod is demastered like any
+other: a copy in ModTrap's mod, above the original. When the tool makes the plugin anew without the mod, ModTrap
+retires its copy: moved into the job's folder, never deleted, and only if the new original names no ticked plugin
+and all its masters are active. By itself after a tool's run that ModTrap started (a setting), or by a button on
+the Selection tab. Every executable of MO2's list can be started from the Tools tab.
 
 **What the tools made (WHY§74).** The Tools tab lists every tool-made plugin of the load order: the tool, how
 ModTrap knows, the patchers behind it where the tool's own settings file says so, and its records by kind. The same
@@ -534,7 +546,9 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
 1. **Settings** (a tab of their own; kept in ModTrap's folder for every session; WHY§77). Each is a switch:
    after the dry run, go ahead without asking when the plan leaves nothing to the owner (off); show the Process tab
    when a demaster starts (on); close this modlist's MO2 without asking when a step needs it closed (off); open
-   MO2 again once a demaster is in place (off); take script properties that point at the mod out (on, MT4).
+   MO2 again once a demaster is in place (off); take script properties that point at the mod out (on, MT4);
+   after a tool's run, retire ModTrap's copy of a plugin the tool made anew (on, WHY§80); after the demaster, start
+   the tools that are to run again one after another (off, WHY§81).
    What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
 2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
    tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,

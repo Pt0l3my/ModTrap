@@ -100,6 +100,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 75 | 2026-11-22 | The demaster ran clean on 0.3.7; what is proven on one mod only, and what "any mod" still needs | FACT | #process #method |
 | 76 | 2026-11-22 | A second mod: the tool check looked at part of the load order, the Process tab hid what was left to the owner, and a script property is the first new shape | DECIDED | #tools #steps #page #xedit #process |
 | 77 | 2026-11-22 | Another modlist's MO2, settings, tabs in sections; and the cell stakes were three unused bytes: every stake a tool holds is now checked against the whole load order | DECIDED | #mo2 #page #tools #steps #process |
+| 78 | 2026-11-22 | The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run | FACT | #tools #steps #process |
+| 79 | 2026-11-22 | Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself | FACT | #tools #xedit #process |
+| 80 | 2026-11-22 | The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab | DECIDED | #tools #process #page #safety |
+| 81 | 2026-11-22 | The tools in a row, and a Revert that always ends where the demaster began: remade plugins and kept tool output come back, and a job in place is never cleared | DECIDED | #safety #tools #process #page |
 
 ## Entries
 
@@ -1809,3 +1813,107 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   sure", and the step says that ModTrap's copy then hides the tool's new one.
 - Not checked: any of it on the owner's PC. The reading script still counts unused bytes; changing it would ask
   for the probe again, and is left for the next change to the scripts.
+
+### 78. The generator asked for once more: my own slip in WHY§77's check; the evidence now shows the values; and a leftover could be put right by ModTrap instead of a run
+
+`2026-11-22` · FACT · `#tools #steps #process` · refs: MT17, MT24, DESIGN§14, TL01§15, WHY§77
+
+- The owner, on version 0.3.10: "still asking for dyndolod. why is that? Should we implement something else?"
+- FACT (the session file): WHY§77's look through the whole load order worked for five of six cells: each has a
+  later plugin that stays and has the last word, named in the evidence. One cell stayed, in the grid field,
+  "the same" in three of the generator's plugins.
+- FACT (my slip): the look compared only the fields that differ, by bytes, from the mod's own master. With the
+  unused bytes left out (TL01§15) that field no longer differed from the master, so it was not compared with
+  the plugin next in line at all; and then it was counted from xEdit's telling all the same. The one case the
+  change was made for was the one it passed over.
+- DECIDED: the look compares every field xEdit named. A test holds the case: a field that differs in nothing
+  that counts is no stake, whatever holds the same bytes.
+- DECIDED: where a tool's plugin holds the mod's value, the evidence shows the three values side by side: the
+  mod's, the tool's plugin's, and the next in line's with its plugin; a cell's grid field in words. They go into
+  the log too. A finding can then be judged by eye, by the owner and from a saved session.
+- OPEN (MT24): if such a finding is ever real, a run of a generator that takes hours is a heavy answer to one
+  field in one record. ModTrap could put the field right itself, in a copy of the tool's plugin, as it does for
+  a patch (MT4, case C). Asked of the owner.
+- Not checked: on the owner's PC. Whether the last cell falls away depends on its flags byte, which the next
+  session file will show.
+
+### 79. Where the false alarms came from (ModTrap, not the files), the fix at the source, and how ModTrap would put a leftover right itself
+
+`2026-11-22` · FACT · `#tools #xedit #process` · refs: MT4, MT24, XE01§19, XE01§22, TL01§13, TL01§15, WHY§66, WHY§69, WHY§76, WHY§77, WHY§78
+
+- The owner: "so you are saying that ModTrap could do those fixes itself without having to run patching tools?
+  How would that work in details? Would ModTrap alter existing patch files made by those tools or generate new
+  ones? Either way, we have to ensure the ModTrap does not get any more false alarms in the first place (or do
+  those actually comes from those bad fields themselves? are they false or badly written? are thug bugs?)"
+- FACT: none of the false alarms came from a faulty mod or tool. In order: bytes read without knowing what a
+  field means (WHY§63 to WHY§66); values many plugins share (WHY§69); unused bytes taken for content
+  (TL01§15); a conclusion about the whole load order drawn from the part xEdit had loaded (WHY§76); and a slip
+  of mine (WHY§78). Unused bytes are how the game's file format is: every plugin has them.
+- DECIDED: the unused bytes are left out where the comparison is made, in the scripts (XE01§22), not only
+  sorted out afterwards for one field.
+- METHOD told to the owner (MT24, not built): ModTrap never alters a tool's file. It would copy the tool's
+  plugin into its own mod, which has the highest priority, set the one field in the copy to what the plugin next
+  in line says, check the copy, and put it in place with the rest of the demaster; Revert takes it out. It can
+  do this for a value a tool copied into a plugin. It cannot for what a tool builds from the mod's files
+  (models, textures, behaviour files), nor for what a patcher works out anew.
+- KNOWN: the copy hides the tool's next output of that plugin until it is taken out of ModTrap's mod; ModTrap
+  warns of it and does not yet retire its copy by itself.
+
+### 80. The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab
+
+`2026-11-22` · DECIDED · `#tools #process #page #safety` · refs: MT9, MT14, MT15, MT17, DESIGN§11, DESIGN§13, DESIGN§19, WHY§56, WHY§77, WHY§79
+
+- The owner, on version 0.3.12: "no dyndolod asked this time, looks promising." And on ModTrap's copy hiding a
+  plugin a tool makes anew: "Build that next. Could the user run tools as well from ModTrap? basically start up
+  MO2 interface and run the tools from its environment. Can that be built?"
+- FACT (the session file): the probe passed with the changed scripts; two mods demastered with seven plugins,
+  one of them through script properties; the generator cleared, each of six cells with its reason, the last one
+  "the plugin next in line says the same there as the mod". XE01§22 and WHY§77 hold on a real list.
+- FACT: a demastered copy of a tool's plugin lies in ModTrap's mod, above the original. After the tool's next
+  run the original is new and whole, and ModTrap's copy hides it. ModTrap said so (WHY§56) and left the rest to
+  the owner.
+- DECIDED: ModTrap retires its copy. Only when the original, as it is now, names no ticked plugin as a master
+  and all its masters are active: a tool run while the mod was still enabled makes an original that still
+  needs it, and then the copy must stay. The copy is moved into the job's folder (MT9: nothing of the owner's is
+  deleted, and this is ModTrap's own file), the history says so (MT15), MO2 must be closed, and the plugin keeps
+  its place in the load order under the mod that now provides it.
+- DECIDED: after a tool's run that ModTrap started, this happens by itself (a setting, on). Otherwise the
+  Selection tab says which copies can go and has the button; a copy that must stay says why.
+- FACT (the owner's second question): starting a tool through MO2, with the modlist's files in place, was built
+  (DESIGN§16.8) but only offered inside a step. DECIDED: the Tools tab has a start button for every executable of
+  MO2's list, and one to open MO2 itself.
+- Checked: tests on the stand-in (refused when nothing was made anew, when the new original still needs the mod,
+  when MO2 is open; done otherwise). Not checked: on the owner's PC, with a real tool's run.
+
+### 81. The tools in a row, and a Revert that always ends where the demaster began: remade plugins and kept tool output come back, and a job in place is never cleared
+
+`2026-11-22` · DECIDED · `#safety #tools #process #page` · refs: MT9, MT14, MT15, MT17, DESIGN§11, DESIGN§12, DESIGN§19, TL01§12, WHY§60, WHY§67, WHY§80
+
+- The owner: "can you also add setting for the tool process to carry on automatically, like the process after dry
+  run? so the user could run the whole demaster process in one go. I would like to ensure that a strong and
+  stable revert option always remains and can be used at any stage of the demaster. The user should always have
+  the revert back to pre-demaster state option (never deleted from job history)."
+- DECIDED (the setting, off by default): once the demaster is in place, each tool its steps name is started
+  through MO2 as soon as the one before it has closed, and its step is ticked off when it has written output. A
+  tool that closes without writing anything ends the row. The owner still works each tool: ModTrap starts a
+  tool's program, it does not press the tool's own buttons.
+- FACT (read in the behaviour tool's source, `Pandora.Skyrim/CLI/CommandLineParser.cs:24-30` at commit `1f26bbc`):
+  that tool has switches to run and to close by itself. Not used yet: each tool would need its own, and a run
+  nobody watches needs its outcome checked. A later step, on the owner's word.
+- FACT (Revert as it was): it put the three lists back (whole, or line by line once MO2 had rewritten them) and
+  removed ModTrap's own mod. It did not touch a plugin a tool had made anew since, nor anything else a tool had
+  written after the demaster. After tools had run, "Revert" was not "as it was before".
+- DECIDED: Revert ends where the demaster began. (1) Every plugin ModTrap copied into the safe folder that is no
+  longer that original is put back from the copy. (2) Before ModTrap starts a tool while a demaster is in
+  place, it keeps a copy of what the tool is about to write over: the files of its output mod and the plugins it
+  made; once for each tool, so that the copy is of the state before the demaster's tools. Revert puts those
+  back and takes out what the run added. (3) What is there at the time of the Revert is set aside in the job's
+  folder first: nothing made since is lost either.
+- LIMIT, said where it applies: an output of more than 5,000 files or one gibibyte is not kept (the
+  distant-view generator's is of that size); the log says so before the tool starts, and Revert names the tool
+  as one to run again. A tool the owner starts outside ModTrap is not seen, so nothing of it is kept.
+- FACT: a job in place cannot be cleared from the job history (WHY§67): only jobs that no longer stand can. Its
+  Revert is on the History tab and the Selection tab for as long as the session exists. A test holds it.
+- Checked: a test in which a tool ran, a copy was retired and MO2 rewrote the lists, and every file ends as it
+  began, dates included; in a browser, one press through the tool's run, then Revert from the History tab.
+- Not checked: on the owner's PC.

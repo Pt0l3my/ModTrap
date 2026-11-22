@@ -20,7 +20,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   active session per modlist).
 - **2026-11-21.** MT21 (adding mods safely: analysis, steps, and carrying out what ModTrap can; the how is
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
-- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
+- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+  tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
 ## MT1
@@ -496,3 +497,27 @@ tell a patcher's copy made from the mod from one that only looks different. For 
 framework, (c) is what the owner would mostly do anyway; (a) earns its keep for tools whose run takes long.
 
 **Until decided.** (c) is what ModTrap does.
+
+## MT24
+
+**A leftover of the mod in a tool's plugin: run the tool, or let ModTrap put it right** · *Open*
+
+**Question.** A tool's plugin can hold a value it took from the mod in a record it only carries along (a cell it
+puts its own things into). Today the step says "run the tool again". For a generator whose run takes hours that is
+a heavy answer to one field. Should ModTrap put such a field right itself: in a copy of the tool's plugin, in
+ModTrap's own mod, set the field to what the plugin next in line says, as it does for a patch that carries a part on
+from the mod (MT4, case C)?
+
+**Options.**
+
+- (a) **ModTrap puts it right**, as part of "Demaster Selected", named in the plan. The change run then also loads
+  the tool's plugins and their masters (a longer run), and ModTrap's mod holds copies of them; the tool's next run
+  makes them anew, and ModTrap says when its copy has become the stale one.
+- (b) **Only say it.** The step shows the values and leaves the choice: run the tool, or leave the leftover until
+  the tool's next run.
+- (c) **As now:** "run the tool again".
+
+**Recommendation.** (b) now, (a) once a real leftover shows up that matters: none has yet (every one so far was
+bytes that mean nothing, or my own slip, WHY§77, WHY§78).
+
+**Until decided.** (c), with the values shown.

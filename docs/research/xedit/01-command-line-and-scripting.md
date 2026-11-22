@@ -315,3 +315,13 @@ All in `xEdit/JvI/xejviScriptAdapter.pas`:
 - **Not proven by the probe.** The probe's invented plugins have no script. The run's own checks apply: an entry
   xEdit will not take out leaves that plugin as it was; the new plugin must no longer name the mod; xEdit must
   find nothing left that needs it.
+
+## 22. Unused bytes are no part of what an element says (2026-11-22)
+
+- **FACT (xEdit's source, commit `f5c00f3`).** xEdit names the padding inside a field `Unused` and marks it to be
+  ignored when plugins are compared, as in a cell's grid field (`Core/wbDefinitionsCommon.pas:513`); the name
+  stands in about a hundred places of the definitions for this game (`Core/wbDefinitionsTES5.pas`).
+- **FACT (the owner's list).** ModTrap's scripts compared elements part by part and took those bytes for content.
+  Every "stake" in a cell that a dialogue mod and a follower mod were said to have was this (TL01§15, WHY§77).
+- **METHOD.** When the scripts put an element into comparable text (`Shape`, in both scripts), a part named
+  `Unused` is left out. Nothing else changes; the scripts changed, so the probe runs again.

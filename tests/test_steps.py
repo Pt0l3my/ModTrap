@@ -280,8 +280,9 @@ class ToolEvidence(unittest.TestCase):
                                "Synthesis Gameplay.esp": ("Synthesis", 1, 0),   # A, with another value
                                "Bashed Patch, 0.esp": ("Wrye Bash", 1, 1)})     # C, with the patch's value; B does not count
         detail = next(o for o in deep["outputs"] if o["plugin"] == "Synthesis.esp")["details"]
-        self.assertEqual(detail, [{"kind": "GLOB", "owner": "core.esp", "id": "000A00", "by": ["Bramble.esp"],
-                                   "carried": ["FLTV"], "changed": ["FLTV"]}])
+        self.assertEqual({k: v for k, v in detail[0].items() if k != "values"},
+                         {"kind": "GLOB", "owner": "core.esp", "id": "000A00", "by": ["Bramble.esp"],
+                          "carried": ["FLTV"], "changed": ["FLTV"]})
         self.assertEqual([(o["tool"], o["mod"], o["files"], o["shared"], o["examples"]) for o in deep["output_files"]],
                          [("ParallaxGen (PGPatcher)", "PG Output", 3, 1, ["meshes/bramble/leaf.nif"])])
         st = steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]
@@ -455,6 +456,32 @@ class ToolEvidence(unittest.TestCase):
         self.assertEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", old))
         self.assertNotEqual(plugin.canonical("XCLC", new), plugin.canonical("XCLC", new[:8] + b"\x01" + new[9:]))   # a flag counts
         self.assertEqual(plugin.canonical("FLTV", new), new)                          # any other field: as it is
+
+    def test_a_field_that_differs_only_in_what_does_not_count_is_no_stake_anywhere(self):
+        """WHY§78: xEdit names a field whose bytes differ in nothing that counts (unused bytes). ModTrap's own
+        comparison then finds no difference from the mod's master, and must not count the field for all that: the
+        tool's plugin holding the same bytes as the mod is no trace of the mod."""
+        from unittest import mock
+        m = model.build(instance.load(self.root))
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        with mock.patch.object(plugin, "canonical", lambda t, b: b"" if t == "FLTV" else b):    # as if all of it were unused
+            deep = steps.look_deeper(m, ["Bramble"], told)
+        rows = {o["plugin"]: o for o in deep["outputs"]}
+        self.assertEqual((rows["Synthesis.esp"]["shared"], rows["Synthesis.esp"]["carried"]), (0, 0))
+        self.assertIn("says the same there as the mod", rows["Synthesis.esp"]["no_stake"][0]["why"])
+
+    def test_the_evidence_shows_what_each_plugin_says(self):
+        m = model.build(instance.load(self.root))
+        told = {"Bramble.esp": [{"form": "02000A00", "kind": "GLOB", "owner": "Core.esp", "fields": ["FLTV"]}]}
+        deep = steps.look_deeper(m, ["Bramble"], told)
+        vals = next(o for o in deep["outputs"] if o["plugin"] == "Synthesis.esp")["details"][0]["values"]
+        self.assertEqual(vals, [{"field": "FLTV", "mod": "00 00 E0 40", "tool": "00 00 E0 40", "next": "00 00 80 3F", "next_by": "Core.esp"}])
+        by = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], None, deep, auto=True)["steps"]}
+        lines = [ln for i in by["tool:Synthesis"]["items"] if "details" in i for ln in i["details"]["lines"]]
+        self.assertIn("    FLTV · the mod: 00 00 E0 40 · this plugin: 00 00 E0 40 · next in line (Core.esp): 00 00 80 3F", lines)
+        self.assertEqual(steps.show_field("XCLC", b"\x09\x00\x00\x00\xfc\xff\xff\xff\x05\x11\x22\x33"), "cell (9, -4), land flags 0x05")
+        self.assertEqual(steps.show_field("XCLC", b"\x09\x00\x00\x00\xfc\xff\xff\xff"), "cell (9, -4), land flags none")
+        self.assertEqual(steps.show_field("FULL", b"x" * 40), "40 bytes")
 
     def test_a_tools_plugin_that_named_the_mod_is_proof(self):
         """WHY§77: ModTrap's demastered copy of a plugin a tool made, in ModTrap's own mod: the tool made it from the
