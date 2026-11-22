@@ -82,6 +82,7 @@ class ToolJob:
         self._dismiss, self._grace = dismiss, grace
         self._binary, self._keep_logs = exe.binary, keep_logs
         self.own_log: dict | None = None        # what the tool's own log of this run says (toollog, WHY§88)
+        self.before: list[str] = []             # what ModTrap set right in the tool's own settings before the start (WHY§89)
         self.arguments, self.switches = self_run_arguments(title, exe.binary, exe.arguments) if self_run else ("", [])
         name, _kind = tools.of_executable(title, exe.binary)
         # What is known about this tool closing without having written anything (data, TL01§16): said then, as a hint.
@@ -121,7 +122,7 @@ class ToolJob:
         return {"title": self.title, "state": self.state, "message": self.message, "output_mod": self.output_mod,
                 "seconds": int((self.ended or time.time()) - self.started), "changed": self.changed[:200],
                 "changed_count": len(self.changed), "by_itself": bool(self.switches), "profile": self.inst.profile,
-                "hint": self.hint if self.state == "done" and not self.changed else "", "own_log": self.own_log}
+                "hint": self.hint if self.state == "done" and not self.changed else "", "own_log": self.own_log, "before": list(self.before)}
 
     def _run(self) -> None:
         try:

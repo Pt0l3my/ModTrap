@@ -569,6 +569,8 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    after a tool's run, retire ModTrap's copy of a plugin the tool made anew (on, WHY§80); after the demaster, start
    the tools that are to run again one after another (off, WHY§81); let a tool that can do so run and close by
    itself, by switches of its own that ModTrap knows as data (on, MT25, WHY§84).
+   Before the patcher framework starts, library versions that its own last log proves unfit for the program are
+   set to the pair the program was built with, in its settings file, a copy kept first (on, MT27, WHY§89).
    What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
 2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
    tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,

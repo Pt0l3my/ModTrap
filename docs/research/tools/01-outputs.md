@@ -301,3 +301,23 @@ Read in the tools' public sources (both GPL-3.0: facts only, nothing copied), ea
 - **LIKELY.** With the profile's versions back at the first pair, the patchers build outside MO2: outside MO2
   neither the crash nor the refusal showed. Not established.
 
+## 19. Where the patcher framework keeps its library versions, and what its log's first lines state (2026-11-22)
+
+Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`.
+
+- **FACT (`Synthesis.Bethesda.Execution/Settings/V1/SynthesisProfile.cs:9-19`).** A profile in
+  `PipelineSettings.json` has, beside its name (`Nickname`): `MutagenVersioning` and `SynthesisVersioning`, each
+  one of Latest, Match, Manual; and `MutagenManualVersion` and `SynthesisManualVersion`, the versions used when
+  that is Manual.
+- **FACT (`Synthesis.Bethesda.Execution/Settings/NugetVersioningEnum.cs:3-8`, `Constants.cs:14-20`).** The three
+  ways are numbered Latest 1, Match 2, Manual 3, and the file is written with such values as words.
+- **FACT (`Synthesis.Bethesda.Execution/Settings/GithubPatcherSettings.cs:31-34`).** A patcher can override the
+  profile: `MutagenVersionType` and `SynthesisVersionType` (Profile, Latest, Match, Manual), with
+  `ManualMutagenVersion` and `ManualSynthesisVersion`.
+- **FACT (`Mutagen.Bethesda.Synthesis/Versioning/ProvideCurrentVersions.cs:48-49` and `:97-99`,
+  `Synthesis.Bethesda.GUI/Services/Startup/Startup.cs:69`).** At its start the program writes "Mutagen version: …"
+  and "Synthesis version: …" into its log: the versions of the two libraries in the program's own files, the ones
+  it was built with.
+- **FACT (the owner's logs, TL01§18).** Program 0.35.5 states 0.53.1 and 0.35.5 there, the pair its profile was
+  set to before the change, and with that pair no build error of the "does not fit" kind showed.
+

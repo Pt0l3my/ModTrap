@@ -21,7 +21,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
 - **2026-11-21.** MT21 (adding mods safely: analysis, steps, and carrying out what ModTrap can; the how is
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
 - **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
-  state facts: before the dry run, only that it comes first).
+  state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
+  right before it starts).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -551,4 +552,20 @@ the steps would look like."
 **Decision.** Until a dry run of the ticked mods is done, the Steps tab shows only the dry run and that the rest
 follows from it. What it shows afterwards rests on what was read, and a verdict on a tool is the same before the
 demaster as after it (WHY§86, DESIGN§14).
+
+## MT27
+
+**The patcher framework's library versions** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "can you make ModTrap to check the patches what versions are required and automatically set them
+to that version?"
+
+**Settled under that freedom** (WHY§89, TL01§19; the owner may overrule any of it):
+
+- ModTrap sets the versions only on proof: the program's own last log shows the versions its profile is still
+  set to as not fitting, and states the versions the program was built with. Those are set.
+- It does so before it starts the program, in the program's settings file, keeps a copy of the file as it was
+  with the session, and records the change in the History.
+- A setting, on by default, turns it off; ModTrap then only says what it found.
+- It is a tool's own file, outside any demaster: Revert does not undo it.
 

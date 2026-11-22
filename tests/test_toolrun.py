@@ -197,6 +197,93 @@ class Tools(unittest.TestCase):
         # A tool whose log ModTrap does not know has none read.
         self.assertIsNone(toolrun.toollog.after_run("Invented Patcher", "C:/Tools/Patcher.exe", 0, None))
 
+    def _framework(self, versions=("0.11.0", "1.3.0"), how="Manual", log_lines=None) -> Path:
+        """An invented patcher framework beside the list: its settings file with one profile, and its last log."""
+        import json
+        tool_dir = Path(self.tmp.name) / "Tools" / "Framework"
+        (tool_dir / "logs").mkdir(parents=True, exist_ok=True)
+        settings = {"Profiles": [{"$type": "Invented.Profile", "Nickname": "Invented", "ID": "abc", "MutagenVersioning": how,
+                                  "MutagenManualVersion": versions[0], "SynthesisVersioning": how,
+                                  "SynthesisManualVersion": versions[1], "Groups": [{"Name": "Invented group", "On": True, "Patchers": []}]},
+                                 {"Nickname": "Another", "MutagenVersioning": "Match", "MutagenManualVersion": None,
+                                  "SynthesisVersioning": "Match", "SynthesisManualVersion": None, "Groups": []}],
+                    "SelectedProfile": "abc", "Kept": 1.5}
+        (tool_dir / "PipelineSettings.json").write_bytes(b"\xef\xbb\xbf" + json.dumps(settings, indent=2).replace("\n", "\r\n").encode())
+        lines = log_lines if log_lines is not None else [
+            "2026-01-01 10:00:00.000 +00:00 [INF] ============== Opening Synthesis v1.2.3 ==============",
+            "2026-01-01 10:00:00.001 +00:00 [INF] Mutagen version: 0.10.0",
+            "2026-01-01 10:00:00.002 +00:00 [INF] Synthesis version: 1.2.3",
+            "2026-01-01 10:00:02.000 +00:00 [INF] Swapping to net8.0",
+            "Invented.csproj : error NU1202: Package Mutagen.Bethesda.Invented 0.11.0 is not compatible with net8.0 (.NETCoreApp,Version=v8.0).",
+            "Invented.csproj : error NU1202: Package Mutagen.Bethesda.Synthesis 1.3.0 is not compatible with net8.0 (.NETCoreApp,Version=v8.0)."]
+        (tool_dir / "logs" / "the last run.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        ini = self.root / "ModOrganizer.ini"
+        ini.write_bytes(ini.read_bytes().replace(b"title=Invented Patcher", b"title=Synthesis")
+                        .replace(b"C:/Tools/Patcher.exe", (tool_dir / "Synthesis.exe").as_posix().encode()))
+        self.api.open(str(self.root), wait=True)
+        return tool_dir
+
+    def test_library_versions_the_frameworks_log_shows_as_not_fitting_are_set_right_before_it_starts(self) -> None:
+        """MT27, WHY§89: the profile is still set to the versions the program's last log names as not fitting, and
+        the same log states the versions the program was built with. ModTrap sets those, keeps the file as it was,
+        records it, and starts the tool. Only that profile's four fields change."""
+        import json
+        from modtrap import toolfit
+        tool_dir = self._framework()
+        f = tool_dir / "PipelineSettings.json"
+        before = f.read_bytes()
+        self.assertEqual(toolfit.check(tool_dir), [{"profile": "Invented", "was": {"mutagen": "0.11.0", "synthesis": "1.3.0"},
+                                                     "now": {"mutagen": "0.10.0", "synthesis": "1.2.3"}, "target": "net8.0",
+                                                     "log": "the last run.log"}])
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertEqual(len(t["before"]), 1)
+        self.assertIn("Mutagen 0.10.0, Synthesis 1.2.3", t["before"][0])
+        now = f.read_bytes()
+        self.assertTrue(now.startswith(b"\xef\xbb\xbf") and b"\r\n" in now)                # written as the file was
+        was, new = json.loads(before.decode("utf-8-sig")), json.loads(now.decode("utf-8-sig"))
+        self.assertEqual((new["Profiles"][0]["MutagenManualVersion"], new["Profiles"][0]["SynthesisManualVersion"],
+                          new["Profiles"][0]["MutagenVersioning"]), ("0.10.0", "1.2.3", "Manual"))
+        was["Profiles"][0].update(MutagenManualVersion="0.10.0", SynthesisManualVersion="1.2.3")
+        self.assertEqual(new, was)                                                          # nothing else changed
+        kept = list((self.api.store.dir(self.api.session.id) / "tool-settings").iterdir())
+        self.assertEqual([k.read_bytes() for k in kept], [before])                           # the file as it was, kept
+        ev = self.api.get("/api/history", {})[1]["events"][0]
+        self.assertEqual((ev["kind"], ev["was"], ev["now"]), ("tool settings changed", "Mutagen 0.11.0, Synthesis 1.3.0", "Mutagen 0.10.0, Synthesis 1.2.3"))
+        # The profile now says what the log shows as fitting: a second start changes nothing.
+        self.assertEqual(toolfit.check(tool_dir), [])
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        self.assertEqual(self.ended()["before"], [])
+        self.assertEqual(f.read_bytes(), now)
+
+    def test_library_versions_are_left_alone_without_the_proof_or_when_the_setting_is_off(self) -> None:
+        from modtrap import toolfit
+        # The log's errors name other versions than the profile is set to (set right by hand since): nothing to do.
+        tool_dir = self._framework(versions=("0.10.5", "1.2.9"))
+        self.assertEqual(toolfit.check(tool_dir), [])
+        # No build error of that kind in the log: nothing to do, whatever the versions.
+        tool_dir = self._framework(log_lines=["x [INF] Mutagen version: 0.10.0", "x [INF] Synthesis version: 1.2.3"])
+        self.assertEqual(toolfit.check(tool_dir), [])
+        # The log does not state the program's own versions: ModTrap does not know what to set, and sets nothing.
+        tool_dir = self._framework(log_lines=["a.csproj : error NU1202: Package Mutagen.Bethesda.Synthesis 1.3.0 is not compatible with net8.0 (x)."])
+        self.assertEqual(toolfit.check(tool_dir), [])
+        # "Latest" with such errors in the log is set right too; a number for "Manual" stays a number.
+        tool_dir = self._framework(how=1)
+        self.assertEqual([(x["was"], x["now"]) for x in toolfit.check(tool_dir)],
+                         [({"mutagen": "latest", "synthesis": "latest"}, {"mutagen": "0.10.0", "synthesis": "1.2.3"})])
+        # The setting off: said, not set.
+        before = (tool_dir / "PipelineSettings.json").read_bytes()
+        self.api.post("/api/settings", {"name": "tool_versions", "value": False})
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        t = self.ended()
+        self.assertIn("Left as it is", t["before"][0])
+        self.assertEqual((tool_dir / "PipelineSettings.json").read_bytes(), before)
+        self.api.post("/api/settings", {"name": "tool_versions", "value": True})
+        self.api.post("/api/tool/start", {"title": "Synthesis"})
+        self.ended()
+        import json
+        self.assertEqual(json.loads((tool_dir / "PipelineSettings.json").read_bytes().decode("utf-8-sig"))["Profiles"][0]["MutagenVersioning"], 3)
+
     def test_only_a_tool_of_this_mo2_and_one_at_a_time(self) -> None:
         with self.assertRaises(Bad):
             self.api.post("/api/tool/start", {"title": "Not Set Up"})

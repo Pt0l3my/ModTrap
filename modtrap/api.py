@@ -99,6 +99,7 @@ SETTINGS = {
     "retire_copies": True,     # after a tool's run, take ModTrap's own copy of a plugin the tool made anew out of the way
     "auto_tools": False,       # after the demaster, start the tools that are to run again, one after another
     "tools_self": True,        # a tool with switches of its own to work and close by itself is started with them (WHY§84)
+    "tool_versions": True,     # before the patcher framework starts: library versions its last log shows as not fitting are set right (MT27)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -485,6 +486,7 @@ class Api:
                     if self.changes is not None:
                         self.changes.retire_remade()         # a copy of ModTrap's that the run made needless (WHY§80)
             job.on_end = ended
+            job.before = self._fit_tool(exe, job.image)
             self.tooljob = job
             if self.changes is not None:
                 # With a demaster in place, what the tool is about to write over is kept for Revert (WHY§81).
@@ -492,6 +494,39 @@ class Api:
                 self.changes.before_tool(title, made, target.folder if target is not None else None)
         job.start()
         return job.public()
+
+    def _fit_tool(self, exe, image: str) -> list[str]:
+        """Before the patcher framework is started (MT27, WHY§89): if its newest log shows that the library versions
+        its profile is still set to do not fit the program, they are set to the program's own pair, unless the
+        owner's setting says no. Returns what was done or found, in words. Never raises: the start goes on."""
+        from . import history, toolfit
+        try:
+            if not toolfit.is_tool(exe.title, exe.binary) or self.running(image):
+                return []
+            folder = Path(exe.binary.replace("\\", "/")).parent
+            found = toolfit.check(folder)
+            if not found:
+                return []
+            if self.settings().get("tool_versions") is False or self.session is None:
+                said = ["%s. Left as it is: the setting to set them right is off" % toolfit.words(f).split(". ModTrap set")[0] for f in found]
+                for x in said:
+                    log.warn("%s", x)
+                return said
+            done = toolfit.apply(folder, found, self.store.dir(self.session.id) / "tool-settings")
+            said = []
+            for f in done:
+                history.History(self.store.dir(self.session.id)).add(
+                    "tool settings changed", tool=exe.title, file=toolfit.SETTINGS, profile=f["profile"],
+                    was="Mutagen %s, Synthesis %s" % (f["was"]["mutagen"], f["was"]["synthesis"]),
+                    now="Mutagen %s, Synthesis %s" % (f["now"]["mutagen"], f["now"]["synthesis"]),
+                    why="its last log (%s) shows the versions set as not fitting this program" % f["log"], kept=f["kept"])
+                text = toolfit.words(f) + ". A copy of its settings file as it was is kept with this session (%s)" % f["kept"]
+                log.info("%s", text)
+                said.append(text)
+            return said
+        except Exception as e:
+            log.warn("the library versions of “%s” could not be checked or set: %s", exe.title, logbook.why(e))
+            return []
 
     # --- the record check (DESIGN§16.5): xEdit, read-only ----------------------------------------------------------
 

@@ -111,6 +111,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 86 | 2026-11-22 | The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after | DECIDED | #steps #tools |
 | 87 | 2026-11-22 | 0.3.16 on the owner's PC: both Reverts ended clean; ticks go with the demaster they were made for; the panes take their place whenever they come into view; what the patcher framework's profile is, and what is known when it writes nothing | FACT | #revert #page #tools |
 | 88 | 2026-11-22 | A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's | DECIDED | #tools #page #session |
+| 89 | 2026-11-22 | Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof | DECIDED | #tools #safety #settings |
 
 ## Entries
 
@@ -2111,3 +2112,37 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: the reader on the owner's four logs (each read as told above); a test with an invented log (the one
   of this run read and kept, an older one left alone, the session file holding it); the card in a browser.
 - Not checked: on the owner's PC.
+
+### 89. Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof
+
+`2026-11-22` · DECIDED · `#tools #safety #settings` · refs: MT27, TL01§18, TL01§19, WHY§88, DESIGN§19, MT14, MT15
+
+- The owner: "can you make ModTrap to check the patches what versions are required and automatically set them to
+  that version?"
+- What "required" can mean, as facts: a patcher's own project names the library versions it was written
+  against (old ones, for most); the framework's profile overrides them all with one pair, by the modlist's
+  choice; and the program can only build for versions it knows a .NET version for (TL01§18). The last is the
+  one that failed, and the only one with a certain answer: the pair of versions the program itself was built
+  with, which every log of it states at its top (TL01§19).
+- REJECTED: comparing version numbers ("newer than the program's own means unfit"). A later patch version of a
+  library may well fit; ModTrap would be setting things right that were not wrong.
+- DECIDED. Three facts must agree before anything is set: the program's newest log names a library version as
+  not fitting (its build error for that); the profile in the settings file is still set to exactly that
+  version, or to "Latest"; and the same log states the program's own pair. Then, before ModTrap starts the
+  program, the profile is set to that pair, chosen by hand, in the settings file: four fields of that profile,
+  nothing else. A profile set to follow each patcher's own versions is left alone, and so are a patcher's own
+  overrides.
+- Safety (MT14, MT15): the program must not be running; a copy of the settings file as it was goes into the
+  session's folder first and is compared with what was read; the file is written whole and swapped in, with its
+  byte order mark and line ends as before; the change is in the History with what was and what is. A setting,
+  on by default at the owner's word, turns the setting-right off; ModTrap then only says what it found.
+- Not part of a demaster, so Revert does not undo it: it puts right the tool's own setup. The kept copy is the
+  way back.
+- What this does not solve: building inside MO2 (the compiler's crash, TL01§16), which showed with the fitting
+  versions too.
+- Checked: the reading on the owner's four logs (own pair and unfit pair as told in TL01§18); tests (set once
+  and not again; only the four fields change; left alone when the log's errors name other versions, when there
+  is no such error, when the log does not state the program's pair, when the setting is off; "Latest"; a number
+  kept a number).
+- Not checked: on the owner's PC; against a settings file of the owner's (none was at hand: the field names are
+  from the source).
