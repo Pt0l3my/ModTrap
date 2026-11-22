@@ -347,6 +347,12 @@ ModTrap has noted a run of it, with its output written, since the demaster in pl
 new demaster asks for it again. "I have done this" is left for what no record can show (the play test, settings
 files to look at, a tool outside MO2's list), and a play-test tick goes with the demaster it was made for.
 
+**The settings files, and the checks after (MT33, WHY§95).** Settings files of other mods that name a ticked plugin
+are read line by line; the step is ModTrap's and done where every line only gives something of the mod's or reaches
+only its things, and the owner's where a line leaves the mod's things out or the file is of a kind ModTrap has not
+read the handling of. With the demaster in place the steps carry one account of ModTrap's checks (masters, mods
+disabled, each tool's noted run, the settings files): "complete and checked" only when all hold.
+
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
 plugins concerned. Once it is done the steps are stated from what was read. A verdict on a tool does not change
@@ -581,6 +587,8 @@ starts are refused, and the one go holds its place and takes its step again by i
    set to the pair the program was built with, in its settings file, a copy kept first (on, MT27, WHY§89).
    And patchers its last log shows as not built are built first with the program opened by itself, outside MO2,
    which ModTrap then closes before the start through MO2 (on, MT28, WHY§90).
+   A compiler that a tool's own log shows crashing inside MO2 is added to MO2's list of programs its virtual file
+   system leaves alone, in MO2's settings file, with MO2 closed and a copy kept (on, MT32, WHY§94).
    What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
 2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
    tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,

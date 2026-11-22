@@ -116,6 +116,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 91 | 2026-11-22 | A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist | DECIDED | #steps #tools #page |
 | 92 | 2026-11-22 | ModTrap tells its own reading and scanning; while any of it goes, nothing is started: greyed on the page, refused by the server, waited for by the one go | DECIDED | #page #process #safety |
 | 93 | 2026-11-22 | 0.3.21 on the owner's PC: versions set, patchers built outside MO2 and taken as built inside; the framework then waited for its run button, which ModTrap now presses, closing it on its log's word | DECIDED | #tools #mo2 #process |
+| 94 | 2026-11-22 | The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason | DECIDED | #tools #mo2 #safety |
+| 95 | 2026-11-22 | The whole demaster went through on the owner's PC; ModTrap reads the settings files that name the plugin line by line, and gives one account of its checks after the demaster | DECIDED | #steps #process #revert |
 
 ## Entries
 
@@ -2288,3 +2290,80 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   closed; a run without an end in the log never closed; the setting off; the helper answering in one line and
   pressing nothing where it cannot).
 - Not checked: the press itself, on a PC. The owner's next run is its first.
+- **Later (2026-11-22, the session file of 0.3.23).** Checked on the owner's PC: 31 seconds after the start
+  ModTrap pressed the run button, the run began at that second, the log stated its end 26 seconds later, and the
+  window closed when asked. The helper worked as written (WHY§94 for what the run then did).
+
+### 94. The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason
+
+`2026-11-22` · DECIDED · `#tools #mo2 #safety` · refs: MT32, MO01§11, TL01§22, WHY§90, WHY§93, MT14, MT15
+
+- The owner, with the session file of 0.3.23: "Synthesis started patching this time, but it had errors and then
+  closed on its own."
+- FACT (the session file). The press, the reading of the run's end and the closing all happened as meant
+  (WHY§93's Later line). The run itself failed in its first group, in 26 seconds, and wrote nothing.
+- FACT (the framework's log, TL01§22). Version 0.35.5 builds every patcher again as the first thing of a run,
+  whatever was built before; the builds made outside MO2 were only what let it show itself ready. For three
+  patchers the build tool decided to compile, and the compiler ended with the access violation, as in every
+  build inside MO2 on this PC and in none outside it.
+- FACT (MO01§11). MO2 hooks each program a hooked program starts, unless its name is on a list MO2 keeps in its
+  settings ("Executables Blacklist"): such a program is started and left alone.
+- LIKELY. The compiler crashes because it is hooked: the crash shows only inside MO2, the framework's own source
+  names MO2's virtual file system for it (TL01§16), and the compiler reads nothing of the modlist (its sources
+  and libraries lie in the user's temporary and package folders), so it loses nothing by being left alone. Not
+  established until a run with the compiler on the list goes through.
+- DECIDED (MT32). When a tool's own newest log shows the compiler's crash (the line is data), ModTrap adds the
+  compiler, by the two names it is started under, to MO2's list before it starts the tool: one value of one
+  section of MO2's settings file, every other byte kept (`mo2fix`). Only with MO2 closed, since MO2 writes its
+  settings when it closes; a copy of the file as it was goes into the session's folder first; the change is in
+  the History; a setting, on by default, turns it off. Where the file names no list, MO2's default list is
+  written with the addition, so nothing MO2 left alone before is hooked now.
+- DECIDED. After a tool has closed without output, the row of tools starts it once more, at most twice, when
+  there is a stated reason that is not a guess: something ModTrap sets right before a start is still to be set
+  right (versions, builds, this list), which that very run has shown; or the tool's log shows Windows refusing
+  it a start, of the kind seen to pass (WHY§93). Otherwise the row ends as before.
+- Not solved by this, if it shows again: Windows refusing the framework itself the start of a program ("Access
+  is denied") in the middle of a run. The framework's newer versions run a built patcher directly and try a
+  refused start again (TL01§22); 0.35.5 does neither.
+- Checked: tests (the value added with MO2 closed and not with it open, the file as it was kept, every other
+  byte the same, the default list kept, only plain program names ever written; the reasons for one more start).
+- Not checked: on the owner's PC, and whether the compiler then goes through.
+- **Later (2026-11-22, the session file of 0.3.24).** Checked on the owner's PC: before the framework's start
+  ModTrap added the compiler's two names to MO2's list; the run then went through all three groups in four and a
+  half minutes with no crash and no refused start, and wrote its plugins. The LIKELY above held (WHY§95).
+
+### 95. The whole demaster went through on the owner's PC; ModTrap reads the settings files that name the plugin line by line, and gives one account of its checks after the demaster
+
+`2026-11-22` · DECIDED · `#steps #process #revert` · refs: MT33, TL01§23, WHY§91, WHY§94, DESIGN§14, DESIGN§18
+
+- The owner, with the session file of 0.3.24 and a picture of the step "Look at the settings files that name the
+  mod's plugin": "looks like the demaster went through fine, MO2 has no warnings. Could this step be done by
+  ModTrap as well? Could we implement after demaster checks?"
+- FACT (the session file). One press: dry run, demaster of seven plugins, put in place, the behaviour engine run
+  and closed by its switches, the compiler put on MO2's list (WHY§94), the patcher framework's run button pressed,
+  three groups run, the window closed on the log's word; the modlist read with no problem; MO2 opened.
+- FACT (the same file). The framework wrote the plugin of its third group to the file that wins in MO2's virtual
+  folder, which after a demaster is ModTrap's own copy in ModTrap's mod; the stale original in the tool's output
+  mod stays hidden beneath it. The game gets the new one. LIKELY the same for any tool that writes a plugin
+  ModTrap demastered.
+- DECIDED (the step). ModTrap reads each such file line by line. A line that is switched off is passed over.
+  For the two frameworks whose handling was read in their source (TL01§23), ModTrap says where the line names
+  the plugin: as what the line gives or changes, as a condition for what it reaches, or as an exclusion. The
+  first two mean nothing once the mod is gone, and nothing else changes: the step is then ModTrap's, done, with no
+  tick. An exclusion is left to the owner, with the line shown, because what the framework then does with the
+  line depends on its version (TL01§23); so is a file of any kind ModTrap has not read the handling of.
+- REJECTED: clearing every file by the name of its framework. What one of them does with an exclusion whose
+  plugin is gone is to drop the whole line, in the version read; that is a change to everything else the line
+  reached, and the owner should see it.
+- DECIDED (the checks). The steps carry one account of what ModTrap has checked after the demaster, each line a
+  fact it read or recorded: the load order's masters, the mods disabled, each tool's run noted with its output
+  (WHY§91), the settings files read. "Checked" only when all hold; what is still the owner's is named beside it.
+  The Process tab's last box shows them, and its summary says "complete and checked" with what is left.
+- DECIDED (Revert). A plugin in ModTrap's own mod that a tool has written anew was left where it was by Revert,
+  as "changed by something else"; ModTrap's mod then stayed behind with that one file. It is now set aside in the
+  job's folder, kept, and ModTrap's mod goes: the original in the tool's own mod is in force again.
+- Not done: moving such a plugin from ModTrap's mod to the tool's output mod after the tool's run. The game does
+  not care where it lies; a later Revert handles it.
+- Checked: tests (where a line names the plugin, a switched-off line, a file of an unknown kind, the step ModTrap's
+  or the owner's accordingly; the account of checks; Revert with a plugin rewritten in ModTrap's mod); in a
+  browser, the one go ending "complete and checked" with the play test left.

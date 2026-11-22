@@ -369,3 +369,50 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa`, and i
   window) and whether it is enabled, and a button can be pressed through it. ModTrap's helper goes by exactly
   these, and checks itself before pressing (WHY§93). Not yet seen working on a PC.
 
+## 22. What a run of the patcher framework does first, in the owner's version and in the current source (2026-11-22)
+
+- **FACT (the owner's log, version 0.35.5, a run begun by its run button inside MO2).** In the same second as
+  "Starting Pipeline Run" the log shows `dotnet build "<patcher>.csproj" --runtime win-x64 -c Release` for each
+  patcher of the group, though each had been taken as built seconds before ("Short circuiting …"). Three of the
+  builds ended "Build FAILED" with the compiler's exit code -1073741819 after "All projects are up-to-date for
+  restore"; the log's own trace names the place as the preparing of a patcher for a run
+  (`SolutionPatcherPrep.cs:42` of that version). The run ended 26 seconds after it began; "Finished patcher run"
+  follows the errors.
+- **FACT (the same log and those of §18).** The compiler's crash shows in every session inside MO2 in which a
+  compile was made, and in no session outside MO2.
+- **FACT (Synthesis's source at commit `14cf3fa`,
+  `Synthesis.Bethesda.Execution/Patchers/Running/Git/GitPatcherRunner.cs:36-55`).** The current source runs a
+  patcher's built program directly, by the path its build record names, and wraps that start in a retry "on
+  transient spawn failure" that is named for MO2. So what failed on the owner's PC (building again at a run, and
+  a refused start) is what later versions were changed to avoid.
+- **FACT (the compiler's error line).** The program that crashed is named `csc.exe` by the build tool.
+  LIKELY (the .NET build tools as published; not read in a file here): the build tool may also start the
+  compiler as a server, by a command line that names `VBCSCompiler.dll`. Both names are what ModTrap adds to
+  MO2's list (MO01§11, WHY§94).
+
+## 23. Settings files of two frameworks that work while the game runs: a line's layout, and a plugin that is not loaded (2026-11-22)
+
+Read in the frameworks' public sources, facts only, nothing copied: Spell Perk Item Distributor (MIT) at commit
+`105725c`, Keyword Item Distributor (GPL-3.0) at commit `99adaaa`. The version a modlist carries may differ.
+
+- **FACT (both).** Such a file is named by its ending (`_DISTR.ini`, `_KID.ini`). A line is a key, an equals
+  sign, and fields divided by `|`: the first field is the thing the line gives or works on, later fields are
+  conditions (KID: `src/LookupConfigs.cpp:17-45`). A condition that begins with `-` leaves out what it names
+  (KID: `include/Data/BaseFilters.h:61-63`, an "exclude" mark on a rule); conditions joined by `+` must all hold.
+  A form of a plugin is written as a number, `~`, and the plugin's file name; a plugin's name alone stands for
+  everything of that plugin.
+- **FACT (SPID, `SPID/src/FormData.h:307-357`).** A condition whose form or plugin cannot be found is passed
+  over, with a line in the framework's own log ("SKIP - mod cannot be found", "SKIP - formID doesn't exist").
+  A list of conditions then counts as usable when every one of them was found, or, for a list of which one is
+  enough, when at least one was.
+- **FACT (SPID, `SPID/src/FormData.h:611-616`).** An entry is kept only when each of its three lists of
+  conditions is usable: those that must all hold, those that leave out, those of which one is enough. So an
+  entry whose only exclusion names a plugin that is not loaded is dropped whole, in this version; with a second
+  exclusion that is found, it goes on without the first.
+- **FACT (KID, `include/Data/BaseFilters.h:73-90`).** A condition that cannot be found is noted for the log as
+  "SKIP - (mod not found)" or "(form not found)" and is not used.
+- **LIKELY.** A line whose first field names the plugin has nothing to give once the plugin is gone, and a line
+  that reaches only the plugin's things reaches nothing: neither changes what happens to anything else.
+- **Not read.** FormList Manipulator and Base Object Swapper (their sources were not at hand), and any settings
+  file of another kind: ModTrap leaves those to the owner.
+

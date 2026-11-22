@@ -646,6 +646,25 @@ class Changes:
             m = api._need()
             originals = self._originals_back(the_safe, work, m.instance.profiles_dir / m.instance.profile)
             tools_back = self._tools_back(work)
+            # A plugin of ModTrap's own mod that a tool has written anew in place (MO2 writes to the file that wins, and
+            # ModTrap's copy won): not as ModTrap made it, so Revert left it there. It is set aside, kept, so that
+            # ModTrap's mod can go and the original, back in force, is the only one (WHY§95).
+            rewritten = 0
+            for path in list(what.get("left", [])):
+                p = Path(path)
+                try:
+                    if p.is_file():
+                        self._aside(p, work / "set-aside-by-revert" / "modtraps-own-mod")
+                        p.unlink()
+                        rewritten += 1
+                        log.info("%s in ModTrap's own mod had been written anew by a tool: it is set aside in the job's folder", p.name)
+                        try:
+                            p.parent.rmdir()
+                        except OSError:
+                            pass
+                except OSError as e:
+                    log.warn("%s in ModTrap's own mod could not be set aside: %s", p.name, logbook.why(e))
+            what["left"] = [x for x in what.get("left", []) if Path(x).exists()]
             what["restore"] = list(what["restore"]) + originals
             history.History(api.store.dir(api.session.id)).add(
                 "reverted", why="the owner asked", job=name, restored=[Path(p).name for p in what["restore"]],
@@ -664,7 +683,7 @@ class Changes:
         return {"job": name, "restored": len(what["restore"]), "removed": len(what["remove"]),
                 "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])],
                 "placed": len(what.get("placed", [])), "notes": [logbook.mask(n) for n in what.get("notes", [])],
-                "tools": tools_back["titles"], "tools_not_kept": tools_back["not_kept"], "set_aside": tools_back["aside"] + len(originals)}
+                "tools": tools_back["titles"], "tools_not_kept": tools_back["not_kept"], "set_aside": tools_back["aside"] + len(originals) + rewritten}
 
     def _installed(self, work: Path) -> dict:
         try:

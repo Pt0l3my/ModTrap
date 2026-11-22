@@ -1,0 +1,18 @@
+{
+ "format": "modtrap-mentions/1",
+ "about": "Settings files of frameworks that work while the game runs, by the name such a file must have, and how a line of one is laid out (TL01§23). ModTrap's data, not code. With it ModTrap says where in a line a plugin is named: as the thing the line gives or changes, as a condition for what the line reaches, or as an exclusion. 'layout' is 'pipes' for a line of the form key = first|more|more, where a condition can start with - (leave out), and conditions joined by + must all hold. What each framework does with a line that names a plugin which is not loaded is in the research note, with its source. Only frameworks whose handling of a missing plugin was read in their source are listed; a file of any other kind is left to the owner.",
+ "kinds": [
+  {
+   "pattern": "_DISTR\\.ini$",
+   "framework": "Spell Perk Item Distributor",
+   "layout": "pipes",
+   "source": "TL01§23"
+  },
+  {
+   "pattern": "_KID\\.ini$",
+   "framework": "Keyword Item Distributor",
+   "layout": "pipes",
+   "source": "TL01§23"
+  }
+ ]
+}

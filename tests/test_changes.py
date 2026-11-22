@@ -296,7 +296,7 @@ class DemasterThroughThePage(unittest.TestCase):
     def test_the_owners_settings_are_kept_and_only_known_ones(self) -> None:
         self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
                                                         "follow": True, "script_props": True, "retire_copies": True,
-                                                        "auto_tools": False, "tools_self": True, "tool_versions": True, "tool_prebuild": True})
+                                                        "auto_tools": False, "tools_self": True, "tool_versions": True, "tool_prebuild": True, "mo2_leave_alone": True})
         self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
         self.assertTrue(self.api.state()["settings"]["auto_go"])
         for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):
@@ -654,6 +654,28 @@ class DemasterThroughThePage(unittest.TestCase):
             time.sleep(0.02)
         self.assertEqual((self.api.state()["working"], self.api.unsettled()), ([], ""))
         self.dry_run()                                                              # and now it starts
+
+    def test_revert_sets_aside_a_plugin_a_tool_wrote_anew_in_modtraps_own_mod(self) -> None:
+        """WHY§95: a tool run through MO2 writes its plugin to the file that wins, which after a demaster is ModTrap's
+        copy in ModTrap's mod. Revert does not leave that file behind: it is set aside, and ModTrap's mod goes."""
+        lists = {k: (self.root / "profiles" / "Default" / k).read_bytes() for k in ("modlist.txt", "plugins.txt", "loadorder.txt")}
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        job = self.api.state()["demaster"]["jobs"][0]
+        own = self.root / "mods" / job["mod_name"] / "Generated.esp"
+        self.assertTrue(own.is_file())
+        own.write_bytes(own.read_bytes() + b"written anew by the tool")
+        back = self.api.post("/api/demaster/revert", {"job": job["job"]})[1]
+        self.ready()
+        self.assertEqual(back["left"], [])
+        self.assertFalse((self.root / "mods" / job["mod_name"]).exists())
+        aside = self.api.changes._jobs_dir() / job["job"] / "set-aside-by-revert" / "modtraps-own-mod" / "Generated.esp"
+        self.assertTrue(aside.read_bytes().endswith(b"written anew by the tool"))                 # kept, not lost
+        self.assertEqual({k: v for k, v in lists.items()}, {k: (self.root / "profiles" / "Default" / k).read_bytes() for k in lists})
+        self.assertEqual(sorted(snapshot(self.root)), sorted(self.before))                       # the same files as it began with
 
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()
