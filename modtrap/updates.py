@@ -24,6 +24,7 @@ import re
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -33,7 +34,15 @@ log = logbook.get("updates")
 
 NEXUS = "https://api.nexusmods.com/v1"
 GITHUB = "https://api.github.com"
+ACCOUNT = "users/validate"           # under NEXUS: what kind of account a key is of (MO01§15)
 HOSTS = ("api.nexusmods.com", "api.github.com")
+# A mod's file is fetched from these and no others (MT40): GitHub's own store of release files, and the hosts Nexus
+# names in the download address it gives. The owner's key is never sent to any of them.
+DOWNLOAD_SUFFIXES = (".githubusercontent.com", ".nexus-cdn.com", ".nexusmods.com")
+GITHUB_FILE = re.compile(r"^/[^/]+/[^/]+/releases/download/")
+DOWNLOAD_MAX = 30 * 1024 ** 3
+HOPS = 6
+ARCHIVE = re.compile(r"\.(zip|7z|rar)$", re.IGNORECASE)
 TIMEOUT = 40
 BODY_MAX = 96 * 1024 * 1024
 NEXUS_PER_SCAN = 400                 # questions about single mods in one scan, at most
@@ -79,6 +88,55 @@ class Net:
             return status, got, json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return status, got, None
+
+
+    def download(self, url: str, dest: Path, progress=None, stopped=None) -> int:
+        """Fetches one file to `dest` (written beside it first, then swapped in). Only from the hosts mod files are
+        kept on; an answer that points on is followed only to such a host, a few times at most. Returns its size.
+        Raises Refused, with the reason in words."""
+        for _hop in range(HOPS):
+            parts = urllib.parse.urlsplit(url)
+            host = (parts.hostname or "").lower()
+            ok = parts.scheme == "https" and not parts.username and (
+                (host == "github.com" and GITHUB_FILE.match(parts.path or "")) or any(host.endswith(x) for x in DOWNLOAD_SUFFIXES))
+            if not ok:
+                raise Refused("the download's address is not one ModTrap fetches a mod's file from")
+            req = urllib.request.Request(url, headers={"User-Agent": self.agent, "Accept": "application/octet-stream"})
+            try:
+                with self._opener.open(req, timeout=TIMEOUT) as r:
+                    total = int(r.headers.get("Content-Length") or 0)
+                    if total > DOWNLOAD_MAX:
+                        raise Refused("the file is larger than ModTrap fetches")
+                    tmp = dest.with_name(dest.name + ".part")
+                    done = 0
+                    try:
+                        with open(tmp, "wb") as f:
+                            while True:
+                                if stopped is not None and stopped():
+                                    raise Refused("stopped")
+                                block = r.read(1024 * 1024)
+                                if not block:
+                                    break
+                                done += len(block)
+                                if done > DOWNLOAD_MAX:
+                                    raise Refused("the file is larger than ModTrap fetches")
+                                f.write(block)
+                                if progress is not None:
+                                    progress(done, total)
+                        if total and done != total:
+                            raise Refused("the file did not arrive whole")
+                        tmp.replace(dest)
+                    finally:
+                        tmp.unlink(missing_ok=True)
+                    return done
+            except urllib.error.HTTPError as e:
+                if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+                    url = urllib.parse.urljoin(url, e.headers["Location"])
+                    continue
+                raise Refused("the file's host answered with an error (%d)" % e.code) from None
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                raise Refused("the file could not be fetched (%s)" % logbook.why(getattr(e, "reason", e) if isinstance(getattr(e, "reason", None), BaseException) else e)) from None
+        raise Refused("the download was passed on too many times")
 
 
 # --- what is kept between scans ------------------------------------------------------------------------------------
@@ -207,7 +265,8 @@ def verdict(row: dict, store: dict) -> dict:
     elif row["host"] == "github" and row.get("repo"):
         v = github_verdict(row, store["github"].get(row["repo"].lower()))
     else:
-        why = {"": "no record on this PC says where this mod came from", "url": "it came from a web address that cannot be asked for versions"}
+        why = {"": "no record on this PC says where this mod came from", "url": "it came from a web address that cannot be asked for versions",
+               "loverslab": "it came from LoversLab, which gives a program no way to ask for versions: open its page in your browser, where you are logged in"}
         v = {"state": "none", "text": why.get(row["host"], "it came from %s, which cannot be asked for versions" % row["host"]),
              "newest": "", "file": "", "when": "", "asked": ""}
     # What MO2 itself last saw is said beside it: it is on this PC already, and costs no question.
@@ -355,8 +414,12 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
         elif status == 404:
             store["github"][repo] = {"asked": int(now), "gone": "no release, or no such repository"}
         elif status == 200 and isinstance(body, dict) and body.get("tag_name"):
+            assets = []
+            for a in (body.get("assets") or [])[:60]:
+                if isinstance(a, dict) and a.get("name") and a.get("browser_download_url"):
+                    assets.append([str(a["name"]), str(a["browser_download_url"]), int(a.get("size") or 0)])
             store["github"][repo] = {"asked": int(now), "tag": str(body["tag_name"]), "published": str(body.get("published_at") or ""),
-                                     "etag": h.get("etag", "")}
+                                     "etag": h.get("etag", ""), "assets": assets}
         else:
             gh["why_stopped"] = ("GitHub could not be reached (%s)" % h.get("why", "no answer") if status == 0 else
                                  "GitHub's allowance of questions for this hour is used up" if status in (403, 429) else
@@ -374,6 +437,91 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
     log.info("scan for updates: GitHub: %d repositor(ies), %d asked about now, %d left for later%s; the scan took %.1f s",
              gh["repos"], gh["asked"], gh["left"], ": " + gh["why_stopped"] if gh["why_stopped"] else "", out["seconds"])
     return out
+
+
+# --- fetching a newer file (MT40) ------------------------------------------------------------------------------------
+
+def nexus_headers(key: str, net: Net) -> dict:
+    return {"APIKEY": key, "Application-Name": "ModTrap", "Application-Version": net.agent.split("/", 1)[-1], "Protocol-Version": "1.0.0"}
+
+
+def nexus_account(key: str, net: Net) -> dict:
+    """What Nexus says of the key's account (MO01§15): {"ok", "premium", "why"}."""
+    status, h, body = net.get("%s/%s" % (NEXUS, ACCOUNT), nexus_headers(key, net))
+    if status == 200 and isinstance(body, dict) and "user_id" in body:
+        return {"ok": True, "premium": bool(body.get("is_premium")), "why": ""}
+    return {"ok": False, "premium": False, "why": "Nexus did not accept the key" if status == 401 else
+            "Nexus could not be reached (%s)" % h.get("why", "no answer") if status == 0 else "Nexus answered with an error (%d)" % status}
+
+
+def nexus_link(key: str, net: Net, game: str, mod_id: int, file_id: int) -> tuple[str, str]:
+    """The address of one file, as Nexus gives it to a program (MO01§14): (address, "") or ("", why). Nexus gives
+    it to a paying account only; to any other it answers that it will not."""
+    status, h, body = net.get("%s/games/%s/mods/%d/files/%d/download_link" % (NEXUS, game, mod_id, file_id), nexus_headers(key, net))
+    if status == 200 and isinstance(body, list):
+        for server in body:
+            if isinstance(server, dict) and str(server.get("URI") or "").lower().startswith("https://"):
+                return str(server["URI"]), ""
+        return "", "Nexus named no address for the file"
+    if status == 403:
+        return "", "Nexus lets a program start a download only for a Premium account"
+    return "", ("Nexus did not accept the key" if status == 401 else "Nexus could not be reached (%s)" % h.get("why", "no answer") if status == 0
+                else "Nexus answered with an error (%d)" % status)
+
+
+def github_asset(row: dict, kept: dict | None) -> tuple[str, str] | None:
+    """Which file of the newest release is the mod's: the one named as the installed archive, else the one whose
+    name differs from it only in digits (a version), else the only archive there is. None when it cannot be told."""
+    files = [(a[0], a[1]) for a in (kept or {}).get("assets", []) if ARCHIVE.search(a[0])]
+    if not files:
+        return None
+    shape = lambda name: re.sub(r"[\d._\- ]+", "", name.lower())
+    mine = (row.get("archive") or "").lower()
+    same = [f for f in files if f[0].lower() == mine] or ([f for f in files if shape(f[0]) == shape(mine)] if mine else [])
+    if len(same) == 1:
+        return same[0]
+    return files[0] if len(files) == 1 else None
+
+
+def how_to_get(row: dict, v: dict, store: dict, key: bool, premium: bool | None) -> dict:
+    """What the update button does for one mod, decided without asking anyone: {"fetch": "nexus" or "github", ...}
+    when ModTrap can fetch the file itself, else {"open": the page to open, "why": why ModTrap does not fetch}."""
+    page = get_of(row, v) or page_of(row)
+    if row["host"] == "nexus":
+        if v["state"] != "update" or not v.get("file_id"):
+            return {"open": page, "why": "which file is the newer one is not known for certain"}
+        if not key:
+            return {"open": page, "why": "no Nexus key is kept, so the download goes through Nexus's page and MO2"}
+        if premium is False:
+            return {"open": page, "why": "Nexus lets a program start a download only for a Premium account, so it goes through Nexus's page and MO2"}
+        return {"fetch": "nexus", "file_id": v["file_id"], "name": v.get("file") or "", "version": v.get("newest") or "", "page": page}
+    if row["host"] == "github" and row.get("repo"):
+        kept = store["github"].get(row["repo"].lower())
+        got = github_asset(row, kept)
+        if got is None:
+            return {"open": page, "why": "the newest release has no file, or several, and ModTrap cannot tell which is this mod's"}
+        return {"fetch": "github", "url": got[1], "name": got[0], "version": (kept or {}).get("tag", ""), "page": page}
+    if row["host"] == "loverslab":
+        return {"open": page, "why": "LoversLab gives files only to your logged-in browser; download it there, then use “Install a downloaded archive as its newer version” in the mod's menu"}
+    return {"open": page, "why": "ModTrap cannot fetch from there; download it in your browser, then use “Install a downloaded archive as its newer version” in the mod's menu"}
+
+
+def fetch(how: dict, row: dict, key: str, net: Net, folder: Path, progress=None, stopped=None) -> dict:
+    """Fetches the file `how_to_get` named into `folder`: {"path", "name", "version"} or {"open", "why"} when the
+    host would not give it after all. Raises Refused when the fetching itself fails."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", how.get("name") or "the newer file")[:200]
+    if how["fetch"] == "nexus":
+        url, why = nexus_link(key, net, row["game"], row["mod_id"], how["file_id"])
+        if not url:
+            if "Premium" in why:
+                return {"open": how["page"], "why": why + ", so it goes through Nexus's page and MO2"}
+            raise Refused(why)
+    else:
+        url = how["url"]
+    folder.mkdir(parents=True, exist_ok=True)
+    size = net.download(url, folder / name, progress, stopped)
+    log.info("fetched “%s” for “%s” from %s: %.1f MB", name, row["mod"], "Nexus" if how["fetch"] == "nexus" else "GitHub", size / (1024 * 1024))
+    return {"path": folder / name, "name": name, "version": how.get("version", "")}
 
 
 def get_of(row: dict, v: dict) -> str:
@@ -396,7 +544,7 @@ def page_of(row: dict) -> str:
         return "https://www.nexusmods.com/%s/mods/%d?tab=files" % (row["game"], row["mod_id"])
     if row["host"] == "github" and row.get("repo"):
         return "https://github.com/%s/releases" % row["repo"]
-    return row.get("url", "") if row["host"] == "url" else ""
+    return row.get("url", "") if row["host"] in ("url", "loverslab") else ""
 
 
-__all__ = ["Net", "Refused", "get_of", "github_verdict", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]
+__all__ = ["Net", "Refused", "fetch", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]

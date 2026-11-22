@@ -37,7 +37,9 @@ class Refused(Exception):
 
 @dataclass
 class Plan:
-    mods: list[dict] = field(default_factory=list)       # {"name", "before", "staged", "root", "archive", "enabled"}
+    mods: list[dict] = field(default_factory=list)       # {"name", "before", "staged", "root", "archive", "enabled",
+                                                         #  "updates": the mod it is a newer version of, "replaces": that
+                                                         #  mod where it is enabled now and is to be disabled (MT40)}
     plugins: list[dict] = field(default_factory=list)    # {"name", "before", "kind", "mod"}
     lists: dict[str, str] = field(default_factory=dict)  # the three lists' checksums when the plan was made
 
@@ -64,12 +66,20 @@ def plan(m: model.Model, report: dict, staged: dict[str, dict] | None = None) ->
                 raise Refused("the unpacked copy of '%s' is no longer in ModTrap's work folder" % x["name"])
             if (inst.mods_dir / x["name"]).exists() or inst.mod(x["name"]) is not None:
                 raise Refused("MO2 already has a mod called '%s'; ModTrap never overwrites one" % x["name"])
-            p.mods.append({"name": x["name"], "before": before, "staged": True, "root": str(src["root"]),
-                           "archive": src.get("archive", ""), "enabled": False})
+            old = x.get("updates") or ""
+            if old and inst.mod(old) is None:
+                raise Refused("'%s', which '%s' is a newer version of, is no longer in the modlist" % (old, x["name"]))
+            p.mods.append({"name": x["name"], "before": x.get("own_before", "") if old else before, "staged": True, "root": str(src["root"]),
+                           "archive": src.get("archive", ""), "enabled": False, "updates": old,
+                           "replaces": old if old and x.get("updates_enabled") else ""})
         else:
             p.mods.append({"name": x["name"], "before": before, "staged": False, "root": "", "archive": "",
                            "enabled": x["enabled"]})
-    todo = [(pl, x["name"]) for x in report["mods"] for pl in x["plugins"] if not pl["active"]]
+    # A plugin of a newer version that the load order already names (the older version's) keeps its place and its
+    # state there: only what the newer version brings anew is placed.
+    listed = {fold(n) for n, _active in inst.load_order}
+    todo = [(pl, x["name"]) for x in report["mods"] for pl in x["plugins"]
+            if not pl["active"] and not (x.get("updates") and fold(pl["name"]) in listed)]
     for pl, mod_name in sorted(todo, key=lambda t: t[0].get("order", 0)):
         p.plugins.append({"name": pl["name"], "before": pl["proposed"]["before"], "kind": pl["kind"], "mod": mod_name})
     pdir = inst.profiles_dir / inst.profile
@@ -166,6 +176,13 @@ class AddJob:
                                  priority=line["priority"], priority_before=line["was"], before=x["before"],
                                  archive=x["archive"], plugins=[{"name": p["name"], "kind": p["kind"]}
                                                                 for p in self.plan.plugins if p["mod"] == x["name"]])
+                if x.get("replaces"):
+                    # The older version steps aside: disabled, never deleted (MT9); Revert enables it again.
+                    self.safe.may_change(self.pdir / "modlist.txt")
+                    profile.set_mods(self.pdir, {x["replaces"]: False})
+                    self.safe.wrote(self.pdir / "modlist.txt")
+                    done["mods"][-1]["replaces"] = x["replaces"]
+                    self.history.add("mod disabled", mod=x["replaces"], why="a newer version of it was added: %s" % x["name"])
             if self.plan.plugins:
                 for n in ("loadorder.txt", "plugins.txt"):
                     self.safe.may_change(self.pdir / n)
@@ -187,6 +204,9 @@ class AddJob:
             log.error("adding stopped: %s; putting everything back", why)
             self.stage = "failed"
             left = self._put_back()
+            for x in self.plan.mods:
+                if x.get("replaces") and any(d.get("replaces") == x["replaces"] for d in done["mods"]):
+                    self.history.add("mod enabled", mod=x["replaces"], why="adding stopped part way")
             self.history.add("reverted", why="adding stopped part way", left=left)
             self.stage = "reverted"
             raise Refused("adding stopped and everything was put back: %s" % why) from None
@@ -208,6 +228,10 @@ class AddJob:
             if mod is None or not mod.enabled:
                 out.append("'%s' is not enabled" % x["name"])
                 continue
+            if x.get("replaces"):
+                old = inst.mod(x["replaces"])
+                if old is None or old.enabled:
+                    out.append("'%s', the older version of '%s', is not disabled" % (x["replaces"], x["name"]))
             if not x["enabled"] and x["before"]:
                 nxt = next((y for y in inst.mods if y.priority == mod.priority + 1), None)
                 if nxt is None or fold(nxt.name) != fold(x["before"]) and fold(nxt.name) not in {
@@ -284,6 +308,11 @@ class AddJob:
                     profile.set_mods(self.pdir, {x["name"]: False})  # disabled again; it keeps its new place
             except profile.Refused as e:
                 log.warn("undoing by line: %s", e)
+            if x.get("replaces"):
+                try:
+                    profile.set_mods(self.pdir, {x["replaces"]: True})   # the older version, enabled as it was
+                except profile.Refused as e:
+                    log.warn("undoing by line: %s", e)
         self.safe.mark_reverted()
 
     def revert(self) -> dict:
@@ -296,6 +325,9 @@ class AddJob:
         except safe.Refused as e:
             raise Refused(str(e)) from None
         self.stage = "reverted"
+        for x in self.plan.mods:
+            if x.get("replaces"):
+                self.history.add("mod enabled", mod=x["replaces"], why="the newer version was taken out again: %s" % x["name"])
         self.history.add("reverted", why="the owner asked", mods=[x["name"] for x in self.plan.mods], left=left,
                          how=self.how)
         paths.write_atomic(self.dir / "reverted.json", (json.dumps(

@@ -31,7 +31,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   from, and whether Nexus or GitHub has a newer file; asks and reads only). MT38 (a menu on a mod by the right mouse button, with a
   source link of the owner's own; a drop zone on the Updates tab for files that name sources). MT39 (the Updates tab lists the mods as
   the modlist does, with an Update column and a button that leads to the newer file).
-- **Open.** MT40 (should ModTrap itself fetch and install a mod's newer file). MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+  MT40 (answered the same day: ModTrap fetches a newer file where the host gives it to a program, and installs through
+  Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
+- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -827,3 +829,32 @@ can (MO01§14): a free account downloads through the site, and through MO2 after
 button, which makes a short-lived key for that one file. What a free account cannot have is a program starting
 the download by itself; that is what option C would need, and why it is for paying accounts only. Options A and B
 work for every account: the update button opens the file's page, the press there starts MO2's download.
+
+**Answered, 2026-11-22: B and C together.** The owner: "can we merge B and C? If nexus key is given, then download
+the mod as well, if not, open nexus page. also make sure you support not just nexus but loverslab and github for
+downloading mods and yes, also make ModTrap use its install mod feature for mods downloaded/added in ModTrap."
+Done in 0.3.34 (WHY§105, MO01§14, MO01§15), within what each host allows a program:
+
+- **Nexus, with a key.** ModTrap asks Nexus once what kind of account the key is of. For a paying account the
+  update button fetches the file. For any other account Nexus gives a program no download (MO01§14), so the button
+  opens the file's page, as without a key. The button's own words say which it will do.
+- **GitHub.** The newest release's file is fetched, without any key, where ModTrap can tell which file is the
+  mod's; otherwise the release's page is opened.
+- **LoversLab.** It is known as a source and its page is opened. It gives files to a logged-in browser only, and
+  ModTrap does not ask for or keep a site's password. The file the owner downloads there goes in through the
+  mod's menu, "Install a downloaded archive as its newer version…".
+- **The install.** A fetched file, and one the owner downloaded, go to Add mods as a newer version of the mod
+  (MT41). Nothing is changed before the owner has seen the plan there and pressed "Go ahead".
+
+## MT41
+
+**A newer version of a mod through Add mods** · *2026-11-22 · Follows from the owner's answer to MT40*
+
+**Settled** (WHY§105; the owner may overrule any of it):
+
+- A newer version is added as a mod of its own, named after the old one with the new version. Its place is right
+  above the old one. The old one is disabled, never deleted or overwritten (MT9), and Revert enables it again.
+- A plugin the load order already names keeps its place and its state there. Only plugins the newer version
+  brings anew are placed.
+- After the add the modlist is read again, as for every add: if the newer version no longer brings a plugin that
+  others need, the missing master is found and everything is put back.

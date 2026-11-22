@@ -35,7 +35,13 @@ WJ_ENTRY = "modlist"                 # the list itself, inside a Wabbajack file 
 WJ_CHUNK = 1024 * 1024
 WJ_VALUE_MAX = 64 * 1024 * 1024      # one entry of the list larger than this is passed over
 GITHUB = re.compile(r"^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/releases/download/([^/]+)/)?", re.IGNORECASE)
+LOVERSLAB = re.compile(r"^https?://(?:www\.)?loverslab\.com/", re.IGNORECASE)
 _data: dict | None = None
+
+
+def host_of(url: str) -> str:
+    """The kind of source a web address is: "github", "loverslab", or "url" for any other."""
+    return "github" if GITHUB.match(url) else "loverslab" if LOVERSLAB.match(url) else "url"
 
 
 def data() -> dict:
@@ -167,7 +173,7 @@ def parse_link(url: str) -> dict:
     hit = GITHUB.match(url)
     if hit:
         return {"host": "github", "repo": "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2))), "tag": hit.group(3) or "", "url": url}
-    return {"host": "url", "url": url}
+    return {"host": host_of(url), "url": url}
 
 
 # --- a Wabbajack file --------------------------------------------------------------------------------------------
@@ -248,10 +254,11 @@ def _state(state: dict) -> dict:
     if kind.startswith("NexusDownloader"):
         return {"host": "nexus", "game": nexus_game(str(state.get("GameName", ""))), "mod_id": _number(state.get("ModID", "")),
                 "file_id": _number(state.get("FileID", "")), "version": str(state.get("Version") or "")}
-    url = str(state.get("Url") or "")
+    url = str(state.get("Url") or state.get("IPS4Url") or "")
     if url:
-        hit = GITHUB.match(url)
-        return {"host": "github" if hit else "url", "url": url}
+        return {"host": host_of(url), "url": url}
+    if kind.startswith("LoversLab"):
+        return {"host": "loverslab", "url": ""}
     return {"host": {"GameFileSourceDownloader": "game", "WabbajackCDNDownloader+State": "list's own files",
                      "ManualDownloader": "by hand", "MegaDownloader": "mega", "GoogleDriveDownloader": "google drive",
                      "MediaFireDownloader+State": "mediafire", "ModDBDownloader": "moddb"}.get(kind, kind or "unknown")}
@@ -501,13 +508,14 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
             url = meta["url"] or dl.get("url", "") or next((a.get("url", "") for a in from_list if a.get("url")), "")
             if url:
                 hit = GITHUB.match(url)
-                row.update(host="github" if hit else "url", url=url)
+                row.update(host=host_of(url), url=url)
                 row["by"].append(by_meta if meta["url"] else by_dl if dl.get("url") else "the Wabbajack file")
                 if hit:
                     row["repo"] = "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2)))
                     row["tag"] = hit.group(3) or ""
             elif from_list:
                 row["host"] = from_list[0]["host"] if from_list[0]["host"] not in ("nexus", "github", "url") else ""
+                row["url"] = from_list[0].get("url", "")
                 row["by"].append("the Wabbajack file")
         rows.append(row)
     return rows

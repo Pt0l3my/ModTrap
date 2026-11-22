@@ -38,6 +38,8 @@ class Updating:
         self._stop = threading.Event()
         self.store = updates.load()
         self.launched = False
+        self.premium: bool | None = None           # whether the key's account is a paying one, once Nexus has said
+        self.fetching: dict[str, dict] = {}        # a mod's name -> how the fetching of its newer file stands
 
     # --- the Wabbajack file of a modlist ---------------------------------------------------------------------------
     def _places(self) -> dict:
@@ -252,6 +254,7 @@ class Updating:
         counts = {"update": 0, "maybe": 0, "current": 0, "not asked": 0, "none": 0, "gone": 0}
         origins = {"list": 0, "added": 0, "modtrap": 0, "": 0}
         hosts: dict[str, int] = {}
+        key_kept = secret.kept(KEY)
         for r in rows[:ROWS_MAX]:
             v = updates.verdict(r, self.store)
             counts[v["state"]] = counts.get(v["state"], 0) + 1
@@ -260,7 +263,8 @@ class Updating:
             out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": r["version"],
                              "archive": r["archive"], "origin": r["origin"], "by": r["by"], "given": r.get("given", ""), "state": v["state"], "text": v["text"],
                              "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r),
-                             "get": updates.get_of(r, v), "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", "")})
+                             "get": updates.get_of(r, v), "fetches": "fetch" in updates.how_to_get(r, v, self.store, key_kept, self.premium)
+                             if v["state"] == "update" else False, "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", "")})
         place = self._place(modlist_key)
         given = sources.given_load()
         return {"rows": out_rows, "counts": counts, "origins": origins, "hosts": hosts, "key": secret.kept(KEY),
@@ -268,10 +272,79 @@ class Updating:
                 "list": {"named": bool(place), "file": Path(place["path"]).name if place.get("path") else place.get("file", ""), "name": wj["name"] if wj else "",
                          "version": wj["version"] if wj else "", "counts": wj["counts"] if wj else None,
                          "reading": self.reading["state"] == "going", "text": self.reading["text"], "error": self.reading["error"]},
-                "scan": dict(self.work), "last": self.store.get("last") or None}
+                "scan": dict(self.work), "last": self.store.get("last") or None,
+                "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()}}
+
+    # --- fetching a newer file (MT40) -----------------------------------------------------------------------------------
+    def _account(self) -> None:
+        """Asks Nexus once what kind of account the key is of: a program may start a download only for a paying one."""
+        key = secret.read(KEY)
+        if not key or self.premium is not None:
+            return
+        got = updates.nexus_account(key, self.net)
+        if got["ok"]:
+            self.premium = got["premium"]
+            log.info("Nexus says the key's account is %s", "a Premium one: ModTrap can fetch files itself" if got["premium"]
+                     else "not a Premium one: a download goes through Nexus's page and MO2")
+        else:
+            log.warn("the kind of the key's account could not be asked: %s", got["why"])
+
+    def get(self, model, modlist_key: str, added: set[str], mod: str, folder: Path, stage, only_open: bool = False) -> dict:
+        """The update button for one mod. Where ModTrap can fetch the newer file itself (a Nexus key of a paying
+        account; a GitHub release), it does, beside everything else, and hands the file to Add mods through `stage`;
+        the answer is {"going": True}. Otherwise the answer names the page to open and why: {"open", "why"}."""
+        rows, _wj = self.rows(model, modlist_key, added)
+        row = next((r for r in rows if r["mod"] == mod), None)
+        if row is None:
+            raise Bad("that is not a mod of this modlist")
+        v = updates.verdict(row, self.store)
+        key = secret.read(KEY)
+        if row["host"] == "nexus" and key and self.premium is None:
+            self._account()
+        how = updates.how_to_get(row, v, self.store, bool(key), self.premium)
+        if "open" in how or only_open:
+            page = how.get("open") or how.get("page") or ""
+            why = how.get("why") or "ModTrap adds mods only when it is started with its switch for changes, so the file is not fetched"
+            if not page:
+                raise Bad("no page is known for this mod: add a source link first")
+            log.info("the newer file of “%s” is not fetched: %s; its page is opened instead", mod, why)
+            return {"open": page, "why": why}
+        with self._lock:
+            if self.fetching.get(mod, {}).get("state") == "going":
+                return {"going": True}
+            self.fetching[mod] = {"state": "going", "text": "asking for the file", "pct": 0}
+
+        def run():
+            def progress(done: int, total: int) -> None:
+                self.fetching[mod].update(text="fetching %s" % how.get("name", "the file"), pct=int(100 * done / total) if total else 0,
+                                          mb=round(done / (1024 * 1024), 1))
+            try:
+                got = updates.fetch(how, row, key, self.net, folder, progress)
+                if "open" in got:
+                    self.premium = False
+                    self.fetching[mod] = {"state": "open", "open": got["open"], "why": got["why"]}
+                    return
+                rec = stage(got["path"], got["name"], mod, got["version"])
+                self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
+            except updates.Refused as e:
+                log.warn("the newer file of “%s” was not fetched: %s", mod, e)
+                self.fetching[mod] = {"state": "failed", "error": str(e), "open": how.get("page", "")}
+            except Exception as e:
+                why = str(e) if e.__class__.__name__ == "Bad" else logbook.why(e)
+                log.error("fetching the newer file of “%s” failed: %s", mod, why)
+                self.fetching[mod] = {"state": "failed", "error": why, "open": how.get("page", "")}
+
+        threading.Thread(target=run, name="fetch", daemon=True).start()
+        return {"going": True}
+
+    def seen(self, mod: str) -> None:
+        """The page has shown how a fetching ended: it is not told again."""
+        if self.fetching.get(mod, {}).get("state") != "going":
+            self.fetching.pop(mod, None)
 
     # --- the key -----------------------------------------------------------------------------------------------------
     def set_key(self, text: str | None) -> dict:
+        self.premium = None
         if not text:
             secret.forget(KEY)
             log.info("the Nexus key is forgotten")
@@ -306,6 +379,8 @@ class Updating:
 
         def run():
             try:
+                if key and not only:
+                    self._account()
                 updates.scan(rows, key, self.net, self.store, progress=lambda t: self.work.update(text=t), stopped=self._stop.is_set,
                              force=bool(only))
                 with self._lock:

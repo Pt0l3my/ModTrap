@@ -640,3 +640,10 @@ Columns: Priority, Mod, From, Installed, Notes (what the owner wrote of the mod 
 last asking), a button, What is known. The button, an upward arrow shown where a newer file is out, opens that
 file's own page for a download through MO2, or the newest release at GitHub. ModTrap downloads and installs
 nothing; whether it should is open (MT40).
+
+**Getting the newer file (MT40, MT41, WHY§105).** The button fetches the file where its host gives one to a program:
+Nexus for the key of a paying account, GitHub for a release's file. Otherwise it opens the file's page and says
+why: Nexus without a key or for another kind of account, LoversLab and other sites always. A fetched file, and one
+the owner downloaded and names through the mod's menu, go to Add mods (§16) as a newer version of the mod: placed
+right above the old one, which is disabled and not deleted; a plugin the load order already names keeps its place.
+Nothing is changed before the owner has seen the plan and gone ahead; Revert puts all of it back.

@@ -127,6 +127,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 102 | 2026-11-22 | The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything | DECIDED | #page |
 | 103 | 2026-11-22 | A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list | DECIDED | #updates #page |
 | 104 | 2026-11-22 | The Updates tab is laid out as the modlist: priority, separators, MO2's notes; an Update column whose button opens the newer file's own page for a download through MO2; ModTrap still downloads nothing | DECIDED | #updates #page |
+| 105 | 2026-11-22 | The update button fetches the newer file where the host gives one to a program (Nexus for a paying account's key, GitHub), else opens its page; the file goes to Add mods as a newer version: right above the old mod, which is disabled; LoversLab only through the owner's browser | DECIDED | #updates #add #network |
 
 ## Entries
 
@@ -2632,3 +2633,39 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   while the owner is typing in it. The key and the sources parts fold away once they are set up.
 - Checked: tests (priority and the two notes; the address the button opens; single mods asked now); in a browser
   the order, the headings and their folding, the filter, the button and the menu.
+
+### 105. The update button fetches the newer file where the host gives one to a program (Nexus for a paying account's key, GitHub), else opens its page; the file goes to Add mods as a newer version: right above the old mod, which is disabled; LoversLab only through the owner's browser
+
+`2026-11-22` · DECIDED · `#updates #add #network` · refs: MT40, MT41, MT37, MT21, MT9, MO01§14, MO01§15, WHY§101, WHY§104, DESIGN§16, DESIGN§20
+
+- The owner's answer to MT40 (its note): fetch with a key, open the page without; GitHub and LoversLab too; install
+  through Add mods. Also asked in the same turn: whether the sweep had been used, and how safe a key in ModTrap is.
+- FACT (MO01§14, MO01§15). A key alone does not make Nexus give a program a download: only a paying account's
+  does. So "with a key" becomes: ask Nexus once what kind of account the key is of; fetch for a paying one; for
+  any other, open the file's page as without a key. The button's tooltip says beforehand which it will do, so the
+  owner is not surprised by a page opening.
+- GitHub needs no key. Which file of a release is the mod's: the one named as the installed archive; else the one
+  whose name differs only in digits; else the only archive. Otherwise ModTrap does not guess and opens the page.
+- REJECTED: logging in to LoversLab for the owner. It gives files to a logged-in session only; a program would
+  need the owner's password or session, which ModTrap does not ask for or keep. Its page opens in the owner's
+  browser, and the downloaded file is handed to ModTrap by the mod's menu. That menu row serves any site.
+- The fetching goes out to more hosts than the asking: the store of release files at GitHub and the hosts Nexus
+  names. The list is in the code, a test holds the code to it, the key is sent to none of them, and an answer
+  that points on is followed only to such a host.
+- DECIDED (MT41). An update through Add mods was not a case the add job knew: it would have put the newer
+  version where a new mod goes, beside the old one, both enabled. Now the staged archive carries the name of the
+  mod it is a newer version of. The analysis judges it at that mod's place; the plan puts it right above and
+  disables the old one; a plugin already in the load order is left where it is; the by-line way back enables the
+  old one again; the check after the add catches a newer version that dropped a needed plugin.
+- FACT, found by a test before it shipped: the plan first placed the newer version's plugin anew although the
+  load order named it already, and the by-line way back then took its line out, leaving a dependant with an
+  inactive master. Such plugins are now not in the plan at all.
+- Without ModTrap's switch for changes nothing is fetched: there would be nothing to do with the file.
+- NOT YET CHECKED against the real services: the account question, the download address, the hosts' names. With
+  stand-ins: fetched, unpacked, planned and added in a browser; the modlist then read "+new" right above "-old".
+- On the owner's two questions. The sweep ran on the whole repository before every commit of this work and is
+  git's gate before every push; each said clean. The key: kept in one file of ModTrap's folder, written through
+  Windows' protection for the owner's account, sent to Nexus's service only, never to the page, the log or a
+  session file (tests hold this). Said plainly to the owner: any program running as the owner's Windows account
+  could read it, as with MO2's own; the key can be withdrawn on Nexus at any time; and the Windows part of the
+  keeping has run only in tests on another system so far, where it fails closed (no key kept) if Windows refuses.

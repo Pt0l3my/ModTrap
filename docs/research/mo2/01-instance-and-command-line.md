@@ -201,3 +201,16 @@ Read at `4ba22f0`; facts only, nothing copied.
   makes a key for that one file, for a short time. A program cannot ask for a download by itself for a free
   account; for a paying one it can. The slower speed for free accounts is the site's own doing and was not read
   in source.
+
+## 15. What Nexus says of an account, and the answer to a request for a download address (2026-11-22)
+
+Read at `4ba22f0`; facts only, nothing copied.
+
+- **FACT (`src/nxmaccessmanager.cpp:199`, `:357-365`).** MO2 checks a key at the service's `users/validate`; the answer holds
+  `user_id` and `is_premium`.
+- **FACT (`src/downloadmanager.cpp:2187`, `:1977`).** The answer to a request for a file's download address (§14) is
+  a list of servers, each with `URI`, the address, and `short_name`.
+- **LIKELY, not read.** The addresses Nexus names are on hosts of its own (names ending in `nexus-cdn.com` or
+  `nexusmods.com`); GitHub hands a release's file on to a host ending in `githubusercontent.com`. ModTrap fetches a
+  file only from such hosts (WHY§105); if Nexus or GitHub names another, the fetch is refused in words and the
+  file's page is still there to open.

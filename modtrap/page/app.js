@@ -453,7 +453,8 @@ async function modMenu(ev, mod) {
   const rows = [
     { text: r && r.given ? "Change the source link…" : "Add a source link…", run: () => sourceLink(mod, r ? r.given : "") },
     r && r.given ? { text: "Forget my source link", run: async () => { try { await api("/api/updates/link", { mod, url: "" }); toast("The source link is forgotten."); await loadUpdates(); } catch (e) { toast(e.message); } } } : undefined,
-    r && r.get ? { text: r.state === "update" ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") + "…" : "Look at its files for a newer one…", note: r.get, run: () => window.open(r.get, "_blank", "noopener,noreferrer") } : undefined,
+    r && r.get ? { text: r.state === "update" ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") + "…" : "Look at its files for a newer one…", note: r.fetches ? "ModTrap fetches it and takes it to Add mods" : r.get, run: () => getUpdate(mod) } : undefined,
+    m && m.kind === "mod" ? { text: "Install a downloaded archive as its newer version…", note: "For a file you downloaded yourself, from any site: it goes to Add mods as a newer version of this mod", off: !state.changes, run: () => installDownloaded(mod) } : undefined,
     r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => window.open(page, "_blank", "noopener,noreferrer") },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
@@ -601,7 +602,53 @@ function updatesChosen(input) {
 // The update check (MT37, WHY§101): where each mod came from, and whether a newer file of it is out.
 const UP_STATE = { update: ["Update out", "bad"], maybe: ["Unclear", "warn"], current: ["Up to date", "good"], "not asked": ["Not asked yet", ""], none: ["Cannot be asked", ""], gone: ["Gone from its page", "warn"] };
 const UP_ORIGIN = { list: "the list's own", added: "added afterwards", modtrap: "added by ModTrap", "": "" };
-const UP_HOST = { nexus: "Nexus", github: "GitHub", url: "web address", "": "not known" };
+const UP_HOST = { nexus: "Nexus", github: "GitHub", loverslab: "LoversLab", url: "web address", "": "not known" };
+// The update button of one mod (MT40): ModTrap fetches the newer file where it can and takes it to Add mods; where it
+// cannot, the file's page is opened and the reason said.
+async function getUpdate(mod) {
+  let got;
+  try { got = await api("/api/updates/get", { mod }); } catch (e) { toast(e.message); return; }
+  if (got.open) {
+    window.open(got.open, "_blank", "noopener,noreferrer");
+    toast("Its page is opened: " + got.why + ".");
+    return;
+  }
+  toast("ModTrap is fetching the newer file of “" + mod + "”. It goes to Add mods when it is here.");
+  state.upSig = "";
+  loadUpdates();
+}
+async function installDownloaded(mod) {
+  const pick = el("input", { type: "file", accept: ".zip,.7z,.rar" });
+  pick.addEventListener("change", async () => {
+    const file = pick.files && pick.files[0];
+    if (!file) return;
+    try {
+      toast("Taking in “" + file.name + "” as a newer version of “" + mod + "”…");
+      const rec = await sendArchive(file, mod);
+      state.staged = (state.staged || []).concat(rec.id);
+      saveUi();
+      showTab("add");
+      pollAdd(true);
+    } catch (e) { toast(e.message); }
+  });
+  pick.click();
+}
+function fetchingEnded(d) {
+  for (const [mod, f] of Object.entries(d.fetching || {})) {
+    if (f.state === "going") continue;
+    api("/api/updates/seen", { mod }).catch(() => {});
+    if (f.state === "done") {
+      if (!(state.staged || []).includes(f.staged)) state.staged = (state.staged || []).concat(f.staged);
+      saveUi();
+      toast("The newer file of “" + mod + "” is here, as “" + f.name + "”. Add mods shows what it needs and where it goes.");
+      showTab("add");
+      pollAdd(true);
+    } else if (f.state === "open") {
+      window.open(f.open, "_blank", "noopener,noreferrer");
+      toast("Its page is opened instead: " + f.why + ".");
+    } else toast("The newer file of “" + mod + "” was not fetched: " + f.error + "." + (f.open ? " Its page is in the mod's menu." : ""));
+  }
+}
 async function loadUpdates() {
   if (state.updatesBusy || state.status !== "ready") return;
   state.updatesBusy = true;
@@ -610,7 +657,8 @@ async function loadUpdates() {
   renderUpdates();
   const d = state.updates;
   clearTimeout(state.updatesTimer);
-  if (d && (d.scan.state === "going" || d.list.reading)) state.updatesTimer = setTimeout(loadUpdates, 2000);
+  if (d) fetchingEnded(d);
+  if (d && (d.scan.state === "going" || d.list.reading || Object.values(d.fetching || {}).some((f) => f.state === "going"))) state.updatesTimer = setTimeout(loadUpdates, 2000);
 }
 function upFilter(key, value) { state.upFilter = Object.assign({ state: "", origin: "", on: false, text: "" }, state.upFilter, { [key]: value }); renderUpdates(true); }
 function renderUpdates(listOnly) {
@@ -761,10 +809,13 @@ function renderUpdates(listOnly) {
   const getButton = (r) => {
     if (!r.get) return null;
     const sure = r.state === "update";
+    const busy = (d.fetching || {})[r.mod];
+    if (busy && busy.state === "going") return el("span", { class: "dim small", title: busy.text || "fetching", text: (busy.pct ? busy.pct + "%" : "…") });
     const b = el("button", { type: "button", class: "upget" + (sure ? "" : " unsure"), text: "↑", "aria-label": "Get the newer file of " + r.mod,
-      title: (sure ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") : "Unclear whether a newer file is out: look at the mod's files")
-        + ". Opens its page" + (r.host === "nexus" ? " at Nexus, for a download through MO2" : " at GitHub") + ". ModTrap itself downloads nothing." });
-    b.addEventListener("click", (ev) => { ev.stopPropagation(); window.open(r.get, "_blank", "noopener,noreferrer"); });
+      title: (sure ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") : "Unclear whether a newer file is out: look at the mod's files") + ". "
+        + (r.fetches ? "ModTrap fetches it and takes it to Add mods, which shows what it needs and where it goes before anything is changed."
+          : "Opens its page" + (r.host === "nexus" ? " at Nexus, for a download through MO2" : "") + "; afterwards, “Install a downloaded archive as its newer version” in the mod's menu takes it to Add mods.") });
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); getUpdate(r.mod); });
     return b;
   };
   const COLS = 8;
@@ -2625,13 +2676,13 @@ function addMatches() {
 // is taken in: read in MO2's Downloads if it lies there, or else sent to ModTrap, which unpacks it in its own folder.
 const ARCHIVE_NAME = /\.(7z|zip|rar)$/i;
 
-function sendArchive(file) {
+function sendArchive(file, updates) {
   const up = { name: file.name, pct: 0 };
   state.uploads = (state.uploads || []).concat(up);
   renderAddPicked();
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
-    x.open("POST", "/api/add/upload?name=" + encodeURIComponent(file.name));
+    x.open("POST", "/api/add/upload?name=" + encodeURIComponent(file.name) + (updates ? "&updates=" + encodeURIComponent(updates) : ""));
     x.setRequestHeader("X-ModTrap-Token", TOKEN);
     x.setRequestHeader("Content-Type", "application/octet-stream");
     x.upload.onprogress = (ev) => { if (ev.lengthComputable) { up.pct = Math.floor(100 * ev.loaded / ev.total); renderAddPicked(); } };
@@ -2708,15 +2759,16 @@ function shareTable(title, list, word) {
 }
 
 function addModCard(x, place, built) {
-  const where = place.before ? "directly before “" + place.before + "” in MO2's list" : "last in MO2's list (the highest priority)";
+  const where = x.updates ? "right above “" + x.updates + "”, the version it is newer than" + (x.updates_enabled ? "; “" + x.updates + "” is disabled when this one is added, not deleted, and enabled again by Revert" : " (which is disabled already)")
+    : place.before ? "directly before “" + place.before + "” in MO2's list" : "last in MO2's list (the highest priority)";
   const plugs = x.plugins.map((p) => {
     if (p.unreadable) return el("div", { class: "plug" }, el("p", {}, el("span", { class: "mono", text: p.name }), el("span", { class: "tag bad", text: "could not be read" })), el("p", { class: "dim", text: p.unreadable }));
     const pr = p.proposed;
     const bad = p.masters.filter((m) => m.state !== "active" && m.state !== "comes along");
     return el("div", { class: "plug" },
       el("p", {}, p.active ? pluginLink(p.name) : el("span", { class: "mono", text: p.name }), el("span", { class: "tag", text: p.kind }),
-        el("span", { class: "tag " + (p.active ? "good" : ""), text: p.active ? "active, position " + p.position : "not active yet" })),
-      p.active ? null : el("p", {}, "Goes " + (pr.before ? "directly before " : "at the end of the load order"), pr.before ? pluginLink(pr.before) : null,
+        el("span", { class: "tag " + (p.active || p.keeps ? "good" : ""), text: p.active ? "active, position " + p.position : p.keeps ? "keeps the older version's place, position " + p.keeps.position + (p.keeps.active ? "" : " (not active there)") : "not active yet" })),
+      p.active || p.keeps ? null : el("p", {}, "Goes " + (pr.before ? "directly before " : "at the end of the load order"), pr.before ? pluginLink(pr.before) : null,
         el("span", { class: "dim", text: "  (" + pr.why + ")" })),
       el("p", { class: "dim" }, "Masters: " + (p.masters.length ? p.masters.map((m) => m.name).join(", ") : "none"),
         bad.length ? el("span", { class: "tag bad", text: plural(bad.length, "master") + " not ready" }) : p.masters.length ? el("span", { class: "tag good", text: "all there" }) : null),
@@ -2816,7 +2868,9 @@ function addActionCard(d) {
     const lines = [];
     for (const x of p.mods) {
       if (x.staged) lines.push("Copy “" + x.name + "” from ModTrap's work folder into MO2's mods folder.");
-      if (!x.enabled) lines.push("Put “" + x.name + "” " + (x.before ? "directly before “" + x.before + "”" : "last") + " in MO2's mod list, and enable it.");
+      if (!x.enabled) lines.push("Put “" + x.name + "” " + (x.before ? "directly before “" + x.before + "”" : "last") + " in MO2's mod list" + (x.updates ? ", which is right above “" + x.updates + "”, the version it is newer than" : "") + ", and enable it.");
+      if (x.replaces) lines.push("Disable “" + x.replaces + "”, the older version. It is not deleted; Revert enables it again.");
+      else if (x.updates) lines.push("“" + x.updates + "”, the older version, is disabled already and stays so.");
     }
     for (const x of p.plugins) lines.push("Put " + x.name + " " + (x.before ? "directly before " + x.before : "at the end") + " in the load order, and activate it.");
     const closed = p.mo2_closed === true;
