@@ -113,6 +113,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 88 | 2026-11-22 | A tool's own log is read after the run ModTrap started and kept with the session; the patcher framework's failures on the owner's PC were two things, neither ModTrap's | DECIDED | #tools #page #session |
 | 89 | 2026-11-22 | Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof | DECIDED | #tools #safety #settings |
 | 90 | 2026-11-22 | The patcher framework's patchers are built outside MO2 before it is started through MO2, when its log shows them unbuilt; what makes that safe | DECIDED | #tools #safety #mo2 |
+| 91 | 2026-11-22 | A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist | DECIDED | #steps #tools #page |
 
 ## Entries
 
@@ -2183,3 +2184,30 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   outside, then started through MO2, the settings file put back after the program had changed it, nothing
   opened the next time; a build that fails outside ends there with no start through MO2; the setting off).
 - Not checked: on the owner's PC.
+
+### 91. A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist
+
+`2026-11-22` · DECIDED · `#steps #tools #page` · refs: MT29, WHY§87, WHY§86, DESIGN§14, DESIGN§18
+
+- The owner, with a picture of 0.3.20 before a new demaster, the behaviour engine's step ticked "I have done
+  this": "it still says that pandora run is complete from previous session, that should be rerun after each
+  demaster. since we already made these tool processes automatic, maybe we should remove the manual override, it
+  just introduces more error."
+- FACT. WHY§87 took ticks away on a Revert or a new demaster, but only from the moment the page first kept which
+  demaster its ticks were for: a tick from before stayed until the next demaster was put in place. More to the
+  point, a tick is the owner's word, and the steps are to state facts (MT26).
+- DECIDED. When a tool that ModTrap started has closed with its output written, ModTrap notes the run with the
+  demaster that is in place (`tools-run.json` in that demaster's folder) and in the History. A tool's step is
+  done exactly when such a note exists for one of the tool's entries in MO2's list. No demaster in place: no
+  note. A Revert, or a new demaster, therefore asks for every tool again, by construction. The step has no tick
+  box, and the row of tools goes by the steps' own state.
+- Ticks stay only where no record of ModTrap's can exist: the play test, the settings files to look at, a tool
+  that is not in MO2's list (ModTrap cannot start it), and every tool when ModTrap was started without leave to
+  change anything (it starts none then). The page drops play-test and tool ticks whenever the demaster in place
+  is another than the one they were made for, also when it never kept which that was.
+- Not counted: a run the owner makes from MO2 itself. ModTrap does not see it; the step stays to do until the
+  tool is started from ModTrap. Telling such a run from the tool's output files (written after the demaster was
+  put in place) would be a fact too; not built.
+- Checked: tests (the note kept only with a demaster in place and gone with its Revert; the step done from the
+  note and each tool by its own; no tick for a tool ModTrap starts, a tick where it starts none); in a browser,
+  one go with the row of tools, the step done without a tick, to do again after Revert.

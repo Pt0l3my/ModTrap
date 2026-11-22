@@ -342,8 +342,10 @@ A typical job's steps:
 9. *ModTrap:* verify the instance: the health check (§3), and the load order otherwise as it was.
 10. *You:* open MO2 and confirm it shows no missing-master warning; then play, and report anything odd.
 
-**Ticks.** "I have done this" on a tool's step or on the play test holds for the demaster in place: a Revert, or a
-new demaster, takes those ticks away (WHY§87).
+**Ticks, and a tool's step (MT29, WHY§91).** A tool that ModTrap can start has no tick: its step is done when
+ModTrap has noted a run of it, with its output written, since the demaster in place was put in place; a Revert or a
+new demaster asks for it again. "I have done this" is left for what no record can show (the play test, settings
+files to look at, a tool outside MO2's list), and a play-test tick goes with the demaster it was made for.
 
 **Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
 tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the

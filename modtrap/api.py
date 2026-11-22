@@ -484,6 +484,16 @@ class Api:
 
             def ended() -> None:
                 self.save_log()
+                if job.state == "done" and self.session is not None:
+                    try:
+                        from . import history
+                        history.History(self.store.dir(self.session.id)).add(
+                            "tool ran", tool=title, files=len(job.changed), seconds=int((job.ended or time.time()) - job.started),
+                            why="started by ModTrap through MO2" + (", to run and close by itself" if job.switches else ""))
+                    except Exception:
+                        pass
+                    if self.changes is not None:
+                        self.changes.tool_ran(title, len(job.changed))     # what makes its step done (WHY§91)
                 if job.state == "done" and self.folder and self.status == "ready":
                     self.open(self.folder, self.profile or None, session=self.session, wait=True)   # its output, read again
                     if self.changes is not None:
@@ -795,7 +805,8 @@ class Api:
         deep = self._deep.get(key)
         job = self.job.public() if self.job else None
         out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None,
-                                  going=self.changes is not None and self.changes.dm_state in ("working", "verified"))
+                                  going=self.changes is not None and self.changes.dm_state in ("working", "verified"),
+                                  tools_run=self.changes.tools_run() if self.changes is not None else None)
         out["looking"] = bool(mods) and deep is None
         return out
 

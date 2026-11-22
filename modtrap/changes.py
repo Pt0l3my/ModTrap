@@ -410,6 +410,44 @@ class Changes:
                         "unfinished": unfinished})
         return out
 
+    # --- the tools run after a demaster (MT29, WHY§91) ----------------------------------------------------------------
+
+    def _placed(self) -> Path | None:
+        """The folder of the demaster that is in place now (the newest one put in place and not reverted)."""
+        job = next((j for j in self.demaster_jobs() if j["state"] == "installed"), None)
+        return self._jobs_dir() / job["job"] if job is not None else None
+
+    def tool_ran(self, title: str, files: int) -> None:
+        """Notes, with the demaster in place, that a tool ModTrap started after it has closed with its output
+        written. That note, and nothing the owner says, is what makes the tool's step done. Never raises."""
+        try:
+            work = self._placed()
+            if work is None or files <= 0:
+                return
+            ran = self._tools_run_of(work)
+            ran[title] = {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "files": int(files)}
+            paths.write_atomic(work / "tools-run.json", (json.dumps(ran, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+        except Exception as e:
+            log.warn("the run of “%s” could not be noted with the demaster: %s", title, logbook.why(e))
+
+    @staticmethod
+    def _tools_run_of(work: Path) -> dict:
+        try:
+            with open(work / "tools-run.json", "rb") as f:
+                data = json.loads(f.read(4 * 1024 * 1024).decode("utf-8"))
+            return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, dict)} if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def tools_run(self) -> dict:
+        """The tools that have had their run since the demaster in place was put in place: {title: {"when", "files"}}.
+        Empty when no demaster is in place: a Revert, or a new demaster, starts every tool's step afresh."""
+        try:
+            work = self._placed()
+            return self._tools_run_of(work) if work is not None else {}
+        except Exception:
+            return {}
+
     def _remade(self, job_dir: Path, plugins: list[str], trapped: list[str]) -> list[dict]:
         """The demastered plugins whose original a tool has made anew, each with whether ModTrap's copy of it can be
         retired: the original as it is now names no ticked plugin as a master, and every master it names is in the

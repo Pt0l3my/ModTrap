@@ -248,8 +248,10 @@ class Tools(unittest.TestCase):
         self.assertEqual(new, was)                                                          # nothing else changed
         kept = list((self.api.store.dir(self.api.session.id) / "tool-settings").iterdir())
         self.assertEqual([k.read_bytes() for k in kept], [before])                           # the file as it was, kept
-        ev = self.api.get("/api/history", {})[1]["events"][0]
-        self.assertEqual((ev["kind"], ev["was"], ev["now"]), ("tool settings changed", "Mutagen 0.11.0, Synthesis 1.3.0", "Mutagen 0.10.0, Synthesis 1.2.3"))
+        events = self.api.get("/api/history", {})[1]["events"]
+        self.assertEqual([e["kind"] for e in events[:2]], ["tool ran", "tool settings changed"])     # newest first
+        ev = events[1]
+        self.assertEqual((ev["was"], ev["now"]), ("Mutagen 0.11.0, Synthesis 1.3.0", "Mutagen 0.10.0, Synthesis 1.2.3"))
         # The profile now says what the log shows as fitting: a second start changes nothing.
         self.assertEqual(toolfit.check(tool_dir), [])
         self.api.post("/api/tool/start", {"title": "Synthesis"})

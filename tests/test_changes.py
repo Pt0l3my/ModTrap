@@ -602,6 +602,27 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["unfinished"], [])
         self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "revert finished")
 
+    def test_a_tools_run_counts_for_the_demaster_in_place_and_no_longer_after_a_revert(self) -> None:
+        """MT29, WHY§91: what makes a tool's step done is ModTrap's own note of the tool's run, kept with the demaster
+        that was in place. No demaster in place, no note; a Revert takes it away; a new demaster starts afresh."""
+        ch = self.api.changes
+        ch.tool_ran("Invented Tool", 3)                                   # nothing in place: nothing to note it with
+        self.assertEqual(ch.tools_run(), {})
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        self.assertEqual(ch.tools_run(), {})
+        ch.tool_ran("Invented Tool", 0)                                   # closed without output: not a run that counts
+        self.assertEqual(ch.tools_run(), {})
+        ch.tool_ran("Invented Tool", 3)
+        self.assertEqual(ch.tools_run()["Invented Tool"]["files"], 3)
+        job = self.api.state()["demaster"]["jobs"][0]["job"]
+        self.api.post("/api/demaster/revert", {"job": job})
+        self.ready()
+        self.assertEqual(ch.tools_run(), {})                              # reverted: every tool is to run again next time
+
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()
         self.tool = "touch"                       # a run that alters an original on disk

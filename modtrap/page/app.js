@@ -231,8 +231,8 @@ const SETTING_TEXT = [
   ["close_mo2", "Close this modlist's MO2 without asking", "Some steps change MO2's lists and need MO2 closed (putting a demaster in place, Revert, adding a mod). On: ModTrap asks MO2 to close, as a click on its X does, without asking you first. It never ends MO2 by force. The one go closes MO2 for its last step either way: its plan says so."],
   ["open_mo2_after", "Open MO2 again when a demaster is in place", "Starts this modlist's MO2 once the demaster is in place, so that you can look at the result."],
   ["retire_copies", "After a tool's run, retire ModTrap's copy of a plugin the tool made anew", "ModTrap keeps demastered copies in a mod of its own, above the originals. When a tool you start from ModTrap makes such a plugin anew without the mod, ModTrap's copy would hide the new one. On: ModTrap moves its copy into the job's folder by itself (kept, not deleted). Off: it tells you on the Selection tab and waits for the button."],
-  ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and ticks the tool's step off when the tool has written its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
-  ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is ticked off once it has written its output. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
+  ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and the tool's step is done once ModTrap has seen the tool write its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
+  ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is done once it has written its output. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
   ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
@@ -651,23 +651,23 @@ function startToolsRow() {
 }
 
 function toolsInARow() {
-  const t = state.tool, d = state.stepsData, ticks = state.stepsDone = state.stepsDone || {};
+  const t = state.tool, d = state.stepsData;
   if (state.status !== "ready" || state.toolsBusy) return;
   if (toolGoing(t)) return;                                                    // one at a time
   if (state.toolsNow) {                                                          // the one that has just closed
-    const key = state.toolsNow, title = state.toolsTitle;
+    const title = state.toolsTitle;
     state.toolsNow = "";
     if (t && t.title === title && t.state === "done" && t.changed_count > 0) {
-      ticks[stepKey(key)] = true;                                                // it wrote its output: its step is done
-      saveUi(); state.stepsText = ""; state.stepsKey = ""; state.processText = "";
+      // It wrote its output: ModTrap has noted the run with the demaster, and the steps, read again, say done.
+      state.stepsText = ""; state.stepsKey = ""; state.processText = "";
     } else {
       state.dmChain = "";
-      toast("“" + title + "” closed without writing anything new, so ModTrap stops here. The tools are yours from the Steps tab.");
+      toast(t && t.title === title && t.state === "failed" ? "“" + title + "” did not get to its run, so ModTrap stops here: " + (t.message || "see the Tools tab") : "“" + title + "” closed without writing anything new, so ModTrap stops here. The tool's card on the Tools tab says what its own log holds.");
       return;
     }
   }
   if (!d || state.stepsLooking || state.stepsKey === "") return;                 // the steps are being worked out again
-  const next = d.steps.find((st) => st.key.startsWith("tool:") && st.state === "to do" && !ticks[stepKey(st.key)] &&
+  const next = d.steps.find((st) => st.key.startsWith("tool:") && st.state === "to do" && !st.manual &&
     !state.toolsTried[st.key] && (st.items || []).some((i) => i.tool));
   if (!next) {
     state.dmChain = "";
@@ -982,7 +982,7 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "tool ran": "Tool run", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
@@ -999,6 +999,7 @@ function historyLine(e) {
   if (Array.isArray(e.left) && e.left.length) bits.push("left in place: " + e.left.join(", "));
   if (e.tool) bits.push("“" + e.tool + "”" + (e.file ? ", " + e.file : "") + (e.profile ? ", its profile “" + e.profile + "”" : ""));
   if (e.was && e.now) bits.push("was " + e.was + " · now " + e.now);
+  if (e.kind === "tool ran") bits.push(e.files ? plural(e.files, "file") + " of its output written" : "none of its output files changed");
   if (e.kept) bits.push("a copy as it was: " + e.kept);
   if (Array.isArray(e.placed) && e.placed.length) bits.push("back at their places in the load order: " + e.placed.join(", "));
   if (Array.isArray(e.notes) && e.notes.length) bits.push("not done: " + e.notes.join("; "));
@@ -1683,7 +1684,7 @@ function ticksOfThisDemaster() {
   if (state.status !== "ready" || !state.demaster || !state.session) return;
   const placed = (state.demaster.jobs || []).find((j) => j.state === "installed");
   const now = placed ? placed.job : "";
-  if (state.ticksJob !== undefined && state.ticksJob !== now) {
+  if (state.ticksJob !== now) {                        // also when it was never kept: an older page's ticks are not trusted
     const ticks = state.stepsDone || {};
     let gone = 0;
     for (const k of Object.keys(ticks)) if (/::(tool:|play$)/.test(k)) { delete ticks[k]; gone++; }

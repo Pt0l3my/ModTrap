@@ -182,6 +182,20 @@ class StepsTests(unittest.TestCase):
         going = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, going=True)["steps"]}
         self.assertEqual([(going[k]["state"], going[k]["action"]) for k in ("switch-off", "demaster", "disable")],
                          [("going", ""), ("going", ""), ("going", "")])
+        # A tool ModTrap can start is not ticked off by the owner (WHY§91): its step is done when ModTrap has a
+        # record of its run since the demaster was put in place, and to do again without one.
+        engine = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, tools_run={})["steps"]}["tool:Pandora Behaviour Engine"]
+        self.assertEqual((engine["state"], engine["manual"]), ("to do", False))
+        self.assertIn("Done when a run of it that ModTrap started", engine["note"])
+        ran = {"Invented Behaviour Engine": {"when": "2026-01-01T10:00:00", "files": 4}}
+        after = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep, auto=True, tools_run=ran)["steps"]}
+        self.assertEqual((after["tool:Pandora Behaviour Engine"]["state"], after["tool:Pandora Behaviour Engine"]["manual"]), ("done", False))
+        self.assertIn("“Invented Behaviour Engine”, 2026-01-01 10:00:00, 4 file(s)", after["tool:Pandora Behaviour Engine"]["note"])
+        self.assertEqual(after["tool:Invented Patcher"]["state"], "to do")              # each tool by its own run
+        self.assertEqual((after["play"]["manual"], after["mentions"]["manual"]), (True, True))   # what no record can show
+        # Started without the switch ModTrap starts no tool: there the owner still ticks it off.
+        looking = {x["key"]: x for x in steps.compile_steps(m, ["Bramble"], job, deep)["steps"]}
+        self.assertTrue(looking["tool:Pandora Behaviour Engine"]["manual"])
         # Every step says truly who does it (WHY§58): ModTrap, the owner, or ModTrap starting a tool the owner runs.
         self.assertEqual({k: v["who"] for k, v in by.items() if not k.startswith("tool:")},
                          {"dry": "ModTrap", "switch-off": "ModTrap", "demaster": "ModTrap", "disable": "ModTrap",

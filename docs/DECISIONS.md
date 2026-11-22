@@ -22,7 +22,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
 - **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
-  right before it starts). MT28 (its patchers are built outside MO2 first when they are not built).
+  right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
+  by ModTrap's record of its run, not by a tick).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -585,4 +586,16 @@ to that version?"
   is a fact on disk and nothing was run in it.
 - If the build fails outside MO2 too, ModTrap makes no start through MO2 and says what the log holds.
 - A setting, on by default, turns it off.
+
+## MT29
+
+**A tool's step is done by a record, not by a tick** · *2026-11-22 · Decided by the owner*
+
+**Owner's words.** "it still says that pandora run is complete from previous session, that should be rerun after
+each demaster. since we already made these tool processes automatic, maybe we should remove the manual override, it
+just introduces more error."
+
+**Decision.** A tool's step has no "I have done this". It is done when ModTrap has noted, with the demaster in
+place, a run of that tool that it started and that wrote its output; every Revert and every new demaster asks for
+the tools again (WHY§91). A tick stays only where no such record can exist.
 
