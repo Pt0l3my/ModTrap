@@ -34,7 +34,7 @@ NOTE_MAX = 400                       # characters of a mod's comment or note tha
 WJ_ENTRY = "modlist"                 # the list itself, inside a Wabbajack file (TL01§27)
 WJ_CHUNK = 1024 * 1024
 WJ_VALUE_MAX = 64 * 1024 * 1024      # one entry of the list larger than this is passed over
-GITHUB = re.compile(r"^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/releases/download/([^/]+)/)?", re.IGNORECASE)
+GITHUB = re.compile(r"^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/releases/(?:download|tag)/([^/?#]+))?", re.IGNORECASE)
 LOVERSLAB = re.compile(r"^https?://(?:www\.)?loverslab\.com/", re.IGNORECASE)
 _data: dict | None = None
 
@@ -131,6 +131,57 @@ def download_meta_of(ini: dict) -> dict:
             "version": g.get("version", ""), "url": url}
 
 
+# --- the mark a browser leaves on a downloaded file (WHY§109) -----------------------------------------------------------
+
+MARK = ":Zone.Identifier"            # Windows keeps it beside the file's own bytes, on the disks it uses for that
+MARK_BYTES = 8 * 1024
+
+
+def _read_mark(path: Path) -> str:
+    """The text of the mark on a file, or "" where there is none: on another system, on a disk that keeps none,
+    or for a file that no browser downloaded."""
+    if os.name != "nt":
+        return ""
+    try:
+        with open(str(path) + MARK, "rb") as f:
+            raw = f.read(MARK_BYTES)
+    except OSError:
+        return ""
+    for enc in ("utf-8-sig", "utf-16", "cp1252"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+def web_mark(path: Path, read=None) -> dict:
+    """Where a browser says it downloaded a file from: {"url": the address of the file, "page": the page the download
+    was started on}; either may be missing. `read` stands in for the reading in tests."""
+    text = (read or _read_mark)(path)
+    out = {}
+    for line in text.splitlines():
+        key, _eq, value = line.partition("=")
+        value = value.strip()
+        if value.lower().startswith(("http://", "https://")) and len(value) <= 2000 and not any(c.isspace() for c in value):
+            if key.strip().lower() == "hosturl":
+                out["url"] = value
+            elif key.strip().lower() == "referrerurl":
+                out["page"] = value
+    return out
+
+
+def source_of_mark(mark: dict) -> str:
+    """The one address of a mark that says most of the source: a GitHub address before any other (the release's
+    file, else the page), then a LoversLab one, then the page the download was started on, then the file's own."""
+    both = [mark.get("url", ""), mark.get("page", "")]
+    for test in (GITHUB.match, LOVERSLAB.match):
+        hit = next((u for u in both if u and test(u)), "")
+        if hit:
+            return hit
+    return mark.get("page") or mark.get("url") or ""
+
+
 # --- what the owner gave by hand (WHY§103) -------------------------------------------------------------------------
 
 GIVEN = "given-sources.json"
@@ -147,12 +198,12 @@ def given_load() -> dict:
         with open(paths.home() / GIVEN, "rb") as f:
             got = json.loads(f.read().decode("utf-8"))
         if got.get("format") == "modtrap-given/1":
-            for k in ("links", "archives", "mods"):
+            for k in ("links", "archives", "mods", "favourites"):
                 got.setdefault(k, {})
             return got
     except (OSError, ValueError):
         pass
-    return {"format": "modtrap-given/1", "links": {}, "archives": {}, "mods": {}}
+    return {"format": "modtrap-given/1", "links": {}, "archives": {}, "mods": {}, "favourites": {}}
 
 
 def given_save(given: dict) -> None:
@@ -174,6 +225,26 @@ def parse_link(url: str) -> dict:
     if hit:
         return {"host": "github", "repo": "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2))), "tag": hit.group(3) or "", "url": url}
     return {"host": host_of(url), "url": url}
+
+
+def own_record(archive: str, meta: dict | None = None) -> str:
+    """The `meta.ini` ModTrap writes for a mod it adds (MO01§12): the archive it came from and, where known, its
+    source, in MO2's own fields, so that MO2 and ModTrap both know afterwards where the mod came from. `meta`:
+    {"game": MO2's name of the game, "mod_id", "file_id", "version", "url"}; all optional."""
+    meta = meta or {}
+    clean = lambda v: re.sub(r'[\r\n"]', "", str(v))
+    lines = ["[General]"]
+    if archive:
+        lines.append("installationFile=%s" % archive.replace("\\", "/"))
+    if meta.get("mod_id") and meta.get("game"):
+        lines += ["gameName=%s" % clean(meta["game"]), "modid=%d" % int(meta["mod_id"]), "repository=Nexus"]
+    if meta.get("version"):
+        lines.append('version="%s"' % clean(meta["version"]))
+    if meta.get("url") and str(meta["url"]).lower().startswith(("http://", "https://")):
+        lines += ['url="%s"' % clean(meta["url"]), "hasCustomURL=true"]
+    if meta.get("mod_id") and meta.get("file_id") and meta.get("game"):
+        lines += ["", "[installedFiles]", "1\\modid=%d" % int(meta["mod_id"]), "1\\fileid=%d" % int(meta["file_id"]), "size=1"]
+    return "\r\n".join(lines) + "\r\n"
 
 
 # --- a Wabbajack file --------------------------------------------------------------------------------------------
@@ -288,6 +359,9 @@ class _Inflate:
         return False
 
     def flush(self):
+        pass
+
+    def close(self):
         pass
 
     def read(self, n: int = -1) -> bytes:
@@ -420,7 +494,8 @@ def wabbajack(path: Path, progress=None) -> dict:
 
 # --- all of it, for each mod -----------------------------------------------------------------------------------
 
-def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | None = None, given: dict | None = None) -> list[dict]:
+def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | None = None, given: dict | None = None,
+           mark_reader=None) -> list[dict]:
     """One row for each mod of the modlist: where it came from, by every record there is. {"mod", "enabled",
     "host": "nexus", "github", "url" or "", "game", "mod_id", "files": [file numbers at Nexus known to be installed],
     "archive", "version", "mo2_newest", "url", "repo": "owner/name", "tag", "origin": "list", "modtrap", "added" or ""
@@ -517,9 +592,20 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
                 row["host"] = from_list[0]["host"] if from_list[0]["host"] not in ("nexus", "github", "url") else ""
                 row["url"] = from_list[0].get("url", "")
                 row["by"].append("the Wabbajack file")
+        if not row["host"] and meta["archive"] and inst.downloads_dir is not None:
+            # No record names a source: the archive itself may, by the mark the browser left on it when it was
+            # downloaded (WHY§109). Only where the archive still lies in MO2's downloads folder.
+            url = source_of_mark(web_mark(inst.downloads_dir / meta["archive"], mark_reader))
+            if url:
+                hit = GITHUB.match(url)
+                row.update(host=host_of(url), url=url)
+                row["by"].append("the mark your browser left on the downloaded archive")
+                if hit:
+                    row["repo"] = "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2)))
+                    row["tag"] = hit.group(3) or ""
         rows.append(row)
     return rows
 
 
 __all__ = ["data", "download_meta", "download_meta_of", "gather", "given_load", "given_save", "memo_name", "memo_read", "memo_write",
-           "mod_meta", "mod_meta_of", "nexus_game", "parse_link", "read_list_bytes", "read_wabbajack", "said", "wabbajack"]
+           "mod_meta", "mod_meta_of", "nexus_game", "parse_link", "source_of_mark", "web_mark", "own_record", "read_list_bytes", "read_wabbajack", "said", "wabbajack"]

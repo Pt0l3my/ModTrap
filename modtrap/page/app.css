@@ -387,3 +387,8 @@ table.updates .c-get { width: 34px; padding-left: 0; padding-right: 4px; }
 .upzone-buttons { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
 .upfold { margin: 8px 0 0; }
 .upfold > summary { cursor: pointer; padding: 4px 0; }
+.upsteps { margin: 4px 0 10px; padding-left: 22px; line-height: 1.6; }
+.upzone.manual { border-color: var(--accent); background: var(--sel); padding: 30px 16px 20px; }
+.upzone.manual.over { background: #3b3170; border-style: solid; }
+.modal.wide { max-width: 640px; }
+.upfav { color: var(--warn); }

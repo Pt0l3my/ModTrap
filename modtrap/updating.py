@@ -23,6 +23,7 @@ PLACES = "update-lists.json"         # which Wabbajack file belongs to which mod
 PREFS = "update-prefs.json"          # the folder the owner's browser saves downloads to, if not the usual one
 WAIT_SECONDS = 45 * 60               # how long ModTrap waits for a download the owner started in the browser
 LOOK_EVERY = 2.0                     # seconds between two looks into the watched folders
+NEXUS_NAME = re.compile(r"-(\d+)-.*-(\d{9,11})\.(?:zip|7z|rar)$", re.IGNORECASE)   # a Nexus download's name: mod's number … time of upload
 PARTIAL = (".crdownload", ".part", ".partial", ".tmp", ".download", ".unfinished", ".opdownload")
 LIST_MAX = 2 * 1024 * 1024 * 1024    # the bytes of a dropped list, at most
 DROP_FILES = 20_000                  # meta files taken in one drop, at most
@@ -49,6 +50,7 @@ class Updating:
         self._looked = 0.0
         self.premium: bool | None = None           # whether the key's account is a paying one, once Nexus has said
         self.fetching: dict[str, dict] = {}        # a mod's name -> how the fetching of its newer file stands
+        self.mark_reader = None                    # reads a download's mark of the browser; a test's stand-in
 
     # --- the Wabbajack file of a modlist ---------------------------------------------------------------------------
     def _places(self) -> dict:
@@ -202,6 +204,16 @@ class Updating:
         log.info("a source link for “%s” is %s", mod, "kept (%s)" % {"nexus": "a mod's page at Nexus", "github": "a GitHub repository", "url": "a web address"}[kind] if url else "forgotten")
         return {"kept": bool(url), "kind": kind}
 
+    def set_favourite(self, modlist_key: str, mod: str, on: bool) -> dict:
+        """The owner's own mark on a mod (MT46): a favourite, to find it again by a filter. Kept in ModTrap's folder
+        for that modlist; nothing of the mod is touched."""
+        given = sources.given_load()
+        mine = set(given["favourites"].get(modlist_key, []))
+        (mine.add if on else mine.discard)(sources.fold(mod))
+        given["favourites"][modlist_key] = sorted(mine)
+        sources.given_save(given)
+        return {"favourite": bool(on), "count": len(mine)}
+
     def take_metas(self, modlist_key: str, files: list) -> dict:
         """Meta files dropped on the page: a download's `<archive>.meta` says where that archive came from, for every
         mod installed from it; a mod's `meta.ini`, dropped with its folder, says so for the mod of that name."""
@@ -281,13 +293,17 @@ class Updating:
                              if v["state"] == "update" else False, "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", "")})
         place = self._place(modlist_key)
         given = sources.given_load()
+        favs = set(given["favourites"].get(modlist_key, []))
+        for r in out_rows:
+            r["fav"] = sources.fold(r["mod"]) in favs
+        counts["fav"] = sum(1 for r in out_rows if r["fav"])
         return {"rows": out_rows, "counts": counts, "origins": origins, "hosts": hosts, "key": secret.kept(KEY),
                 "given": {"links": len(given["links"].get(modlist_key, {})), "archives": len(given["archives"]), "mods": len(given["mods"].get(modlist_key, {}))},
                 "list": {"named": bool(place), "file": Path(place["path"]).name if place.get("path") else place.get("file", ""), "name": wj["name"] if wj else "",
                          "version": wj["version"] if wj else "", "counts": wj["counts"] if wj else None,
                          "reading": self.reading["state"] == "going", "text": self.reading["text"], "error": self.reading["error"]},
                 "scan": dict(self.work), "last": self.store.get("last") or None,
-                "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()},
+                "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()}, "key_page": updates.KEY_PAGE,
                 "watch": {"folder": str(self.downloads_folder()), "there": self.downloads_folder().is_dir(),
                           "waiting": {m: {"minutes": max(0, int((WAIT_SECONDS - (time.time() - w["since"])) // 60)), "name": w["name"]}
                                       for m, w in self.waiting.items()}}}
@@ -337,8 +353,9 @@ class Updating:
 
     def _expect(self, row: dict, v: dict) -> None:
         self.waiting[row["mod"]] = {"since": time.time(), "host": row["host"], "mod_id": row.get("mod_id") or 0, "file_id": v.get("file_id") or 0,
-                                    "name": v.get("file") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
-                                    "installed": list(row.get("files") or [])}
+                                    "name": v.get("file_name") or "", "label": v.get("file") or "", "time": v.get("time") or 0,
+                                    "game": row.get("game") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
+                                    "installed": list(row.get("files") or []), "url": row.get("url") or ""}
 
     def look(self, model, stage) -> None:
         """Looks into MO2's downloads folder and the browser's for an archive a waiting mod's download has brought, and
@@ -384,30 +401,60 @@ class Updating:
                     continue                                    # still held by what is writing it
                 mine = None
                 meta = sources.download_meta(Path(folder), e.name) if where.startswith("MO2") else {}
+                mark = sources.web_mark(Path(e.path), self.mark_reader) if not where.startswith("MO2") else {}
+                marked = [sources.NEXUS_PAGE.match(u) for u in (mark.get("page", ""), mark.get("url", "")) if u]
+                marked = next((m for m in marked if m), None)
+                named = NEXUS_NAME.search(plain(e.name))             # "…-<mod's number>-<version>-<time of upload>.7z"
                 for mod, w in self.waiting.items():
                     if st.st_mtime < w["since"] - 5:
                         continue
                     if meta.get("mod_id") and w["mod_id"]:
+                        # MO2's own record beside the archive: the mod's and the file's number.
                         if meta["mod_id"] == w["mod_id"] and (meta.get("file_id") == w["file_id"] if w["file_id"] else meta.get("file_id") not in w["installed"]):
+                            mine = mod
+                            break
+                        continue
+                    if marked is not None and w["mod_id"]:
+                        # The browser's mark on the file: the page it was downloaded from is this mod's (WHY§110).
+                        if int(marked.group(2)) == w["mod_id"] and marked.group(1).lower() == w["game"]:
                             mine = mod
                             break
                         continue
                     if w["name"] and plain(e.name) == w["name"].lower():
                         mine = mod
                         break
-                if mine is None:
-                    # No number and no name to go by: the one mod waited for, or the one whose installed archive is
-                    # named alike but for its digits.
+                    if named is not None and w["mod_id"] and int(named.group(1)) == w["mod_id"] and \
+                            (int(named.group(2)) == w["time"] if w["time"] else int(named.group(2)) != updates.archive_time(w["archive"])):
+                        mine = mod                                   # the mod's number and the upload's time, in the name
+                        break
+                if mine is None and named is None and marked is None:
+                    # Nothing certain to go by (a name that carries a mod's number and a time, or a mark of a mod's
+                    # page, has said whose file it is, and it is not a waited one's). A new archive is taken for the
+                    # one mod waited for where its name begins as the file's name on its page does, or as the
+                    # installed archive's, or where the site gives no name at all; never while several are waited for.
+                    letters = lambda t: re.sub(r"[^a-z]+", "", t.lower())
                     alike = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and w["archive"] and shape(w["archive"]) == shape(plain(e.name))]
-                    open_ones = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and not w["name"]]
-                    mine = alike[0] if len(alike) == 1 else open_ones[0] if len(open_ones) == 1 and len(self.waiting) == 1 else None
+                    if len(alike) == 1:
+                        mine = alike[0]
+                    elif len(self.waiting) == 1:
+                        mod, w = next(iter(self.waiting.items()))
+                        lead = letters(e.name)
+                        starts = [letters(x)[:12] for x in (w.get("label") or "", re.sub(r"-\d+.*$", "", w["archive"])) if len(letters(x)) >= 4]
+                        if st.st_mtime >= w["since"] - 5 and (not w["name"] and not w["mod_id"] or any(lead.startswith(x) for x in starts)):
+                            mine = mod
                 if mine is not None and mine not in [m for m, _p, _w in found]:
                     found.append((mine, Path(e.path), where))
         self._sizes = sizes
         for mod, path, where in found:
             w = self.waiting.pop(mod)
             try:
-                rec = stage(path, path.name, mod, w["version"])
+                # The new mod's own record gets what is known of the file: its numbers at Nexus, or the address the
+                # browser says it came from, else the older version's address (WHY§109).
+                dl = sources.download_meta(path.parent, path.name) if where.startswith("MO2") else {}
+                meta = {"mod_id": w["mod_id"], "file_id": w["file_id"] or (dl.get("file_id", 0) if dl.get("mod_id") == w["mod_id"] else 0),
+                        "version": w["version"] or dl.get("version", "")} if w["mod_id"] else \
+                       {"version": w["version"], "url": sources.source_of_mark(sources.web_mark(path, self.mark_reader)) or w.get("url") or ""}
+                rec = stage(path, path.name, mod, w["version"], meta)
                 self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
                 log.info("the download for “%s” is in %s: taken to Add mods as its newer version", mod, where)
             except Exception as e:
@@ -467,7 +514,9 @@ class Updating:
                     self._expect(row, v)
                     self.fetching[mod] = {"state": "open", "open": got["open"], "why": got["why"]}
                     return
-                rec = stage(got["path"], got["name"], mod, got["version"])
+                rec = stage(got["path"], got["name"], mod, got["version"],
+                            {"mod_id": row.get("mod_id") or 0, "file_id": how.get("file_id") or 0, "version": got["version"],
+                             "url": how.get("url") or ""} if row["host"] == "nexus" else {"version": got["version"], "url": how.get("url") or row.get("url") or ""})
                 self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
             except updates.Refused as e:
                 log.warn("the newer file of “%s” was not fetched: %s", mod, e)
@@ -542,7 +591,7 @@ class Updating:
 
     def at_launch(self, model, modlist_key: str, added: set[str], wanted: bool) -> None:
         """Once for each start of ModTrap, when the first modlist is read: a scan, if the owner's setting asks for
-        one and there is something that can be asked (a key for Nexus, or a mod from GitHub)."""
+        one and there is a mod that can be asked about (one from Nexus or from GitHub)."""
         if self.launched:
             return
         self.launched = True
@@ -550,7 +599,7 @@ class Updating:
             return
         try:
             rows, _wj = self.rows(model, modlist_key, added)
-            if secret.kept(KEY) or any(r["host"] == "github" for r in rows):
+            if any(r["host"] in ("nexus", "github") for r in rows):          # Nexus needs no key (MT44)
                 self.start(model, modlist_key, added, "at launch")
         except Exception as e:
             log.warn("the scan for updates at launch could not be started: %s", logbook.why(e))

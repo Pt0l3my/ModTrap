@@ -34,7 +34,14 @@ log = logbook.get("updates")
 
 NEXUS = "https://api.nexusmods.com/v1"
 GITHUB = "https://api.github.com"
+PUBLIC = "https://api.nexusmods.com/v2/graphql"   # Nexus's newer service: answers what is public without any key (TL01§29)
+MODS_PER_QUESTION = 50               # mods named in one question of that service (it gives at most 80 in one answer)
+FILES_PER_QUESTION = 5               # mods whose files are asked for in one question
+PUBLIC_QUESTIONS = 800               # questions of that service in one scan, at most
+PUBLIC_PAUSE = 0.2                   # seconds between two of them: no hurry, and no burden on the service
+ARCHIVE_TIME = re.compile(r"-(\d{9,11})\.(?:zip|7z|rar)$", re.IGNORECASE)   # the upload's time in a Nexus file's name
 ACCOUNT = "users/validate"           # under NEXUS: what kind of account a key is of (MO01§15)
+KEY_PAGE = "https://next.nexusmods.com/settings/api-keys"   # where an account's keys are, for the owner to open (WHY§107)
 HOSTS = ("api.nexusmods.com", "api.github.com")
 # A mod's file is fetched from these and no others (MT40): GitHub's own store of release files, and the hosts Nexus
 # names in the download address it gives. The owner's key is never sent to any of them.
@@ -89,6 +96,27 @@ class Net:
         except (ValueError, UnicodeDecodeError):
             return status, got, None
 
+
+    def ask(self, url: str, query: str, headers: dict[str, str]) -> tuple[int, dict[str, str], object]:
+        """A question in the form Nexus's newer service takes (TL01§29): the question's text, sent as a body. The
+        answer as `get` gives it."""
+        m = re.match(r"^https://([^/:]+)/", url)
+        if not m or m.group(1).lower() not in HOSTS:
+            raise Refused("ModTrap asks only %s" % " and ".join(HOSTS))
+        body = json.dumps({"query": query}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST", headers={"User-Agent": self.agent, "Accept": "application/json",
+                                                                             "Content-Type": "application/json", **headers})
+        try:
+            with self._opener.open(req, timeout=TIMEOUT) as r:
+                status, got, raw = r.status, {k.lower(): v for k, v in r.headers.items()}, r.read(BODY_MAX)
+        except urllib.error.HTTPError as e:
+            return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, None
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            return 0, {"why": logbook.why(getattr(e, "reason", e) if isinstance(getattr(e, "reason", None), BaseException) else e)}, None
+        try:
+            return status, got, json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return status, got, None
 
     def download(self, url: str, dest: Path, progress=None, stopped=None) -> int:
         """Fetches one file to `dest` (written beside it first, then swapped in). Only from the hosts mod files are
@@ -180,6 +208,20 @@ def _day(seconds) -> str:
         return ""
 
 
+def archive_time(name: str) -> int:
+    """The time of upload that Nexus writes into a file's name ("Name-12604-6-0-1774355307.zip"), or 0."""
+    m = ARCHIVE_TIME.search(name or "")
+    return int(m.group(1)) if m else 0
+
+
+def _iso_time(text: str) -> int:
+    try:
+        import calendar
+        return calendar.timegm(time.strptime(text[:19], "%Y-%m-%dT%H:%M:%S"))
+    except (ValueError, TypeError):
+        return 0
+
+
 def nexus_verdict(row: dict, kept: dict | None) -> dict:
     """What Nexus's files for the mod say of the files installed (MO01§13). {"state": "update", "current", "maybe",
     "gone" or "not asked", "text", "newest", "file", "when", "asked"}."""
@@ -190,7 +232,17 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
         return {"state": "gone", "text": "Nexus no longer shows this mod (%s)" % kept["gone"], "newest": "", "file": "", "when": "", "asked": asked}
     d = sources.data()
     active, gone = set(d["active_states"]), set(d["gone_states"])
-    files = {f[0]: {"id": f[0], "name": f[1], "version": f[2], "state": f[3], "time": f[4]} for f in kept.get("files", [])}
+    if not kept.get("files") and kept.get("updated"):
+        # Only the mod's own date is kept (TL01§29): it is the time of its newest file. The installed archive's
+        # name carries the time of its own upload; where the two are the same, the installed file is that newest one.
+        mine = archive_time(row.get("archive") or "")
+        if mine and mine == kept["updated"]:
+            return {"state": "current", "text": "the installed file is the mod's newest: nothing was uploaded after it", "newest": "", "file": "", "when": "", "asked": asked}
+        return {"state": "not asked", "text": "Nexus has not been asked for this mod's files yet", "newest": "", "file": "", "when": "", "asked": ""}
+    # "name" is what the file is downloaded as, where the service gives that; for newer uploads it gives a storage
+    # code instead (WHY§110), so "label", the file's name on its page, is what is shown.
+    files = {f[0]: {"id": f[0], "name": f[1], "version": f[2], "state": f[3], "time": f[4], "group": f[5] if len(f) > 5 else 0,
+                    "label": (f[6] if len(f) > 6 and f[6] else f[1] if ARCHIVE.search(f[1]) else "the mod's newer file")} for f in kept.get("files", [])}
     chain = {c[0]: c for c in kept.get("chain", [])}
     installed = [i for i in row.get("files", []) if i in files or i in chain or any(c[1] == i for c in chain.values())]
     how = "by the file's number"
@@ -206,10 +258,10 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
                     "newest": "", "file": "", "when": "", "asked": asked}
         if row.get("version") and any(same_version(row["version"], f["version"]) for f in mains):
             return {"state": "current", "text": "the installed version is that of a main file (the file itself could not be told)",
-                    "newest": mains[0]["version"], "file": mains[0]["name"], "when": _day(mains[0]["time"]), "asked": asked}
+                    "newest": mains[0]["version"], "file": mains[0]["label"], "when": _day(mains[0]["time"]), "asked": asked}
         return {"state": "maybe", "text": "the installed file could not be told among the mod's files; its main file is version %s, of %s, and "
                                           "the installed version reads %s" % (mains[0]["version"] or "(none given)", _day(mains[0]["time"]), row.get("version") or "(none given)"),
-                "newest": mains[0]["version"], "file": mains[0]["name"], "when": _day(mains[0]["time"]), "asked": asked}
+                "newest": mains[0]["version"], "file": mains[0]["label"], "when": _day(mains[0]["time"]), "asked": asked}
     best = None
     unsure = None
     for i in installed:
@@ -219,6 +271,17 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
             seen.add(at)
             successors.append(at)
         own = files.get(i)
+        if not successors and own is not None and own["group"]:
+            # No word of what replaced what, but the files of one line of versions share a group (TL01§29): the
+            # newest current file of the installed file's group, uploaded after it, is its newer version.
+            later = [f for f in files.values() if f["group"] == own["group"] and f["state"] in active and f["time"] > own["time"]]
+            if later:
+                newest = max(later, key=lambda f: f["time"])
+                if best is None or newest["time"] > best["time"]:
+                    best = newest
+                continue
+            if own["state"] in active:
+                continue                                    # the newest of its line, and current
         current = next((files[s] for s in reversed(successors) if s in files and files[s]["state"] in active), None)
         downloadable = next((files[s] for s in reversed(successors) if s in files and files[s]["state"] not in gone), None)
         newer = current or (downloadable if own is None or own["state"] not in active else None)
@@ -231,12 +294,13 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
                 unsure = later
     if best is not None:
         return {"state": "update", "text": "a newer file replaced the installed one (%s): %s, version %s, of %s" % (
-            how, best["name"], best["version"] or "(none given)", _day(best["time"])),
-                "newest": best["version"], "file": best["name"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"]}
+            how, best["label"], best["version"] or "(none given)", _day(best["time"])),
+                "newest": best["version"], "file": best["label"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"],
+                "file_name": best["name"] if ARCHIVE.search(best["name"]) else "", "time": best["time"]}
     if unsure is not None:
         return {"state": "maybe", "text": "the installed file is marked old or is no longer listed, with no word of what replaced it; a later "
-                                          "main file is there: %s, version %s, of %s" % (unsure["name"], unsure["version"] or "(none given)", _day(unsure["time"])),
-                "newest": unsure["version"], "file": unsure["name"], "when": _day(unsure["time"]), "asked": asked}
+                                          "main file is there: %s, version %s, of %s" % (unsure["label"], unsure["version"] or "(none given)", _day(unsure["time"])),
+                "newest": unsure["version"], "file": unsure["label"], "when": _day(unsure["time"]), "asked": asked}
     return {"state": "current", "text": "no newer file replaced the installed one (%s)" % how, "newest": "", "file": "", "when": "", "asked": asked}
 
 
@@ -270,7 +334,10 @@ def verdict(row: dict, store: dict) -> dict:
         v = {"state": "none", "text": why.get(row["host"], "it came from %s, which cannot be asked for versions" % row["host"]),
              "newest": "", "file": "", "when": "", "asked": ""}
     # What MO2 itself last saw is said beside it: it is on this PC already, and costs no question.
-    if row.get("mo2_newest") and row.get("version") and not same_version(row["mo2_newest"], row["version"]) and v["state"] in ("not asked", "maybe"):
+    # Only where both versions are plain numbers and MO2's is the higher: a version MO2 made up from a file's date,
+    # or one written in another way, says nothing by comparison (WHY§107).
+    mine, theirs = _parts(row.get("version") or ""), _parts(row.get("mo2_newest") or "")
+    if mine is not None and theirs is not None and theirs > mine and v["state"] in ("not asked", "maybe"):
         v["text"] += "; MO2's own last check saw version %s as the newest" % row["mo2_newest"]
         if v["state"] == "not asked":
             v["mo2"] = True
@@ -279,8 +346,141 @@ def verdict(row: dict, store: dict) -> dict:
 
 # --- the scan --------------------------------------------------------------------------------------------------------
 
+def _scan_public(rows: list[dict], wanted: dict, net: Net, store: dict, now: float, say, halted, nx: dict, force: bool, pause: float) -> bool:
+    """Asks Nexus's public service, without any key (MT44, TL01§29). First, in questions of fifty mods each, when
+    each mod last had a file uploaded. Then, only for mods where that is later than the installed file or cannot be
+    compared, the mod's files. False when the service does not answer as expected at the outset: nothing is kept
+    then, and the caller may go the other way. Otherwise True, with the account in `nx`."""
+    headers = {"Application-Name": "ModTrap", "Application-Version": net.agent.split("/", 1)[-1]}
+    asked = 0
+
+    def ask(query: str):
+        nonlocal asked
+        if asked and pause:
+            time.sleep(pause)
+        asked += 1
+        status, h, body = net.ask(PUBLIC, query, headers)
+        if status != 200 or not isinstance(body, dict) or not isinstance(body.get("data"), dict):
+            errors = body.get("errors") if isinstance(body, dict) else None
+            why = ("Nexus's public service could not be reached (%s)" % h.get("why", "no answer") if status == 0 else
+                   "Nexus's public service asks ModTrap to wait (%d)" % status if status in (429, 503) else
+                   "Nexus's public service refused the question" if errors else "Nexus's public service answered with an error (%d)" % status)
+            return None, why
+        return body["data"], ""
+
+    games: dict[str, int] = {}
+    for game in sorted({g for g, _i in wanted}):
+        if not re.fullmatch(r"[a-z0-9]+", game):
+            continue
+        data, why = ask('{ game(domainName: "%s") { id } }' % game)
+        if data is None or not isinstance(data.get("game"), dict) or not isinstance(data["game"].get("id"), int):
+            nx["public_why"] = why or "Nexus's public service does not know the game"
+            return False
+        games[game] = data["game"]["id"]
+
+    # What each row has installed, by mod: the time in its archive's name, where there is one.
+    times: dict[tuple[str, int], list[int]] = {}
+    for r in rows:
+        if r["host"] == "nexus":
+            times.setdefault((r["game"], r["mod_id"]), []).append(archive_time(r.get("archive") or ""))
+    order = sorted((k for k in wanted if k[0] in games), key=lambda k: (0 if wanted[k] else 1, k))
+    need: list[tuple[str, int]] = []
+    for at in range(0, len(order), MODS_PER_QUESTION):
+        if halted():
+            nx["why_stopped"] = "stopped"
+            nx["left"] = len(order) - at
+            return True
+        part = order[at:at + MODS_PER_QUESTION]
+        say("asking Nexus when %d of %d mods last had a new file" % (min(at + len(part), len(order)), len(order)))
+        ids = ", ".join('{ gameDomain: "%s", modId: %d }' % k for k in part)
+        data, why = ask("{ legacyModsByDomain(ids: [%s], count: %d) { nodes { modId gameId status updatedAt } } }" % (ids, len(part)))
+        page = (data or {}).get("legacyModsByDomain") if data is not None else None
+        if not isinstance(page, dict) or not isinstance(page.get("nodes"), list):
+            if at == 0:
+                nx["public_why"] = why or "Nexus's public service answered in a form ModTrap does not know"
+                return False
+            nx["why_stopped"] = why or "Nexus's public service answered in a form ModTrap does not know"
+            nx["left"] = len(order) - at
+            return True
+        by_game = {v: k for k, v in games.items()}
+        seen: dict[tuple[str, int], dict] = {}
+        for n in page["nodes"]:
+            try:
+                seen[(by_game[int(n["gameId"])], int(n["modId"]))] = n
+            except (KeyError, TypeError, ValueError):
+                continue
+        for k in part:
+            name = "%s/%d" % k
+            n = seen.get(k)
+            if n is None or str(n.get("status") or "published") != "published":
+                store["nexus"][name] = {"asked": int(now), "gone": "hidden or removed" if n is None else "its page is %s" % str(n.get("status")).replace("_", " "), "via": "public"}
+                continue
+            updated = _iso_time(str(n.get("updatedAt") or ""))
+            prev = store["nexus"].get(name)
+            if not force and updated and all(t and t == updated for t in times.get(k, [0])):
+                # Every installed file of this mod carries the time of the mod's newest upload: it is that file,
+                # and the mod's files need not be asked for.
+                store["nexus"][name] = {"asked": int(now), "updated": updated, "files": [], "chain": [], "via": "public"}
+            elif not force and prev is not None and prev.get("files") and prev.get("updated") == updated:
+                prev["asked"] = int(now)                    # nothing was uploaded since: what is kept still stands
+            else:
+                store["nexus"][name] = {"asked": int(now), "updated": updated, "files": [], "chain": [], "via": "public"}
+                need.append(k)
+    nx["month_list"] = len(order)
+    # The files of the mods that need them, a few mods to a question.
+    for at in range(0, len(need), FILES_PER_QUESTION):
+        if halted():
+            nx["why_stopped"] = "stopped"
+        elif asked >= PUBLIC_QUESTIONS:
+            nx["why_stopped"] = "%d questions were asked in this scan; the rest follow at the next" % asked
+        if nx["why_stopped"]:
+            nx["left"] = len(need) - at
+            break
+        part = need[at:at + FILES_PER_QUESTION]
+        say("asking Nexus for the files of mod %d of %d" % (min(at + len(part), len(need)), len(need)))
+
+        def files_of(some):
+            return "{ %s }" % " ".join('m%d: modFiles(modId: "%d", gameId: "%d") { fileId name uri version categoryId date groupId }' % (i, k[1], games[k[0]])
+                                       for i, k in enumerate(some))
+        data, why = ask(files_of(part))
+        answers: dict[tuple[str, int], object] = {}
+        if data is not None:
+            answers = {k: data.get("m%d" % i) for i, k in enumerate(part)}
+        elif len(part) > 1:
+            for k in part:                                  # one of them upset the question: each alone
+                one, _w = ask(files_of([k]))
+                answers[k] = one.get("m0") if one is not None else None
+        else:
+            answers = {part[0]: None}
+        if all(v is None for v in answers.values()) and why and "wait" in why:
+            nx["why_stopped"] = why
+            nx["left"] = len(need) - at
+            break
+        for k, got in answers.items():
+            name = "%s/%d" % k
+            rec = store["nexus"].get(name) or {"asked": int(now), "updated": 0, "via": "public"}
+            if not isinstance(got, list):
+                rec["updated"] = 0                          # not answered: asked again at the next scan
+                store["nexus"][name] = rec
+                continue
+            files = []
+            for f in got:
+                try:
+                    files.append([int(f["fileId"]), str(f.get("uri") or ""), str(f.get("version") or ""), int(f.get("categoryId") or 0),
+                                  int(f.get("date") or 0), int(f.get("groupId") or 0), str(f.get("name") or "")])
+                except (KeyError, TypeError, ValueError):
+                    continue
+            rec.update(files=files, chain=[], asked=int(now), via="public")
+            store["nexus"][name] = rec
+            nx["asked"] += 1
+        if nx["asked"] % 100 < FILES_PER_QUESTION:
+            save(store)
+    nx["questions"] = asked
+    return True
+
+
 def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: float | None = None, progress=None,
-         stopped=None, per_scan: int = NEXUS_PER_SCAN, force: bool = False) -> dict:
+         stopped=None, per_scan: int = NEXUS_PER_SCAN, force: bool = False, pause: float = PUBLIC_PAUSE) -> dict:
     """Asks Nexus and GitHub about the mods of `rows` that need asking, keeps the answers, and gives an account:
     {"nexus": {"mods", "asked", "left", "month_list", "why_stopped", "day_left", "hour_left"}, "github": {...},
     "seconds", "when"}. `progress(text)` is told what it is at; `stopped()` ends it early. `force`: every mod of
@@ -312,10 +512,16 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
         return {0: "Nexus could not be reached (%s)" % h.get("why", "no answer"), 401: "Nexus did not accept the key",
                 429: "Nexus says the account's allowance of questions is used up for now"}.get(status, "Nexus answered with an error (%d)" % status)
 
-    if wanted and not key:
-        nx["why_stopped"] = "no Nexus key is kept: Nexus answers a program only with an account's key"
+    # Nexus's newer service first: it needs no key (MT44). The older one, with the owner's key, only where the newer
+    # one does not answer as expected.
+    public = _scan_public(rows, wanted, net, store, now, say, halted, nx, force, pause) if wanted else True
+    nx["way"] = "public" if public else "key"
+    if wanted and not public and not key:
+        nx["why_stopped"] = (nx.get("public_why") or "Nexus's public service did not answer as expected") + \
+            "; the older service answers only with an account's key, and none is kept"
         nx["left"] = len(wanted)
-    elif wanted:
+    elif wanted and not public:
+        nx["why_stopped"] = ""
         updated: dict[str, dict[int, int]] = {}
         for game in sorted({g for g, _i in wanted}):
             say("asking Nexus which mods of %s had a new file in the last month" % game)
@@ -431,7 +637,13 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
     if not force:
         store["last"] = out                               # a question about single mods is not "the last scan"
     save(store)
-    log.info("scan for updates: Nexus: %d mod(s) with a number, the month's list named %s, %d asked about now, %d left for later%s%s",
+    if nx.get("way") == "public":
+        log.info("scan for updates: Nexus, by its public service, without a key: %d mod(s) with a number, %s asked when they last had a new file, "
+                 "the files of %d asked for, %d left for later, in %d question(s)%s", nx["mods"], format(nx["month_list"], ","), nx["asked"], nx["left"],
+                 nx.get("questions", 0), ": " + nx["why_stopped"] if nx["why_stopped"] else "")
+    else:
+      log.info("scan for updates: Nexus, by its older service, with the key%s: %d mod(s) with a number, the month's list named %s, %d asked about now, %d left for later%s%s",
+             " (the public service: %s)" % nx["public_why"] if nx.get("public_why") else "",
              nx["mods"], format(nx["month_list"], ","), nx["asked"], nx["left"], ": " + nx["why_stopped"] if nx["why_stopped"] else "",
              "; the account has %s question(s) left today, %s this hour" % (nx["day_left"], nx["hour_left"]) if nx["day_left"] is not None else "")
     log.info("scan for updates: GitHub: %d repositor(ies), %d asked about now, %d left for later%s; the scan took %.1f s",
@@ -494,7 +706,7 @@ def how_to_get(row: dict, v: dict, store: dict, key: bool, premium: bool | None)
             return {"open": page, "why": "no Nexus key is kept, so the download goes through Nexus's page and MO2"}
         if premium is False:
             return {"open": page, "why": "Nexus lets a program start a download only for a Premium account, so it goes through Nexus's page and MO2"}
-        return {"fetch": "nexus", "file_id": v["file_id"], "name": v.get("file") or "", "version": v.get("newest") or "", "page": page}
+        return {"fetch": "nexus", "file_id": v["file_id"], "name": v.get("file_name") or v.get("file") or "", "version": v.get("newest") or "", "page": page}
     if row["host"] == "github" and row.get("repo"):
         kept = store["github"].get(row["repo"].lower())
         got = github_asset(row, kept)
@@ -502,8 +714,8 @@ def how_to_get(row: dict, v: dict, store: dict, key: bool, premium: bool | None)
             return {"open": page, "why": "the newest release has no file, or several, and ModTrap cannot tell which is this mod's"}
         return {"fetch": "github", "url": got[1], "name": got[0], "version": (kept or {}).get("tag", ""), "page": page}
     if row["host"] == "loverslab":
-        return {"open": page, "why": "LoversLab gives files only to your logged-in browser; download it there, then use “Install a downloaded archive as its newer version” in the mod's menu"}
-    return {"open": page, "why": "ModTrap cannot fetch from there; download it in your browser, then use “Install a downloaded archive as its newer version” in the mod's menu"}
+        return {"open": page, "why": "LoversLab gives files only to your logged-in browser; download it there, then use “Manual update” in the mod's menu"}
+    return {"open": page, "why": "ModTrap cannot fetch from there; download it in your browser, then use “Manual update” in the mod's menu"}
 
 
 def fetch(how: dict, row: dict, key: str, net: Net, folder: Path, progress=None, stopped=None) -> dict:

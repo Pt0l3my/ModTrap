@@ -129,6 +129,11 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 104 | 2026-11-22 | The Updates tab is laid out as the modlist: priority, separators, MO2's notes; an Update column whose button opens the newer file's own page for a download through MO2; ModTrap still downloads nothing | DECIDED | #updates #page |
 | 105 | 2026-11-22 | The update button fetches the newer file where the host gives one to a program (Nexus for a paying account's key, GitHub), else opens its page; the file goes to Add mods as a newer version: right above the old mod, which is disabled; LoversLab only through the owner's browser | DECIDED | #updates #add #network |
 | 106 | 2026-11-22 | ModTrap watches MO2's and the browser's Downloads folders for a file the owner fetched on a site, and a setting lets a newer file be added without asking: one press where the host lets a program fetch, one more on the site where it does not | DECIDED | #updates #add #page |
+| 107 | 2026-11-22 | On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made | FACT | #updates #page |
+| 108 | 2026-11-22 | The owner was right that a scan needs no key: Nexus's newer public service answers without one; the scan is rebuilt on it, the key kept only for fetching and as a fallback | DECIDED | #updates #network |
+| 109 | 2026-11-22 | A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about | DECIDED | #updates #add |
+| 110 | 2026-11-22 | A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name | FACT | #updates #network |
+| 111 | 2026-11-22 | A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting | DECIDED | #updates #page #safety |
 
 ## Entries
 
@@ -2702,3 +2707,154 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   by; MO2's folder by numbers; a site with no name; stopping and the end of waiting); in a browser both ways to
   the end: a Premium account in one press, a free one with the file saved as the browser saves it, each ending
   with the newer version above the disabled older one.
+
+### 107. On the owner's list a scan without a key asks nothing and ends at once, which looked like a dead button; the button now says so and leads to the key, with where the key is made
+
+`2026-11-22` · FACT · `#updates #page` · refs: MT37, WHY§101, WHY§104
+
+- The owner, with a picture and a session file of 0.3.35: "Clicking Scan for updates doesn't seem to be doing
+  anything? Where do I get Nexus key from?"
+- FACT (the session's log). The scan ran, twice: 3,576 mods, 3,503 of them with a number at Nexus (3,000 different
+  numbers), none from GitHub, 73 with no source that can be asked; no key kept; nothing asked; 0.0 seconds. The
+  page did say "no Nexus key is kept", in small print under the last scan's line. A press that ends at once with
+  a line of small print reads as a press that did nothing.
+- The reading of sources works on the real list: every mod's own record gave its number, with no Wabbajack file.
+- Fixed. With no key and no mod from GitHub, the button asks nothing of the program at all: it says at once how
+  many mods come from Nexus and that Nexus needs the key, opens the key's part and puts the cursor in its field.
+  A scan that does run says "Scanning…", and what came of it when it ends. The last scan's line says "Nexus was
+  not asked" where it was not.
+- The key's part now has the steps to make one, with a link to Nexus's page for it. LIKELY, not checked against
+  the site today: the page is the account's "API Keys" page, with the personal key at its bottom. The steps say
+  the way by hand as well, in case the address has moved.
+- FACT (the picture). The line "MO2's own last check saw version 0.8.0.0 as the newest" stood beside an installed
+  version "d2025.1.9.0": MO2 writes such a version itself, from a file's date, when a mod gives none. The two say
+  nothing by comparison. MO2's word is now passed on only where both are plain numbers and MO2's is the higher.
+- The tab's own description still said that ModTrap downloads nothing; since MT40 a mod's update button can fetch.
+  It now says what a scan does and what the button does.
+
+### 108. The owner was right that a scan needs no key: Nexus's newer public service answers without one; the scan is rebuilt on it, the key kept only for fetching and as a fallback
+
+`2026-11-22` · DECIDED · `#updates #network` · refs: MT44, MT37, MT40, TL01§29, MO01§13, WHY§101, WHY§107
+
+- The owner, after 0.3.36 told them a key was needed: "I see no reason why it would need a nexus key to check if
+  there are any updates for mods."
+- FACT, my error. WHY§101 built the scan on what MO2's source shows: MO2 sends a key with every question, to
+  Nexus's older service. From that I wrote that Nexus answers a program only with a key, and never checked
+  whether Nexus has another way. It has (TL01§29). The claim was an inference from one program's habit, stated
+  as a fact about the service.
+- METHOD. This session's network did not reach Nexus's services. A second environment that does was proposed to
+  the owner and approved; this session could not move to it, so a helper session on it asked the live service,
+  with no key and only about two well-known public mods, and reported the literal questions and answers.
+- DECIDED. The scan asks the public service first. Fifty mods to a question give each mod's time of last upload.
+  Where the installed archive's name carries that same time (Nexus writes the upload's time into a file's
+  name), the installed file is the mod's newest and nothing more is asked. Otherwise the mod's files are asked
+  for, five mods to a question; a question that is refused is asked again mod by mod.
+- The verdict without a word of what replaced what: the files of one line of versions share a group (TL01§29,
+  LIKELY). The newest current file of the installed file's group, uploaded after it, is its newer version. This
+  also keeps a mod's other lines apart: a newer main file is no update for an installed patch of another line.
+  Where the installed file is not found among the mod's files, the older rules hold (by the archive's name, by
+  version, else "unclear").
+- What is kept from the older way: the key and its service remain, used only where the public service does not
+  answer as expected at the outset, and for fetching (MT40). The key is never sent to the public service; a test
+  holds that.
+- The public service is said by Nexus to be still changing. An answer in a form ModTrap does not know is said in
+  words, in the log and on the page, and never taken for "no update".
+- NOT YET CHECKED by ModTrap's own code against the live service: the helper asked the questions by hand. The
+  owner's next scan is the check, with its lines in the log.
+- Later, 2026-11-22: checked. The helper session ran ModTrap's own scan, unchanged, from the pushed commit
+  `7869d5c` (0.3.37), against the live service with no key, for three invented rows on the two public mods. Three
+  questions, each answered with no error, in 1.2 seconds. An old file of the first mod, named as its archive is
+  named: update, to the mod's current main file, by the group. The same mod's current file, by its number:
+  current. The second mod, by the time in its archive's name alone: current, without its files being asked for.
+  Not yet seen: a scan of some 3,000 mods, fifty to a question and five to a question for files; and how many
+  questions the service allows.
+- Checked: tests with a stand-in for the public service (states by group and by time; no key sent; files asked
+  for only where needed; a second scan; fifty and five to a question; the service absent, with and without a
+  key; a service that asks to wait; a game's name that is no name); the page in a browser.
+
+### 109. A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about
+
+`2026-11-22` · DECIDED · `#updates #add` · refs: MT45, MT38, MT41, MO01§12, WHY§103, WHY§105
+
+- The owner asked for an efficient way to give a GitHub source, supposing rightly that the archive's contents do
+  not name it.
+- LIKELY, not checked on a Windows PC from here: browsers on Windows write, beside a downloaded file's own bytes,
+  a small text ("Zone.Identifier") with `HostUrl`, the address of the file, and `ReferrerUrl`, the page the
+  download was started on. It stays with the file while the file stays on a disk that keeps such texts, and is
+  lost when the file is copied through a program that does not carry it, or unpacked. For a file from GitHub the
+  file's own address is often that of GitHub's store, and the page is the release's; so both are looked at, and a
+  GitHub address in either counts first.
+- DECIDED. Where meta.ini, the download's meta file, what the owner gave and the Wabbajack file all say nothing,
+  the archive named in the mod's record is looked for in MO2's downloads folder and its mark read. One small read
+  for each mod that has no source; nothing where the archive is gone. On another system, or with no mark, nothing
+  is found and nothing changes.
+- FACT, a gap found while answering. The record ModTrap wrote for a mod it added held the archive's name only. A
+  newer version put in by ModTrap (MT41) therefore had no source of its own unless MO2's downloads folder still
+  held a record beside its archive: after an update fetched by ModTrap, or one taken from the browser's folder,
+  the new mod would have shown "cannot be asked". The record now carries the source in MO2's own fields
+  (MO01§12): the game, the mod's and the file's number, the version; or the web address, with the flag MO2 uses
+  for an address of the owner's. The owner's own link for the older mod is copied to the newer one's name.
+- A new mod taken from MO2's downloads folder gets what MO2's record beside the archive says, else the mark's
+  address.
+- Values written into the record have line ends and quotes taken out; an address that is not a web address is
+  not written.
+- The pattern for a GitHub address now also reads a release's page (`/releases/tag/…`), not only a release's
+  file: a link pasted from the release page records which release is installed.
+- Checked: tests (the mark's two addresses and which counts; texts that are no addresses; a mod with no record
+  getting its source from the mark while a mod with a record keeps its own; the record of a newer version read
+  back by ModTrap's own reader; the hand-over through Add mods). The reading of a real mark on Windows is not
+  checked.
+
+### 110. A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name
+
+`2026-11-22` · FACT · `#updates #network` · refs: MT46, MT42, MT44, TL01§29, WHY§106, WHY§108, WHY§109
+
+- The owner's session file at 0.3.38 shows the scan without a key working on the real list: 3,000 distinct mods
+  asked when they last had a new file, the files of 2,190 asked for, none left, in 500 questions and 184.4 s.
+- The same file shows why a download started on Nexus's page was not taken. For the mod the owner updated, the
+  public service's `uri` of the newer file was not a file's name but a code of three short parts and a long one,
+  divided by slashes: where the file is stored. ModTrap showed that code as the file's name and waited for a
+  download of exactly that name, which no browser writes. LIKELY: the service gives such codes for files uploaded
+  through Nexus's newer uploader; older files still carry a name.
+- The files question now also asks each file's `name`, its name on the mod's page. That is what the owner is
+  shown; where it is empty too, "the mod's newer file". A `uri` counts as a file's name only where it ends as an
+  archive does.
+- A download is now known, in this order: by the numbers MO2 writes beside an archive in its own folder; by the
+  browser's mark on the file (WHY§109), where the page it came from is the mod's page at Nexus, same game and same
+  number; by the exact name, where one is known; by the mod's number and the upload's time, which Nexus puts at
+  the end of every download's name ("…-<mod's number>-<version>-<time>.7z") and which the service gives as the
+  file's `date`. A name of that shape that fits no waited mod is nobody's: before this, the installed file
+  downloaded again would have been taken as the newer one, by the likeness of its name (found by a new test).
+- Only where one mod alone is waited for, and nothing above speaks, an archive is taken whose name begins as the
+  file's name on the page does, or as the installed archive's.
+- Checked: tests (a storage code is never shown or waited for; the download known by number and time while the
+  installed file and another mod's file are passed by; known by the mark whatever its name, another page's file
+  left; the one-mod fallback), and in a browser against a stand-in service: the file dropped into the watched
+  folder under a name ModTrap was never told is taken to Add mods. Not checked: a real download on the owner's PC.
+
+### 111. A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting
+
+`2026-11-22` · DECIDED · `#updates #page #safety` · refs: MT46, MT40, MT42, WHY§105, WHY§106
+
+- The owner asked whether Nexus's page must open at all without a key, and otherwise to stay on ModTrap's tab.
+- It must: the public service names a mod's files and gives no address to fetch one from; the address is made by
+  Nexus's page for the signed-in browser, or by the keyed service for a paying account only (WHY§105). ModTrap
+  takes no password and does not act as the owner's browser (the secrets policy), so the press on Nexus's page
+  stays the owner's.
+- A page cannot open a tab behind itself: browsers put a new tab or window in front. The nearest thing is a small
+  window beside ModTrap, opened on the owner's press, which leaves ModTrap's tab as it is. It is opened empty at
+  the press itself, because a browser lets a page open a window only then, and sent to the address once ModTrap's
+  answer names it; it is closed again where ModTrap fetches the file itself.
+- Found in a browser: a window whose tie to ModTrap is cut (`opener` set to nothing, as "noopener" does) cannot be
+  closed by ModTrap afterwards, nor found again by its name. And a window whose tie is kept gives the site's page
+  a handle on ModTrap's tab, by which it may send that tab to any address: the known danger "noopener" exists
+  against. There is no third way: any window a page may close is one that can reach the page.
+- DECIDED: cut loose by default; the owner closes the window. A second setting, off, keeps the tie, only for
+  addresses at Nexus, GitHub and LoversLab; ModTrap then closes the window when the file is here or the waiting
+  ends, uses the one window for the next mod, and holds a "leave this page?" question on its own tab while such a
+  window is open, so that the tab cannot be sent anywhere unseen. Any other address is always cut loose.
+- What the tie could cost at worst: ModTrap's tab replaced by another page. ModTrap's server answers only its own
+  page (requests of another origin are refused), so nothing of the modlist could be changed through it.
+- Checked in a browser against a stand-in page: cut loose, the page sees no opener and stays open after "stop
+  waiting"; tied, the page sees its opener, is closed on "stop waiting" and when the file arrives. The page test
+  that forbids outside addresses and inline code still holds.

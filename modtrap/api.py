@@ -104,6 +104,8 @@ SETTINGS = {
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
+    "site_window": True,       # a site's page for a download opens in a small window of its own (MT46)
+    "site_window_closes": False,   # that window stays tied to ModTrap's tab, so that ModTrap can close it (MT46, WHY§111)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -434,12 +436,13 @@ class Api:
                 pass
         return sessions.modlist_key(self.folder or "."), added
 
-    def stage_where_it_lies(self, path: Path, name: str, updates: str, version: str) -> dict:
+    def stage_where_it_lies(self, path: Path, name: str, updates: str, version: str, meta: dict | None = None) -> dict:
         """An archive the owner downloaded, found in a watched folder (MT42): read where it lies, not copied, not
         moved, and marked as a newer version of the mod it was downloaded for."""
         self._need()
         name = self._archive_name(name)
         rec = self._new_staged(name, "downloads", updates=updates, version=version)
+        rec["meta"] = {**rec.get("meta", {}), **{k: v for k, v in (meta or {}).items() if v}}
         rec["state"] = "unpacking"
         self._save_staged(rec)
         threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
@@ -508,6 +511,11 @@ class Api:
                 if isinstance(body.get("mod"), str):
                     self.updating.seen(body["mod"])
                 return {}
+            if what == "favourite":
+                mod, on = body.get("mod"), body.get("on")
+                if not isinstance(mod, str) or not isinstance(on, bool) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):
+                    raise Bad("that is not a mod of this modlist")
+                return self.updating.set_favourite(key, mod, on)
             if what == "link":
                 mod, url = body.get("mod"), body.get("url", "")
                 if not isinstance(mod, str) or not isinstance(url, str) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):
@@ -1088,7 +1096,7 @@ class Api:
         try:
             paths.write_atomic(Path(rec["dir"]) / "staged.json", json.dumps(
                 {k: rec.get(k, "") for k in ("id", "archive", "name", "state", "note", "root", "files", "kind", "source",
-                                             "installer", "options", "raw", "picks", "updates")},
+                                             "installer", "options", "raw", "picks", "updates", "meta")},
                 ensure_ascii=False).encode("utf-8"))
         except OSError:
             pass
@@ -1115,6 +1123,28 @@ class Api:
                 rec["state"], rec["note"] = "failed", "ModTrap was closed while this was being unpacked. Drop it again."
             self._staged[d.name] = rec
 
+    def _source_for(self, old: str, new: str) -> dict:
+        """What a newer version inherits of the older mod's source (WHY§109): MO2's name of the game and the mod's
+        number at Nexus, or its web address; and the owner's own source link, which is kept for the new mod too."""
+        m = self.model
+        mod = m.instance.mod(old) if m is not None else None
+        if mod is None or mod.folder is None:
+            return {}
+        from . import sources
+        g = sources._ini(mod.folder / "meta.ini").get("general", {})
+        got = sources.mod_meta_of({"general": g})
+        out = {"game": g.get("gamename", ""), "mod_id": got["mod_id"], "url": got["url"]}
+        try:
+            key, _added = self._updates_for()
+            given = sources.given_load()
+            link = given["links"].get(key, {}).get(instance.fold(old))
+            if link:
+                given["links"].setdefault(key, {})[instance.fold(new)] = link
+                sources.given_save(given)
+        except Exception:
+            pass
+        return {k: v for k, v in out.items() if v}
+
     def _new_staged(self, archive: str, source: str, updates: str = "", version: str = "") -> dict:
         """`updates`: the mod of the modlist this archive is a newer version of (MT40); the new mod is then named
         after it, with the version."""
@@ -1138,7 +1168,7 @@ class Api:
             name, n = "%s (%d)" % (stem, n), n + 1
         rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
                "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {},
-               "updates": updates}
+               "updates": updates, "meta": self._source_for(updates, name) if updates else {}}
         self._staged[sid] = rec
         self._save_staged(rec)
         return rec
@@ -1256,12 +1286,13 @@ class Api:
             raise Bad("the dropped file has no usable name")
         return name
 
-    def stage_fetched(self, path: Path, name: str, updates: str, version: str) -> dict:
+    def stage_fetched(self, path: Path, name: str, updates: str, version: str, meta: dict | None = None) -> dict:
         """A newer file ModTrap fetched for a mod (MT40): taken into the session's folder and unpacked, as a dropped
         archive is, and marked as a newer version of that mod."""
         self._need()
         name = self._archive_name(name)
         rec = self._new_staged(name, "fetched", updates=updates, version=version)
+        rec["meta"] = {**rec.get("meta", {}), **{k: v for k, v in (meta or {}).items() if v}}
         target = Path(rec["dir"]) / "archive"
         try:
             shutil.move(str(path), str(target))
@@ -1331,6 +1362,14 @@ class Api:
         if not ok:
             raise Bad("that file is not in MO2's Downloads as it was dropped")
         rec = self._new_staged(name, "downloads")
+        try:                                             # what MO2 and the browser recorded of the archive (WHY§109)
+            from . import sources
+            dl = sources.download_meta(base, name)
+            url = dl.get("url") or sources.source_of_mark(sources.web_mark(src))
+            rec["meta"] = {k: v for k, v in {"game": dl.get("game", ""), "mod_id": dl.get("mod_id", 0), "file_id": dl.get("file_id", 0),
+                                             "version": dl.get("version", ""), "url": "" if dl.get("mod_id") else url}.items() if v}
+        except Exception:
+            rec["meta"] = {}
         rec["state"] = "unpacking"
         self._save_staged(rec)
         threading.Thread(target=self._unpack, args=(rec, src), name="unpack", daemon=True).start()

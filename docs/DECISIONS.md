@@ -35,6 +35,10 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
   MT42 (answered: ModTrap watches the Downloads folders for a file the owner fetched in the browser). MT43 (one press
   all the way: a setting lets a newer file be added without asking where its plan leaves nothing open).
+  MT44 (a scan for updates needs no key). MT45 (a source without typing: the mark a browser leaves on a download, and
+  a mod ModTrap adds keeps its source).
+  MT46 (a "Manual update" box and favourites in a mod's menu, a Favourites filter; a site's page for a download in a
+  small window of its own, so that ModTrap's tab stays).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -922,3 +926,77 @@ install/update with a single click on download button?" Done in 0.3.35 (WHY§106
 - ModTrap still stops and shows the plan when the archive has an installer with questions, when something the
   mod needs is missing, or when more than that one mod is on the Add mods list. The check after the add, and
   Revert, are as for every add.
+
+## MT44
+
+**A scan for updates needs no key** · *2026-11-22 · Asked by the owner*
+
+**Owner's words.** "The scan for updates still won't scan for updates... I see no reason why it would need a nexus
+key to check if there are any updates for mods."
+
+The owner was right, and MT37's "Nexus is asked only with the owner's own key" was wrong for scanning: it held for
+the older of Nexus's two services, the only one ModTrap had read about. The newer one answers what is public
+without a key (TL01§29).
+
+**Settled** (WHY§108):
+
+- A scan asks Nexus's public service, with no key: first, fifty mods to a question, when each mod last had a file
+  uploaded; then, only for mods where that is later than the installed file or cannot be compared, the mod's
+  files.
+- The key is optional and has one use: with a Premium account's key, a mod's update button fetches the file
+  itself (MT40). It is also the fallback for scanning where the public service does not answer as expected.
+- ModTrap names itself to Nexus in every question, asks no faster than five questions a second, at most 800 in a
+  scan, and stops when the service asks it to wait.
+- A scan at each start (the setting of MT37) now needs no key either.
+
+## MT45
+
+**A source without typing it** · *2026-11-22 · From the owner's question; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "what would be efficient way to add github source? I suppose downloading the compressed file does
+not provide the source."
+
+**Settled** (WHY§109; the owner may overrule any of it):
+
+- An archive's contents do not name its source, but a browser on Windows leaves a mark on every file it
+  downloads, with the address it came from. Where no record names a mod's source and the archive it was
+  installed from still lies in MO2's downloads folder, ModTrap reads that mark. A GitHub address in it makes the
+  mod a GitHub mod, with the release it came from; any other address is kept as the mod's page.
+- A mod ModTrap adds gets its source written into the record ModTrap creates for it, in MO2's own fields: its
+  numbers at Nexus, or its web address. A newer version takes over the older one's source, and the owner's own
+  source link is kept for it too. So a mod stays askable after ModTrap has updated it.
+- The owner's own link (MT38) still comes before everything; a link to a release's page now records the release.
+
+## MT46
+
+**Manual update, favourites, and staying on ModTrap's tab** · *2026-11-22 · The owner's request*
+
+**Owner's words.** "can you also add: 1. in the right click menu of a mod, "Manual update". Clicking on that will open
+a pop up UI window with colored file drop zone and "Add file" button. 2. also in right click menu, "Mark as Favorite".
+Clicking on this will mark the mod as a favorite. 3. Add a Favorite to states (should be renamed filter I suppose), so
+clicking on that will show only mod rows that have been marked as favorite." And, after updating a mod: "ModTrap
+opened Nexus download page for the mode (the one where the file is being downloaded). Is that necessary? Can it be done
+without opening nexus download browser tab (without nexus key that is)? If not, then make it so when the nexus page is
+opened, stay on ModTrap browser tab (could be a setting). The nexus page was opened but couldn't fetch the mod file."
+
+**Settled** (WHY§110, WHY§111; the owner may overrule any of it):
+
+- **Manual update.** A mod's menu has "Manual update…": a box of ModTrap's own with a coloured drop zone and an "Add
+  file…" button, for an archive the owner downloaded themselves. The file goes to Add mods as the mod's newer version
+  (MT41); the box changes nothing.
+- **Favourites.** A mod's menu has "Mark as favourite" and, for a favourite, "Remove from favourites". The mark is the
+  owner's own, kept in ModTrap's folder for that modlist; nothing of the mod is touched. A favourite shows a star
+  before its name on the Updates tab.
+- **The filter.** The row of states is named "Filter:" and ends with "★ Favourites", which shows only the favourites
+  and works together with the other filters.
+- **The site's page.** Without a key of a paying account Nexus gives a file only through its page, in the browser
+  where the owner is signed in (MT40, WHY§105); ModTrap cannot do without that page. A setting, on, opens it in a
+  small window beside ModTrap, so that ModTrap's tab stays as it is. A browser gives a page no way to open a tab
+  behind the one in front.
+- **Closing that window.** A second setting, off, lets ModTrap close the window itself when the file is here or the
+  waiting ends. It is off because the window must then stay tied to ModTrap's tab, and a tied page can send the tab
+  that opened it elsewhere; with it on, the tie is kept only for Nexus, GitHub and LoversLab, and the browser asks
+  before ModTrap's tab goes anywhere while such a window is open.
+- **The file that was not taken.** Nexus's public service gave a storage code where the file's name was expected, so
+  ModTrap waited for a name no download carries. A download is now known by the browser's mark on it, or by the mod's
+  number and the upload's time in its name; the storage code is never shown or waited for.
