@@ -33,7 +33,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   the modlist does, with an Update column and a button that leads to the newer file).
   MT40 (answered the same day: ModTrap fetches a newer file where the host gives it to a program, and installs through
   Add mods). MT41 (a newer version through Add mods: right above the old one, which is disabled).
-- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+- **Open.** MT42 (sign-in through the sites' own pages, or watching the Downloads folder). MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -858,3 +858,37 @@ Done in 0.3.34 (WHY§105, MO01§14, MO01§15), within what each host allows a pr
   brings anew are placed.
 - After the add the modlist is read again, as for every add: if the newer version no longer brings a plugin that
   others need, the missing master is found and everything is put back.
+
+## MT42
+
+**Sign-in through the sites' own pages, or watching the Downloads folder** · *Open*
+
+**Owner's words (2026-11-22).** "would it work if you added login hook to ModTrap, so you could add Nexus, Loverslab
+and Github buttons to Update page, and clicking on one would open browser page of the clicked site which would ask
+for hook of the site that user is logged into (could be also an authrorize like what Wabbajack does), ModTrap would
+never get login details or directly login."
+
+What is known (TL01§28, MO01§14):
+
+- Such a sign-in keeps the password away from ModTrap, as the owner says. But a site offers it only to an
+  application it knows by name. Nexus knows Wabbajack and MO2; it does not know ModTrap. Using another
+  application's name is not ModTrap's to do.
+- For Nexus it would replace pasting a key, and nothing more: with it, Wabbajack too fetches by itself only for
+  a Premium account.
+- LoversLab: the Wabbajack read today does not sign in there; the user fetches by hand and Wabbajack watches the
+  Downloads folder.
+- GitHub needs no sign-in to fetch a release's file. A sign-in would only raise how many questions an hour
+  ModTrap may ask.
+
+Options:
+
+- **A. Watch the Downloads folders.** The buttons open the mod's page; the owner presses download there, in the
+  browser where they are signed in. ModTrap watches the folder the browser saves to, and MO2's downloads folder,
+  and when the archive it is waiting for is there, takes it to Add mods as the mod's newer version. No sign-in,
+  no key, works for Nexus (free accounts), LoversLab and any other site.
+- **B. Ask Nexus to make ModTrap known**, for a "sign in with Nexus" button in place of the key field. Only the
+  owner can ask Nexus for that. A convenience; it unlocks nothing.
+- **C. Both.**
+
+**Recommendation: A now**, and B only if pasting the key bothers the owner. A is what gives the missing piece: a
+file the owner fetched in the browser getting into ModTrap without a second step.
