@@ -120,6 +120,7 @@ class Api:
         self._lists: dict[str, tuple[object, dict]] = {}
         self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
         self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
+        self._making_tools = 0                        # readings of what the tools made that are going (WHY§92)
         self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
         self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
@@ -444,6 +445,36 @@ class Api:
             raise Bad("tick at least one mod")
         return mods
 
+    def working(self) -> list[dict]:
+        """ModTrap's own reading and scanning that is still going (WHY§92): [{"key", "text"}]. While any of it goes,
+        nothing that changes the modlist or starts a program is begun: the page greys those buttons, and the
+        starts themselves are refused (`unsettled`)."""
+        out = []
+        if self.status == "reading":
+            out.append({"key": "modlist", "text": "reading the modlist"})
+        m = self.model
+        if m is not None:
+            if any(v is None for k, v in list(self._deep.items()) if k[0] == id(m)):
+                out.append({"key": "steps", "text": "looking into the ticked mods' folders and the tools' plugins, for the steps"})
+            if any(v is None for k, v in list(self._adding.items()) if k[0] == id(m)):
+                out.append({"key": "adding", "text": "reading the mods to add"})
+        if self._making_tools:
+            out.append({"key": "tools", "text": "reading what the modlist's tools made"})
+        try:
+            if any(r.get("state") in ("copying", "unpacking") for r in list(self._staged.values())):
+                out.append({"key": "unpack", "text": "unpacking a dropped archive"})
+        except Exception:
+            pass
+        return out
+
+    def unsettled(self) -> str:
+        """Why nothing can be started just now, in words, or "" when ModTrap has finished its own reading and
+        scanning. The modlist being read keeps the words the page already waits on."""
+        if self.status != "ready":
+            return "the modlist is being read"
+        rest = [w["text"] for w in self.working()]
+        return "ModTrap is still at work (%s)" % "; ".join(rest) if rest else ""
+
     def _busy(self) -> bool:
         if self.tooljob is not None and self.tooljob.state in ("starting", "preparing", "running"):
             return True
@@ -463,8 +494,8 @@ class Api:
         with self._lock:
             if self._busy():
                 raise Bad("something else is going; wait for it to end")
-            if self.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
             if self._locked():
                 raise Bad(self._locked())
             inst = m.instance
@@ -597,8 +628,8 @@ class Api:
         with self._lock:
             if self._busy():
                 raise Bad("something else is going; wait for it to end")
-            if self.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
             if self._locked():
                 raise Bad(self._locked())
             s = self.session
@@ -722,8 +753,8 @@ class Api:
         with self._lock:
             if self._busy():
                 raise Bad("a dry run is already going")
-            if self.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
             if self._locked():
                 raise Bad(self._locked())
             s = self.session
@@ -1355,6 +1386,7 @@ class Api:
         settings = paths.load_settings()
         out["recent"] = [r for r in settings.get("recent", []) if isinstance(r, str) and r][:8]
         out["log_epoch"] = self.log_epoch
+        out["working"] = self.working()
         every = self.store.all()
         live = [x for x in every if x.status != sessions.FINISHED]
         done = [x for x in every if x.status == sessions.FINISHED][-10:]
@@ -1411,7 +1443,11 @@ class Api:
         hit = self._lists.get("tools_made")
         if hit and hit[0] is m:
             return hit[1]
-        out = toolmade.made(m)
+        self._making_tools += 1
+        try:
+            out = toolmade.made(m)
+        finally:
+            self._making_tools -= 1
         self._lists["tools_made"] = (m, out)
         return out
 

@@ -71,8 +71,8 @@ class Changes:
             m = api._need()
             if api._busy():
                 raise Bad("something else is going; wait for it to end")
-            if api.status != "ready":
-                raise Bad("the modlist is being read; try again in a moment")
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             if api._locked():
                 raise Bad(api._locked())
             if self.closed() is not True:
@@ -204,6 +204,8 @@ class Changes:
         with self._lock:
             if self.gate():
                 raise Bad(self.gate())
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             m, p = self._planned(body)
             base = self._jobs_dir()
             work = base / ("add-" + time.strftime("%Y%m%d-%H%M%S"))
@@ -239,6 +241,8 @@ class Changes:
             m = api._need()
             if api._busy():
                 raise Bad("something else is going; wait for it to end")
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             work = self._jobs_dir() / name
             try:
                 job = addjob.AddJob.reopen(m.instance, m, work, api.store.dir(api.session.id), self.closed)
@@ -288,6 +292,8 @@ class Changes:
         with self._lock:
             if api._busy():
                 raise Bad("something else is going; wait for it to end")
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             if api._locked():
                 raise Bad(api._locked())
             if self.dm is not None and self.dm_state == "verified":
@@ -335,6 +341,8 @@ class Changes:
             dm = self.dm
             if dm is None or self.dm_state != "verified":
                 raise Bad("there is no verified demaster to put in place")
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             # The MO2 of the xEdit run may still be leaving; and in the one go, the plan the owner confirmed said
             # MO2 would be closed for this step (WHY§67).
             board = process.BOARD
@@ -499,6 +507,8 @@ class Changes:
             api._need()
             if api._busy() or self.busy():
                 raise Bad("something else is going; wait for it to end")
+            if not quiet and api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             if self.closed() is not True:
                 raise Bad("MO2 must be closed while ModTrap takes its copy out of its mod. Close MO2, then go on.")
             job = next((j for j in self.demaster_jobs() if j["job"] == name), None)
@@ -595,6 +605,8 @@ class Changes:
                 api._need()
                 if api._busy():
                     raise Bad("something else is going; wait for it to end")
+                if api.unsettled():
+                    raise Bad(api.unsettled() + "; try again in a moment")
                 if self.closed() is not True:
                     raise Bad("MO2 must be closed while ModTrap puts the plugins back in the load order. Close MO2, then go on.")
                 work = self._jobs_dir() / name
@@ -607,6 +619,8 @@ class Changes:
             api._need()
             if api._busy():
                 raise Bad("something else is going; wait for it to end")
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
             if self.closed() is not True:
                 raise Bad("MO2 must be closed while ModTrap puts the mod list back. Close MO2, then go on.")
             work = self._jobs_dir() / name

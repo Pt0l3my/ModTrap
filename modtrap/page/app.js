@@ -138,8 +138,36 @@ function el(tag, attrs, ...kids) {
     else e[k] = v;
   }
   for (const k of kids) if (k != null) e.append(k);
+  if (tag === "button" && attrs && typeof attrs.text === "string" && GATED.test(attrs.text)) e.classList.add("gated");
   return e;
 }
+
+// ModTrap's own reading and scanning (WHY§92). While any of it goes, nothing that changes the modlist or starts a
+// program can be begun: the buttons that would are greyed and do nothing, and the header says what ModTrap is at.
+// The server refuses the same starts; the one go waits and takes its step again.
+const GATED = /^(Dry run through xEdit|Start the dry run|Demaster Selected|Demaster what is left|Go ahead|Put them in place|Put them back in place|Revert|Take it out again|Start it through MO2|Start the tools one after another|Run the probe|Remove the test mods|Add it for me|Retire ModTrap|Check through xEdit|Check again through xEdit)/;
+function settled() { return state.status === "ready" && !(state.working || []).length; }
+function atWork() {
+  if (state.status === "reading") return "reading the modlist";
+  return (state.working || []).map((w) => w.text).join("; ");
+}
+function showWork() {
+  const open = state.status === "ready" || state.status === "reading";
+  const busy = open && !settled();
+  document.body.classList.toggle("unsettled", busy);
+  const chip = $("s-work");
+  if (!chip) return;
+  chip.hidden = !open;
+  chip.className = "chip " + (busy ? "work" : "good");
+  chip.replaceChildren(...(busy ? [el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + atWork() + "…"] : ["ModTrap is ready"]));
+  chip.title = busy ? "Until this has finished, the buttons that change the modlist or start a program are greyed." : "ModTrap has finished reading and scanning: everything can be started.";
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target && ev.target.closest ? ev.target.closest("button.gated") : null;
+  if (!b || !document.body.classList.contains("unsettled")) return;
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  toast("Not yet: ModTrap is still " + atWork() + ". This opens again by itself as soon as that has finished.");
+}, true);
 const plural = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
 const fold = (s) => s.toLowerCase();
 
@@ -510,7 +538,7 @@ function updateDemasterButton() {
 // the plan and one question, then everything ModTrap can do by itself.
 // A step of the one go started from the Process tab stays there: that tab shows it, with its buttons (WHY§71).
 function goTab(name) { if (state.tab !== "process") showTab(name); }
-const BEING_READ = /being read/;
+const BEING_READ = /being read|still at work/;
 
 async function demasterGo() {
   if (!state.changes || !state.picked.size) { showTab("selection"); return; }
@@ -533,7 +561,7 @@ async function demasterGo() {
   }
   // ModTrap reads the modlist again after a probe, a Revert or a Rescan. Until it has, nothing can start: the one
   // go waits for it instead of giving up (WHY§71).
-  if (state.status !== "ready") { waitForModlist(); return; }
+  if (!settled()) { waitForModlist(); return; }
   const job = state.job;
   const dryDone = job && job.state === "done" && !job.past && !job.stale && sameMods(job.plan.trapped_mods, state.picked);
   goTab("selection");
@@ -563,7 +591,7 @@ async function demasterGo() {
 // (WHY§71, WHY§77): the modlist being read, or another modlist's MO2 being open.
 const OTHER_MO2 = /Another Mod Organizer is open/;
 const WAITS = {
-  modlist: { over: () => state.status === "ready", text: "ModTrap is reading the modlist again; the demaster goes on by itself when it has." },
+  modlist: { over: () => settled(), text: "ModTrap is still reading or scanning the modlist; the demaster goes on by itself when it has finished." },
   mo2: { over: () => !(state.mo2 && state.mo2.other), text: "Another Mod Organizer is open, for another modlist. MO2 hands every command to the one that is already open, so ModTrap's would go to the wrong modlist. Close that MO2: the demaster goes on by itself, from the step it stopped at." },
 };
 function waitThen(kind, retry, quiet) {
@@ -608,8 +636,10 @@ function demasterChain() {
   }
   if (state.dmChain === "install" && d) {
     if (d.state === "verified") {
+      if (!settled()) return;                              // ModTrap is still reading or scanning: the next round
       state.dmChain = "";
       demasterCall("/api/demaster/install", { close_mo2: true }, "In place. ModTrap is reading the modlist again.", true).then(() => {
+        if (BEING_READ.test(state.dmError || "")) { state.dmError = ""; state.dmChain = "install"; renderDemaster(true); return; }
         const set = state.settings || {}, placed = state.demaster && state.demaster.state === "installed";
         if (placed && set.auto_tools) { state.dmChain = "tools"; state.toolsTried = {}; state.toolsNow = ""; toast("In place. The tools that are to run again are started one after another."); }
         else if (placed && set.open_mo2_after) call("/api/mo2/open", {}).catch((e) => toast(e.message));
@@ -623,6 +653,7 @@ async function planGoAhead() {
   try { await api("/api/demaster/start", {}); }
   catch (e) {
     if (OTHER_MO2.test(e.message)) { waitThen("mo2", planGoAhead); return; }     // the plan stays; the step is taken again
+    if (BEING_READ.test(e.message)) { waitThen("modlist", planGoAhead); return; }
     state.dmError = e.message; state.dmPlan = null; await tick(); renderDemaster(true); return;
   }
   state.dmChain = "install"; state.dmError = ""; state.dmPlan = null;
@@ -666,7 +697,7 @@ function toolsInARow() {
       return;
     }
   }
-  if (!d || state.stepsLooking || state.stepsKey === "") return;                 // the steps are being worked out again
+  if (!d || state.stepsLooking || state.stepsKey === "" || !settled()) return;   // the steps are being worked out again
   const next = d.steps.find((st) => st.key.startsWith("tool:") && st.state === "to do" && !st.manual &&
     !state.toolsTried[st.key] && (st.items || []).some((i) => i.tool));
   if (!next) {
@@ -681,6 +712,7 @@ function toolsInARow() {
     .catch((e) => {
       state.toolsNow = ""; delete state.toolsTried[next.key];
       if (OTHER_MO2.test(e.message)) waitThen("mo2", () => { state.dmChain = "tools"; });
+      else if (BEING_READ.test(e.message)) { /* ModTrap is still at work: the row takes this tool up again in the next round */ }
       else { state.dmChain = ""; toast(e.message); }
     }).finally(() => { state.toolsBusy = false; });
 }
@@ -2590,6 +2622,8 @@ async function tick() {
     quit.addEventListener("click", quitModTrap);
     up.replaceChildren("This is ModTrap " + s.version + ", still running, but the files in its folder have changed since it was started" + (onDisk && onDisk !== s.version ? ": they are version " + onDisk + " now" : "") + ". Quit it and start it again: until then the program in memory and the scripts on disk are of different versions, and ModTrap starts nothing.  ", quit);
   }
+  state.working = s.working || [];
+  showWork();
   state.demaster = s.demaster || null;
   state.probe = s.probe || null;
   ticksOfThisDemaster();

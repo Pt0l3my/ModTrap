@@ -562,6 +562,10 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
 7. A demaster that is in place stays shown as done until Revert, or until a new one starts. A dry run of the modlist
    as it was before it was read again is not shown as this demaster's.
 
+**ModTrap's own work first (MT30, WHY§92).** The header says whether ModTrap is still reading or scanning, and what.
+Until it has finished, nothing that changes the modlist or starts a program is begun: those buttons are greyed, the
+starts are refused, and the one go holds its place and takes its step again by itself.
+
 ## 19. Settings, sections, and another modlist's MO2
 
 1. **Settings** (a tab of their own; kept in ModTrap's folder for every session; WHY§77). Each is a switch:

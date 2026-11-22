@@ -623,6 +623,38 @@ class DemasterThroughThePage(unittest.TestCase):
         self.ready()
         self.assertEqual(ch.tools_run(), {})                              # reverted: every tool is to run again next time
 
+    def test_nothing_is_started_while_modtrap_is_still_reading_or_scanning(self) -> None:
+        """WHY§92: ModTrap's own scans are told in its state, and while one goes every start is refused in words the
+        one go waits on. When it has finished, the same start goes through."""
+        import threading
+        from modtrap import steps
+        hold, real = threading.Event(), steps.look_deeper
+
+        def slow(*args, **kw):
+            hold.wait(10)
+            return real(*args, **kw)
+
+        steps.look_deeper = slow
+        try:
+            self.assertEqual(self.api.state()["working"], [])
+            self.api.post("/api/steps", {"mods": ["Bramble"]})                       # the page asks for the steps: a scan begins
+            self.assertEqual([w["key"] for w in self.api.state()["working"]], ["steps"])
+            self.assertIn("still at work", self.api.unsettled())
+            for path, body in (("/api/dryrun/start", {"mods": ["Bramble"]}), ("/api/demaster/start", {}),
+                               ("/api/tool/start", {"title": "xEdit"}), ("/api/probe/start", {})):
+                with self.assertRaises(Bad) as refused:
+                    self.api.post(path, body)
+                self.assertIn("still at work", str(refused.exception), path)
+        finally:
+            hold.set()
+            steps.look_deeper = real
+        for _ in range(300):
+            if not self.api.state()["working"]:
+                break
+            time.sleep(0.02)
+        self.assertEqual((self.api.state()["working"], self.api.unsettled()), ([], ""))
+        self.dry_run()                                                              # and now it starts
+
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()
         self.tool = "touch"                       # a run that alters an original on disk

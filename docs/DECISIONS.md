@@ -23,7 +23,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
 - **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
   state facts: before the dry run, only that it comes first). MT27 (the patcher framework's library versions are checked and set
   right before it starts). MT28 (its patchers are built outside MO2 first when they are not built). MT29 (a tool's step is done
-  by ModTrap's record of its run, not by a tick).
+  by ModTrap's record of its run, not by a tick). MT30 (nothing is started while ModTrap is still reading or scanning).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -603,4 +603,16 @@ the tools again (WHY§91). A tick stays only where no such record can exist.
 files and counted: "I don't care, we only want our ModTrap to do its job flawlessly, what the user does outside the
 ModTrap is irrelevant and can't take responsibility." So it is not built: only a run ModTrap started counts, and what
 is done outside ModTrap is neither looked for nor answered for.
+
+## MT30
+
+**Nothing is started while ModTrap is still reading or scanning** · *2026-11-22 · Decided by the owner*
+
+**Owner's words.** "can you also make ModTrap monitor its own loading, checking, scanning processes so the tools and
+features are greyed until those are done? I noticed that after launch I can launch a demaster even though scans are
+still ongoing."
+
+**Decision.** ModTrap tells what reading and scanning of its own is going; until all of it has finished, what would
+change the modlist or start a program is greyed on the page and refused by the program, and the one go waits and
+goes on by itself (WHY§92, DESIGN§18).
 

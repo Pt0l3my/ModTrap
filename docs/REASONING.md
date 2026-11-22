@@ -114,6 +114,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 89 | 2026-11-22 | Before the patcher framework starts, library versions its own log proves unfit are set to the pair the program was built with; nothing is set without that proof | DECIDED | #tools #safety #settings |
 | 90 | 2026-11-22 | The patcher framework's patchers are built outside MO2 before it is started through MO2, when its log shows them unbuilt; what makes that safe | DECIDED | #tools #safety #mo2 |
 | 91 | 2026-11-22 | A tool's step is done by ModTrap's own record of the tool's run since the demaster in place, not by a tick; ticks stay only where no record can exist | DECIDED | #steps #tools #page |
+| 92 | 2026-11-22 | ModTrap tells its own reading and scanning; while any of it goes, nothing is started: greyed on the page, refused by the server, waited for by the one go | DECIDED | #page #process #safety |
 
 ## Entries
 
@@ -2214,3 +2215,29 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - **Later (2026-11-22).** The owner on runs made outside ModTrap: not ModTrap's business (MT29's note). The
   "not built" above stays not built, by decision.
 
+### 92. ModTrap tells its own reading and scanning; while any of it goes, nothing is started: greyed on the page, refused by the server, waited for by the one go
+
+`2026-11-22` · DECIDED · `#page #process #safety` · refs: MT30, WHY§71, DESIGN§18, DESIGN§4
+
+- The owner: "can you also make ModTrap monitor its own loading, checking, scanning processes so the tools and
+  features are greyed until those are done? I noticed that after launch I can launch a demaster even though scans
+  are still ongoing."
+- FACT. Only the reading of the modlist held a start back. ModTrap's other work of its own went on unseen: the
+  look into the ticked mods' folders and the tools' plugins for the steps (up to a minute or two on a large
+  list), the reading of what the tools made, the reading of mods to add, the unpacking of a dropped archive.
+  A demaster or a tool could be started in the middle of it.
+- Why it matters beyond tidiness: those scans hold plugin files open for reading; a tool that makes such a
+  plugin anew, or a Revert that puts one back, can be refused the file by Windows while it is held.
+- DECIDED. The server tells what it is at (`working` in its state, each with words). While the list is not empty,
+  or the modlist is being read: every start that changes the modlist or starts a program is refused, in words
+  the one go waits on ("still at work"; "being read" as before): the dry run, the demaster's start and its
+  putting in place, a tool, the probe, the record check, an add and its taking out, Revert and its finishing,
+  retiring a copy by hand. ModTrap's own retiring after a tool's run is not held back.
+- On the page: a chip in the header says "ModTrap is …" with what, or "ModTrap is ready"; the buttons that
+  would start any of the above are greyed and do nothing but say why; they open again by themselves. The one go
+  holds its place at each of its steps (before the dry run, at "Go ahead", before putting in place, before each
+  tool) and takes the step again when ModTrap is ready.
+- Which buttons: told by what they say, where the page makes its buttons, so that one made later is covered too.
+- Checked: a test (a scan held open: told in the state, four kinds of start refused in those words, the same
+  start accepted once it has finished); in a browser, with a scan slowed to five seconds: the chip, the greyed
+  button, a press meanwhile doing nothing, and the whole one go through the tool with scans in between.
