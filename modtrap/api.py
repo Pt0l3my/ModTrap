@@ -1259,6 +1259,18 @@ class Api:
             })
         return out
 
+    def tools_made(self) -> dict:
+        """What the modlist's tools made (WHY§74): each tool-made plugin with its records by kind, and for the
+        patcher framework the patchers behind it. Read once for each reading of the modlist."""
+        from . import toolmade
+        m = self._need()
+        hit = self._lists.get("tools_made")
+        if hit and hit[0] is m:
+            return hit[1]
+        out = toolmade.made(m)
+        self._lists["tools_made"] = (m, out)
+        return out
+
     def _tools(self, inst: instance.Instance) -> list[dict]:
         """The executables set up in MO2 (DESIGN§13): title, program file, the mod its new files go to, and
         which one ModTrap would start as xEdit."""
@@ -1352,6 +1364,8 @@ class Api:
             return 200, self.mod(query.get("name", ""))
         if path == "/api/job":
             return 200, self.job_state()
+        if path == "/api/tools/made":
+            return 200, self.tools_made()
         if path == "/api/history":
             return 200, self.history_events()
         if path == "/api/log":

@@ -20,7 +20,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   active session per modlist).
 - **2026-11-21.** MT21 (adding mods safely: analysis, steps, and carrying out what ModTrap can; the how is
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
-- **Open.** None. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
+- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
 ## MT1
@@ -467,3 +467,27 @@ an update unpacked while ModTrap ran, so that a new script ran under the old pro
 - One ModTrap at a time: a new start makes one that is still running save its session and close, and takes its
   place. One in the middle of a job is left alone.
 - ModTrap does not fetch updates itself (MT11 leaves an updater for later).
+
+## MT23
+
+**A tool check through xEdit** · *Open*
+
+**Question.** Should ModTrap have a separate, read-only run of xEdit that loads the whole load order and compares,
+record by record and by meaning, each tool-made plugin's copy with the mod's version and with the version next in
+line? It would say for each record a tool holds: the same as the mod's (run the tool again), the same as the next
+in line's (nothing of the mod in it), or neither (the tool's own value). Today ModTrap compares bytes, which holds
+for tools built on xEdit and not for a patcher that writes records its own way (TL01§13, WHY§73).
+
+**Options.**
+
+- (a) **A check of its own**, started from the tool's step ("Check this tool through xEdit"). xEdit loads every
+  active plugin: several minutes and much memory on a list of thousands; nothing is changed.
+- (b) **Part of every dry run.** Always exact, and every dry run takes those minutes.
+- (c) **Not at all.** A patcher that holds a record the mod has a stake in is simply run again, to be sure: its
+  run is short.
+
+**Recommendation.** (a). It costs nothing unless asked for, and it is the only way short of running the tool to
+tell a patcher's copy made from the mod from one that only looks different. For a tool as quick as the patcher
+framework, (c) is what the owner would mostly do anyway; (a) earns its keep for tools whose run takes long.
+
+**Until decided.** (c) is what ModTrap does.

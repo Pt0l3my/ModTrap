@@ -8,12 +8,14 @@ folders, and looks into small settings files of other mods for a ticked plugin's
 
 from __future__ import annotations
 
+from collections import Counter
+
 import os
 import re
 import time
 from pathlib import Path
 
-from . import dryrun, logbook, model, plugin, tools
+from . import dryrun, logbook, model, plugin, toolmade, tools
 from .instance import GAME, OVERWRITE, Instance, Mod, fold
 
 log = logbook.get("steps")
@@ -515,6 +517,25 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         if not o.get("judged", True):
             e.setdefault("wait", []).append(o["plugin"])
             continue
+        about = []                                      # what this plugin is, before what it holds of the mod
+        mb = o.get("made_by")
+        if mb:
+            about.append("Made by the patchers of the group “%s”, in order: %s (from %s's own settings file)" % (
+                mb["group"], ", ".join(p["name"] + ("" if p["on"] else " (switched off)") for p in mb["patchers"]) or "none listed",
+                o["tool"]))
+        if o.get("kinds"):
+            about.append("Its %d record(s) by kind: %s%s" % (o["records"], " · ".join("%s %d" % (k, n) for k, n in o["kinds"]),
+                                                             " · and %d more kind(s)" % o["kinds_more"] if o.get("kinds_more") else ""))
+            about.append("The mod has a stake in records of kinds this plugin works on: %s" % ", ".join(
+                "%s %d (this plugin holds %d of them)" % (k, n, h) for k, n, h in o["stake_kinds"])
+                if o.get("stake_kinds") else "The mod has no stake in any kind of record this plugin holds.")
+        if o.get("left_out"):
+            # The framework was told to keep the mod's plugin out of this output: nothing of the mod went into it.
+            e["clear"].append("%s was made with %s left out: the group “%s” has it in its own list of plugins to leave "
+                              "out" % (o["plugin"], ", ".join(o["left_out"]), mb["group"] if mb else ""))
+            e["details"].append({"summary": "%s (%s): the mod's plugin was left out when it was made" % (o["plugin"], o["how"]),
+                                 "lines": about})
+            continue
         lines = ["%s %s of %s · %s has a stake in %s · %s" % (
             d["kind"], d["id"], d["owner"], ", ".join(d["by"]), ", ".join(d["changed"][:8]),
             ("this plugin holds the same " + ", ".join(d["carried"][:8])) if d["carried"]
@@ -525,6 +546,15 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         elif o["cut"]:
             e["run"].append("%s could not be read to the end in the time ModTrap allows itself, so ModTrap cannot "
                             "say that nothing of the mod is in it" % o["plugin"])
+        elif o["shared"] and known.get(o["tool"], {}).get("kind") == "patcher" \
+                and known.get(o["tool"], {}).get("writes") == "own":
+            # A patcher works its values out from the versions that win, and this one writes records in a form of
+            # its own: neither "the same bytes" nor "other bytes" says where a value came from (WHY§73).
+            e["run"].append("%s holds %d record(s) in which the mod has a stake. A patcher builds its copy of a "
+                            "record from the version that wins, and %s writes records in its own form, so reading "
+                            "them cannot show whether a value in them comes from the mod. ModTrap cannot rule it "
+                            "out" % (o["plugin"], o["shared"], o["tool"]))
+            e["unsure"] = e.get("unsure", 0) + 1
         elif o["shared"]:
             e["clear"].append("%s holds %d record(s) in which the mod has a stake, but none of the mod's values in "
                               "them" % (o["plugin"], o["shared"]))
@@ -532,8 +562,14 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             e["clear"].append("%s holds no record in which the mod has a stake" % o["plugin"])
         e["details"].append({"summary": "%s (%s): %d record(s) in which the mod has a stake, %d with the mod's "
                                         "value in them" % (o["plugin"], o["how"], o["shared"], o["carried"]),
-            "lines": lines or ["Of its %d record(s), none is one in which the mod or its patches have a stake."
-                               % o["records"]]})
+            "lines": about + (lines or ["Of its %d record(s), none is one in which the mod or its patches have a stake."
+                                        % o["records"]])})
+    for x in deep.get("tool_settings", []):                            # (b2) a patcher's own settings name the plugin
+        e = entry(x["tool"])
+        e["run"].append("a settings file of one of its patchers names the mod's plugin (%s): that patcher was set up "
+                        "with the mod in mind" % x["file"])
+        e["details"].append({"summary": "Settings of %s's patchers that name the mod's plugin" % x["tool"],
+                             "lines": ["%s names %s" % (x["file"], ", ".join(x["names"]))]})
     for o in deep.get("output_files", []):                             # (c) files in the tool's output mod
         e = entry(o["tool"])
         if o["shared"]:
@@ -567,8 +603,12 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         if e["run"]:
             also = (" What speaks against it: " + "; ".join(e["clear"]) + ".") if e["clear"] else ""
             when = known.get(tool, {}).get("reads_if", "")
-            step("tool:" + tool, "both" if names else "you", "Run %s again" % tool,
+            # Proof, or only "cannot be ruled out"? The title says which (WHY§73).
+            to_be_sure = bool(e.get("unsure")) and e["unsure"] == len(e["run"])
+            step("tool:" + tool, "both" if names else "you", "Run %s again%s" % (tool, ", to be sure" if to_be_sure else ""),
                  (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also + (
+                     " A run of a patcher is short and changes nothing but its own output: when in doubt, run it."
+                     if to_be_sure else "") + (
                      " A new run matters " + when + "; the evidence below shows which records these are."
                      if when else ""),
                  "to do", [{"tool": n} for n in names] + evidence,
@@ -593,7 +633,9 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         step("tools-clear", "ModTrap", "Tools that need no new run for this mod",
              "ModTrap looked at what each of these tools made and found nothing of the mod in it: no file the tool "
              "feeds on, no record with a value only the mod supplies, no file made from the mod's. Each tool has "
-             "one verdict: it is either here or among the steps above, never both." + stake_note, "not needed", clear_items)
+             "one verdict: it is either here or among the steps above, never both. This is evidence, not proof: "
+             "what a tool would make without the mod is only known for certain by running it; a tool that left "
+             "something out because of the mod leaves no trace to find." + stake_note, "not needed", clear_items)
 
     # 7. Settings files of other mods that name a ticked plugin.
     named = deep.get("mentions", [])
@@ -664,6 +706,9 @@ def look_deeper(m: model.Model, mod_names: list[str], touched: dict | None = Non
            "outputs": outputs, "output_files": output_files}
     if "animations" in kinds:
         out["animation"] = animation_feed(inst, paths_all, {fold(x.name) for x in mods})
+    named_by = toolmade.named_in_settings(toolmade.tool_folders(inst, "Synthesis"), trapped) if trapped else []
+    if named_by:
+        out["tool_settings"] = [{"tool": "Synthesis", **x} for x in named_by]
     if told is not None and isinstance(counts, dict):
         out["stakes"] = {"changed": sum(int(v) for v in counts.values()), "stake": sum(len(v) for v in told.values()),
                          "plugins": len(told)}
@@ -765,8 +810,11 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
                 entry["fields"] += [(t, b, src) for t, b in changed]
                 entry["named"] |= wanted
 
-        # 2. What each tool-made plugin carries of that.
+        # 2. What each tool-made plugin carries of that. With it: what kinds of record the plugin holds at all, and
+        # for the patcher framework which patchers made it and which plugins it was told to leave out (WHY§74).
         outputs = []
+        stake_kinds = Counter(ch["kind"] for ch in changes.values())
+        groups = toolmade.synthesis_groups(toolmade.tool_folders(inst, "Synthesis"))
         for f in m.order:
             r = m.plugins[f]
             if not r.active or r.source is None or r.path is None or fold(r.name) in tf:
@@ -780,10 +828,20 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
             row = {"plugin": r.name, "mod": r.source, "tool": ev[0].tool, "strong": ev[0].strong, "how": ev[0].how,
                    "records": 0, "shared": 0, "carried": 0, "cut": out is None or out.cut or unsure, "details": [],
                    "judged": judged}
+            g = toolmade.group_of(r.name, groups) if ev[0].tool == "Synthesis" else None
+            if g is not None:
+                row["made_by"] = {"group": g["group"], "patchers": g["patchers"]}
+                row["left_out"] = sorted(x for x in g["left_out"] if fold(x) in tf)
             if not judged:
                 outputs.append(row)
                 continue
             if out is not None:
+                kinds = Counter(v[3] for v in out.index.values())
+                row["kinds"] = [[k, n] for k, n in kinds.most_common(14)]
+                row["kinds_more"] = max(0, len(kinds) - 14)
+                # the mod's stakes among the kinds this plugin works on, and how many of those it holds
+                held_kinds = Counter(changes[key]["kind"] for key in out.index.keys() & changes.keys())
+                row["stake_kinds"] = [[k, n, held_kinds.get(k, 0)] for k, n in stake_kinds.most_common() if k in kinds]
                 row["records"] = len(out.index)
                 for key in out.index.keys() & changes.keys():
                     ch = changes[key]

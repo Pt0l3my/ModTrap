@@ -95,6 +95,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 70 | 2026-11-21 | A Process tab: the demaster as linked boxes with their tasks, coloured as they are carried out, told by the jobs themselves | DECIDED | #page #process #steps |
 | 71 | 2026-11-21 | The one go stopped where it should have waited (the modlist was being read after the probe); and the owner's buttons go into the process boxes | DECIDED | #page #process #steps |
 | 72 | 2026-11-21 | The demaster went through on 0.3.4; xEdit's "Access violation" box came with ModTrap's early press of OK; the patcher is cleared by stakes; the behaviour tool wants the graph file with the list | FACT | #xedit #tools #steps #process |
+| 73 | 2026-11-21 | "Are you 100% sure?" No: the patcher was cleared by comparing bytes it writes in its own form. A patcher is now cleared only where it can be ruled out | DECIDED | #tools #steps #process |
+| 74 | 2026-11-22 | What each tool made, from its own files: the patchers behind each output, what was left out, and every tool-made plugin's records by kind | DECIDED | #tools #steps #page |
 
 ## Entries
 
@@ -1659,3 +1661,52 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   findings shown.
 - Not checked: the new press on the owner's PC; whether the search of the behaviour output finds names in a
   real output that has them (it has found none so far, in an output that may well have none).
+
+### 73. "Are you 100% sure?" No: the patcher was cleared by comparing bytes it writes in its own form. A patcher is now cleared only where it can be ruled out
+
+`2026-11-21` · DECIDED · `#tools #steps #process` · refs: MT17, DESIGN§13, DESIGN§14, XE01§19, TL01§11, TL01§13, WHY§69, WHY§72
+
+- The owner, on version 0.3.5: "again, still no synthesis to run post demaster, are you 100% sure that's not
+  needed?"
+- The answer is no, and WHY§72 said more than the evidence held. TL01§11 already named the limit ("a tool whose
+  plugin writes it otherwise would be missed"); I cleared the patcher across that limit.
+- FACT: one of the patcher's plugins holds two records in which the mod has a stake. ModTrap found "none of the
+  mod's values" there by bytes. The patcher writes records through a library of its own, in its own form, and
+  works values out from the winning version (TL01§13). Neither fact lets other bytes mean "not from the mod".
+- DECIDED: three kinds of finding, said as such. Proof: the mod's value is in the tool's plugin: run again.
+  Cannot be ruled out: a patcher with its own writer holds a record the mod has a stake in: "run again, to be
+  sure", with the reason; a patcher's run is short and changes only its own output. Cleared: no record with a
+  stake, or, for a tool built on xEdit, such records without the mod's values.
+- DECIDED: the step that lists cleared tools says that it is evidence and not proof, and why: only a run of the
+  tool shows for certain what it would make without the mod.
+- For the owner's mod this gives: patcher, to be sure; behaviour tool, by its list and graph file. That is what
+  the modlist's guide says too. The distant-view generator stays cleared: it is built on xEdit, and its copies
+  hold none of the mod's values.
+- REJECTED: asking for every tool whenever any doubt is left. For a generator that takes hours that would make
+  the steps useless; its evidence is of the kind that can be compared.
+- Not built: xEdit comparing the tools' copies by meaning (TL01§13), which could clear a patcher with evidence.
+
+### 74. What each tool made, from its own files: the patchers behind each output, what was left out, and every tool-made plugin's records by kind
+
+`2026-11-22` · DECIDED · `#tools #steps #page` · refs: MT17, MT23, DESIGN§13, DESIGN§14, TL01§13, TL01§14, WHY§73
+
+- The owner: "but synthesis is not just about terrain, it also patches other things. and other patch files
+  result from it. is there a better way we can implement to check what exactly synthesis and each tool patches
+  for the modlist?"
+- FACT: until now ModTrap knew a tool's plugin only as "made by that tool", and looked in it for the mod's
+  values. It did not know what the plugin is for. The framework's three outputs were three names.
+- FACT (TL01§14): the framework writes down, beside its program, which patchers make each output, in order,
+  which are on, and which plugins an output leaves out. And any plugin says what it works on by the kinds of
+  record it holds, which ModTrap's own reader counts from headers.
+- DECIDED: both are read. The Tools tab has a table of everything the modlist's tools made: plugin, tool, the
+  patchers behind it, records by kind. A tool's step says for each of its plugins what it is made of, in how
+  many records of its kinds the mod has a stake, and how many of those it holds.
+- DECIDED: two new findings count. A plugin made with the mod's plugin left out is cleared, with the list as
+  proof. A patcher's own settings that name the mod's plugin are a reason to run again.
+- The verdict of WHY§73 stands: a patcher's plugin that holds a record in which the mod has a stake cannot be
+  ruled out. This entry makes the reason visible; it does not make it certain.
+- OPEN (MT23): the exact answer for records needs xEdit to compare, by meaning, each tool's copy with the mod's
+  version and with the next in line, with the whole load order loaded: minutes on a large list. Asked of the
+  owner as a separate check.
+- Checked: tests on invented plugins and an invented settings file; the table in a browser. Not checked: the
+  owner's real settings file.

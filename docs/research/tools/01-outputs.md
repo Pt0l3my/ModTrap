@@ -171,3 +171,49 @@ Read in Pandora Behaviour Engine+'s source (GPL-3.0; facts only, nothing copied)
   folder over otherwise. ModTrap now looks for that file, in the mod and in every enabled mod, and counts a
   list as read by this tool only where it is there. For the older engines, which make that file themselves,
   the list alone counts (LIKELY, as above).
+
+## 13. What reading a tool's plugin can and cannot show (2026-11-21)
+
+- **FACT.** ModTrap compares a field in a tool's plugin with the mod's by bytes (§10, §11). That holds only where
+  both were written the same way. A tool built on xEdit writes a record as xEdit does. A tool with a writer of
+  its own (the patcher framework and its library, the Bashed Patch's builder) reads a record into its own model
+  and writes it out in its own form: the same value can come out as other bytes.
+- **FACT.** A patcher builds its copy of a record from the version that wins in the load order, then works new
+  values into it. A value in its copy can be the winner's, or worked out from the winner's, or the patcher's own.
+- **So:** for a patcher with its own writer, "other bytes than the mod's" does not show "another value than the
+  mod's", and even another value may have been worked out from the mod's. If its plugin holds a record in which
+  the mod has a stake (XE01§19), ModTrap cannot rule out that the copy was built from the mod's version.
+- **METHOD.** Such a patcher is told to run again, "to be sure", with that reason; it is cleared only where its
+  plugins hold no record in which the mod has a stake. Proof (the mod's very bytes in its plugin) is still said as
+  proof. A tool built on xEdit is judged by bytes as before. `tools.json` says for each tool how it writes.
+- **Limit, for every tool.** What a tool would make without the mod is known for certain only by running it. A
+  tool that left a record alone, or left something out, because of the mod leaves no trace in its output.
+- **Could be built later.** Letting xEdit compare, in the dry run, each tool plugin's copy with the mod's version
+  and with the next in line, by meaning: the same as the mod's, the same as the next in line's, or neither. It
+  would clear a patcher whose copies all match the next in line.
+
+## 14. What a tool's own files say it made: the patcher framework's settings, and a plugin's records by kind (2026-11-22)
+
+Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa` of 2026-08-13.
+
+- **FACT.** Its settings are in `PipelineSettings.json` in the folder it runs in, beside its program
+  (`Synthesis.Bethesda.GUI/Settings/PipelineSettingsPathProvider.cs:17`).
+- **FACT.** The file holds profiles (`Synthesis.Bethesda.Execution/Settings/V2/PipelineSettings.cs:9`); a profile
+  holds groups (`V2/SynthesisProfile.cs:16`); a group has a name, whether it is on, its patchers in order, and a
+  list of plugins left out for it (`V2/PatcherGroupSettings.cs:7-11`). Each patcher has a nickname and whether
+  it is on (`Settings/PatcherSettings.cs:10-11`), and where it comes from (`GithubPatcherSettings.cs:22`). The
+  older layout had the patchers straight under the profile (`Settings/V1/SynthesisProfile.cs:12`).
+- **FACT.** A group is one output plugin, named after the group (the tests build it as the group's name with
+  `.esp`: `Synthesis.Bethesda.IntegrationTests/Pipeline/SinglePatcherPipelineTest.cs:60`).
+- **FACT.** Patchers keep their own settings under `Data` in the same folder
+  (`Synthesis.Bethesda.Execution/Pathing/ExtraDataPathProvider.cs:21`).
+- **METHOD.** ModTrap reads that file to say, for each plugin the framework made, which patchers made it and
+  whether each is on. A plugin made with the mod's plugin on the group's left-out list holds nothing of the mod:
+  that output is cleared, with the list as the reason. The patchers' own settings are searched for the mod's
+  plugin name: a patcher set up with the mod in mind is a reason to run again.
+- **METHOD.** For every tool-made plugin, ModTrap counts its records by kind (record headers only). The evidence
+  then says what the plugin works on, in how many records of those kinds the mod has a stake, and how many of
+  those the plugin holds. A plugin that holds only kinds in which the mod has no stake is cleared on firmer
+  ground than by values.
+- **Limit.** Kinds and names say what a patcher works on, not what it does to it. Whether a patcher would write
+  something else without the mod is still known for certain only by running it (§13).

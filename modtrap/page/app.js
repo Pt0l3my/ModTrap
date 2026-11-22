@@ -205,6 +205,7 @@ function renderSteps() {
 }
 
 function renderTools(s) {
+  renderToolsMade();
   const box = $("tools-list");
   const rows = s.tools.map((t) => el("tr", {},
     el("td", {}, t.title, t.xedit ? el("span", { class: "tag good", text: "ModTrap starts this one for a dry run" }) : null),
@@ -215,6 +216,50 @@ function renderTools(s) {
     el("p", { class: "dim", text: "These are the executables in MO2's own list. ModTrap only ever starts xEdit. “Output goes to” is the mod MO2 sends a tool's new files to; a plugin found there was made by that tool." }),
     el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "Name in MO2" }), el("th", { text: "Program" }), el("th", { text: "Output goes to" }))),
       el("tbody", {}, ...rows))));
+}
+
+// What the modlist's tools made (WHY§74): each tool-made plugin, who made it, and its records by kind.
+const KIND_WORDS = { NPC_: "characters", CELL: "cells", WRLD: "worldspaces", LAND: "landscape", REFR: "placed objects", ACHR: "placed characters",
+  ARMO: "armour", ARMA: "armour parts", WEAP: "weapons", AMMO: "ammunition", ALCH: "potions and food", INGR: "ingredients", BOOK: "books", MISC: "items",
+  LVLI: "levelled items", LVLN: "levelled characters", LVSP: "levelled spells", SPEL: "spells", MGEF: "magic effects", ENCH: "enchantments", PERK: "perks",
+  RACE: "races", FACT: "factions", QUST: "quests", DIAL: "dialogue topics", INFO: "dialogue lines", STAT: "static objects", TREE: "trees", FLOR: "plants",
+  FURN: "furniture", CONT: "containers", DOOR: "doors", LIGH: "lights", ACTI: "activators", MSTT: "moving statics", GRAS: "grass", LTEX: "land textures",
+  TXST: "texture sets", WATR: "water", WTHR: "weather", CLMT: "climates", REGN: "regions", LCTN: "locations", NAVM: "navmeshes", NAVI: "navmesh info",
+  OTFT: "outfits", KYWD: "keywords", FLST: "lists", GLOB: "globals", COBJ: "recipes", SOUN: "sounds", SNDR: "sound descriptors", IDLE: "idle animations",
+  HDPT: "head parts", SCEN: "scenes", PACK: "packages", IMGS: "image spaces", EXPL: "explosions", PROJ: "projectiles", HAZD: "hazards", SLGM: "soul gems",
+  KEYM: "keys", SCRL: "scrolls", SHOU: "shouts", WOOP: "words of power", EFSH: "effect shaders", MATO: "material objects", MATT: "material types" };
+const kindText = (k, n) => (KIND_WORDS[k] ? KIND_WORDS[k] + " (" + k + ")" : k) + " " + n.toLocaleString("en-GB");
+
+function renderToolsMade() {
+  const box = $("tools-made");
+  if (!box) return;
+  const d = state.toolsMade, busy = state.toolsMadeBusy;
+  const look = el("button", { type: "button", text: busy ? "Reading…" : d ? "Read again" : "Look at what the tools made", disabled: !!busy });
+  look.addEventListener("click", async () => {
+    state.toolsMadeBusy = true; renderToolsMade();
+    try { state.toolsMade = await api("/api/tools/made"); state.toolsMadeFor = state.loaded; } catch (e) { toast(e.message); }
+    state.toolsMadeBusy = false; renderToolsMade();
+  });
+  const kids = [el("div", { class: "card-head" }, el("h2", { text: "What the tools made for this modlist" }), look),
+    el("p", { class: "dim", text: "Every plugin in the load order that a tool made: which tool, how ModTrap knows, and what is in it, by kind of record. For Synthesis, the patchers behind each of its plugins are read from Synthesis's own settings file. ModTrap reads record headers only; it takes some seconds on a large list." })];
+  if (d) {
+    if (state.toolsMadeFor !== state.loaded) kids.push(el("p", { class: "would-needs", text: "The modlist has been read again since this was made: press “Read again”." }));
+    if (!d.plugins.length) kids.push(el("p", { class: "dim", text: "No plugin in this load order is known to be made by a tool." }));
+    else kids.push(el("table", { class: "plain made" }, el("thead", {}, el("tr", {}, el("th", { text: "Plugin" }), el("th", { text: "Tool" }), el("th", { text: "Made by" }), el("th", { text: "What is in it" }))),
+      el("tbody", {}, ...d.plugins.map((r) => {
+        const mb = r.made_by;
+        const by = mb ? el("td", {}, el("div", { class: "dim small", text: "group “" + mb.group + "”" + (mb.left_out ? " · " + plural(mb.left_out, "plugin") + " left out" : "") }),
+          ...(mb.patchers.length ? mb.patchers.map((p) => el("div", { class: p.on ? "" : "dim", text: p.name + (p.on ? "" : " (switched off)") })) : [el("div", { class: "dim", text: "no patcher listed" })]))
+          : el("td", { class: "dim", text: r.tool === "Synthesis" && !d.synthesis_settings ? "Synthesis's settings file was not found beside its program" : r.how });
+        const shown = r.kinds.slice(0, 10);
+        return el("tr", {}, el("td", {}, el("span", { class: "mono", text: r.plugin }), r.active ? null : el("span", { class: "tag", text: "not active" }),
+            el("div", { class: "dim small", text: "in “" + r.mod + "” · " + plural(r.masters, "master") })),
+          el("td", { text: r.tool }), by,
+          el("td", {}, el("div", { text: r.records.toLocaleString("en-GB") + " record" + (r.records === 1 ? "" : "s") + (r.cut ? " (not read to the end)" : "") }),
+            el("div", { class: "dim small", text: shown.map((k) => kindText(k[0], k[1])).join(" · ") + (r.kinds.length > shown.length ? " · and " + (r.kinds.length - shown.length) + " more kinds" : "") })));
+      }))));
+  }
+  box.replaceChildren(el("div", { class: "card" }, ...kids));
 }
 
 function renderState(s) {
