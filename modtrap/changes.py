@@ -45,6 +45,7 @@ class Changes:
         self.dm: demaster.Demaster | None = None        # the demaster in hand, if any
         self.dm_state = ""                              # working, verified, installed, failed
         self._hashes: dict[tuple, str] = {}             # (path, size, time) -> sha256, for the stale check
+        self._gap_memo: tuple = (None, [])              # what a reverted demaster's lists still lack, per state of the lists
         self.dm_message = ""
         self.dm_check: dict | None = None
         self._dm_thread: threading.Thread | None = None
@@ -163,7 +164,7 @@ class Changes:
         """Takes the jobs that no longer stand (reverted, or failed) off the lists. A job that is still in place
         stays: its Revert needs it. Nothing is deleted, and the history of changes is not touched."""
         gone = [j["job"] for j in self.jobs() if j["state"] != "added"] + \
-               [j["job"] for j in self.demaster_jobs() if j["state"] != "installed"]
+               [j["job"] for j in self.demaster_jobs() if j["state"] != "installed" and not j["unfinished"]]
         hidden = sorted(self._hidden() | set(gone))
         try:
             paths.write_atomic(self._jobs_dir() / "hidden.json", (json.dumps(hidden, indent=1) + "\n").encode("utf-8"))
@@ -373,8 +374,9 @@ class Changes:
             return []
         out = []
         hidden = self._hidden()
+        seen = False                 # has the newest demaster that was put in place been met yet
         for d in folders:
-            if d.name in hidden:
+            if seen and d.name in hidden:
                 continue
             try:
                 with open(d / "plan.json", "rb") as f:
@@ -383,10 +385,18 @@ class Changes:
                     done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
             except (OSError, ValueError):
                 continue
+            newest, seen = not seen, True
+            if d.name in hidden and not newest:
+                continue
             try:
                 reverted = bool(safe.Safe(d / "safe").reverted)
             except safe.Refused:
                 reverted = False
+            # Only the newest demaster is looked at: an older one's plugins are a later one's business. A Revert that
+            # left plugins out of their places stays on the list, cleared or not, until it is finished (WHY§83).
+            unfinished = self._unfinished(d, done) if reverted and newest else []
+            if d.name in hidden and not unfinished:
+                continue
             retired = [n for n in done.get("retired", []) if isinstance(n, str)]
             # ModTrap's copies that hide a plugin made anew (WHY§56), and for each whether the copy can go: the new
             # original must stand without the mod (WHY§80).
@@ -396,7 +406,8 @@ class Changes:
                         "mod_name": done.get("mod", ""), "plugins": done.get("plugins", []),
                         "disabled": done.get("disabled", []), "deactivated": done.get("deactivated", []),
                         "state": "reverted" if reverted else "installed", "retired": retired,
-                        "stale": [x["plugin"] for x in remade], "remade": remade})
+                        "stale": [x["plugin"] for x in remade], "remade": remade,
+                        "unfinished": unfinished})
         return out
 
     def _remade(self, job_dir: Path, plugins: list[str], trapped: list[str]) -> list[dict]:
@@ -541,6 +552,19 @@ class Changes:
         name = body.get("job")
         if not isinstance(name, str) or not re.fullmatch(r"demaster-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
             raise Bad("that is not one of this session's demasters")
+        if body.get("finish") is True:
+            with self._lock:
+                api._need()
+                if api._busy():
+                    raise Bad("something else is going; wait for it to end")
+                if self.closed() is not True:
+                    raise Bad("MO2 must be closed while ModTrap puts the plugins back in the load order. Close MO2, then go on.")
+                work = self._jobs_dir() / name
+                if not (work / "installed.json").is_file():
+                    raise Bad("that demaster was never put in place")
+                out = self._revert_finish(name, work, safe.Safe(work / "safe"))
+            api.open(api.folder, api.profile or None, session=api.session)
+            return out
         with self._lock:
             api._need()
             if api._busy():
@@ -551,6 +575,8 @@ class Changes:
             if not (work / "installed.json").is_file():
                 raise Bad("that demaster was never put in place")
             the_safe = safe.Safe(work / "safe")
+            if the_safe.reverted:
+                raise Bad("that demaster has been put back already")
             try:
                 what = the_safe.revert(False)
             except safe.Refused:
@@ -559,7 +585,7 @@ class Changes:
                     with open(work / "installed.json", "rb") as f:
                         done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
                     m = api._need()
-                    what = demaster.undo_by_line(m.instance.profiles_dir / m.instance.profile, the_safe, done)
+                    what = demaster.undo_by_line(m.instance.profiles_dir / m.instance.profile, the_safe, done, m.instance)
                 except (OSError, ValueError) as e:
                     raise Bad("this demaster's record cannot be read: %s" % logbook.why(e)) from None
             # Back to how things stood before the demaster, whatever came after it (WHY§81): a plugin ModTrap
@@ -571,18 +597,77 @@ class Changes:
             what["restore"] = list(what["restore"]) + originals
             history.History(api.store.dir(api.session.id)).add(
                 "reverted", why="the owner asked", job=name, restored=[Path(p).name for p in what["restore"]],
-                removed=[Path(p).name for p in what["remove"]], tools=tools_back["titles"], not_kept=tools_back["not_kept"])
+                removed=[Path(p).name for p in what["remove"]], tools=tools_back["titles"], not_kept=tools_back["not_kept"],
+                placed=list(what.get("placed", [])), notes=[logbook.mask(n) for n in what.get("notes", [])])
             # Whatever the page still shows of a demaster describes the modlist as it was before this Revert: the
             # one that was reverted, or one still waiting to be put in place (WHY§62). It goes.
             if self.dm is not None and (self.dm.dir.name == name or self.dm_state in ("verified", "failed")):
                 self._drop("the modlist was put back by Revert")
-            log.info("the demaster %s was put back: %d file(s) restored, %d of ModTrap's removed", name,
-                     len(what["restore"]), len(what["remove"]))
+            log.info("the demaster %s was put back%s: %d file(s) restored, %d of ModTrap's removed%s", name,
+                     " line by line, because the lists had changed since" if what.get("how") == "by line" else "",
+                     len(what["restore"]), len(what["remove"]),
+                     ", %d plugin(s) back at their places in the load order" % len(what["placed"]) if what.get("placed") else "")
         process.BOARD.drop("dry", "change", "install")     # put back: the Process tab shows a demaster still to come
         api.open(api.folder, api.profile or None, session=api.session)
         return {"job": name, "restored": len(what["restore"]), "removed": len(what["remove"]),
                 "how": what.get("how", "whole"), "left": [Path(p).name for p in what.get("left", [])],
+                "placed": len(what.get("placed", [])), "notes": [logbook.mask(n) for n in what.get("notes", [])],
                 "tools": tools_back["titles"], "tools_not_kept": tools_back["not_kept"], "set_aside": tools_back["aside"] + len(originals)}
+
+    def _installed(self, work: Path) -> dict:
+        try:
+            with open(work / "installed.json", "rb") as f:
+                done = json.loads(f.read(16 * 1024 * 1024).decode("utf-8"))
+        except (OSError, ValueError) as e:
+            raise Bad("this demaster's record cannot be read: %s" % logbook.why(e)) from None
+        if not isinstance(done, dict):
+            raise Bad("this demaster's record cannot be read")
+        return done
+
+    def _unfinished(self, work: Path, done: dict) -> list[str]:
+        """For a demaster that was reverted: the plugins it had taken out of the game that are not back at their
+        places in the load order (WHY§83). Only said while every mod it had disabled is enabled: a later demaster
+        of the same mods has them out again by intent. Never raises."""
+        try:
+            m = self.api.model
+            if m is None:
+                return []
+            inst = m.instance
+            pdir = inst.profiles_dir / inst.profile
+            key = (work.name, id(m)) + tuple((pdir / n).stat().st_mtime_ns for n in ("modlist.txt", "plugins.txt", "loadorder.txt"))
+            if self._gap_memo[0] == key:
+                return self._gap_memo[1]
+            mods = [inst.mod(n) for n in done.get("disabled", []) if isinstance(n, str)]
+            names: list[str] = []
+            if not any(x is None or not x.enabled for x in mods):
+                gap = demaster.lists_gap(pdir, safe.Safe(work / "safe"), inst, done)
+                names = [] if gap is None else [n for n, _b, _a in gap["place"]] + list(gap["activate"])
+            self._gap_memo = (key, names)
+            return names
+        except Exception:
+            return []
+
+    def _revert_finish(self, name: str, work: Path, the_safe: safe.Safe) -> dict:
+        """A Revert made before ModTrap put plugin lines back (or cut short): the plugins the demaster had taken out
+        go back to their places in the load order. Nothing else is touched. Called with the lock held, MO2 closed;
+        the caller reads the modlist again."""
+        api = self.api
+        if not the_safe.reverted:
+            raise Bad("that demaster is still in place: Revert it first")
+        done = self._installed(work)
+        m = api._need()
+        pdir = m.instance.profiles_dir / m.instance.profile
+        gap = demaster.lists_gap(pdir, the_safe, m.instance, done)
+        if gap is None:
+            raise Bad("the safe folder's copies of the plugin lists are not there any more, so ModTrap cannot say "
+                      "where the plugins stood")
+        placed, notes = demaster.lists_back(pdir, gap)
+        history.History(api.store.dir(api.session.id)).add(
+            "revert finished", job=name, placed=placed + list(gap["activate"]), notes=[logbook.mask(n) for n in notes])
+        log.info("the Revert of %s is finished: %d plugin(s) back at their places in the load order%s", name,
+                 len(placed) + len(gap["activate"]), "; " + "; ".join(notes) if notes else "")
+        return {"job": name, "placed": len(placed) + len(gap["activate"]), "notes": [logbook.mask(n) for n in notes],
+                "how": "finish", "restored": 0, "removed": 0, "left": [], "tools": [], "tools_not_kept": [], "set_aside": 0}
 
     # --- a strong Revert (WHY§81) ------------------------------------------------------------------------------------
 

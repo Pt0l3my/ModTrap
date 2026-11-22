@@ -257,6 +257,12 @@ demaster, as it was kept just before the tool ran (up to 5,000 files and one gib
 named as one to make again). What is there at the time is set aside in the job's folder. A job in place is never
 cleared from the job history; its Revert stays.
 
+**The plugin lines MO2 dropped (WHY§83).** A MO2 that runs while a mod is disabled writes its two plugin lists
+without that mod's plugins. So the line-by-line Revert, after enabling the mods again, puts their plugins and the
+ones the demaster deactivated back into both lists: each directly before the plugin that followed it in the safe
+folder's copy of the load order, active or not as it was. A Revert that did not do this (made by an earlier
+ModTrap, or cut short) is said on the job, which stays listed, and one press finishes it.
+
 ## 12. History
 
 A dated, append-only record in ModTrap's work folder, shown on the page, of everything ModTrap changed in the
@@ -335,6 +341,12 @@ A typical job's steps:
 8. *You:* the "may need a re-run" hints (§13); ticked off by the owner, since nothing in a file can prove them.
 9. *ModTrap:* verify the instance: the health check (§3), and the load order otherwise as it was.
 10. *You:* open MO2 and confirm it shows no missing-master warning; then play, and report anything odd.
+
+**Nothing is foretold (MT26, WHY§86).** While the dry run of the ticked mods is still to be made, or is going, the
+tab shows two steps only: the dry run, and one that says the steps after it follow from what it reads, naming the
+plugins concerned. Once it is done the steps are stated from what was read. A verdict on a tool does not change
+with the demaster: a plugin the tool made that names the mod as a master is proof that the tool is to run again,
+before the demaster (when it is a dependant) as after it (when a copy of it stands in ModTrap's mod).
 
 The job is **complete** only when every step is done and the health check passes (MT17). Until then it is shown as
 "in progress, waiting for you", and **Revert** stays one click away. The steps and their states are part of the
@@ -548,7 +560,8 @@ The demaster from start to finish, shown as it happens (WHY§70). It adds nothin
    when a demaster starts (on); close this modlist's MO2 without asking when a step needs it closed (off); open
    MO2 again once a demaster is in place (off); take script properties that point at the mod out (on, MT4);
    after a tool's run, retire ModTrap's copy of a plugin the tool made anew (on, WHY§80); after the demaster, start
-   the tools that are to run again one after another (off, WHY§81).
+   the tools that are to run again one after another (off, WHY§81); let a tool that can do so run and close by
+   itself, by switches of its own that ModTrap knows as data (on, MT25, WHY§84).
    What keeps a modlist safe is not a setting: the probe, the safe folder, the checks, Revert.
 2. **Sections.** The tabs stand in two rows: the section (Modlist, Demaster, Add mods, History, Settings) and the
    tabs of the section in view (Modlist: Mods, Plugins, Health, Tools; Demaster: Selection, Dry run, Steps,

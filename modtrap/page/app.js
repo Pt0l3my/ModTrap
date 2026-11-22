@@ -232,6 +232,7 @@ const SETTING_TEXT = [
   ["open_mo2_after", "Open MO2 again when a demaster is in place", "Starts this modlist's MO2 once the demaster is in place, so that you can look at the result."],
   ["retire_copies", "After a tool's run, retire ModTrap's copy of a plugin the tool made anew", "ModTrap keeps demastered copies in a mod of its own, above the originals. When a tool you start from ModTrap makes such a plugin anew without the mod, ModTrap's copy would hide the new one. On: ModTrap moves its copy into the job's folder by itself (kept, not deleted). Off: it tells you on the Selection tab and waits for the button."],
   ["auto_tools", "After the demaster, start the tools that are to run again, one after another", "Once the demaster is in place, ModTrap starts each tool its steps name (through MO2, as the step's own button does) as soon as the one before it has closed, and ticks the tool's step off when the tool has written its output. You still work each tool yourself: press its own Run or Patch button, then close it. A tool that closes without writing anything stops the row. With “go ahead without asking” on as well, one press of “Demaster Selected” carries the whole demaster through to the play test."],
+  ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is ticked off once it has written its output. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
 function renderSettings() {
@@ -672,7 +673,7 @@ function toolsInARow() {
   }
   const title = next.items.find((i) => i.tool).tool;
   state.toolsTried[next.key] = true; state.toolsNow = next.key; state.toolsTitle = title; state.toolsBusy = true;
-  api("/api/tool/start", { title: title }).then((r) => { state.tool = r; toast("Starting “" + title + "” through MO2. Work it, then close it: the next one follows."); })
+  api("/api/tool/start", { title: title }).then((r) => { state.tool = r; toast(r.by_itself ? "“" + title + "” is started to run and close by itself: nothing to press. The next one follows." : "Starting “" + title + "” through MO2. Work it, then close it: the next one follows."); })
     .catch((e) => {
       state.toolsNow = ""; delete state.toolsTried[next.key];
       if (OTHER_MO2.test(e.message)) waitThen("mo2", () => { state.dmChain = "tools"; });
@@ -736,9 +737,30 @@ function remadeNote(j) {
 // Revert of a demaster (WHY§81): always back to how things stood before it, whatever came after.
 const REVERT_ASKS = "Put everything back as it was before this demaster?\n\nThe three lists as they were; ModTrap's own mod removed; any plugin a tool has made anew since put back as it was; and the output of each tool that ModTrap started since, as it was kept before the tool ran. What is there now is set aside in the job's folder, not deleted.";
 function revertSaid(r) {
-  return "Put back as it was before the demaster." + ((r.tools || []).length ? " Tool output put back too: " + r.tools.join(", ") + "." : "") +
+  if (r.how === "finish") return plural(r.placed, "plugin") + " back at " + (r.placed === 1 ? "its place" : "their places") + " in the load order." + ((r.notes || []).length ? " Not done: " + r.notes.join("; ") + "." : "");
+  return "Put back as it was before the demaster." + (r.placed ? " " + plural(r.placed, "plugin") + " MO2 had dropped from its lists " + (r.placed === 1 ? "is" : "are") + " back in place in the load order." : "") +
+    ((r.notes || []).length ? " Not done: " + r.notes.join("; ") + "." : "") + ((r.tools || []).length ? " Tool output put back too: " + r.tools.join(", ") + "." : "") +
     ((r.tools_not_kept || []).length ? " Too large to have been kept, so run again: " + r.tools_not_kept.join(", ") + "." : "") +
     (r.set_aside ? " What was there (" + plural(r.set_aside, "file") + ") is set aside in the job's folder." : "");
+}
+// A Revert that enabled the mods again but left their plugins out of the load order (WHY§83): MO2 had dropped the
+// lines while the mods were disabled. ModTrap puts them back where they stood.
+function finishButton(j, after) {
+  const b = el("button", { type: "button", class: "primary", text: "Put them back in place" });
+  b.title = "Puts these plugins back where they stood in the load order before the demaster. Nothing else is touched.";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { toast(revertSaid(await api("/api/demaster/revert", { job: j.job, finish: true }))); } catch (e) { toast(e.message); }
+    state.historyText = ""; state.dmText = ""; state.gen = (state.gen || 0) + 1;
+    await tick(); if (after) after();
+  });
+  return b;
+}
+function unfinishedCard(j) {
+  const n = j.unfinished.length;
+  return el("div", { class: "card warn" }, el("h2", { text: "The last Revert left " + plural(n, "plugin") + " out of place in the load order" }),
+    el("p", { text: "The mods are enabled again, but while they were disabled MO2 dropped their plugins from its lists, and the Revert did not put them back where they stood: " + j.unfinished.slice(0, 12).join(", ") + (n > 12 ? " and " + (n - 12) + " more" : "") + ". Left like this, MO2 adds them at the end of the load order, after the plugins that need them." }),
+    el("p", {}, state.changes ? finishButton(j, () => renderDemaster(true)) : null, el("span", { class: "dim", text: "  Close MO2 first. Only the two plugin lists change; a copy of each change is in the history." })));
 }
 async function revertDemaster(job) {
   let said = "";
@@ -829,6 +851,7 @@ function renderDemaster(force) {
       el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
       ...remadeNote(j)));
   }
+  for (const j of allJobs.filter((x) => x.state === "reverted" && (x.unfinished || []).length).slice(0, 1)) cards.push(unfinishedCard(j));
   if (earlier) {
     const go = el("button", { type: "button", class: "linkish", text: "the History tab" });
     go.addEventListener("click", () => showTab("history"));
@@ -955,7 +978,7 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
@@ -970,6 +993,8 @@ function historyLine(e) {
   if (e.kind === "verified") bits.push(e.ok === false ? "something to look at" : "as planned" + (e.what ? " (" + e.what + ")" : ""));
   if (Array.isArray(e.restored) && e.restored.length) bits.push("put back: " + e.restored.join(", "));
   if (Array.isArray(e.left) && e.left.length) bits.push("left in place: " + e.left.join(", "));
+  if (Array.isArray(e.placed) && e.placed.length) bits.push("back at their places in the load order: " + e.placed.join(", "));
+  if (Array.isArray(e.notes) && e.notes.length) bits.push("not done: " + e.notes.join("; "));
   return bits.join(" · ");
 }
 
@@ -1010,6 +1035,9 @@ async function pollHistory() {
             await tick(); pollHistory();
           });
           cell.append(undo);
+        }
+        if (j.what !== "add" && (j.unfinished || []).length && d.can_change) {
+          cell.append(el("div", { class: "dim", text: plural(j.unfinished.length, "plugin") + " left out of place" }), finishButton(j, pollHistory));
         }
         tr.append(cell);
         return tr;
@@ -1652,7 +1680,7 @@ function toolButton(title) {
     title: "Starts “" + title + "” the way MO2's own Run button does. It is yours to work; ModTrap waits for it to close and then says which of its output files changed." });
   b.addEventListener("click", async () => {
     b.disabled = true;
-    try { state.tool = await api("/api/tool/start", { title: title }); toast("Starting “" + title + "” through MO2…"); }
+    try { state.tool = await api("/api/tool/start", { title: title }); toast(state.tool.by_itself ? "“" + title + "” is started to run and close by itself: nothing to press." : "Starting “" + title + "” through MO2…"); }
     catch (e) { toast(e.message); }
     state.addText = ""; state.stepsText = "";
     tick();
@@ -1668,7 +1696,7 @@ function toolCard() {
   stop.addEventListener("click", async () => { try { state.tool = await api("/api/tool/stop", {}); } catch (e) { toast(e.message); } tick(); });
   const mins = Math.floor(t.seconds / 60), secs = t.seconds % 60;
   return el("div", { class: "card" + (going ? " installer" : "") },
-    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? " “" + t.title + "” is open: work it, then close it" :
+    el("h2", {}, going ? el("span", { class: "spinner", "aria-hidden": "true" }) : null, (going ? (t.by_itself ? " “" + t.title + "” is running by itself and closes when it is done" : " “" + t.title + "” is open: work it, then close it") :
       t.state === "done" ? "“" + t.title + "” has closed" : "“" + t.title + "”: " + (t.message || t.state))),
     going ? el("p", { class: "dim", text: "Started " + (mins ? mins + " min " : "") + secs + " s ago. ModTrap is waiting, and changes nothing meanwhile." }) : null,
     t.state === "done" ? el("p", { class: t.changed_count ? "would-record" : "would-needs", text: t.changed_count ?
@@ -1752,7 +1780,7 @@ function renderSteps2(d) {
   badge.hidden = false;
   badge.textContent = open ? open : "✓";
   badge.className = "count " + (open ? "todo" : "ok");
-  $("steps-summary").textContent = open ? plural(open, "step") + " to go" : "Every step is done";
+  $("steps-summary").textContent = d.needs_dry ? "A dry run comes first" : open ? plural(open, "step") + " to go" : "Every step is done";
   const carries = Object.entries(d.contents || {}).filter(([k]) => k !== "other files").map(([k, n]) => n + " " + k);
   $("steps-info").textContent = "Taking out " + d.mods.join(", ") + (d.looking ? " · still looking into the mods' folders…" : carries.length ? " · besides plugins it carries: " + carries.join(", ") : "");
   const intro = el("div", { class: "card" },
@@ -1788,7 +1816,7 @@ function afterStage() {
   for (const st of d.steps) {
     // What ModTrap's own part left open counts here too: a plugin it could not demaster, a mod that stays enabled.
     const leftOpen = ["demaster", "disable"].includes(st.key) && st.state !== "done" && st.state !== "not needed";
-    if (!(st.key.startsWith("tool:") || ["regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key) || leftOpen)) continue;
+    if (!(st.key.startsWith("tool:") || ["after-dry", "regenerate", "tools-wait", "mentions", "health", "play"].includes(st.key) || leftOpen)) continue;
     const ticked = st.manual && !!ticks[stepKey(st.key)];
     const done = ticked || st.state === "done";
     tasks.push({ key: st.key, text: st.title, note: leftOpen ? (st.note || "") : done || st.state === "not needed" ? "" : (st.who === "ModTrap" ? "" : st.who === "both" ? "ModTrap starts it, you run it" : "yours to do or judge"),
@@ -2445,27 +2473,44 @@ function showTab(name) {
   updateTray();
   saveUi();
   if (name === "history") { state.historyText = ""; pollHistory(); }
-  if (name === "job") { const jl = $("job-log"); jl.scrollTop = jl.scrollHeight; }       // the latest lines, not the first
+  if (name === "job") paneFollow("job-log");
+  if (name === "log") paneFollow("log");
+}
+
+// The log panes keep to the latest line (WHY§85): each shows its newest line at the bottom, at every start and
+// whenever its tab is opened, until the owner scrolls away from it; then it stays where they left it, and takes up
+// the latest line again once they scroll back down to it. A pane that is not shown cannot be scrolled, so what
+// the owner last did is kept here, not asked of the pane.
+const PANES = { "log": { follow: true, top: 0 }, "job-log": { follow: true, top: 0 } };
+function paneFollow(id) {
+  const p = $(id), s = PANES[id];
+  if (!p || !p.offsetParent) return;                       // not shown: set when its tab opens
+  p.scrollTop = s.follow ? p.scrollHeight : s.top;
+}
+function paneWatch(id) {
+  const p = $(id);
+  p.addEventListener("scroll", () => {
+    if (!p.offsetParent) return;
+    PANES[id].follow = p.scrollTop + p.clientHeight >= p.scrollHeight - 30;
+    PANES[id].top = p.scrollTop;
+  });
 }
 
 async function pollLog() {
   try {
     const d = await api("/api/log?after=" + state.logAfter);
     if (d.lines.length) {
-      const log = $("log");
-      const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
-      const jl = $("job-log");
-      const jAtEnd = jl.scrollTop + jl.clientHeight >= jl.scrollHeight - 30;
+      const log = $("log"), jl = $("job-log");
       for (const ln of d.lines) {
         log.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
         if (ln.source === "dryrun") {
-          if (/^dry run \S+: \d+ trapped plugin/.test(ln.text)) jl.replaceChildren();     // a new run: its own lines only
+          if (/^dry run \S+: \d+ trapped plugin/.test(ln.text)) { jl.replaceChildren(); PANES["job-log"].follow = true; }     // a new run: its own lines only
           jl.append(el("span", { class: ln.level, text: ln.t + "  " + ln.text + "\n" }));
         }
         state.logAfter = ln.seq;
       }
-      if (atEnd) log.scrollTop = log.scrollHeight;
-      if (jAtEnd) jl.scrollTop = jl.scrollHeight;
+      if (PANES.log.follow) paneFollow("log");
+      if (PANES["job-log"].follow) paneFollow("job-log");
     }
   } catch (e) { /* the next round tries again */ }
 }
@@ -2751,4 +2796,5 @@ $("mods-search").addEventListener("input", later(filterMods));
 $("plugins-search").addEventListener("input", later(filterPlugins));
 for (const id of ["f-enabled", "f-plugins", "f-deps"]) $(id).addEventListener("change", filterMods);
 for (const id of ["p-problems", "p-deps"]) $(id).addEventListener("change", filterPlugins);
+paneWatch("log"); paneWatch("job-log");
 loop();

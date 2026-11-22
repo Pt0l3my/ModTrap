@@ -105,6 +105,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 80 | 2026-11-22 | The demaster ran clean on 0.3.12; ModTrap retires its own copy once a tool has made the plugin anew; every tool can be started from the Tools tab | DECIDED | #tools #process #page #safety |
 | 81 | 2026-11-22 | The tools in a row, and a Revert that always ends where the demaster began: remade plugins and kept tool output come back, and a job in place is never cleared | DECIDED | #safety #tools #process #page |
 | 82 | 2026-11-22 | The row of tools could only begin at the moment of putting in place: a button starts it whenever a demaster is in place | DECIDED | #page #tools #process |
+| 83 | 2026-11-22 | A Revert after MO2 had run enabled the mods but left their plugins out of the load order: Revert now puts the lines back where they stood, and an earlier such Revert can be finished | FACT | #safety #revert #mo2 |
+| 84 | 2026-11-22 | A tool's run ends when the tool has gone: MO2's leftover message is closed; a tool with switches of its own runs and closes by itself; the patcher framework's compiler crash is its own, under MO2 | DECIDED | #tools #mo2 #process |
+| 85 | 2026-11-22 | The log panes keep to the latest line until the owner scrolls away, and take it up again at the bottom | DECIDED | #page |
+| 86 | 2026-11-22 | The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after | DECIDED | #steps #tools |
 
 ## Entries
 
@@ -1936,3 +1940,105 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   against one second the time before. The log cannot say whether the owner pressed. LIKELY otherwise: a browser
   slows the timers of a tab that is not in view, and the one go is driven by the page. Noted; if it shows again,
   the one go belongs on the server.
+
+### 83. A Revert after MO2 had run enabled the mods but left their plugins out of the load order: Revert now puts the lines back where they stood, and an earlier such Revert can be finished
+
+`2026-11-22` · FACT · `#safety #revert #mo2` · refs: DESIGN§11, MO01§10, WHY§47, WHY§81
+
+- The owner, with the session file of 0.3.15: "Then I reverted the demaster job (did that work well?)". It did
+  not, in one respect.
+- FACT (the session file). After the demaster, two tools were started through MO2. After the first, the modlist
+  read 3,741 plugins where it had read 3,751: MO2, run by its `run` command, had written its two plugin lists
+  without the ten plugins of the three mods the demaster had disabled (MO01§10; MO01§9 had shown only that such a
+  MO2 leaves lists alone when it has nothing to drop). The Revert then found the lists changed, went line by line
+  (WHY§47), enabled the three mods, and could activate none of their plugins: they were in no list any more. The
+  modlist read 3,575 mods, 3,751 plugins and 12 problems. MO2, opened next, would have added the ten at the end
+  of the load order, after the plugins that need them.
+- FACT (the same file). The files were right: ModTrap's seven copies removed, the first tool's output as kept
+  before its run (of the 33 files it had written, 30 were byte for byte what they had been; three were put back
+  or set aside), the second tool's untouched, since it had written nothing.
+- DECIDED. The line-by-line Revert also puts back, in both plugin lists, the plugins of the mods the demaster
+  had disabled and the ones it had deactivated: each directly before the plugin that followed it in the safe
+  folder's copy of the load order, active or not as it was there (`demaster.lists_gap`, `lists_back`). The
+  anchor is the next plugin that itself stays where it is. A plugin still in its place is only activated.
+- DECIDED. A Revert already made without this can be finished: the newest reverted demaster says which plugins
+  are not back at their places (not listed, or listed after the plugin they stood before, as MO2 adds them), stays
+  on the job list whatever is cleared, and has "Put them back in place". Only the two plugin lists change; the
+  history gets a "revert finished" line. A second whole Revert of the same demaster is refused.
+- Checked: tests in which the lists lose the disabled mod's plugins as MO2 drops them, and the three lists end
+  byte for byte as before the demaster, by Revert and by the finishing press (with the plugins unlisted, and added
+  at the end); in a browser, both.
+- Not checked: on the owner's PC.
+
+### 84. A tool's run ends when the tool has gone: MO2's leftover message is closed; a tool with switches of its own runs and closes by itself; the patcher framework's compiler crash is its own, under MO2
+
+`2026-11-22` · DECIDED · `#tools #mo2 #process` · refs: MT25, MO01§9, MO01§10, TL01§16, DESIGN§16.8, DESIGN§19, WHY§54
+
+- The owner: "Would it be possible for Modtrap to not only start but close the tools after they confirm their
+  part is done? After I ran Pandora and closed it manually (once it was done with its job), this error popped up
+  again and kept ModTrap thinking that Pandora is still ongoing."
+- FACT. The message is MO2's own "Failed to run", raised by one of the modlist's MO2 plugins after every run
+  started by command (MO01§9). A dry run closes it (WHY§54); a tool's run waited for MO2 to end, and MO2 waited
+  for the message.
+- DECIDED. Once the tool was seen running and has been gone for the grace time while MO2 still stands, ModTrap
+  closes a message of MO2's (a window of MO2's program whose caption is exactly MO2's message caption), as a
+  click on its X does, and the run ends when MO2 has gone, or thirty seconds after the message was closed. With
+  no such message to close, MO2 is waited for as before: it may be waiting for something of the tool's.
+- DECIDED (MT25). A tool is closed by ModTrap never: what "done" looks like in a tool's window is not something
+  ModTrap can know for every tool. A tool that has switches of its own for it is started with them, added to the
+  arguments MO2 has for it (MO2's `-a` replaces those, MO01§10). The switches are data, tool by tool, each read in
+  the tool's source: so far the behaviour engine, which then builds for the mods ticked in it when it was last
+  used and closes (TL01§16). A setting, on by default, turns it off. The outcome is still told from the output
+  files: a tool that wrote nothing ends the row of tools (WHY§81).
+- FACT (TL01§16). The patcher framework's "Blocking Error", `csc.exe exited with code -1073741819`, on every
+  patcher: the compiler crashed (an access violation) while the framework built its patchers inside MO2. The
+  framework's own source names this exact failure and gives MO2's virtual file system and antivirus software as
+  the usual causes; it has a mode for building the patchers outside MO2 first. ModTrap starts the framework as
+  MO2's Run button does. LIKELY, then: the same happens from MO2's own Run button whenever the patchers have to
+  be built anew; not established on the owner's PC.
+- The framework's window takes no switch to run its patchers and close (only which profile to open, TL01§16);
+  its separate command-line program does, and would have to be set up in MO2 as a tool of its own. Not done.
+- Checked: tests (the switches added to a tool's own arguments, kept out when the setting is off or when they are
+  already there; a MO2 that stays at a message until it is closed; a MO2 that waits with no message is waited
+  for); in a browser, the row of tools with a tool started by its switches.
+- Not checked: on the owner's PC.
+
+### 85. The log panes keep to the latest line until the owner scrolls away, and take it up again at the bottom
+
+`2026-11-22` · DECIDED · `#page` · refs: DESIGN§4
+
+- The owner: "ensure that the logs show latest entry by default unless user has scrolled manually away (then once
+  they scroll back to latest entry at the bottom, resume to keep showing latest entry, also after each launch show
+  latest log entry at the bottom)".
+- FACT. The page asked the pane whether it stood at its end each time lines came. A pane whose tab is not shown
+  has no size and cannot be scrolled, so lines that came meanwhile left the Log tab at its top when it was opened.
+- DECIDED. Whether a pane follows is kept by the page, changed only by the owner's own scrolling while the pane
+  is shown: away from the end stops it, back at the end resumes it. When its tab opens, a pane that follows goes
+  to its last line, and one that does not goes back to where it was left. A new dry run's pane follows again.
+  Both panes: the log, and the dry run's lines.
+- Checked in a browser: at the start, with lines coming, scrolled away, another tab and back, scrolled down
+  again, and lines that came while the tab was not shown.
+
+### 86. The steps foretell nothing: before the dry run they say only that it comes first; a tool-made plugin that names the mod is proof for its tool before the demaster as after
+
+`2026-11-22` · DECIDED · `#steps #tools` · refs: MT26, DESIGN§14, WHY§63, WHY§77, TL01§7
+
+- The owner: "before I started the new demaster process, in the steps it was stated that Synthesis run is not
+  required amongst other tools, but as the process went on, later it said it was needed. Can you implement a
+  stronger and more deterministic tool that will not predict but only state facts that are actually true. if
+  steps needs a dry run first then it should state that and only after show what the steps would look like."
+- FACT (the session file of 0.3.15). One of the patcher framework's plugins named the mod as a master. Before the
+  demaster the tool check passed over it ("a dependant: the demaster itself deals with it") and judged the tool
+  by its other plugins: no new run. After the demaster the plugin was a copy in ModTrap's own mod, which is proof
+  (WHY§77): run again. Two answers to one question, from the same facts.
+- DECIDED. A plugin a tool made that names the mod as a master is proof for that tool at once: the tool made it
+  from the mod's own records, and only the tool's run makes it as it is without the mod, whatever the demaster
+  does with a copy meanwhile. Said before the demaster and after it in the same words' meaning.
+- DECIDED (MT26). While a dry run is still to be made, or is going, the steps are two: the dry run, and a step
+  that says the rest follows from it and names the plugins it will read. Nothing about patches, tools or the
+  mod's own disabling is stated until xEdit has read the plugins. With ModTrap allowed to change the modlist, the
+  dry run's step carries "Demaster Selected", which makes the dry run itself.
+- What stays a judgement, and is worded as one: a tool cleared "by evidence, not proof" (WHY§73). That wording
+  is kept; it states what was looked at and found.
+- Checked: tests (the two steps before and during the dry run; the tool's step from the dry run on, with the
+  plugin demastered in the plan or not); in a browser, before the dry run and after the demaster.

@@ -20,6 +20,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   active session per modlist).
 - **2026-11-21.** MT21 (adding mods safely: analysis, steps, and carrying out what ModTrap can; the how is
   ModTrap's to choose); MT22 (a version with every update, and one ModTrap at a time).
+- **2026-11-22.** MT25 (a tool that can do so runs and closes by itself; ModTrap closes no tool); MT26 (the steps
+  state facts: before the dry run, only that it comes first).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -521,3 +523,32 @@ from the mod (MT4, case C)?
 bytes that mean nothing, or my own slip, WHY§77, WHY§78).
 
 **Until decided.** (c), with the values shown.
+
+## MT25
+
+**Tools that run and close by themselves** · *2026-11-22 · Asked by the owner; the how is left to ModTrap (as MT17)*
+
+**Owner's words.** "Would it be possible for Modtrap to not only start but close the tools after they confirm
+their part is done?"
+
+**Settled under that freedom** (WHY§84, TL01§16; the owner may overrule any of it):
+
+- A tool that has switches of its own to do its work and close is started with them, beside the arguments MO2 has
+  for it. Which tools and which switches is data, read in each tool's own source. So far: the behaviour engine.
+- ModTrap closes no tool's window itself: it cannot know for every tool what "done" looks like, and closing one
+  too early loses its work. A tool without such switches stays the owner's to work and close.
+- A setting, on by default, turns this off.
+- MO2's own message after a run, which kept a tool's run from ending, is closed by ModTrap, as after a dry run.
+
+## MT26
+
+**The steps state facts** · *2026-11-22 · Decided by the owner*
+
+**Owner's words.** "Can you implement a stronger and more deterministic tool that will not predict but only state
+facts that are actually true. if steps needs a dry run first then it should state that and only after show what
+the steps would look like."
+
+**Decision.** Until a dry run of the ticked mods is done, the Steps tab shows only the dry run and that the rest
+follows from it. What it shows afterwards rests on what was read, and a verdict on a tool is the same before the
+demaster as after it (WHY§86, DESIGN§14).
+

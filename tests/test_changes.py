@@ -4,6 +4,7 @@ through the same guarded job, on an invented modlist."""
 from __future__ import annotations
 
 import inspect
+import json
 import io
 import os
 import subprocess
@@ -295,7 +296,7 @@ class DemasterThroughThePage(unittest.TestCase):
     def test_the_owners_settings_are_kept_and_only_known_ones(self) -> None:
         self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
                                                         "follow": True, "script_props": True, "retire_copies": True,
-                                                        "auto_tools": False})
+                                                        "auto_tools": False, "tools_self": True})
         self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
         self.assertTrue(self.api.state()["settings"]["auto_go"])
         for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):
@@ -529,6 +530,77 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(m.row("Lantern.esp").source, "Lantern")
         self.assertFalse((self.root / "mods" / "ModTrap - Bramble").exists())
         self.assertEqual(self.api.state()["demaster"]["jobs"][0]["state"], "reverted")
+
+    def _mo2_drops_the_disabled_mods_plugins(self) -> list[str]:
+        """What a MO2 that runs while a mod is disabled does to its lists (WHY§83): the mod's plugins are no longer
+        named in either. Returns the names dropped."""
+        pdir = self.root / "profiles" / "Default"
+        m = model.build(instance.load(self.root))
+        gone = {p.lower() for mod in m.instance.mods if mod.kind == "mod" and not mod.enabled for p in mod.plugins
+                if m.row(p) is None or m.row(p).source is None}
+        self.assertTrue(gone)
+        for fname in ("plugins.txt", "loadorder.txt"):
+            lines = (pdir / fname).read_bytes().split(b"\r\n")
+            (pdir / fname).write_bytes(b"\r\n".join(ln for ln in lines if ln.decode().lstrip("*").lower() not in gone))
+        return sorted(gone)
+
+    def test_revert_puts_back_the_plugin_lines_mo2_dropped(self) -> None:
+        """WHY§83: a tool was run through MO2 after the demaster, so MO2 wrote its lists without the disabled mod's
+        plugins. Revert enables the mod and puts each plugin back where it stood, active as it was."""
+        pdir = self.root / "profiles" / "Default"
+        lists_before = {k: (pdir / k).read_bytes() for k in ("modlist.txt", "plugins.txt", "loadorder.txt")}
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        gone = self._mo2_drops_the_disabled_mods_plugins()
+        job = self.api.state()["demaster"]["jobs"][0]["job"]
+        back = self.api.post("/api/demaster/revert", {"job": job})[1]
+        self.ready()
+        self.assertEqual((back["how"], back["placed"], back["notes"]), ("by line", len(gone), []))
+        self.maxDiff = None
+        self.assertEqual({k: (pdir / k).read_bytes().decode() for k in lists_before}, {k: v.decode() for k, v in lists_before.items()})     # the three lists, to the byte
+        m = model.build(instance.load(self.root))
+        self.assertEqual(m.issues, [])
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["unfinished"], [])
+        self.assertIn("placed", self.api.get("/api/history", {})[1]["events"][0])
+
+    def test_a_revert_that_left_plugins_out_can_be_finished(self) -> None:
+        """A Revert made by a ModTrap that did not put the lines back: the mods are enabled, their plugins are in no
+        list, or MO2 has since added them at the end. The job says so, stays listed, and one press puts them back."""
+        pdir = self.root / "profiles" / "Default"
+        lists_before = {k: (pdir / k).read_bytes() for k in ("modlist.txt", "plugins.txt", "loadorder.txt")}
+        self.dry_run()
+        self.api.post("/api/demaster/start", {})
+        self.worked()
+        self.api.post("/api/demaster/install", {})
+        self.ready()
+        gone = self._mo2_drops_the_disabled_mods_plugins()
+        job = self.api.state()["demaster"]["jobs"][0]["job"]
+        from modtrap import demaster as dm, safe as safe_mod
+        work = self.api.changes._jobs_dir() / job
+        done = json.loads((work / "installed.json").read_text(encoding="utf-8"))
+        dm.undo_by_line(pdir, safe_mod.Safe(work / "safe"), done)                  # the old way: no lines put back
+        self.api.open(str(self.root), None, session=self.api.session)
+        self.ready()
+        j = self.api.state()["demaster"]["jobs"][0]
+        self.assertEqual((j["state"], sorted(x.lower() for x in j["unfinished"])), ("reverted", gone))
+        self.assertEqual(self.api.post("/api/jobs/clear", {})[1], {"cleared": 0})           # it stays until finished
+        # MO2 opened since: it added the plugins at the end, not active.
+        for fname in ("plugins.txt", "loadorder.txt"):
+            (pdir / fname).write_bytes((pdir / fname).read_bytes() + b"".join(n.encode() + b"\r\n" for n in j["unfinished"]))
+        self.api.open(str(self.root), None, session=self.api.session)
+        self.ready()
+        self.assertEqual(len(self.api.state()["demaster"]["jobs"][0]["unfinished"]), len(gone))
+        with self.assertRaises(Bad):
+            self.api.post("/api/demaster/revert", {"job": job})                    # a second whole Revert is not this
+        out = self.api.post("/api/demaster/revert", {"job": job, "finish": True})[1]
+        self.ready()
+        self.assertEqual((out["how"], out["placed"], out["notes"]), ("finish", len(gone), []))
+        self.assertEqual({k: (pdir / k).read_bytes() for k in lists_before}, lists_before)
+        self.assertEqual(self.api.state()["demaster"]["jobs"][0]["unfinished"], [])
+        self.assertEqual(self.api.get("/api/history", {})[1]["events"][0]["kind"], "revert finished")
 
     def test_a_run_that_fails_changes_nothing_and_says_why(self) -> None:
         self.dry_run()

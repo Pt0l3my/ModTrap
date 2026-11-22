@@ -361,10 +361,29 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
         dry_state, dry_note = "to do", "Press “Dry run through xEdit” on the Selection tab."
     else:
         dry_state, dry_note = "not needed", "Nothing depends on these plugins any more."
+    need_dry = dry_state in ("to do", "going")
     step("dry", "ModTrap", "Dry run: find out exactly what each dependant takes from the mod",
          "Until xEdit has read the dependants, ModTrap knows only which plugins list the mod as a master, not what "
          "they take from it. The dry run tells a patch made only for the mod from a plugin that must be demastered.",
-         dry_state, note=dry_note)
+         dry_state, note=dry_note, action=press if need_dry else "")
+    if need_dry:
+        # Nothing is foretold (WHY§86): what is to be done with each dependant, and which tools are to run again,
+        # follows from what xEdit reads. Until then the steps say only that, and how many plugins are concerned.
+        step("after-dry", "ModTrap", "The steps after the dry run",
+             "What is to be done with each of the %d active plugin(s) that list the mod as a master, which tools are "
+             "to run again and which are not, all follows from what the dry run reads in them. ModTrap states those "
+             "steps once the dry run is done, from what it found; it does not guess them beforehand.%s" % (
+                 len(active_left), " “Demaster Selected” makes the dry run itself, shows its plan and asks before it "
+                                   "changes anything." if auto else ""),
+             "waiting for the dry run", [brief(r) for r in active_left])
+        if going:
+            steps[0]["action"] = ""
+        for s_ in steps:
+            s_["manual"] = False
+        return {"mods": [x.name for x in mods], "trapped": trapped, "steps": steps, "complete": False,
+                "deep": bool(deep), "contents": {k: v["count"] for k, v in (deep or {}).get("kinds", {}).items()},
+                "contents_cut": bool((deep or {}).get("cut")), "needs_dry": True,
+                "summary": "A dry run comes first. The steps after it are stated once it is done."}
 
     # 2-4. The dependants, sorted by what is to be done with them: by the dry run's reading where there is one
     # (as "Demaster Selected" sorts them), else by what made them.
@@ -514,6 +533,15 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                                      if info["count"] > len(info["examples"]) else [])})
     for o in deep.get("outputs", []):                                  # (b) records in a plugin the tool made
         e = entry(o["tool"])
+        if o.get("names_mod"):
+            # A fact that needs no dry run and holds before the demaster as after it (WHY§86): the tool made this
+            # plugin with the mod in the load order, and it names the mod as a master.
+            e["run"].append("%s, which %s made, names %s as a master: it was made from the mod's own records. The "
+                            "demaster takes those out of a copy to keep the load order whole; only the tool's own run "
+                            "makes the plugin as it is without the mod" % (o["plugin"], o["tool"], ", ".join(o["names_mod"])))
+            e["details"].append({"summary": "%s (%s) names the mod as a master" % (o["plugin"], o["how"]),
+                                 "lines": ["Its masters include %s." % ", ".join(o["names_mod"])]})
+            continue
         if not o.get("judged", True):
             e.setdefault("wait", []).append(o["plugin"])
             continue
@@ -887,14 +915,19 @@ def tool_outputs(m: model.Model, mods: list[Mod], trapped: list[str], paths_low:
         # for the patcher framework which patchers made it and which plugins it was told to leave out (WHY§74).
         outputs = []
         tool_plugins = []
+        naming = outputs            # tool-made plugins that name the mod as a master come first, said as they are (WHY§86)
         for f in m.order:
             r = m.plugins[f]
-            if not r.active or r.source is None or r.path is None or fold(r.name) in tf \
-                    or any(fold(x) in tf for x in r.masters):   # a dependant: the demaster itself deals with it
+            if not r.active or r.source is None or r.path is None or fold(r.name) in tf:
                 continue
             ev = [e for e in tools.identify(r.name, r.author, r.source, inst.output_mods, binaries) if e.kind != "editor"]
-            if ev and "plugins" in data.get(ev[0].tool, {}).get("reads", ["plugins"]):
-                tool_plugins.append((r, ev))
+            if not ev or "plugins" not in data.get(ev[0].tool, {}).get("reads", ["plugins"]):
+                continue
+            if any(fold(x) in tf for x in r.masters):   # a dependant: the demaster deals with it, the tool makes it anew
+                naming.append({"plugin": r.name, "mod": r.source, "tool": ev[0].tool, "strong": ev[0].strong,
+                               "how": ev[0].how, "names_mod": [x for x in r.masters if fold(x) in tf], "judged": True})
+                continue
+            tool_plugins.append((r, ev))
         # A stake is told from the plugins xEdit loaded for the dry run: the mod, what depends on it and their
         # masters. The rest of the load order was not there, and any plugin of it may have the last word on a
         # record, or say the same as the mod. So for the records a tool's plugin holds, the whole load order is

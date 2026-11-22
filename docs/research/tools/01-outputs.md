@@ -232,3 +232,33 @@ Read in Synthesis's source (facts only, nothing copied), commit `14cf3fa` of 202
 - **Not done.** The reading script still tells these as stakes; they are sorted out afterwards, for the records a
   tool's plugin holds. Teaching the script to pass over parts xEdit marks as ignored would change the script, and
   with it ask for the probe again.
+
+## 16. Tools that run and close by themselves, and a compiler crash inside MO2 (2026-11-22)
+
+Read in the tools' public sources (both GPL-3.0: facts only, nothing copied), each at the commit named.
+
+- **FACT (Pandora Behaviour Engine, `Pandora.Skyrim/CLI/CommandLineParser.cs:24-30` at commit `1f26bbc`).** Its
+  switches: `--output` (`-o`), the output folder; `--tesv`, the game's folder; `--auto_run` (`-ar`);
+  `--auto_close` (`-ac`); `--skyrim_debug64`.
+- **FACT (`Pandora.Engine/Views/Controls/LaunchElementViewModel.cs:46-74`, same commit).** With `--auto_run` the
+  engine's launch starts as soon as the window is up, for the mods that are active in it (its own saved choice);
+  with `--auto_close` the program shuts down when the launch has ended.
+- **FACT (same file as the first, `:55-70`).** If the arguments cannot be parsed, none is applied: the output
+  folder and the game's folder among them. LIKELY harmless here: the switches added are the program's own.
+- **FACT (Synthesis, `Synthesis.Bethesda.GUI/Args/StartCommand.cs` at commit `14cf3fa`).** The window program
+  takes one command, `start`, with one option: the profile to open. Nothing that runs the patchers and closes.
+  A separate command-line program of the same project runs a pipeline (`Synthesis.Bethesda.CLI`).
+- **FACT (`Synthesis.Bethesda.Execution/Reporters/Classifications/CscCrashError.cs`, same commit).** The
+  framework has a name for one build failure: the C# compiler ending with exit code -1073741819 (an access
+  violation, reported as build error MSB6006). Its own text gives the usual causes as other software getting in
+  the compiler's way, "such as antivirus or Mod Organizer 2's virtual file system", and it notes whether it is
+  itself running inside MO2.
+- **FACT (`Synthesis.Bethesda.GUI/ViewModels/Top/Mo2PrepModeProvider.cs`, same commit).** It has a setting that
+  blocks building inside MO2, and with it a mode in which the program, started outside MO2, only builds the
+  patchers, so that a later start inside MO2 finds them built.
+- **FACT (the owner's PC, version 0.35.5 of the framework).** Started through MO2, every patcher showed
+  "Blocking Error" with exactly that compiler exit code; nothing was written.
+- **LIKELY.** The patchers had to be built anew (a new version of a patcher or of the build tools does that), and
+  building inside MO2 crashed the compiler. Not established: whether the same shows from MO2's own Run button on
+  that PC, and whether the owner's version has the setting named above.
+
