@@ -782,7 +782,9 @@ function remadeNote(j) {
 // Revert of a demaster (WHY§81): always back to how things stood before it, whatever came after.
 const REVERT_ASKS = "Put everything back as it was before this demaster?\n\nThe three lists as they were; ModTrap's own mod removed; any plugin a tool has made anew since put back as it was; and the output of each tool that ModTrap started since, as it was kept before the tool ran. What is there now is set aside in the job's folder, not deleted.";
 function revertSaid(r) {
-  if (r.how === "finish") return plural(r.placed, "plugin") + " back at " + (r.placed === 1 ? "its place" : "their places") + " in the load order." + ((r.notes || []).length ? " Not done: " + r.notes.join("; ") + "." : "");
+  if (r.how === "finish") return (r.placed ? plural(r.placed, "plugin") + " back at " + (r.placed === 1 ? "its place" : "their places") + " in the load order. " : "") +
+    (r.set_aside ? plural(r.set_aside, "plugin") + " left in ModTrap's own mod set aside in the job's folder; the mod's folder is gone. " : "") +
+    (!r.placed && !r.set_aside ? "Nothing was left to do. " : "") + ((r.notes || []).length ? "Not done: " + r.notes.join("; ") + "." : "");
   return "Put back as it was before the demaster." + (r.placed ? " " + plural(r.placed, "plugin") + " MO2 had dropped from its lists " + (r.placed === 1 ? "is" : "are") + " back in place in the load order." : "") +
     ((r.notes || []).length ? " Not done: " + r.notes.join("; ") + "." : "") + ((r.tools || []).length ? " Tool output put back too: " + r.tools.join(", ") + "." : "") +
     ((r.tools_not_kept || []).length ? " Too large to have been kept, so run again: " + r.tools_not_kept.join(", ") + "." : "") +
@@ -790,8 +792,8 @@ function revertSaid(r) {
 }
 // A Revert that enabled the mods again but left their plugins out of the load order (WHY§83): MO2 had dropped the
 // lines while the mods were disabled. ModTrap puts them back where they stood.
-function finishButton(j, after) {
-  const b = el("button", { type: "button", class: "primary", text: "Put them back in place" });
+function finishButton(j, after, label) {
+  const b = el("button", { type: "button", class: "primary gated", text: label || "Put them back in place" });
   b.title = "Puts these plugins back where they stood in the load order before the demaster. Nothing else is touched.";
   b.addEventListener("click", async () => {
     b.disabled = true;
@@ -802,10 +804,13 @@ function finishButton(j, after) {
   return b;
 }
 function unfinishedCard(j) {
-  const n = j.unfinished.length;
-  return el("div", { class: "card warn" }, el("h2", { text: "The last Revert left " + plural(n, "plugin") + " out of place in the load order" }),
-    el("p", { text: "The mods are enabled again, but while they were disabled MO2 dropped their plugins from its lists, and the Revert did not put them back where they stood: " + j.unfinished.slice(0, 12).join(", ") + (n > 12 ? " and " + (n - 12) + " more" : "") + ". Left like this, MO2 adds them at the end of the load order, after the plugins that need them." }),
-    el("p", {}, state.changes ? finishButton(j, () => renderDemaster(true)) : null, el("span", { class: "dim", text: "  Close MO2 first. Only the two plugin lists change; a copy of each change is in the history." })));
+  const n = (j.unfinished || []).length, b = (j.left_behind || []).length;
+  const parts = [];
+  if (n) parts.push(el("p", { text: "The mods are enabled again, but while they were disabled MO2 dropped their plugins from its lists, and the Revert did not put them back where they stood: " + j.unfinished.slice(0, 12).join(", ") + (n > 12 ? " and " + (n - 12) + " more" : "") + ". Left like this, MO2 adds them at the end of the load order, after the plugins that need them." }));
+  if (b) parts.push(el("p", { text: "ModTrap's own mod “" + j.mod_name + "” is still in MO2's mods folder with " + plural(b, "plugin") + " a tool had written anew in it (" + j.left_behind.join(", ") + "). It is no longer in the mod list, so the game does not get it and your modlist is as it was before the demaster; MO2 would only show the folder as a new, disabled mod. ModTrap can set the " + (b === 1 ? "plugin" : "plugins") + " aside in the job's folder and take the folder away." }));
+  return el("div", { class: "card warn" }, el("h2", { text: n ? "The last Revert left " + plural(n, "plugin") + " out of place in the load order" : "The last Revert left ModTrap's own mod behind" }),
+    ...parts,
+    el("p", {}, state.changes ? finishButton(j, () => renderDemaster(true), n ? "Put them back in place" : "Tidy it away") : null, el("span", { class: "dim", text: "  Close MO2 first. Nothing is deleted; the change is in the history." })));
 }
 async function revertDemaster(job) {
   let said = "";
@@ -896,7 +901,7 @@ function renderDemaster(force) {
       el("p", { class: "dim", text: "New plugins in “" + j.mod_name + "”: " + (j.plugins.join(", ") || "none") + ". Disabled: " + (j.disabled.join(", ") || "none") + ". Deactivated: " + (j.deactivated.join(", ") || "none") + "." }),
       ...remadeNote(j)));
   }
-  for (const j of allJobs.filter((x) => x.state === "reverted" && (x.unfinished || []).length).slice(0, 1)) cards.push(unfinishedCard(j));
+  for (const j of allJobs.filter((x) => x.state === "reverted" && ((x.unfinished || []).length || (x.left_behind || []).length)).slice(0, 1)) cards.push(unfinishedCard(j));
   if (earlier) {
     const go = el("button", { type: "button", class: "linkish", text: "the History tab" });
     go.addEventListener("click", () => showTab("history"));
@@ -1086,8 +1091,9 @@ async function pollHistory() {
           });
           cell.append(undo);
         }
-        if (j.what !== "add" && (j.unfinished || []).length && d.can_change) {
-          cell.append(el("div", { class: "dim", text: plural(j.unfinished.length, "plugin") + " left out of place" }), finishButton(j, pollHistory));
+        if (j.what !== "add" && ((j.unfinished || []).length || (j.left_behind || []).length) && d.can_change) {
+          cell.append(el("div", { class: "dim", text: (j.unfinished || []).length ? plural(j.unfinished.length, "plugin") + " left out of place" : "ModTrap's own mod left behind" }),
+            finishButton(j, pollHistory, (j.unfinished || []).length ? "Put them back in place" : "Tidy it away"));
         }
         tr.append(cell);
         return tr;

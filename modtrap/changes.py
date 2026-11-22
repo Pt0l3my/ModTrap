@@ -164,7 +164,7 @@ class Changes:
         """Takes the jobs that no longer stand (reverted, or failed) off the lists. A job that is still in place
         stays: its Revert needs it. Nothing is deleted, and the history of changes is not touched."""
         gone = [j["job"] for j in self.jobs() if j["state"] != "added"] + \
-               [j["job"] for j in self.demaster_jobs() if j["state"] != "installed" and not j["unfinished"]]
+               [j["job"] for j in self.demaster_jobs() if j["state"] != "installed" and not j["unfinished"] and not j["left_behind"]]
         hidden = sorted(self._hidden() | set(gone))
         try:
             paths.write_atomic(self._jobs_dir() / "hidden.json", (json.dumps(hidden, indent=1) + "\n").encode("utf-8"))
@@ -403,7 +403,8 @@ class Changes:
             # Only the newest demaster is looked at: an older one's plugins are a later one's business. A Revert that
             # left plugins out of their places stays on the list, cleared or not, until it is finished (WHY§83).
             unfinished = self._unfinished(d, done) if reverted and newest else []
-            if d.name in hidden and not unfinished:
+            left_behind = self._left_behind(d) if reverted and newest else []
+            if d.name in hidden and not unfinished and not left_behind:
                 continue
             retired = [n for n in done.get("retired", []) if isinstance(n, str)]
             # ModTrap's copies that hide a plugin made anew (WHY§56), and for each whether the copy can go: the new
@@ -415,7 +416,7 @@ class Changes:
                         "disabled": done.get("disabled", []), "deactivated": done.get("deactivated", []),
                         "state": "reverted" if reverted else "installed", "retired": retired,
                         "stale": [x["plugin"] for x in remade], "remade": remade,
-                        "unfinished": unfinished})
+                        "unfinished": unfinished, "left_behind": left_behind})
         return out
 
     # --- the tools run after a demaster (MT29, WHY§91) ----------------------------------------------------------------
@@ -718,6 +719,16 @@ class Changes:
         except Exception:
             return []
 
+    @staticmethod
+    def _left_behind(work: Path) -> list[str]:
+        """For a demaster that was reverted: the plugins of ModTrap's own mod that are still on disk. A Revert leaves
+        one that is no longer as ModTrap made it (a tool wrote it anew in place); from 0.3.25 it sets it aside, and
+        one made before that left it, with ModTrap's mod folder around it (WHY§96). Never raises."""
+        try:
+            return [Path(a["path"]).name for a in safe.Safe(work / "safe").added if Path(a["path"]).is_file()]
+        except Exception:
+            return []
+
     def _revert_finish(self, name: str, work: Path, the_safe: safe.Safe) -> dict:
         """A Revert made before ModTrap put plugin lines back (or cut short): the plugins the demaster had taken out
         go back to their places in the load order. Nothing else is touched. Called with the lock held, MO2 closed;
@@ -729,16 +740,37 @@ class Changes:
         m = api._need()
         pdir = m.instance.profiles_dir / m.instance.profile
         gap = demaster.lists_gap(pdir, the_safe, m.instance, done)
-        if gap is None:
+        behind = [Path(a["path"]) for a in the_safe.added if Path(a["path"]).is_file()]
+        if gap is None and not behind:
             raise Bad("the safe folder's copies of the plugin lists are not there any more, so ModTrap cannot say "
                       "where the plugins stood")
+        gap = gap or {"place": [], "activate": []}
         placed, notes = demaster.lists_back(pdir, gap)
+        # What the Revert left of ModTrap's own mod (WHY§96): set aside, kept, and the emptied folder taken away. Only
+        # while the mod is not in MO2's list any more: a folder MO2 has listed again is MO2's and the owner's.
+        aside = 0
+        listed = m.instance.mod(str(done.get("mod", ""))) if done.get("mod") else None
+        if behind and listed is not None and listed.listed:
+            notes.append("ModTrap's own mod “%s” is in MO2's list again, so ModTrap leaves it alone: remove it in MO2" % done.get("mod"))
+        else:
+            for p in behind:
+                try:
+                    self._aside(p, work / "set-aside-by-revert" / "modtraps-own-mod")
+                    p.unlink()
+                    aside += 1
+                    try:
+                        p.parent.rmdir()
+                    except OSError:
+                        pass
+                except OSError as e:
+                    notes.append("%s could not be set aside: %s" % (p.name, logbook.why(e)))
         history.History(api.store.dir(api.session.id)).add(
-            "revert finished", job=name, placed=placed + list(gap["activate"]), notes=[logbook.mask(n) for n in notes])
-        log.info("the Revert of %s is finished: %d plugin(s) back at their places in the load order%s", name,
-                 len(placed) + len(gap["activate"]), "; " + "; ".join(notes) if notes else "")
+            "revert finished", job=name, placed=placed + list(gap["activate"]), notes=[logbook.mask(n) for n in notes],
+            left=[p.name for p in behind] if aside else [])
+        log.info("the Revert of %s is finished: %d plugin(s) back at their places in the load order, %d left in ModTrap's "
+                 "own mod set aside%s", name, len(placed) + len(gap["activate"]), aside, "; " + "; ".join(notes) if notes else "")
         return {"job": name, "placed": len(placed) + len(gap["activate"]), "notes": [logbook.mask(n) for n in notes],
-                "how": "finish", "restored": 0, "removed": 0, "left": [], "tools": [], "tools_not_kept": [], "set_aside": 0}
+                "how": "finish", "restored": 0, "removed": 0, "left": [], "tools": [], "tools_not_kept": [], "set_aside": aside}
 
     # --- a strong Revert (WHY§81) ------------------------------------------------------------------------------------
 

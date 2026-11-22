@@ -118,6 +118,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 93 | 2026-11-22 | 0.3.21 on the owner's PC: versions set, patchers built outside MO2 and taken as built inside; the framework then waited for its run button, which ModTrap now presses, closing it on its log's word | DECIDED | #tools #mo2 #process |
 | 94 | 2026-11-22 | The press worked on the owner's PC; the framework's run compiles again and its compiler crashes inside MO2: the compiler goes on MO2's own list of programs it leaves alone, and a tool is started once more for a stated reason | DECIDED | #tools #mo2 #safety |
 | 95 | 2026-11-22 | The whole demaster went through on the owner's PC; ModTrap reads the settings files that name the plugin line by line, and gives one account of its checks after the demaster | DECIDED | #steps #process #revert |
+| 96 | 2026-11-22 | A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press | FACT | #revert #page |
 
 ## Entries
 
@@ -2367,3 +2368,19 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests (where a line names the plugin, a switched-off line, a file of an unknown kind, the step ModTrap's
   or the owner's accordingly; the account of checks; Revert with a plugin rewritten in ModTrap's mod); in a
   browser, the one go ending "complete and checked" with the play test left.
+
+### 96. A Revert made before 0.3.25 left ModTrap's own mod folder behind with a plugin a tool had rewritten: harmless, said on the job, tidied with one press
+
+`2026-11-22` · FACT · `#revert #page` · refs: WHY§95, WHY§83, DESIGN§11
+
+- The owner, after WHY§95: "well I already done a revert, is that bad?"
+- FACT (the code of 0.3.24). That Revert went line by line. It took ModTrap's mod out of the mod list, enabled the
+  mods again with their plugins at their places, put the tools' kept output back, and removed ModTrap's plugins
+  that were still as ModTrap had made them. The one a tool had written anew in place was left, and its folder
+  with it. The folder is in MO2's mods folder and in no list: the game does not get it; MO2 shows such a folder
+  as a new mod, not enabled. The modlist is as it was before the demaster.
+- What it costs: a next demaster of the same mods finds the name taken and calls its mod "… (2)".
+- DECIDED. The newest reverted demaster says when plugins of ModTrap's own mod are still on disk, stays on the job
+  list, and the press that finishes a Revert (WHY§83) also sets those plugins aside in the job's folder and takes
+  the emptied folder away. Not if MO2 has the mod in its list again: then it is MO2's and the owner's.
+- Checked: a test (left behind by the earlier way, said on the job, tidied by the press, the three lists untouched).
