@@ -35,6 +35,9 @@ HANDOVER_HEADER = "X-ModTrap-Handover"
 LOCATE_PATH = "/api/locate"
 SAVE_PATH = "/api/save/download"  # the packed session, handed out once (WHY§48)
 UPLOAD_PATH = "/api/add/upload"   # a dropped mod archive, as its bytes (DESIGN§16.1)
+LIST_PATH = "/api/updates/upload" # the list of a dropped Wabbajack file, as its bytes (DESIGN§20)
+METAS_PATH = "/api/updates/metas" # dropped meta files, as their texts
+METAS_MAX = 4 * 1024 * 1024
 UPLOAD_MAX = 64 * 1024 ** 3
 LOCATE_MAX = 3 * 1024 * 1024      # a dropped folder's ModOrganizer.ini in base64, and the folder's name
 POST_MAX = 64 * 1024
@@ -340,13 +343,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             n = -1
-        cap = LOCATE_MAX if path == LOCATE_PATH else UPLOAD_MAX if path == UPLOAD_PATH else POST_MAX
+        cap = LOCATE_MAX if path == LOCATE_PATH else UPLOAD_MAX if path in (UPLOAD_PATH, LIST_PATH) else METAS_MAX if path == METAS_PATH else POST_MAX
         if n < 0:
             self._will_not_read()
             return self.send(400, {"error": "no length"})
         if n > cap:
             self._will_not_read()
             return self.send(413, {"error": "too large"})
+        if path == LIST_PATH:
+            take = getattr(self.app.api, "updates_upload", None)
+            if take is None:
+                self._will_not_read()
+                return self.send(404, {"error": "not found"})
+            try:
+                return self.send(200, take(urllib.parse.parse_qs(self.path.partition("?")[2], keep_blank_values=True), n, self.rfile))
+            except Exception as e:
+                self.close_connection = True          # what is left of the body is not read
+                return self._error(e)
         if path == UPLOAD_PATH:
             # The body is the file itself, written to ModTrap's work folder as it arrives; never held in memory.
             upload = getattr(self.app.api, "upload", None)

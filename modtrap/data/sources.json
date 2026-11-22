@@ -1,0 +1,15 @@
+{
+ "format": "modtrap-sources/1",
+ "about": "ModTrap's data for finding where a mod came from and whether it has a newer file (MO01§12, TL01§27, MO01§13). 'nexus_games' maps a game's name as MO2 writes it in a meta file, and as Wabbajack writes it in a list, both in lower case, to the game's name in Nexus's addresses. 'active_states' are the states of a file at Nexus that MO2 counts as current (main, update, optional, miscellaneous); 'gone_states' are removed and archived. Facts read in MO2's and Wabbajack's public sources; nothing copied.",
+ "nexus_games": {
+  "skyrimse": "skyrimspecialedition",
+  "skyrimspecialedition": "skyrimspecialedition",
+  "skyrim": "skyrim",
+  "enderalse": "enderalspecialedition",
+  "enderalspecialedition": "enderalspecialedition"
+ },
+ "active_states": [1, 2, 3, 5],
+ "old_state": 4,
+ "gone_states": [6, 7],
+ "state_words": {"1": "main file", "2": "update", "3": "optional file", "4": "old version", "5": "miscellaneous", "6": "removed", "7": "archived"}
+}

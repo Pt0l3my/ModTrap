@@ -122,6 +122,10 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 97 | 2026-11-22 | Steps say who really does them; what is left to the owner in a settings file is said with file, line and what to do; a third framework read; Revert with MO2 open | DECIDED | #steps #page #tools |
 | 98 | 2026-11-22 | A scanner of every settings file in force in the modlist: the winner of each path, read to its end, no time limit; what it could not read is named; the frameworks installed are listed | DECIDED | #steps #tools #page |
 | 99 | 2026-11-22 | The scanner walks all of meshes for the folders of animation replacers and reads which condition each mention belongs to; two conditions can hold once the mod is gone and stay the owner's; every look is written to the log with each failure | DECIDED | #steps #tools #log |
+| 100 | 2026-11-22 | On the owner's list the scanner is whole in 20 s, then 3 s; the demaster of 0.3.29 went through clean; the Process tab's own Demaster button was not greyed while ModTrap scanned | FACT | #page #steps #process |
+| 101 | 2026-11-22 | An update check: sources read from MO2's records and a Wabbajack file; Nexus and GitHub asked as MO2 asks; the owner's key kept under Windows' protection; not yet run against the real services | DECIDED | #updates #network #page |
+| 102 | 2026-11-22 | The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything | DECIDED | #page |
+| 103 | 2026-11-22 | A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list | DECIDED | #updates #page |
 
 ## Entries
 
@@ -2495,3 +2499,107 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests with invented files (folders at any depth, the older layout's folder, conditions nested, on one
   line, unknown, unsound; the two unsettled; a file and a folder that cannot be opened and what the log says; a
   second look that fails the same way; a scanner that raises); the card and a whole demaster in a browser.
+
+### 100. On the owner's list the scanner is whole in 20 s, then 3 s; the demaster of 0.3.29 went through clean; the Process tab's own Demaster button was not greyed while ModTrap scanned
+
+`2026-11-22` · FACT · `#page #steps #process` · refs: WHY§92, WHY§98, WHY§99, MT30, MT36
+
+- The owner, with a session file of 0.3.29: "the demaster button isn't greyed out in process page header whilst
+  ModTrap is still doing its post launch scans. How do the logs look, was the demaster flawless?"
+- FACT (the session's log). The scanner's first look after launch: 3,488 sources, 30,933 folders listed, 168
+  folders of animation replacers, 11,549 settings files in force (6,918 in SKSE/Plugins, 3,999 in animation
+  replacers' folders, 630 in top folders, 2 in FLM), 973 hidden, 37.5 MB read, whole, 20.2 s of which the listing
+  3.4 s. Every later look: 2.5 to 3.3 s, with one or two files read anew and some 10,750 folders passed by.
+- FACT. The whole demaster in one go went through: dry run, 7 plugins demastered and verified, 3 mods disabled,
+  the behaviour tool run by its switches (33 files), the patcher framework run by its button (3 files), 0
+  problems in the load order after each reading. One settings file named a ticked plugin before the patcher
+  framework's run and was that tool's own output; after the run it no longer did. One file is left that names a
+  plugin, of a kind ModTrap reads, with nothing to do.
+- FACT. After the dry run MO2 took longer to close than the 16 s it was given, as once before; the demaster's own
+  start closed it. It now gets 30 s, and a message that shows only then is closed as the first is.
+- FACT, the fault. The gate (WHY§92) marks buttons by their words as the script makes them. The Process tab's
+  "Demaster Selected" is a fixed button of the page and did not carry the mark; the same button on the Selection
+  tab did. The server would have refused the start all the same (MT30), so nothing could go wrong, but the button
+  looked ready.
+- Fixed: the button carries the mark; at its start the page marks every fixed button by the same words; a test
+  holds every fixed button with such words to the mark.
+
+### 101. An update check: sources read from MO2's records and a Wabbajack file; Nexus and GitHub asked as MO2 asks; the owner's key kept under Windows' protection; not yet run against the real services
+
+`2026-11-22` · DECIDED · `#updates #network #page` · refs: MT37, MO01§12, MO01§13, TL01§27, DESIGN§20
+
+- The owner asked for it (MT37). Until now ModTrap made no connection but to its own page on this PC. This is the
+  one exception, and it is kept narrow: two hosts, named in the code, and a test holds the code to them; an
+  answer that points elsewhere is not followed.
+- Sources, in the order they are trusted: the mod's `meta.ini` (the files installed by number, the mod's number,
+  the archive, a web address), the `.meta` beside the downloaded archive, then the Wabbajack file's entry for the
+  archive. A mod with no number and a GitHub address is a GitHub mod; other hosts cannot be asked for versions
+  and are said so.
+- The Wabbajack file's list is read piece by piece (METHOD: its archives and directives are walked one entry at a
+  time, never the whole text), and only a summary is kept in ModTrap's folder, by the file's size and date.
+  30,000 invented directives through pieces of 4 KB read right in the tests; the real size is not yet seen.
+- The verdict for a Nexus mod follows MO2's own way (MO01§13), in ModTrap's own code: the installed file by its
+  number, else by the archive's name; the chain of replacements; a newer current file is an update. Where the
+  installed file cannot be told, or is marked old with no word of what replaced it, the state is "unclear" with
+  what is known, never "up to date".
+- REJECTED: asking about every mod at each scan. Some 3,000 mods with a number are more than the account's
+  allowance for a day. One question for the month's list says which mods had a new file; a mod is asked about
+  only then, or when its last asking is over four weeks old. The first scans of a large list are therefore
+  spread over several scans, enabled mods and those in the month's list first.
+- REJECTED: taking the key from MO2. MO2 keeps its own in Windows' store for MO2; it is not ModTrap's to take.
+- The key: one file in ModTrap's own folder, written through DPAPI on Windows; the page gets only "a key is
+  kept"; the log gets no part of it (a test reads the log, the page's state and the state for the key's text).
+- A scan does not count as ModTrap working (WHY§92): it changes nothing and reads nothing a demaster needs, so
+  nothing is greyed for it.
+- NOT YET CHECKED: against the real Nexus and GitHub, and with a real Wabbajack file. The answers' fields are as
+  MO2 reads them, and the tests use stand-ins shaped so. The owner's first scan, and its lines in the log, are
+  the check; anything that differs shows there as an error in words, not as a wrong "up to date".
+- Checked: tests (the records of a mod; the list's file, also large and broken ones; the chain, the archive's
+  name, what cannot be told; what is asked again and when; the allowance; no key; the two hosts only; the key
+  never given back); the tab in a browser with stand-ins.
+
+### 102. The bar of ticked mods sits at the free end of the row of sections instead of over the page; ModTrap's own mod shows under the modlist's last separator only because it is placed above everything
+
+`2026-11-22` · DECIDED · `#page` · refs: DESIGN§4, DESIGN§8, WHY§97
+
+- The owner, with a picture: "when the user has mods selected this over top message with buttons covers the UI,
+  can it be moved into header where there is no text? Also what is "ModTrap - … + …" in Not Yet Installed?"
+- The bar ("2 mods ticked: …", "See what depends on them", "Untick all") floated over the bottom of the page and
+  covered the last rows of the list. It is now part of the row of sections (Modlist, Demaster, …), at its right
+  end, which is empty. Tried first: the header's row of chips; on a wide list that row is nearly full, the bar
+  wrapped to a line of its own and the page jumped as mods were ticked. In the row of sections the height stays
+  the same at 1500 and at 1000 pixels' width; the text of the bar is cut with an ellipsis before the row grows.
+- The mod asked about is the one ModTrap makes for a demaster: it holds the plugins ModTrap rewrote (seven in the
+  owner's demaster), is enabled, and is placed above every other mod so that its plugins win over the originals,
+  which stay untouched in their own mods. The Mods tab groups mods by the modlist's separators; the list's last
+  separator is called "Not Yet Installed", so a mod placed above everything shows under it. The label is the
+  list's, not a state of the mod. Revert takes the mod out again.
+
+### 103. A menu on a mod by the right mouse button; a source link of the owner's own, kept outside the mod; a drop zone for a Wabbajack file, downloads' meta files and mods' folders; of a Wabbajack file the page sends only the list
+
+`2026-11-22` · DECIDED · `#updates #page` · refs: MT38, MT37, WHY§101, TL01§27, MO01§12, DESIGN§20
+
+- The owner asked for both (MT38).
+- The link is not written into the mod's `meta.ini`, though MO2 has a field for it: that file is the mod's and
+  MO2's, and ModTrap changes no file of a mod it did not make (MT9). It is kept in ModTrap's folder by modlist
+  and mod, and read before the mod's own records: it is the owner's own word on the source.
+- What a dropped meta file is good for: a list installed by Wabbajack often keeps its downloads in a folder that
+  is not MO2's downloads folder, so MO2's own records of the archives are not where ModTrap looks. A download's
+  `<archive>.meta` names the mod's and the file's number (MO01§12); it is matched to the mods by the archive each
+  was installed from. A mod's `meta.ini` alone does not say which mod it is of, so it is taken with its folder,
+  whose name is the mod's. A given meta file fills in only where the mod's own records say nothing.
+- A dropped folder is looked through at its top and one folder down: that covers one mod's folder, a folder of
+  mods, and a folder of downloads, and never walks a whole drive.
+- METHOD. A browser gives a dropped file's bytes, not its path, and a Wabbajack file can be gigabytes. The page
+  reads the archive's directory at the file's end (also the large kind, for more than 65,535 entries or sizes
+  past 4 GB), finds the entry called `modlist` (TL01§27), and sends only that entry's bytes as they lie in the
+  file. ModTrap unpacks them as it reads, writes nothing but its summary, and deletes what arrived. Checked in a
+  browser with an invented file of 66,000 entries, and in tests with the bytes packed and unpacked.
+- The path field stays, for a file too awkward to drag.
+- While the Updates tab is shown, a drop anywhere on the page is for the update check; elsewhere a drop still
+  opens a modlist or adds a mod's archive as before.
+- The menu is the page's own, not the browser's: rows as buttons, closed by Escape, a click elsewhere, a scroll
+  or leaving the window; the arrow keys move in it.
+- Checked: tests (the kinds of link and what is refused; the link before every record and no file of the mod
+  changed; given meta files, and the mod's own record winning; the list's bytes, broken bytes; through the
+  requests); in a browser the menu on both tabs, the box, the button's file chooser and a real drop.
