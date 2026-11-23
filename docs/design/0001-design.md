@@ -1109,3 +1109,90 @@ together in the load order, its line says so.
 
 **A file swapped in** (`paths.write_atomic`): every write has a temporary name of its own, and a swap Windows
 refuses because the file is held open for a moment is tried again for about four seconds before it is given up.
+
+## 31. MO2's plugin groups, kept; a tool's last word (MT73)
+
+**Which groups the Plugins tab shows.** Where the profile has a `plugingroups.txt` (MO05), the groups are MO2's
+own: each plugin carries the name the file gives it, a group's line stands wherever that name changes from one
+plugin of the load order to the next, and a run of plugins without a name stands under "No group", with a button
+to give them one. Where the profile has no such file, §30's groups by the mods' separators stay. A word beside the
+filters says which of the two is shown. Reading the groups is part of reading the lists and needs nothing switched
+on.
+
+**Writing a group** (`plugingroups.set_groups`) changes the lines of the plugins named and no other byte of the
+file: a line is changed in place, added at its place by name, or taken out; the file's own line ends are kept. It
+is refused where the file is not there, and for a name that could not stand in it. It is never done outside a job:
+the list job and the add job take the file into their safe (§8) with MO2's other lists whenever it is there.
+
+**When ModTrap writes one** (MT73):
+
+| What happens | The plugin's group |
+|---|---|
+| A plugin is new in the load order (install, enable, first activation) | between two plugins of one group: that group; else the name of its mod's separator, unless plugins elsewhere carry that name and no neighbour does; else none |
+| ModTrap moves a plugin | between two plugins of one group: that group; else its own, where a new neighbour has it or it stood alone in it; else none |
+| The owner says (Plugins tab) | the name given, or none; for a whole group, its new name |
+| A mod is uninstalled | nothing is written (MO2 drops the line itself); the group is remembered, and written again by a Revert that finds it gone |
+
+Each is in the History ("Plugin's group", or with the move), and each Revert puts it back: the whole file while
+nothing else has changed it, otherwise only the lines that still say what ModTrap wrote; a line changed again
+since stays, and the Revert says so.
+
+**The mods' table side by side** keeps MO2's Installation and Notes columns (§29); only the count of a mod's
+plugins is hidden there.
+
+**A mod's web** (§23), amended:
+
+- Two plugins that change the same records without one being the other's master are a conflict only where the
+  later one was made by hand. Where a tool made the later one from the load order as a whole (`adding.generated`:
+  a tool's output), or it is ModTrap's demastered copy of such a plugin (it lies in ModTrap's own mod and a tool's
+  output mod holds the plugin it was made from), the link is told as that plugin's change winning, with "made by a
+  tool to have the last word", and the pair's block says why it is no conflict.
+- The overview says what "It needs" means: how many mods the mod's plugins are built on, and that there is
+  nothing to do while all of them are there and active. A master that is missing, or not active while the plugin
+  that needs it is, is a warning line above it.
+
+## 32. ModTrap's own copies in a mod's web; a demaster and the plugins' groups (MT74)
+
+**A demastered copy** is a plugin whose file lies in a mod ModTrap made for a demaster (its name begins with
+"ModTrap - "); it stands for the plugin of the same name in the highest other enabled mod that has it. In a mod's
+web (§23, §31), a pair of plugins that change the same records without one naming the other as a master is, in
+this order:
+
+1. *as before the demaster*, where one of the two is such a copy and the other plugin's mod is not younger than
+   the copy's file: told as the later one's change winning, with the reason; never a conflict;
+2. *a tool's last word*, where the later one was made by a tool, or is a copy of a plugin a tool made (§31);
+3. *settled*, where an active third plugin has both as masters;
+4. *a conflict*.
+
+The overview of ModTrap's own mod names the mods its copies stand for and says that a copy adds no conflict and
+takes none away.
+
+**A demaster's safe folder** (§8) holds MO2's groups file with the three lists, where the profile has one. A
+demaster writes no group. Its Revert by lines (§11), and the finishing of an earlier Revert, give each plugin they
+put back in the load order its group again where it has none: the one the safe's copy names, or, without such a
+copy, the one it stands inside.
+
+## 33. What ModTrap warns of (MT76)
+
+**The rule.** A warning (a red or amber finding, a mark on a row, a question before a change, a note on the Health
+tab) is given only for something that breaks the game or the load order. Who overwrites whom, in files or in
+records, is never one.
+
+| Warned of | Where it is read |
+|---|---|
+| a master missing, not active, or loading after the plugin that needs it; a master-flagged plugin needing one that is not | the plugins' headers and the load order (§5) |
+| a plugin that cannot be read; more full or light plugins than the game loads | the same |
+| an archive, animations or meshes in the older game's format; a script extender plugin for another game version | the files' first bytes (§26, TL01§33) |
+| a deleted navmesh; deleted references; files one folder too deep | the plugin's records by kind; the mod's folders |
+| a skeleton that wins with fewer bones | the two files' sizes |
+| a mod's files winning over what a tool built | the files, and which mods are a tool's output (§20) |
+| the same mod enabled twice | the mods' titles and files (§27, MT68) |
+
+**Told as information, on the owner's asking:** which mod's files win (the evaluation's findings of that kind, the
+web's "overwrites" and "is overwritten", MO2's Conflicts column), and, through "Scan what it overwrites", which
+plugins hold the same records before and after a plugin.
+
+**No longer told at all:** whether two plugins that change the same records "conflict". §23.2's four kinds for
+records, §31's and §32's rules about them, the scan after enabling (§18) with its note and its row marks, and the
+setting for it are gone. A mod's web (§23) has six kinds: it needs, needs it, a patch for it, a tool's output,
+overwrites its files, files it overwrites; its second pass looks through the files only.

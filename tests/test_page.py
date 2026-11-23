@@ -82,7 +82,10 @@ class PageTests(unittest.TestCase):
         for path in ("/api/list/plugins/set", "/api/list/plugins/move", "/api/selfupdate/upload", "/api/selfupdate/apply"):
             self.assertIn(path, self.js)
         self.assertIn('if (p.issues.length) mark("bad", "⚠"', self.js)
-        self.assertIn('mark("warn", "⇄"', self.js)
+        # MT76: what a plugin overwrites gets no mark, and nothing is scanned unasked.
+        self.assertNotIn("⇄", self.js.split("function pluginMarks(p) {")[1].split("\n}")[0])
+        self.assertNotIn("scan_on_enable", self.js)
+        self.assertNotIn("function scanNote(", self.js)
         for needle in ('id="plugins-undo"', 'class="c-mark"'):
             self.assertIn(needle, self.html)
         # A plugin's tick asks nothing: no question box in its function.
@@ -131,9 +134,41 @@ class PageTests(unittest.TestCase):
         self.assertIn('const COL_FIXED = { "mods-table": 3, "plugins-table": 4 };', self.js)
         self.assertIn("const key = keys[th.dataset.c !== undefined ? Number(th.dataset.c) : i];", self.js)
         self.assertIn("main.sidebyside #mods-table .k3,", self.css)
+        # MT73: side by side, the mods keep MO2's Installation and Notes columns; only their plugins' count goes.
+        self.assertNotRegex(self.css, r"sidebyside #mods-table \.k[4567]")
         self.assertNotIn("nth-child(n+7)", self.css)
         self.assertIn("table.colfixed { table-layout: fixed; }", self.css)
 
+
+    def test_the_plugins_list_shows_mo2s_own_groups_where_mo2_keeps_them(self):
+        """MT73."""
+        # MO2's groups as its file has them: a new one wherever the name changes from a plugin to the next; a plugin
+        # without one under “No group”, with a button to give it one. Without the file, the mods' separators.
+        self.assertIn('state.pluginGroups = p.groups || "separators";', self.js)
+        self.assertIn('const mo2 = state.pluginGroups === "mo2";', self.js)
+        self.assertIn('group = last && last.mo2 === gname ? last : null;', self.js)
+        self.assertIn('name: gname || "No group"', self.js)
+        self.assertIn('give.addEventListener("click", () => groupPlugins(names(), ""));', self.js)
+        self.assertIn('id="plugins-groups"', self.html)
+        self.assertIn('"Groups: MO2\'s own" : "Groups: by the mods\' separators"', self.js)
+        # A group is given by name, with the groups there are to choose from, as a change of its own; never with MO2 open.
+        self.assertIn('const got = await api("/api/list/plugins/group", { plugins: names, group: to.trim() });', self.js)
+        self.assertIn('if (choices) input.setAttribute("list", "modal-list");', self.js)
+        self.assertRegex(self.js, r'const NEEDS_MO2_FREE = new Set\(\[[^\]]*"/api/list/plugins/group"')
+        self.assertRegex(self.js, r"const MO2_GATED = /\^\([^/]*Give a group…")
+        self.assertIn('"plugin grouped": "Plugin\'s group"', self.js)
+        self.assertIn('"plugin group": "plugin\'s group"', self.js)
+
+    def test_the_web_says_what_it_needs_means_and_tells_no_conflicts(self):
+        """MT73, MT76."""
+        self.assertIn('if (d.needs) said.push(', self.js)
+        self.assertIn("every one of them is there and active. Nothing to do:", self.js)
+        # MT76: which records two plugins both change is not told: six kinds, none of them a conflict.
+        self.assertIn('const WEB_LEGEND = ["needs", "needed", "patch", "output", "overwritten", "overwrites"];', self.js)
+        for gone in ('conflict: ["Conflict"', '"Conflict, settled"', '"Changes its records"', '"Records it changes"', 'class: "wkw wk-conflict"'):
+            self.assertNotIn(gone, self.js)
+        # ModTrap's own mod says what its copies stand for.
+        self.assertIn('if (d.mod.modtrap) said.push(el("p", {}, el("b", { text: "ModTrap\'s own mod: " })', self.js)
 
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
@@ -248,12 +283,12 @@ class PageTests(unittest.TestCase):
             self.assertRegex(self.js, r"\n  %s: \[\"⚡" % state)
             self.assertIn(".confbtn.cf-%s { color:" % state, self.css)
         self.assertIn('if (!state.placing) webOpen(m.name, { conflicts: true });', self.js)
-        self.assertIn('if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output", "loses", "wins"]);', self.js)
+        self.assertIn('if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output"]);', self.js)
         self.assertIn('if (table.id) return table.id + (table.id === "mods-table" ? ":" + table.tHead.rows[0].cells.length : "");', self.js)
         for option in ("conflict", "conflict-asc", "made", "made-asc", "notes", "notes-desc"):
             self.assertIn('<option value="%s">' % option, self.html)
         # The plugins' list: groups by the mods' separators, folded and unfolded, and open while a search narrows it.
-        self.assertIn('g.row = el("tr", { class: "sep pgroup" }, el("td", { colSpan: 9 }, g.btn, g.info));', self.js)
+        self.assertIn('g.row = el("tr", { class: "sep pgroup" + (g.loose ? " loose" : "") }, el("td", { colSpan: 9 }, g.btn, g.info));', self.js)
         self.assertIn('const shut = !filtering && p.group && folded.has(p.group.key);', self.js)
         self.assertIn('ev.target.closest("#plugins-table tbody tr[data-plugin]")', self.js)
         self.assertIn('id="plugins-fold"', self.html)
@@ -277,7 +312,7 @@ class PageTests(unittest.TestCase):
         self.assertIn('if (refreshing) { $("refresh-text").textContent = "Reading the modlist anew…"; return; }', self.js)
         self.assertIn('id="refresh-bar"', self.html)
         # MT71: each separator's name heads the plugins' list once.
-        self.assertIn("let group = byName.get(gname);", self.js)
+        self.assertIn("group = byName.get(gname);", self.js)
         self.assertNotIn('" #" + n', self.js)
 
     def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):

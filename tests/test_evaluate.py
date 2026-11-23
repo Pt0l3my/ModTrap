@@ -99,13 +99,14 @@ class AModWeighed(unittest.TestCase):
         self.assertEqual((got["counts"]["same"], got["counts"]["papers"]), (1, 1))              # the same script, and a read-me
         self.assertIn("1 shared file is the same, byte for byte", f["same"]["title"])
         self.assertEqual(f["papers"]["level"], "good")
-        self.assertEqual(f["shared:scripts:wins"]["level"], "warn")
+        self.assertEqual(f["shared:scripts:wins"]["level"], "info")              # MT76: which mod's file wins is no warning
         self.assertEqual(f["shared:scripts:wins"]["items"], ["“Quill”: 1 file (scripts/quillscript.pex)"])
         plug = f["shared:plugin:wins"]
-        self.assertEqual(plug["level"], "warn")
+        self.assertEqual(plug["level"], "info")
         self.assertIn("   Shared.esp: this mod's has the masters Core.esm, Quill.esp; “Quill”'s has Core.esm", plug["items"])
         self.assertTrue(any("the winning file is much smaller" in x for x in f["shared:skeleton:wins"]["items"]))
-        self.assertEqual(f["shared:script extender plugin:wins"]["level"], "warn")
+        self.assertEqual(f["shared:skeleton:wins"]["level"], "warn")             # the one that crashes the game: fewer bones win
+        self.assertEqual((f["shared:script extender plugin:wins"]["level"], f["mixed-textures"]["level"]), ("info", "info"))
         # A colour picture from this mod over a mod that has the surface picture too: a set from two mods, and smaller.
         self.assertTrue(any("textures/set/wall.dds (colour from this mod, surface from “Quill”)" == x for x in f["mixed-textures"]["items"]))
         self.assertTrue(any("1024×1024 in place of 4096×4096" in x for x in f["smaller-textures"]["items"]))

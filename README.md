@@ -32,8 +32,8 @@ only when ModTrap is started with `--allow-changes`, and that is meant for once 
 With `--allow-changes`, the Modlist section's Mods tab works as MO2's own list does, with MO2 closed: tick a mod to
 enable or disable it (its plugins are placed by MO2's own rule: a new one last, a master at the end of the masters'
 block, none before its own masters), drag a row to move it, rename a separator. What is not safe is asked first;
-every change can be undone; and a scanner tells, for a mod, whether its plugins stand safely in the load order and
-which records and files it overwrites. The ticks that choose mods for a demaster are on Demaster's "Pick mods" tab.
+every change can be undone; and a scanner tells, when asked, for a mod, whether its plugins stand safely in the load
+order and which records and files it overwrites. The ticks that choose mods for a demaster are on Demaster's "Pick mods" tab.
 
 The Plugins tab works the same way: tick a plugin to activate or deactivate it, drag it to another place in the load
 order (within the limits MO2 itself keeps), and a symbol on a plugin's row says when something is wrong with it or
@@ -59,7 +59,11 @@ A mod that is installed or updated is named by its title and its version ("Examp
 offered in a box to change or keep.
 
 The mods' list has MO2's own Conflicts, Installation and Notes columns, worked out by MO2's rules; a press on a
-conflict mark draws the mods in conflict. The plugins' list is grouped by the mods' separators, as in MO2.
+conflict mark draws the mods whose files it overwrites and that overwrite its own. ModTrap warns only of what breaks
+the game (a missing master, a file of the wrong format and the like); who overwrites whom is told when asked for, and
+never as a warning. The plugins' list shows MO2's own plugin groups where MO2 keeps them (its plugin manager extension's
+`plugingroups.txt`), and ModTrap gives a plugin it installs or moves its group there; without them it is grouped by
+the mods' separators.
 
 ModTrap shows no window but its page in the browser: its program's console is hidden, and what it writes is on the
 page's Log. It closes when its page is closed, never in the middle of a job, and a tab the browser brings back
@@ -69,8 +73,9 @@ ModTrap updates itself: the version at the top of the page is a button, and a re
 checked, put in place (the version in use is kept aside), tried, and started.
 
 To try it on Windows from the package (`ModTrap-<version>-win64.zip`, built by `tools/build_exe.py`): unpack it and
-start `ModTrap.exe`, which starts it with `--allow-changes`. It runs on the Python
-installed on the PC (3.10 or newer), or on its own where the package was built with Python inside.
+start `ModTrap.exe`, which starts it with `--allow-changes`. **It needs Python 3.10 or newer installed on the PC**
+(python.org, with "Add python.exe to PATH" ticked): the package holds no Python of its own, and nothing else needs
+installing.
 
 To try it from this repository (Windows, Python 3.10 or newer): download it, then double-click `ModTrap.cmd`, or run
 

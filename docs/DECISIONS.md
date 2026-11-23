@@ -85,8 +85,13 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT71 (with MO2 open nothing that changes its lists can be begun; the page stays while the modlist is read anew;
   each separator heads the plugins' list once).
   MT72 (the loading symbols move on every PC).
-- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
-  package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+  MT73 (MO2's own plugin groups are shown, and kept when ModTrap places or moves a plugin; Notes and Installation
+  side by side; a tool's last word is no conflict; "It needs" is no fault).
+  MT74 (ModTrap's demastered copy stands for the plugin it was made from, so what it shares with the mods that were
+  there is no conflict; a demaster's Revert puts plugins back in their groups).
+  MT75 (closed by MT76). MT76 (ModTrap warns only of what breaks the game; conflicts are not told: the record
+  kinds of a mod's web, the scan after enabling and its marks are removed).
+- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -1187,6 +1192,11 @@ you are done, so github repo upload or download doesn't fail."
   with its switch for changes. The switch stays a thing the owner chooses, by which program they start.
 - The package is built by `tools/build_exe.py` and is never committed. The launcher is ModTrap's own code.
 
+*2026-11-23, later.* **Owner's words:** "we ship without python, and make it dependency". Settled: the package holds
+no Python and there is no build with Python inside; Python 3.10 or newer on the PC is what ModTrap needs, said in the
+package's read-me and by the launcher where none is found. The open point about the sweep falls away with it. The
+second bullet above no longer holds; the build script, the launcher and `NOTICE` no longer know a `python` folder.
+
 ## MT52
 
 **The package's names; staying on ModTrap's tab; the press at Nexus** · *2026-11-23 · The owner's request*
@@ -1876,6 +1886,9 @@ now."
 the load order with a plugin outside them. MO2's own source has no such groups, so they come from somewhere
 ModTrap has not read. A session's pack now lists the files of the profile's folder, to find where.
 
+*2026-11-23, later.* Found: an extension of MO2 keeps them in the profile's `plugingroups.txt` (MO05). MT73 shows
+and keeps them.
+
 ## MT72
 
 **The loading symbols move** · *2026-11-23 · The owner's report*
@@ -1887,3 +1900,143 @@ animate, you have this symbol at many places, find them all and make them animat
 PC: the turning circle wherever it stands, the mark of a step that is going, the dot of a live run, and the bar of
 a modlist read anew. They stood still where Windows is set to show no animations, because the page switched them
 off there. What is only for show (a row that flashes when it is gone to) still stands still on such a PC.
+
+## MT73
+
+**MO2's own plugin groups, read and kept; Notes and Installation side by side; a tool's last word is no conflict; what "It needs" says** · *2026-11-23 · The owner's report*
+
+**Owner's words.** "looking at current plugin list in ModTrap it's not being saved to MO2, if you compare [a mod]
+is in [a] group at the bottom, but not in MO2.
+
+also you didn't add MO2 notes column to modlist.
+
+Also when I look at the demastered files at the bottom of the modlist, the UI shows massive number of conflicts, I
+believe these files have been made to simply overwrite some of the original output files with two demastered mods,
+so these should not be confilcts? Also what is "it needs" about? those mods are turned on and active, so what is
+the issue with the demastered patch files needing 329 masters? or is that just a note that those are required
+anyway?"
+
+(The mod's and the group's names stand as placeholders.)
+
+**Settled** (DESIGN§31, WHY§139, MO05; the owner may overrule any of it):
+
+- **The plugins' groups are MO2's own.** The owner's MO2 keeps plugin groups in its profile's `plugingroups.txt`
+  (MO05), and the Plugins tab now shows those: a group wherever neighbours in the load order carry the same name,
+  as MO2 shows them, and a plugin without one under "No group". This answers MT71's open note. Where a MO2 keeps
+  no such file, the groups by the mods' separators of MT71 stay, and the tab says which of the two it shows.
+- **ModTrap keeps them.** What MT70 and MT71 showed was worked out for the page and written nowhere, which is why
+  MO2 did not have it. Now:
+  - *A plugin new to the load order* (a mod installed, a mod enabled, a plugin activated for the first time) gets
+    its group in MO2's file as part of the same job: placed between two plugins of one group, it is in that group;
+    otherwise it takes the name of its mod's separator, joining a neighbour that has it or beginning a new group.
+    Where that name is in use elsewhere in the load order and no neighbour has it, the plugin is left without a
+    group rather than under a second group of the same name; where its mod stands under no separator, likewise.
+  - *A plugin ModTrap moves* joins the group it lands in; it keeps its own at the edge of its group, or where it
+    stood alone in it; taken out of the middle of its group, it has none.
+  - *At the owner's word:* "Give a group…" on a "No group" line, and "Change its group…" or "Take it out of its
+    group" in a plugin's right-click menu, with the name asked for (the mod's separator proposed, the groups there
+    are to choose from); "Rename the group…" in a group's.
+  - All of it as every change of MO2's lists: MO2 closed, a safe copy first, read back, in the History with its
+    Revert (whole, or by its own lines once MO2 has written since). ModTrap never makes the file: without it there
+    are no groups to keep.
+- **Notes and Installation show side by side too.** They were there on the Mods tab and hidden in the split view,
+  for room; only the count of a mod's plugins is hidden there now, and the table scrolls sideways.
+- **A tool's last word is no conflict.** A plugin a tool made from the load order as a whole (a tool's output, or
+  ModTrap's demastered copy of one, which stands in its place) is meant to have the last word on the records it
+  holds, whether or not it names the earlier plugin as a master. What it changes after a plugin it does not name
+  is told as its change winning, with the reason, and no longer as a conflict. The other way round stays one: a
+  plugin that loads after a tool's output and does not know it undoes the tool's work unseen.
+- **"It needs" is no fault.** It names the mods whose plugins this mod's plugins are built on (their masters): what
+  must stay enabled for it to load. With all of them there and active there is nothing to do, and the web's
+  overview now says so in words. A master that is missing or not active is the fault, and is told apart, as a
+  warning.
+
+## MT74
+
+**ModTrap's demastered copy stands for the plugin it was made from; a demaster's Revert puts plugins back in their groups** · *2026-11-23 · The owner's report*
+
+**Owner's words.** "fix the known gap, the conflict are still showing for the demaster files in ModTrap 0.3.64. the
+plugin groups seem to work now. so what do you need from me?"
+
+**Settled** (DESIGN§32, WHY§140; the owner may overrule any of it):
+
+- **A demastered copy is judged as the plugin it stands for.** MT73 took only a tool's output out of the conflicts.
+  The owner's demaster mod holds seven copies, and five of them are hand-made plugins, most of them the list
+  author's own patches: those still read as conflicts with hundreds of mods. But a copy has the same records as the plugin it was made from,
+  at the same place in the load order, with a master taken out. So what it changes in common with another plugin,
+  that plugin and the original changed in common before the demaster, in the same order: the demaster made none of
+  it and removed none of it. In a mod's web such a pair is told as "records it changes" or "changes its records",
+  with "as before the demaster" and the reason, from either side; the overview of ModTrap's own mod says what its
+  copies stand for.
+- **A mod that came since is weighed anew.** Where the other plugin's mod came into MO2 after the copy was made
+  (its folder is younger than the copy's file: an install, or an update, which makes the folder anew), the plugin
+  the copy stands for never stood beside it. That pair goes by the rules for any two plugins: a conflict where
+  neither knows the other and the later one is no tool's work (MT73).
+- **The known gap of MT73 is closed.** A demaster now takes MO2's groups file into its safe folder with the other
+  lists. When its Revert puts back plugin lines that MO2 had dropped (DESIGN§11), each plugin gets the group it
+  had before the demaster. For a demaster made before this (its safe folder has no copy of the groups), a plugin
+  put back between two plugins of one group is in that group, and one put back at the edge of a group is left
+  under "No group" for the owner; a copy of the groups file is taken before it is written.
+
+## MT75
+
+**The modlist's own hand-made patches: conflicts, or the author's arrangement** · *Open*
+
+**Question.** Two hand-made plugins that change the same records, neither naming the other as a master, are told as
+a conflict (DESIGN§23). On a curated list that rule also catches the list author's own patches: built on dozens to
+hundreds of mods, placed late on purpose, they are the author's settling of conflicts and read as hundreds of
+conflicts. MT74 takes ModTrap's copies of them out of it; the plugins themselves, where no copy stands for them,
+are still told so. Should they be?
+
+**Options.**
+
+- (a) **By what came with the list.** Where the owner has given the list's own file (`.wabbajack`, on the Updater
+  list), ModTrap knows which mods came with the list. Two plugins that both came with it are the author's
+  arrangement, whatever their masters: told as records changed, never as a conflict. A conflict is only told where
+  one of the two came since: a mod the owner added, or one updated.
+- (b) **By how broad a plugin is.** A plugin whose masters come from ten mods or more is taken as a patch made over
+  the list: what it changes after a plugin that was there when it was made is its work. Needs nothing from the
+  owner; a small patch of the author's still reads as a conflict, and ten is a number picked, not found.
+- (c) **As now.**
+
+**Recommendation.** (a), with (b) where no list file is given. It says what the owner needs to know when adding
+and removing mods on a curated list: what the list's author arranged is left alone, and what changed since is
+weighed.
+
+**Until decided.** (c), with MT74's exception for ModTrap's own copies.
+
+*2026-11-23, later.* Closed by MT76: the owner wants no conflicts told at all, so neither option is taken.
+
+## MT76
+
+**ModTrap warns only of what breaks the game; conflicts are not told** · *2026-11-23 · The owner's decision*
+
+**Owner's words.** "I only wanted modtrap to tell when there is an actual problem that would cause issues, like
+crashes, I am not actually interested in conflicts, and clearly so far they are all false alarms. if you can't do
+that, just remove it."
+
+**Settled** (DESIGN§33, WHY§141). ModTrap cannot do it for conflicts: it reads which records and files two mods
+both have, not what is changed inside them, and that one mod's change wins over another's is how a modlist is put
+together, not a fault. So the telling of conflicts is removed, and what stays a warning is what breaks the game.
+
+- **A warning is given only for** a master that is missing, not active, or loads after the plugin that needs it; a
+  plugin flagged as a master that needs one that is not; a plugin that cannot be read; more plugins than the game
+  loads; a file the game cannot use or crashes on (an archive, animations or meshes in the older game's format, a
+  script extender plugin for another version of the game, a deleted navmesh, deleted references, files one folder
+  too deep); a skeleton that wins with fewer bones; a mod's files winning over what a tool built; and the same mod
+  enabled twice (MT64, asked for).
+- **Removed.** From a mod's web: the four kinds that came from comparing records ("Conflict", "Conflict,
+  settled", "Changes its records", "Records it changes"), the list of conflicts in its overview, and the look
+  through the records, which was also what made it slow. The scan that ran by itself after a mod was enabled or a
+  plugin was activated or moved, its note at the foot of the page, its setting, and the marks on the plugins' rows
+  for what a plugin overwrites.
+- **Lowered to information.** In a mod's evaluation, which mod's file wins (plugins of the same name, scripts,
+  face files, archives, textures put together from two mods and the rest): told, never as a warning. When a mod
+  is enabled, that its plugin goes after what the tools made is a note, not a warning.
+- **Kept, because they are not warnings.** MO2's own Conflicts column, which says whose files are loaded as MO2
+  says it, and the web's two kinds for files (overwrites, is overwritten); "Scan what it overwrites" when the
+  owner asks for it, for a mod or a plugin.
+- **This closes MT75** (neither option: nothing of the kind is told at all) and takes away the web's rules of MT73
+  and MT74 for a tool's last word and for ModTrap's copies, which only decided what counted as a conflict. Of
+  MT74 the rest stands: a demaster's Revert puts plugins back in their groups, and the overview of ModTrap's own
+  mod says which mods its copies stand for.

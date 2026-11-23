@@ -161,6 +161,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 136 | 2026-11-23 | MO2's Conflicts column is a property of the whole list, so the whole list is listed once and kept; a new plugin goes before the tools' outputs whatever it changes | METHOD | #model #page #adding |
 | 137 | 2026-11-23 | The page greys what the server already refuses; a re-read keeps the page; a run of the load order is not a separator's group; two saves at once shared one temporary file | METHOD | #page #safety #sessions |
 | 138 | 2026-11-23 | A progress symbol is not decoration: it moves even where the PC asks for less motion | FACT | #page |
+| 139 | 2026-11-23 | MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands | FACT | #model #page #safety |
+| 140 | 2026-11-23 | A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed | METHOD | #model #page #safety |
+| 141 | 2026-11-23 | Which records two plugins both change predicts no fault, so it is told as none | DECIDED | #model #page |
 
 ## Entries
 
@@ -3079,6 +3082,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   (the "py" launcher, else "python", with ModTrap's folder given to it); and with Python inside, which is built
   the same way and waits for the owner's word on the sweep. The launcher is the same program in both: it takes
   the Python beside it where there is one.
+- Later (2026-11-23, MT51's note): the owner chose the package without Python, with Python as what ModTrap needs
+  on the PC. The build with Python inside, and the launcher's look for a Python beside it, are taken out.
 
 ### 117. The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program
 
@@ -3751,3 +3756,105 @@ them; the addresses were read by a session that can), and the time the second pa
   turning in its place is the message itself. So those four keep moving; the flash of a row gone to stays off.
 - Checked in a browser set to ask for less motion: the circle's animation is in force and its angle changes
   between two looks; the dot and the bar likewise.
+
+### 139. MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands
+
+`2026-11-23` · FACT · `#model #page #safety` · refs: MT73, MT71, MT70, MO05, DESIGN§31, WHY§137
+
+- FACT (MO05§1, §2): the groups of the owner's plugin list are not MO2's own. An extension that replaces MO2's
+  plugin list keeps them in the profile's `plugingroups.txt`, one `name|group` line for each grouped plugin,
+  rewritten whole whenever MO2 writes its plugin lists. Found by the listing of the profile's folder that the
+  session's pack has carried since 0.3.62 (MT71's open note).
+- FACT (MO05§3): a group is not stored as a thing. It is the run of neighbours in the load order with the same
+  name. A plugin with a name its neighbours lack is a group of one; a name carried by plugins apart is two groups.
+  This is the very thing the owner called duplicates in MT71, there by ModTrap's own doing; in MO2's own data it
+  can only be shown as it is.
+- METHOD: so a new plugin's group cannot be chosen apart from its place. The place is settled first (MT70: before
+  the tools' outputs), then the group follows: inside a group, that group; between groups, the name of the mod's
+  separator, which is what the page showed before and what the owner expected to find in MO2. Rejected: always
+  the separator's name (it would cut a group in two where the plugin lands inside one, and begin a second group of
+  a name already in use elsewhere); always the group of the plugin before (a new plugin would silently join the
+  last ordinary group, whatever it is). Left without a group where neither rule gives a clean answer: the owner
+  sees it under "No group" and says.
+- METHOD: the writer changes single lines and keeps every other byte, at the line's place by name, so that a
+  Revert by lines is possible once MO2 has written the file anew, and a stale line is never a harm (MO05§2).
+  ModTrap never makes the file: where it is absent, that MO2 has no groups, and a file made by ModTrap would be
+  read by nothing.
+- FACT (the module loaded at start): reading the groups must not load the writer of MO2's lists, which is loaded
+  only where changes are switched on (MT8, a test holds it); the reader uses the instance's own file reading, and
+  the writer is brought in inside the one function that writes.
+- METHOD (the web's conflicts): "neither is the other's master" is the mark of a conflict between two plugins
+  made by hand. A tool's output is made from the whole load order and holds the winning record of each, with
+  masters only where a record points at another plugin: by that mark alone it conflicts with hundreds of mods,
+  which is what the owner saw on ModTrap's demastered copies of the outputs. The later plugin being tool-made
+  decides it; the earlier one being tool-made does not, because a hand-made plugin after the outputs does undo
+  them. A patch told only by its name is not counted as tool-made: its name says what it was made for, not that
+  it saw the plugin it overrides.
+- Checked: on a copy of the owner's file the rule gives the one plugin without a group the name of its mod's
+  separator, the writer adds one line at its place and keeps the other 3,742 lines as they were, and taking the
+  group away again gives the file back byte for byte. Not checked on the owner's PC: that MO2 shows the new group
+  after the next start, and the web of the demastered mod with the new rule.
+- Not done: a demaster's Revert that puts back plugin lines MO2 had dropped (DESIGN§11) does not put back their
+  groups, which MO2 dropped with them. The groups file is not among that job's safe copies, and nothing is written
+  without one (MT14). Such a plugin shows under "No group", for the owner to give it one.
+- Later (2026-11-23, MT74, WHY§140): done. A demaster takes the groups file into its safe, and its Revert puts the
+  groups back; and the web's rule for ModTrap's copies no longer rests on who made the plugin.
+
+### 140. A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed
+
+`2026-11-23` · METHOD · `#model #page #safety` · refs: MT74, MT75, MT73, DESIGN§32, DESIGN§23, DESIGN§11, MO05§2, WHY§139, WHY§83
+
+- FACT (the owner's screenshot of 0.3.64): the web of ModTrap's demaster mod still showed 355 mods in conflict.
+  Its seven plugins are two tools' outputs and five hand-made plugins, most of them the list author's own patches
+  (the plugins' groups in MO2 say so: two stand in the outputs' group, the five in three ordinary groups of the
+  load order). WHY§139's rule asks whether a tool made the later plugin, so it cleared the two and left the five.
+- METHOD: the owner's point was never about tools. It was that these files only stand in for the originals. That
+  is exact: the demaster's change run takes a master out and leaves every record the plugin overrides as it was
+  (the dry run and the check after it hold that), and the copy takes the original's place in the load order by its
+  name. So for any other plugin P, the set of records the copy and P both change, and which of the two loads
+  later, is what it was between the original and P. Whether that was ever a conflict is a question about the
+  modlist (MT75), not about the demaster. The web of ModTrap's own mod is where the owner looks for what ModTrap
+  did, so there it must not be told as a conflict.
+- METHOD (the limit): "as it was before" is only true of a plugin that was there before. The copy's file time is
+  when the demaster made it; a mod's folder is made when MO2 or ModTrap installs it, and made anew by an update
+  (MO04§3, the Installation column). A mod whose folder is younger than the copy is weighed by the ordinary rules.
+  Not caught: a mod installed before the demaster and enabled only after it. The demaster's safe folder holds the
+  lists of that time and could say; left until it matters.
+- Rejected: telling such pairs by a kind of their own. The ten kinds each have a colour and a side of the picture;
+  "records it changes" with the reason beside it says what is the case.
+- Rejected for now, and asked as MT75: taking the author's hand-made patches out of the conflicts wherever they
+  stand. That needs to know what came with the list, or a guess by how many mods a plugin is built on.
+- METHOD (the gap of WHY§139): a demaster takes MO2's groups file into its safe with the three lists, so that the
+  groups of that time can be read when plugin lines MO2 dropped are put back (`groups_back`). A demaster made
+  earlier has no such copy: there the only thing known is where the plugin stands now, so it gets the group it
+  stands inside, and none at a group's edge, where two answers are possible. MT14 is kept by taking the copy at
+  that moment, before the write.
+- Checked: on invented lists, both directions and both sides of the web, the mod that came since, the Revert by
+  lines to the byte with the groups' copy, and the Revert of a demaster without one. Not checked on the owner's
+  PC: the web of the demaster mod, where every mod of the list is older than the copies and the mods installed on
+  the 23rd are younger.
+
+### 141. Which records two plugins both change predicts no fault, so it is told as none
+
+`2026-11-23` · DECIDED · `#model #page` · refs: MT76, MT75, MT74, MT73, MT62, DESIGN§33, DESIGN§23, WHY§140, WHY§139
+
+- FACT (three rounds with the owner's list): every conflict ModTrap told was a false alarm. 129 notes on doubles
+  (MT68), 355 conflicts on the demaster mod (MT73), the same again after a tool's output was let off (MT74). Each
+  round made the rule finer and left the next class standing.
+- FACT (what ModTrap reads): for a record, that a plugin holds it; for a file, its name, size and first bytes. Not
+  what is changed inside a record. Whether the later plugin's record carries the earlier one's change, or drops
+  it, or should drop it, cannot be seen from that; "neither is the other's master" was a guess at the author's
+  intent, and on a curated list of thousands of plugins the guess is wrong nearly every time, because the load
+  order itself is the author's settling of it.
+- FACT (the game): two plugins changing one record never stop the game: the last one loaded is used, whole. What
+  stops it, or a plugin, is of another kind and can be read exactly: a master that is not there, not active or
+  loads too late, too many plugins, a file in a format this game does not read, a navmesh deleted.
+- DECIDED (the owner, MT76): so the first is not told and the second is. A warning that is wrong most of the time
+  teaches the owner to pass over the ones that are right.
+- METHOD (what went): the record pass of `modweb.far` with the rules of WHY§139 and WHY§140 on top of it, the
+  page's four kinds and their side of the picture, the automatic scan and its marks. What stayed is on request:
+  `loadcheck.overrides` behind "Scan what it overwrites", told plainly, for the owner who wants the facts.
+- METHOD (the evaluation's levels): a finding about whose file wins is information; the one such finding with a
+  crash behind it is a skeleton that wins with fewer bones, and it is a warning only where the sizes say so.
+- Later readers: the web's record pass is in the history of this file's repository at 0.3.65, if a way to read
+  inside records ever makes it worth having again (MT23 is the open question nearest to it).

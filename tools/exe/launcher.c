@@ -3,9 +3,9 @@
    Starts Python with ModTrap ("-m modtrap") in a console of its own, hidden (MT63), and hands on whatever was given
    on its own command line. It has no window itself. ModTrap lies in the "app" folder beside this program.
 
-   Which Python: the one in a "python" folder beside this program, where the package has one (it finds ModTrap
-   through python\python313._pth and takes nothing else of the PC into its path); else the Python installed on the
-   PC, found as Windows finds programs: the "py" launcher first, then "python". Nothing on the PC is changed.
+   Which Python: the one installed on the PC, found as Windows finds programs: the "py" launcher first, then
+   "python". ModTrap's package holds none (MT51): Python 3.10 or newer is what ModTrap needs to be there, and this
+   program says so where it is not. Nothing on the PC is changed.
 
    Built with EXTRA_ARGS set to ModTrap's switch for changes: ModTrap.exe is the one program, able to do all of
    ModTrap's work. Built plain, it would start ModTrap as its command line does without the switch. */
@@ -69,25 +69,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show
     if (slash == NULL) return say(L"ModTrap could not tell which folder it is in.");
     *slash = 0;
 
-    if (_snwprintf(app, LONGEST + 63, L"%ls\\app", dir) < 0 || _snwprintf(python, LONGEST + 63, L"%ls\\python\\python.exe", dir) < 0)
+    if (_snwprintf(app, LONGEST + 63, L"%ls\\app", dir) < 0)
         return say(L"The folder ModTrap is in has too long a path.");
     if (GetFileAttributesW(app) == INVALID_FILE_ATTRIBUTES)
         return say(L"The \"app\" folder that belongs beside ModTrap.exe is not there.\n\nUnpack the whole ModTrap folder and start ModTrap.exe from inside it.");
 
     rest = rest_of_command_line();
-    if (GetFileAttributesW(python) != INVALID_FILE_ATTRIBUTES) {
-        /* The package's own Python. */
+    /* The Python installed on this PC: it is told where ModTrap lies. */
+    SetEnvironmentVariableW(L"PYTHONPATH", app);
+    if (SearchPathW(NULL, L"py.exe", NULL, LONGEST, python, NULL) != 0) {
+        first = L" -3";
+    } else if (SearchPathW(NULL, L"python.exe", NULL, LONGEST, python, NULL) != 0) {
         first = L"";
     } else {
-        /* The Python installed on this PC: it is told where ModTrap lies. */
-        SetEnvironmentVariableW(L"PYTHONPATH", app);
-        if (SearchPathW(NULL, L"py.exe", NULL, LONGEST, python, NULL) != 0) {
-            first = L" -3";
-        } else if (SearchPathW(NULL, L"python.exe", NULL, LONGEST, python, NULL) != 0) {
-            first = L"";
-        } else {
-            return say(L"ModTrap needs Python 3.10 or newer, and found none on this PC.\n\nInstall Python from python.org (tick \"Add python.exe to PATH\"), then start ModTrap again.");
-        }
+        return say(L"ModTrap needs Python 3.10 or newer, and found none on this PC.\n\nInstall Python from python.org (tick \"Add python.exe to PATH\"), then start ModTrap again.");
     }
     if (wcslen(python) + wcslen(EXTRA_ARGS) + wcslen(rest) + 64 > LONGEST) return say(L"The command line is too long.");
     /* Started plainly, the console made below is ModTrap's own, and ModTrap is told so: it may then hide it or show it.

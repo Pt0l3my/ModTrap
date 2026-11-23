@@ -75,26 +75,44 @@ class TheWebOfAMod(unittest.TestCase):
         self.assertEqual((won["weight"], won["text"]), (1, "1 file of it overwritten"))
         self.assertNotIn(("overwrites", "Thistle"), quill)
 
-    def test_records_two_plugins_both_change_a_conflict_a_settled_one_and_a_patchs_own_way(self):
-        quill, thistle = self.links("Quill"), self.links("Thistle")
-        # Quill and Thistle both change a record of Core, neither knowing the other; Bridge has both as masters.
-        settled = quill[("settled", "Thistle")]
-        self.assertEqual((settled["weight"], settled["settled_by"], settled["loses"]), (1, ["Bridge.esp"], 1))
-        self.assertIn("Bridge.esp has both as masters", settled["text"])
-        self.assertEqual(thistle[("settled", "Quill")]["wins"], 1)
-        # Thistle and the tool's output: nobody has both. A conflict, told from each side.
-        clash = thistle[("conflict", "Tool Output")]
-        self.assertEqual((clash["weight"], clash["lines"]), (1, ["Thistle.esp loses to Generated.esp in 1 record (GLOB 1)"]))
-        self.assertIn(("conflict", "Quill - Lantern Patch"), thistle)
-        # The patch changes what Quill changes and has Quill as a master: how a patch works, and no conflict.
-        self.assertEqual(quill[("loses", "Quill - Lantern Patch")]["text"], "its change wins over this mod's in 1 record")
-        self.assertNotIn(("conflict", "Quill - Lantern Patch"), quill)
+    def test_which_records_two_plugins_both_change_is_not_told(self):
+        """MT76: that one plugin's change wins over another's is how a modlist works; nothing breaks by it, and
+        ModTrap cannot see whether anything is lost. No link says it, from either side."""
+        self.assertEqual(modweb.KINDS, ("needs", "needed", "patch", "output", "overwrites", "overwritten"))
+        for name in ("Quill", "Thistle", "Tool Output", "Quill - Lantern Patch"):
+            got = modweb.web(self.m, self.m.instance.mod(name), True)
+            self.assertTrue(got["deep"])
+            self.assertEqual({x["kind"] for x in got["links"]} - set(modweb.KINDS), set())
+            self.assertFalse(any("record" in x["text"] for x in got["links"]))
+
+    def test_modtraps_own_mod_names_the_mods_its_copies_stand_for(self):
+        fx.write(self.root / "mods" / "Demaster_separator" / "meta.ini", b"[General]\r\n")
+        for name, data in {"QuillLanternPatch.esp": pf((CORE, "Quill.esp"), (A, 6.0)), "Generated.esp": pf((CORE,), (B, 4.0))}.items():
+            fx.write(self.root / "mods" / "ModTrap - Lantern" / name, data)
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Tool Output\r\n", b"+ModTrap - Lantern\r\n+Demaster_separator\r\n+Tool Output\r\n"))
+        self.m = model.build(instance.load(self.root))
+        got = modweb.web(self.m, self.m.instance.mod("ModTrap - Lantern"), True)
+        self.assertEqual((got["mod"]["modtrap"], got["mod"]["copies"]), (True, ["Quill - Lantern Patch", "Tool Output"]))
+        mine = {(x["kind"], x["mod"]) for x in got["links"]}
+        self.assertEqual(mine, {("needs", "Core"), ("needs", "Quill"), ("overwrites", "Quill - Lantern Patch"), ("overwrites", "Tool Output")})
+        self.assertNotIn("modtrap", modweb.web(self.m, self.m.instance.mod("Quill"), False)["mod"])
+
+    def test_what_it_needs_is_counted_and_only_a_master_that_is_absent_or_off_is_a_fault(self):
+        got = modweb.web(self.m, self.m.instance.mod("Bridge"), False)
+        self.assertEqual((got["needs"], got["lacking"], got["lacks"]), (3, 0, []))
+        profile_dir = self.root / "profiles" / "Default"
+        f = profile_dir / "plugins.txt"
+        f.write_bytes(f.read_bytes().replace(b"*Thistle.esp", b"Thistle.esp"))
+        self.m = model.build(instance.load(self.root))
+        got = modweb.web(self.m, self.m.instance.mod("Bridge"), False)
+        self.assertEqual((got["needs"], got["lacking"], got["lacks"]), (3, 1, ["Bridge.esp needs Thistle.esp, which is not active"]))
 
     def test_the_links_come_in_the_order_of_their_kinds_and_are_counted(self):
         got = modweb.web(self.m, self.m.instance.mod("Quill"), True)
         kinds = [x["kind"] for x in got["links"]]
         self.assertEqual(kinds, sorted(kinds, key=modweb.KINDS.index))
-        self.assertEqual(got["counts"], {"needs": 1, "needed": 2, "patch": 1, "output": 1, "overwritten": 1, "settled": 1, "loses": 1})
+        self.assertEqual(got["counts"], {"needs": 1, "needed": 2, "patch": 1, "output": 1, "overwritten": 1})
         self.assertTrue(got["deep"])
 
 

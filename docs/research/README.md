@@ -13,6 +13,7 @@ Sources are read only, never built or run, each cloned in its own folder outside
 | MO02 | [A mod's installer file, as MO2 reads it](mo2/02-installer-file.md) | `github.com/ModOrganizer2/modorganizer-installer_fomod`, `master` at `7c39956` (2026-10-06); no licence file at its root, read only |
 | MO03 | [Where MO2 puts a mod's plugins, and how it renames a mod](mo2/03-plugin-placement.md) | the same MO2 source as MO01, at `4ba22f0` |
 | MO04 | [What MO2's Conflicts, Installation and Notes columns show](mo2/04-columns.md) | the same MO2 source as MO01, at `4ba22f0` |
+| MO05 | [MO2's plugin groups: the plugin manager extension and its `plugingroups.txt`](mo2/05-plugin-groups.md) | `github.com/Exit-9B/modorganizer-bsplugins`, `main` at `5c535d7` (2024-02-15); GPL-3.0 by its `LICENSE`; and the owner's own file, as a session's pack had it |
 | XE01 | [xEdit: the command line and scripting](xedit/01-command-line-and-scripting.md) | `github.com/TES5Edit/TES5Edit`, tag `xedit-4.1.5f` at `f5c00f3` (2024-04-27); MPL-2.0 by its `LICENSE.txt` |
 | XE02 | [The plugin file header](xedit/02-plugin-header.md) | the same xEdit source: its record definitions |
 | TL01 | [How patching tools name and mark their output](tools/01-outputs.md) | the repositories of Wrye Bash, Synthesis and ParallaxGen, each at a named commit |

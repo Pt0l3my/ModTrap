@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import dryrun, history, instance, logbook, model, paths, plugin, process, profile, safe
+from . import dryrun, history, instance, logbook, model, paths, plugin, plugingroups, process, profile, safe
 from .instance import fold
 
 SCRIPT = Path(__file__).resolve().parent / "xedit" / "ModTrapApply.pas"
@@ -169,7 +169,9 @@ class Demaster:
         self.board.mark("change", "safe", process.GOING)
         for name in list(self.plan.demaster) + self.plan.switch_off:
             self.safe.take(self.model.row(name).path)
-        for fname in ("modlist.txt", "plugins.txt", "loadorder.txt"):
+        # MO2's plugin groups too, where this MO2 keeps them (MT73): a MO2 that runs while a plugin is out of its
+        # lists drops the plugin's group with its line, and Revert puts both back (MT74).
+        for fname in ("modlist.txt", "plugins.txt", "loadorder.txt", plugingroups.NAME):
             if (self.pdir / fname).is_file():
                 self.safe.take(self.pdir / fname)
         self.stage = "safe"
@@ -449,6 +451,53 @@ def _old_lists(profile_dir: Path, the_safe: safe.Safe) -> tuple[list[str], dict[
     return order, {fold(n): a for n, a in listed}
 
 
+def _old_groups(profile_dir: Path, the_safe: safe.Safe) -> dict[str, str] | None:
+    """The plugins' groups before the demaster, from the safe folder's copy of MO2's groups file; None when the
+    job took none (this MO2 keeps no groups, or the demaster was made before ModTrap kept them) or the copy is
+    no longer what was taken."""
+    item = next((i for i in the_safe.items if Path(i["path"]).name == plugingroups.NAME and Path(i["path"]).parent == profile_dir), None)
+    if item is None:
+        return None
+    src = the_safe.files / item["copy"]
+    try:
+        if safe.sha256(src) != item["sha256"]:
+            return None
+        return plugingroups.parse(instance._decode(instance._read_bytes(src)))[0]
+    except (OSError, instance.Unusable):
+        return None
+
+
+def groups_back(profile_dir: Path, the_safe: safe.Safe, placed: list[str]) -> tuple[dict[str, str], list[str]]:
+    """Gives the plugins just put back in the load order their groups in MO2's plugin list again (MT74): MO2 drops
+    a plugin's group with its line (MO05§2). Each gets the group it had before the demaster, as the safe folder's
+    copy says; for a demaster made before ModTrap kept that copy, the group it stands inside now, if it stands
+    inside one. A plugin that has a group is left alone. Returns the groups given and what could not be done."""
+    now = plugingroups.read(profile_dir)
+    if now is None or not placed:
+        return {}, []
+    then = _old_groups(profile_dir, the_safe)
+    want: dict[str, str] = {}
+    try:
+        order = instance.parse_loadorder(instance._decode(instance._read_bytes(profile_dir / "loadorder.txt")))
+        for name in placed:
+            if now.get(fold(name)):
+                continue
+            g = then.get(fold(name), "") if then is not None else plugingroups.for_new(order, now, name, "")
+            if g:
+                want[name], now[fold(name)] = g, g
+        if want:
+            path = profile_dir / plugingroups.NAME
+            the_safe.take(path)                     # a copy first, where the job has none yet (MT14)
+            the_safe.may_change(path)
+            try:
+                plugingroups.set_groups(profile_dir, want)
+            finally:
+                the_safe.wrote(path)
+    except (profile.Refused, safe.Refused, OSError, instance.Unusable) as e:
+        return {}, ["the plugins' groups could not be put back: %s" % (logbook.why(e) if isinstance(e, OSError) else e)]
+    return want, []
+
+
 def lists_gap(profile_dir: Path, the_safe: safe.Safe, inst, done: dict) -> dict | None:
     """What the profile's plugin lists lack of how they stood before the demaster, for the plugins the demaster
     took out of the game: those of the mods it disabled and the ones it deactivated. A MO2 that runs while a mod is
@@ -498,9 +547,10 @@ def lists_gap(profile_dir: Path, the_safe: safe.Safe, inst, done: dict) -> dict 
     return gap
 
 
-def lists_back(profile_dir: Path, gap: dict) -> tuple[list[str], list[str]]:
+def lists_back(profile_dir: Path, gap: dict, the_safe: safe.Safe | None = None) -> tuple[list[str], list[str]]:
     """Puts back what `lists_gap` found: each plugin directly before the plugin it stood before, in both lists,
-    active or not as it was. Returns the plugins placed and what could not be done, in words."""
+    active or not as it was, and in its group of MO2's plugin list where MO2 keeps groups (`groups_back`).
+    Returns the plugins placed and what could not be done, in words."""
     notes: list[str] = []
     placed: list[str] = []
     for name, before, _active in gap["place"]:
@@ -516,6 +566,11 @@ def lists_back(profile_dir: Path, gap: dict) -> tuple[list[str], list[str]]:
                 profile.set_plugins(profile_dir, wanted)
             except (profile.Refused, OSError) as e:
                 notes.append(str(e))
+    if the_safe is not None:
+        given, more = groups_back(profile_dir, the_safe, placed)
+        notes += more
+        for name, g in given.items():
+            log.info("%s is in the group “%s” of MO2's plugin list again", name, g)
     return placed, notes
 
 
@@ -535,7 +590,7 @@ def undo_by_line(profile_dir: Path, the_safe: safe.Safe, done: dict, inst=None) 
     placed: list[str] = []
     gap = lists_gap(profile_dir, the_safe, inst, done) if inst is not None else None
     if gap is not None:
-        placed, more = lists_back(profile_dir, gap)
+        placed, more = lists_back(profile_dir, gap, the_safe)
         notes += more
         for name in placed:
             log.info("%s is back at its place in the load order", name)

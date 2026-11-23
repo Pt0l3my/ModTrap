@@ -319,16 +319,17 @@ def shared(m: model.Model, mod: Mod, mine: list[str], stop: float) -> tuple[list
                     if win < lose * 0.85:
                         by[(kind, wins)].append("   %s: the winning file is much smaller (%s bytes against %s): fewer bones, most likely" % (f, format(win, ","), format(lose, ",")))
 
+    # Which mod's file wins is how a modlist works, and no warning (MT76): each kind is told, with what follows from
+    # it, as information. The one that breaks the game is a skeleton that wins with fewer bones: that is a warning.
     WORDS = {
-        "plugin": ("warn", "A plugin of the same name", "the whole plugin is replaced: every plugin that names it as a master gets the winner's instead. Right only where one mod is a "
+        "plugin": ("info", "A plugin of the same name", "the whole plugin is replaced: every plugin that names it as a master gets the winner's instead. So it is where one mod is a "
                    "newer version of the other, or a patch made to replace its plugin, as modlists' authors often make them"),
-        "script extender plugin": ("warn", "The same script extender plugin twice", "only the winner's is loaded. Two copies mostly mean the same mod twice, in two versions, or a mod and a fix that replaces its plugin"),
-        "skeleton": ("warn", "A skeleton is replaced", "every animation and every physics mod counts on the bones of the skeleton that wins. One with fewer bones crashes the game when a "
+        "script extender plugin": ("info", "The same script extender plugin twice", "only the winner's is loaded. Two copies mostly mean the same mod twice, in two versions, or a mod and a fix that replaces its plugin"),
+        "skeleton": ("info", "A skeleton is replaced", "every animation and every physics mod counts on the bones of the skeleton that wins. One with fewer bones crashes the game when a "
                      "character loads; the skeleton with the most bones should be the last"),
-        "scripts": ("warn", "Compiled scripts are replaced", "only the winner's script runs, and each mod was made for its own. Right where the winner is a patch for the other or "
-                    "its newer version; an older script over a newer one breaks what the newer mod does, without a word"),
-        "face data": ("warn", "Face files are replaced", "the mod that wins a character's face files must be the one whose plugin wins that character, or the face turns dark"),
-        "archive": ("warn", "An archive of the same name", "only one of the two archives is used, whole"),
+        "scripts": ("info", "Compiled scripts are replaced", "only the winner's script runs. So it is where the winner is a patch for the other or its newer version"),
+        "face data": ("info", "Face files are replaced", "the mod that wins a character's face files is to be the one whose plugin wins that character"),
+        "archive": ("info", "An archive of the same name", "only one of the two archives is used, whole"),
         "animations": ("info", "Animation or behaviour files are replaced", "the behaviour tool of the modlist builds from the winner's; it has to run again after such a change"),
         "lod": ("info", "Distant-view files are replaced", "what the distant-view tools built before does not hold what the winner brings, until they run again"),
         "menus": ("info", "Menu files are replaced", "the look of a menu, or a mod's settings menu, is the winner's"),
@@ -339,6 +340,8 @@ def shared(m: model.Model, mod: Mod, mine: list[str], stop: float) -> tuple[list
     }
     for (kind, wins), lines in sorted(by.items(), key=lambda kv: ({"bad": 0, "warn": 1, "info": 2}[WORDS.get(kv[0][0], ("info",))[0]], not kv[0][1], kv[0][0])):
         level, title, why = WORDS.get(kind, ("info", "Other files are replaced", "files of a kind ModTrap has no rule for"))
+        if kind == "skeleton" and any("fewer bones" in ln for ln in lines):
+            level = "warn"
         side = "This mod's files are the ones loaded" if wins else "The other mod's files are the ones loaded, not this mod's"
         findings.append(_finding("shared:%s:%s" % (kind, "wins" if wins else "loses"), level, title + (": this mod wins" if wins else ": this mod loses"),
                                  "%s. Why it matters: %s." % (side, why), lines))
@@ -347,7 +350,7 @@ def shared(m: model.Model, mod: Mod, mine: list[str], stop: float) -> tuple[list
                                     "At this place the mod wins over files a tool of the modlist built, so the game loads the mod's files and not what the tool made "
                                     "from the whole list. A mod belongs below the tools' outputs; the tool then has to run again.", outputs))
     if mixed:
-        findings.append(_finding("mixed-textures", "warn", "Texture sets put together from two mods",
+        findings.append(_finding("mixed-textures", "info", "Texture sets put together from two mods",
                                  "A surface has a colour picture and a surface picture that belong together. Here one of the two comes from this mod and the other from "
                                  "another: where they were not made for each other, the surface shows seams or the wrong shine.", sorted(mixed, key=str.lower)))
     if smaller:

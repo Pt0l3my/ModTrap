@@ -152,7 +152,7 @@
     <div class="scroll"><table id="mods-table">
       <thead><tr><th class="c-tick" id="mods-tick-head"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
         <th title="The plugins this mod provides, as MO2 would use them">Plugins</th>
-        <th class="c-conf" title="As MO2's Conflicts column: whether loose files of the mod win over other mods' files (⚡+), lose to them (⚡−), both (⚡±), or all lose (⚡∅). Press a mark for the mods it is in conflict with">Conflicts</th>
+        <th class="c-conf" title="As MO2's Conflicts column: whether loose files of the mod win over other mods' files (⚡+), lose to them (⚡−), both (⚡±), or all lose (⚡∅). Press a mark for the mods whose files it overwrites and the mods that overwrite its own. As in MO2, this says whose files are loaded; it is no warning">Conflicts</th>
         <th class="c-made" title="As MO2's Installation column: when the mod's folder was made">Installation</th>
         <th class="c-notes" title="As MO2's Notes column: the comments kept with the mod">Notes</th>
         <th class="c-num" title="Plugins of other mods that list one of this mod's plugins as a master. While there are any, disabling the mod gives missing-master errors.">Dependants</th></tr></thead>
@@ -171,6 +171,7 @@
       <label title="Plugins that other plugins list as a master"><input type="checkbox" id="p-deps"> Needed by others</label>
       <button id="plugins-fold" type="button" title="Fold every group of plugins">Fold all</button>
       <button id="plugins-unfold" type="button" title="Unfold every group of plugins">Unfold all</button>
+      <span id="plugins-groups" class="dim"></span>
       <span id="plugins-shown" class="dim"></span>
       <button id="plugins-undo" type="button" hidden></button>
       <span id="plugins-hint" class="dim"></span>
@@ -179,7 +180,7 @@
       <div class="scroll"><table id="plugins-table">
         <thead><tr><th class="c-tick" title="Ticked: the plugin is active. Tick or untick it to activate or deactivate the plugin"></th>
           <th class="c-num" title="The plugin's place in the load order">Position</th>
-          <th class="c-mark" title="Issues and conflicts: press a symbol for what it stands for"></th><th>Plugin</th>
+          <th class="c-mark" title="Issues: press a symbol for what it stands for"></th><th>Plugin</th>
           <th title="esm: a master file; esl: a light plugin; esp+esl: an .esp flagged light">Kind</th><th>Mod</th><th class="c-num">Mod priority</th>
           <th class="c-num" title="How many plugins this one lists as its masters">Masters</th>
           <th class="c-num" title="How many plugins list this one as a master">Needed by</th></tr></thead>

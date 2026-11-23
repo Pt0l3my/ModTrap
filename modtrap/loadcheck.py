@@ -196,8 +196,9 @@ def plan_set(m: model.Model, names: list[str], on: bool, read=plugin.read) -> di
             elif fold(x) in at and at[fold(x)] > i:
                 warn("%s is flagged as a master but needs %s, which is not: the game loads masters first whatever the list says." % (p["name"], x))
         if not p["master"] and not p["listed"] and made and not nxt:
-            warn("%s goes last, after what the tools made (%s): by MO2's rule a new plugin goes to the end. Where they change the same records, "
-                 "this plugin now wins; run those tools again if the mod should be in their output." % (p["name"], _listing(made[:3])))
+            # No warning (MT76): nothing breaks by it. What the tools made does not hold this mod until they run again.
+            out["notes"].append("%s goes last, after what the tools made (%s): by MO2's rule a new plugin goes to the end. Run those tools again "
+                                "if the mod should be in their output." % (p["name"], _listing(made[:3])))
     full = sum(1 for r in m.plugins.values() if r.active and r.source is not None and r.position is not None and not adding.is_light(r.kind))
     light = sum(1 for r in m.plugins.values() if r.active and r.source is not None and r.position is not None and adding.is_light(r.kind))
     add_full = sum(1 for x in out["plugins"] if not adding.is_light(x["kind"]))
@@ -206,8 +207,6 @@ def plan_set(m: model.Model, names: list[str], on: bool, read=plugin.read) -> di
         bad("%d full plugins would be active: the game loads %d at most." % (full + add_full, FULL_SLOTS))
     if add_light and light + add_light > LIGHT_SLOTS:
         bad("%d light plugins would be active: the game loads %d at most." % (light + add_light, LIGHT_SLOTS))
-    if len(out["plugins"]) > 1:
-        out["notes"].append("%d plugins become active together: look at what they overwrite." % len(out["plugins"]))
     out["ask"] = any(w["level"] == "bad" for w in out["warnings"])
     return out
 

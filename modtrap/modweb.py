@@ -4,14 +4,14 @@ Reading only. Two passes, because the second takes seconds on a large list:
 
 - `near`: what the plugins' headers say. The mods this mod needs (its plugins name theirs as masters), the mods that
   need it, which of those look like patches made for it, and which are a tool's output.
-- `far`: what the files and the records say. The mods whose files this mod overwrites and the mods that overwrite
-  its files (by kind of file, with examples), and the plugins that change the same records as this mod's plugins:
-  where neither plugin knows the other (neither is the other's master), that is a conflict, unless a third plugin
-  that has both as masters is there to settle it.
+- `far`: what the files say. The mods whose files this mod overwrites and the mods that overwrite its files (by
+  kind of file, with examples), as MO2's Conflicts column counts them.
+
+Which records two plugins both change is not told (MT76): that one plugin's change wins over another's is how a
+modlist works, ModTrap cannot see whether anything is lost by it, and nothing breaks by it.
 
 Every link is {"mod", "kind", "weight", "text", "lines", ...}. Kinds: "needs", "needed", "patch", "output",
-"overwrites", "overwritten", "conflict", "settled", "wins", "loses" (the last two: records of a common master that a
-mod it needs or is needed by also changes, which is how a patch works, and no conflict).
+"overwrites", "overwritten".
 """
 
 from __future__ import annotations
@@ -22,8 +22,9 @@ from . import loadcheck, model
 from .instance import GAME, OVERWRITE, Mod, fold
 
 PATCH_WORDS = re.compile(r"(patch|patches|compat|compatib|fix(es)?\b|tweak|addon|add-on|consistency)", re.IGNORECASE)
+MOD_PREFIX = "ModTrap - "      # the mod ModTrap makes for a demaster (as `demaster.MOD_PREFIX`)
 LINES = 12                     # detail lines kept for one link
-KINDS = ("needs", "needed", "patch", "output", "overwrites", "overwritten", "conflict", "settled", "wins", "loses")
+KINDS = ("needs", "needed", "patch", "output", "overwrites", "overwritten")
 
 
 def _name(mod_name: str) -> str:
@@ -57,6 +58,8 @@ def near(m: model.Model, mod: Mod) -> dict:
                 lacks.append("%s needs %s, which no enabled mod has" % (r.name, master))
             elif mr.source != mod.name:
                 needs.setdefault(mr.source, []).append("%s needs %s%s" % (r.name, mr.name, "" if mr.active else " (not active)"))
+                if r.active and not mr.active:
+                    lacks.append("%s needs %s, which is not active" % (r.name, mr.name))
     for other, lines in needs.items():
         links.append(_link(m, other, "needs", len(lines), "%d of its plugins' masters" % len(lines) if len(lines) != 1 else "1 master of its plugins", lines))
     # The mods that need it, by what they look like.
@@ -86,11 +89,15 @@ def near(m: model.Model, mod: Mod) -> dict:
         else:
             links.append(_link(m, g.mod.name, "needed", n, "%d of its plugins need%s it" % (n, "s" if n == 1 else "") + ("" if whole else " (it has %d more that do not)" % g.others)
                                + (", and %s" % ", ".join(_name(x) for x in between[:2]) if between else ""), lines, between=between[:8], whole=whole))
-    return {"mod": _base(m, mod), "links": links, "lacks": lacks[:LINES], "deep": False, "cut": False}
+    base = _base(m, mod)
+    if mod.name.startswith(MOD_PREFIX):             # ModTrap's own mod: the mods whose plugins its demastered copies stand for
+        base["copies"] = sorted({r.also_in[-1] for r in own if r.also_in}, key=fold)[:8]
+        base["modtrap"] = True
+    return {"mod": base, "links": links, "lacks": lacks[:LINES], "lacking": len(lacks), "needs": len(needs), "deep": False, "cut": False}
 
 
-def far(m: model.Model, mod: Mod, files_seconds: float = loadcheck.FILES_SECONDS, records_seconds: float = loadcheck.SCAN_SECONDS) -> dict:
-    """What the files and the records say: who overwrites whom, and where two plugins change the same records."""
+def far(m: model.Model, mod: Mod, files_seconds: float = loadcheck.FILES_SECONDS) -> dict:
+    """What the files say: who overwrites whom."""
     links: list[dict] = []
     f = loadcheck.files(m, mod, files_seconds)
 
@@ -104,43 +111,7 @@ def far(m: model.Model, mod: Mod, files_seconds: float = loadcheck.FILES_SECONDS
     for e in f["loses"]:
         links.append(_link(m, e["mod"], "overwritten", e["files"], "overwrites %d file%s of this mod" % (e["files"], "" if e["files"] == 1 else "s"), file_lines(e),
                            kinds=e["kinds"], notable=e["notable"], output=e.get("output", "")))
-    cut = bool(f["cut"])
-    if mod.enabled and mod.kind in ("mod", "overwrite"):
-        scan = loadcheck.overrides(m, mod, records_seconds)
-        cut = cut or bool(scan["cut"])
-        by: dict[tuple[str, str], dict] = {}
-        for p in scan["plugins"]:
-            mine = m.plugins.get(fold(p["name"]))
-            for side, kind_known, kind_unknown in (("overwrites", "wins", "conflict"), ("overwritten_by", "loses", "conflict")):
-                for x in p[side]:
-                    theirs = m.plugins.get(fold(x["plugin"]))
-                    if mine is None or theirs is None or not x["mod"] or x["mod"] == mod.name:
-                        continue
-                    # Do the two plugins know each other? One that has the other as a master was made with it in
-                    # view: its changes over the other's are what a patch is. Two that do not are a conflict,
-                    # unless a third plugin has both as masters and so can settle it.
-                    known = any(fold(y) == fold(mine.name) for y in theirs.masters) or any(fold(y) == fold(theirs.name) for y in mine.masters)
-                    both = sorted(set(mine.dependants) & set(theirs.dependants), key=fold)
-                    active_both = [z for z in both if (zr := m.plugins.get(fold(z))) is not None and zr.active]
-                    kind = kind_known if known else ("settled" if active_both else kind_unknown)
-                    wins = side == "overwrites"
-                    entry = by.setdefault((x["mod"], kind), {"records": 0, "lines": [], "settled_by": set(), "wins": 0, "loses": 0})
-                    entry["records"] += x["records"]
-                    entry["wins" if wins else "loses"] += x["records"]
-                    kinds = ", ".join("%s %d" % (k, n) for k, n in x["kinds"].items())
-                    entry["lines"].append("%s %s %s in %d record%s (%s)" % (mine.name, "wins over" if wins else "loses to", theirs.name, x["records"], "" if x["records"] == 1 else "s", kinds))
-                    entry["settled_by"].update(active_both)
-        for (other, kind), e in by.items():
-            if kind == "conflict":
-                text = "%d record%s both change, neither knowing the other" % (e["records"], "" if e["records"] == 1 else "s")
-            elif kind == "settled":
-                text = "%d record%s both change; %s has both as masters" % (e["records"], "" if e["records"] == 1 else "s", sorted(e["settled_by"], key=fold)[0])
-            elif kind == "wins":
-                text = "this mod's change wins in %d record%s" % (e["records"], "" if e["records"] == 1 else "s")
-            else:
-                text = "its change wins over this mod's in %d record%s" % (e["records"], "" if e["records"] == 1 else "s")
-            links.append(_link(m, other, kind, e["records"], text, e["lines"], wins=e["wins"], loses=e["loses"], settled_by=sorted(e["settled_by"], key=fold)[:6]))
-    return {"links": links, "files": f["files"], "deep": True, "cut": cut}
+    return {"links": links, "files": f["files"], "deep": True, "cut": bool(f["cut"])}
 
 
 def web(m: model.Model, mod: Mod, deep: bool) -> dict:
