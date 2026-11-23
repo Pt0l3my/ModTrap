@@ -144,7 +144,8 @@ class TheModlistPage(unittest.TestCase):
         self.assertEqual((plug["name"], plug["how"], plug["why"]), ("Thistle.esp", "placed", "at the end of the load order"))
         # MO2's rule puts it after what the tools made: said, not asked about.
         self.assertFalse(got["plan"]["ask"])
-        self.assertTrue(any("after what the tools made" in w["text"] for w in got["plan"]["warnings"]))
+        self.assertEqual(got["plan"]["warnings"], [])                           # MT76: nothing breaks by it, so no warning
+        self.assertTrue(any("after what the tools made" in n for n in got["plan"]["notes"]))
         self.assertEqual(self.events()[-2:], [("mod enabled", "Thistle"), ("plugin activated", "Thistle.esp")])
         self.assertEqual(self.api.get("/api/list", {})[1]["undo"]["text"], "Enabled “Thistle”: 1 plugin activated")
         # Undo: the three lists exactly as they were.

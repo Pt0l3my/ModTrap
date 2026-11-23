@@ -117,7 +117,6 @@ SETTINGS = {
     "start_from_page": True,   # a link of ModTrap's own kind starts ModTrap.exe, so that a page brought back can start it (MT64)
     "console_window": False,   # ModTrap's own console window is shown, minimised; off: it is hidden, its lines being on the page (MT63)
     "mod_pictures": True,      # a mod's pop-up shows the picture its page opens with, fetched from its site (MT62)
-    "scan_on_enable": True,    # a mod enabled on the Modlist page is then scanned for what its plugins overwrite (MT56)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",

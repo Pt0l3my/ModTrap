@@ -163,6 +163,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 138 | 2026-11-23 | A progress symbol is not decoration: it moves even where the PC asks for less motion | FACT | #page |
 | 139 | 2026-11-23 | MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands | FACT | #model #page #safety |
 | 140 | 2026-11-23 | A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed | METHOD | #model #page #safety |
+| 141 | 2026-11-23 | Which records two plugins both change predicts no fault, so it is told as none | DECIDED | #model #page |
 
 ## Entries
 
@@ -3830,3 +3831,28 @@ them; the addresses were read by a session that can), and the time the second pa
   lines to the byte with the groups' copy, and the Revert of a demaster without one. Not checked on the owner's
   PC: the web of the demaster mod, where every mod of the list is older than the copies and the mods installed on
   the 23rd are younger.
+
+### 141. Which records two plugins both change predicts no fault, so it is told as none
+
+`2026-11-23` · DECIDED · `#model #page` · refs: MT76, MT75, MT74, MT73, MT62, DESIGN§33, DESIGN§23, WHY§140, WHY§139
+
+- FACT (three rounds with the owner's list): every conflict ModTrap told was a false alarm. 129 notes on doubles
+  (MT68), 355 conflicts on the demaster mod (MT73), the same again after a tool's output was let off (MT74). Each
+  round made the rule finer and left the next class standing.
+- FACT (what ModTrap reads): for a record, that a plugin holds it; for a file, its name, size and first bytes. Not
+  what is changed inside a record. Whether the later plugin's record carries the earlier one's change, or drops
+  it, or should drop it, cannot be seen from that; "neither is the other's master" was a guess at the author's
+  intent, and on a curated list of thousands of plugins the guess is wrong nearly every time, because the load
+  order itself is the author's settling of it.
+- FACT (the game): two plugins changing one record never stop the game: the last one loaded is used, whole. What
+  stops it, or a plugin, is of another kind and can be read exactly: a master that is not there, not active or
+  loads too late, too many plugins, a file in a format this game does not read, a navmesh deleted.
+- DECIDED (the owner, MT76): so the first is not told and the second is. A warning that is wrong most of the time
+  teaches the owner to pass over the ones that are right.
+- METHOD (what went): the record pass of `modweb.far` with the rules of WHY§139 and WHY§140 on top of it, the
+  page's four kinds and their side of the picture, the automatic scan and its marks. What stayed is on request:
+  `loadcheck.overrides` behind "Scan what it overwrites", told plainly, for the owner who wants the facts.
+- METHOD (the evaluation's levels): a finding about whose file wins is information; the one such finding with a
+  crash behind it is a skeleton that wins with fewer bones, and it is a warning only where the sizes say so.
+- Later readers: the web's record pass is in the history of this file's repository at 0.3.65, if a way to read
+  inside records ever makes it worth having again (MT23 is the open question nearest to it).

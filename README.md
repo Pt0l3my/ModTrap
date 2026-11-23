@@ -32,8 +32,8 @@ only when ModTrap is started with `--allow-changes`, and that is meant for once 
 With `--allow-changes`, the Modlist section's Mods tab works as MO2's own list does, with MO2 closed: tick a mod to
 enable or disable it (its plugins are placed by MO2's own rule: a new one last, a master at the end of the masters'
 block, none before its own masters), drag a row to move it, rename a separator. What is not safe is asked first;
-every change can be undone; and a scanner tells, for a mod, whether its plugins stand safely in the load order and
-which records and files it overwrites. The ticks that choose mods for a demaster are on Demaster's "Pick mods" tab.
+every change can be undone; and a scanner tells, when asked, for a mod, whether its plugins stand safely in the load
+order and which records and files it overwrites. The ticks that choose mods for a demaster are on Demaster's "Pick mods" tab.
 
 The Plugins tab works the same way: tick a plugin to activate or deactivate it, drag it to another place in the load
 order (within the limits MO2 itself keeps), and a symbol on a plugin's row says when something is wrong with it or
@@ -59,7 +59,9 @@ A mod that is installed or updated is named by its title and its version ("Examp
 offered in a box to change or keep.
 
 The mods' list has MO2's own Conflicts, Installation and Notes columns, worked out by MO2's rules; a press on a
-conflict mark draws the mods in conflict. The plugins' list shows MO2's own plugin groups where MO2 keeps them (its plugin manager extension's
+conflict mark draws the mods whose files it overwrites and that overwrite its own. ModTrap warns only of what breaks
+the game (a missing master, a file of the wrong format and the like); who overwrites whom is told when asked for, and
+never as a warning. The plugins' list shows MO2's own plugin groups where MO2 keeps them (its plugin manager extension's
 `plugingroups.txt`), and ModTrap gives a plugin it installs or moves its group there; without them it is grouped by
 the mods' separators.
 

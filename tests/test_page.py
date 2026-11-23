@@ -82,7 +82,10 @@ class PageTests(unittest.TestCase):
         for path in ("/api/list/plugins/set", "/api/list/plugins/move", "/api/selfupdate/upload", "/api/selfupdate/apply"):
             self.assertIn(path, self.js)
         self.assertIn('if (p.issues.length) mark("bad", "⚠"', self.js)
-        self.assertIn('mark("warn", "⇄"', self.js)
+        # MT76: what a plugin overwrites gets no mark, and nothing is scanned unasked.
+        self.assertNotIn("⇄", self.js.split("function pluginMarks(p) {")[1].split("\n}")[0])
+        self.assertNotIn("scan_on_enable", self.js)
+        self.assertNotIn("function scanNote(", self.js)
         for needle in ('id="plugins-undo"', 'class="c-mark"'):
             self.assertIn(needle, self.html)
         # A plugin's tick asks nothing: no question box in its function.
@@ -156,15 +159,16 @@ class PageTests(unittest.TestCase):
         self.assertIn('"plugin grouped": "Plugin\'s group"', self.js)
         self.assertIn('"plugin group": "plugin\'s group"', self.js)
 
-    def test_the_web_says_what_it_needs_means_and_a_tools_last_word_is_no_conflict(self):
-        """MT73."""
+    def test_the_web_says_what_it_needs_means_and_tells_no_conflicts(self):
+        """MT73, MT76."""
         self.assertIn('if (d.needs) said.push(', self.js)
         self.assertIn("every one of them is there and active. Nothing to do:", self.js)
-        self.assertIn('x.made ? el("p", { class: "small dim", text: x.made }) : null,', self.js)
-        # MT74: ModTrap's own mod says what its copies stand for, and that they add no conflict.
+        # MT76: which records two plugins both change is not told: six kinds, none of them a conflict.
+        self.assertIn('const WEB_LEGEND = ["needs", "needed", "patch", "output", "overwritten", "overwrites"];', self.js)
+        for gone in ('conflict: ["Conflict"', '"Conflict, settled"', '"Changes its records"', '"Records it changes"', 'class: "wkw wk-conflict"'):
+            self.assertNotIn(gone, self.js)
+        # ModTrap's own mod says what its copies stand for.
         self.assertIn('if (d.mod.modtrap) said.push(el("p", {}, el("b", { text: "ModTrap\'s own mod: " })', self.js)
-        self.assertIn("so it adds no conflict and takes none away", self.js)
-        self.assertIn("and the later one is no tool's output", self.js)
 
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
@@ -279,7 +283,7 @@ class PageTests(unittest.TestCase):
             self.assertRegex(self.js, r"\n  %s: \[\"⚡" % state)
             self.assertIn(".confbtn.cf-%s { color:" % state, self.css)
         self.assertIn('if (!state.placing) webOpen(m.name, { conflicts: true });', self.js)
-        self.assertIn('if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output", "loses", "wins"]);', self.js)
+        self.assertIn('if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output"]);', self.js)
         self.assertIn('if (table.id) return table.id + (table.id === "mods-table" ? ":" + table.tHead.rows[0].cells.length : "");', self.js)
         for option in ("conflict", "conflict-asc", "made", "made-asc", "notes", "notes-desc"):
             self.assertIn('<option value="%s">' % option, self.html)

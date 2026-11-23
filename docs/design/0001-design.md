@@ -1171,3 +1171,28 @@ takes none away.
 demaster writes no group. Its Revert by lines (§11), and the finishing of an earlier Revert, give each plugin they
 put back in the load order its group again where it has none: the one the safe's copy names, or, without such a
 copy, the one it stands inside.
+
+## 33. What ModTrap warns of (MT76)
+
+**The rule.** A warning (a red or amber finding, a mark on a row, a question before a change, a note on the Health
+tab) is given only for something that breaks the game or the load order. Who overwrites whom, in files or in
+records, is never one.
+
+| Warned of | Where it is read |
+|---|---|
+| a master missing, not active, or loading after the plugin that needs it; a master-flagged plugin needing one that is not | the plugins' headers and the load order (§5) |
+| a plugin that cannot be read; more full or light plugins than the game loads | the same |
+| an archive, animations or meshes in the older game's format; a script extender plugin for another game version | the files' first bytes (§26, TL01§33) |
+| a deleted navmesh; deleted references; files one folder too deep | the plugin's records by kind; the mod's folders |
+| a skeleton that wins with fewer bones | the two files' sizes |
+| a mod's files winning over what a tool built | the files, and which mods are a tool's output (§20) |
+| the same mod enabled twice | the mods' titles and files (§27, MT68) |
+
+**Told as information, on the owner's asking:** which mod's files win (the evaluation's findings of that kind, the
+web's "overwrites" and "is overwritten", MO2's Conflicts column), and, through "Scan what it overwrites", which
+plugins hold the same records before and after a plugin.
+
+**No longer told at all:** whether two plugins that change the same records "conflict". §23.2's four kinds for
+records, §31's and §32's rules about them, the scan after enabling (§18) with its note and its row marks, and the
+setting for it are gone. A mod's web (§23) has six kinds: it needs, needs it, a patch for it, a tool's output,
+overwrites its files, files it overwrites; its second pass looks through the files only.

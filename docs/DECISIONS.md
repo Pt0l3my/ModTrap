@@ -89,7 +89,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   side by side; a tool's last word is no conflict; "It needs" is no fault).
   MT74 (ModTrap's demastered copy stands for the plugin it was made from, so what it shares with the mods that were
   there is no conflict; a demaster's Revert puts plugins back in their groups).
-- **Open.** MT75 (whether the modlist's own hand-made patches are told as conflicts); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  MT75 (closed by MT76). MT76 (ModTrap warns only of what breaks the game; conflicts are not told: the record
+  kinds of a mod's web, the scan after enabling and its marks are removed).
+- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1998,3 +2000,39 @@ and removing mods on a curated list: what the list's author arranged is left alo
 weighed.
 
 **Until decided.** (c), with MT74's exception for ModTrap's own copies.
+
+*2026-11-23, later.* Closed by MT76: the owner wants no conflicts told at all, so neither option is taken.
+
+## MT76
+
+**ModTrap warns only of what breaks the game; conflicts are not told** · *2026-11-23 · The owner's decision*
+
+**Owner's words.** "I only wanted modtrap to tell when there is an actual problem that would cause issues, like
+crashes, I am not actually interested in conflicts, and clearly so far they are all false alarms. if you can't do
+that, just remove it."
+
+**Settled** (DESIGN§33, WHY§141). ModTrap cannot do it for conflicts: it reads which records and files two mods
+both have, not what is changed inside them, and that one mod's change wins over another's is how a modlist is put
+together, not a fault. So the telling of conflicts is removed, and what stays a warning is what breaks the game.
+
+- **A warning is given only for** a master that is missing, not active, or loads after the plugin that needs it; a
+  plugin flagged as a master that needs one that is not; a plugin that cannot be read; more plugins than the game
+  loads; a file the game cannot use or crashes on (an archive, animations or meshes in the older game's format, a
+  script extender plugin for another version of the game, a deleted navmesh, deleted references, files one folder
+  too deep); a skeleton that wins with fewer bones; a mod's files winning over what a tool built; and the same mod
+  enabled twice (MT64, asked for).
+- **Removed.** From a mod's web: the four kinds that came from comparing records ("Conflict", "Conflict,
+  settled", "Changes its records", "Records it changes"), the list of conflicts in its overview, and the look
+  through the records, which was also what made it slow. The scan that ran by itself after a mod was enabled or a
+  plugin was activated or moved, its note at the foot of the page, its setting, and the marks on the plugins' rows
+  for what a plugin overwrites.
+- **Lowered to information.** In a mod's evaluation, which mod's file wins (plugins of the same name, scripts,
+  face files, archives, textures put together from two mods and the rest): told, never as a warning. When a mod
+  is enabled, that its plugin goes after what the tools made is a note, not a warning.
+- **Kept, because they are not warnings.** MO2's own Conflicts column, which says whose files are loaded as MO2
+  says it, and the web's two kinds for files (overwrites, is overwritten); "Scan what it overwrites" when the
+  owner asks for it, for a mod or a plugin.
+- **This closes MT75** (neither option: nothing of the kind is told at all) and takes away the web's rules of MT73
+  and MT74 for a tool's last word and for ModTrap's copies, which only decided what counted as a conflict. Of
+  MT74 the rest stands: a demaster's Revert puts plugins back in their groups, and the overview of ModTrap's own
+  mod says which mods its copies stand for.
