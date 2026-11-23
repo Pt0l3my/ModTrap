@@ -88,6 +88,10 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual((r["host"], r["mod_id"], r["file_id"], r["version"], r["for_mod"], r["installed_as"]), ("nexus", 4321, 113, "1.4", "Quill", "Quill (1.4)"))
         self.assertEqual(r["page"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
         self.assertTrue((downloads.folder() / r["file"]).is_file())
+        # Installed mods: the newer version, with the install it came by.
+        inst_rows = self.api.get("/api/installed", {})[1]["rows"]
+        self.assertEqual([(x["mod"], x["updates"], x["job"], x["enabled"], x["archive"]) for x in inst_rows],
+                         [("Quill (1.4)", "Quill", run["job"], True, "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip")])
         # The Updates list: the older version as such, the newer one up to date.
         st = self.api.get("/api/updates", {})[1]
         self.assertEqual({x["mod"]: x["state"] for x in st["rows"] if x["mod"].startswith("Quill")}, {"Quill": "replaced", "Quill (1.4)": "current"})
@@ -152,6 +156,13 @@ class TheUpdater(unittest.TestCase):
         r = self.api.get("/api/downloads", {})[1]["rows"][0]
         self.assertEqual((r["how"], r["where"], r["installed_as"]), ("fetched by ModTrap from Nexus, with your key", "ModTrap's downloads folder", "Quill (1.4)"))
 
+    def test_a_second_press_while_the_first_is_being_begun_starts_nothing_more(self):
+        """WHY§118: the owner pressed twice while the first press was still looking for the file, and got two updates."""
+        self.api.updater._starting.add("Quill")
+        self.assertEqual(self.api.post("/api/updater/start", {"mod": "Quill"})[1], {"run": "", "open": "", "again": True})
+        self.assertEqual(self.api.get("/api/updater", {})[1]["runs"], [])
+        self.api.updater._starting.discard("Quill")
+
     def test_stopping_and_what_cannot_be_updated(self):
         got = self.api.post("/api/updater/start", {"mod": "Quill"})[1]
         self.assertTrue(self.api.post("/api/updater/start", {"mod": "Quill"})[1]["again"])           # one run for a mod
@@ -166,6 +177,31 @@ class TheUpdater(unittest.TestCase):
         self.api.changes = None
         with self.assertRaises(api.Bad):
             self.api.post("/api/updater/start", {"mod": "Quill"})
+
+    def test_a_separator_is_added_below_a_mod_and_registered_in_mo2(self):
+        """MT55: a folder "<name>_separator" in MO2's mods folder and its line in the profile's list, right below the
+        mod named; through the add job, so that it can be taken out again."""
+        before = instance.load(self.root)
+        quill = before.mod("Quill").priority
+        got = self.api.post("/api/separator/add", {"name": "  My   Things ", "below": "Quill"})[1]
+        self.assertEqual((got["name"], got["priority"]), ("My Things_separator", quill + 1))
+        inst = instance.load(self.root)
+        sep = inst.mod("My Things_separator")
+        self.assertEqual((sep.kind, sep.priority, inst.mod("Quill").priority), ("separator", quill + 1, quill))
+        self.assertTrue((self.root / "mods" / "My Things_separator").is_dir())
+        self.assertIn(b"My Things_separator\r\n", (self.root / "profiles" / "Default" / "modlist.txt").read_bytes())
+        self.assertEqual([n for n, _a in inst.load_order], [n for n, _a in before.load_order])            # the load order is untouched
+        for _ in range(400):
+            if not self.api.unsettled():
+                break
+            time.sleep(0.02)
+        self.assertIn("My Things_separator", [x["mod"] for x in self.api.get("/api/installed", {})[1]["rows"]])
+        for bad in ({"name": "", "below": "Quill"}, {"name": "a/b", "below": "Quill"}, {"name": "My Things", "below": "Quill"}, {"name": "Other", "below": "No Such Mod"}):
+            with self.assertRaises(api.Bad):
+                self.api.post("/api/separator/add", bad)
+        self.api.post("/api/add/revert", {"job": got["job"]})
+        self.assertIsNone(instance.load(self.root).mod("My Things_separator"))
+        self.assertFalse((self.root / "mods" / "My Things_separator").exists())
 
     def test_modtraps_downloads_folder_can_be_named(self):
         other = Path(self.tmp.name) / "My ModTrap downloads"

@@ -51,6 +51,7 @@ class Updater:
         self.runs: dict[str, dict] = {}
         self._lock = threading.Lock()
         self._installing = threading.Lock()          # one add at a time
+        self._starting: set[str] = set()             # mods whose update is being begun right now
 
     # --- what the page is told ------------------------------------------------------------------------------------
     @staticmethod
@@ -111,6 +112,18 @@ class Updater:
             had = self._run_for(mod)
             if had is not None:
                 return {"run": had["id"], "open": had["open"] if had["waits_page"] else "", "again": True}
+            if mod in self._starting:
+                # A second press while the first is still finding the file: one update for a mod (WHY§118).
+                return {"run": "", "open": "", "again": True}
+            self._starting.add(mod)
+        try:
+            return self._start(m, mod, staged)
+        finally:
+            with self._lock:
+                self._starting.discard(mod)
+
+    def _start(self, m, mod: str, staged: str) -> dict:
+        api = self.api
         key, added = api._updates_for()
         rows, _wj = api.updating.rows(m, key, added)
         row = next((r for r in rows if r["mod"] == mod), None)
@@ -252,17 +265,19 @@ class Updater:
                 continue
             for e in entries:
                 try:
-                    size = os.stat(e.path).st_size
+                    size = e.stat().st_size                 # as the folder lists it: these files are whole, and thousands
                 except OSError:
                     continue
                 mine = False
                 if where.startswith("MO2"):
                     if not downloads.ARCHIVE.search(e.name):
                         continue
-                    if meta.get("mod_id") and meta.get("file_id"):
+                    if meta.get("size"):
+                        mine = size == meta["size"]         # the size the site gives, to the byte: no file is opened for it
+                    elif meta.get("mod_id") and meta.get("file_id"):
+                        # No size is known: the record MO2 keeps beside each archive is read (slow in a large folder).
                         dl = sources.download_meta(Path(folder), e.name)
                         mine = dl.get("mod_id") == meta["mod_id"] and dl.get("file_id") == meta["file_id"]
-                    mine = mine or bool(meta.get("size")) and size == meta["size"]
                 else:
                     mine = bool(meta.get("size")) and size == meta["size"] or \
                         bool(code and number and not meta.get("size") and code.search(e.name) and number.search(e.name))
@@ -352,7 +367,7 @@ class Updater:
             if needs is not None and needs["state"] != "done":
                 for i in needs["items"][:8]:
                     self._task(run, "check", i["text"], "yours")
-                raise _Yours("something the newer version needs is not there yet: get it, then press “Add it for me” on Install mods")
+                raise _Yours("something the newer version needs is not there yet: get it, then press “Install mod” on Install mods")
             self._task(run, "check", "every master it names is in the modlist and active")
             d = x.get("differs")
             if d:
@@ -395,7 +410,7 @@ class Updater:
             if issues:
                 for i in issues[:8]:
                     self._task(run, "verify", "%s needs %s, which is %s" % (i.plugin, i.master, "not active" if i.what == "inactive" else "missing"), "failed")
-                raise Bad("a master of the newer version is missing or not active: see Health; “Take it out again” puts the older version back")
+                raise Bad("a master of the newer version is missing or not active: see Health; “Uninstall” puts the older version back")
             self._task(run, "verify", "no master is missing or inactive")
             self._set(run, "verify", "done")
             run["state"] = "done"
@@ -404,7 +419,7 @@ class Updater:
             log.info("update of “%s” done: “%s” is in place (%s)", mod, rec["name"], run["job"])
         except _Stopped:
             self._set(run, at, "failed", "Stopped.")
-            run["state"], run["summary"] = "stopped", "Stopped. Nothing of the modlist was changed." if not run["job"] else "Stopped after the add; “Take it out again” puts the older version back."
+            run["state"], run["summary"] = "stopped", "Stopped. Nothing of the modlist was changed." if not run["job"] else "Stopped after the add; “Uninstall” puts the older version back."
             log.info("update of “%s” stopped by the owner", mod)
         except _Yours as e:
             # Handed to Install mods, where the archive now waits with the steps of an update (MT49).

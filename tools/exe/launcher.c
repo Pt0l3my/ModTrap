@@ -1,14 +1,14 @@
 /* ModTrap's launcher for Windows (MT51).
 
-   Starts Python with ModTrap ("-m modtrap"), hands on whatever was given on its own command line, waits for it, and
-   ends with its result. ModTrap lies in the "app" folder beside this program.
+   Starts Python with ModTrap ("-m modtrap") in a console of its own, minimised, and hands on whatever was given on
+   its own command line. It has no window itself. ModTrap lies in the "app" folder beside this program.
 
    Which Python: the one in a "python" folder beside this program, where the package has one (it finds ModTrap
    through python\python313._pth and takes nothing else of the PC into its path); else the Python installed on the
    PC, found as Windows finds programs: the "py" launcher first, then "python". Nothing on the PC is changed.
 
-   Built twice from this one file: with EXTRA_ARGS set to ModTrap's switch for changes (ModTrap.exe), and plain
-   (the "look only" program). */
+   Built with EXTRA_ARGS set to ModTrap's switch for changes: ModTrap.exe is the one program, able to do all of
+   ModTrap's work. Built plain, it would start ModTrap as its command line does without the switch. */
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef UNICODE
@@ -30,6 +30,7 @@ static wchar_t dir[LONGEST + 1];
 static wchar_t python[LONGEST + 64];
 static wchar_t app[LONGEST + 64];
 static wchar_t command[LONGEST + 1];
+static wchar_t title[] = L"ModTrap";
 
 /* What followed this program's own name on its command line, as it was typed. */
 static const wchar_t *rest_of_command_line(void)
@@ -46,19 +47,13 @@ static const wchar_t *rest_of_command_line(void)
     return p;
 }
 
-/* Ctrl+C in the console is Python's to act on; this program only waits. */
-static BOOL WINAPI on_console_event(DWORD kind)
-{
-    return kind == CTRL_C_EVENT || kind == CTRL_BREAK_EVENT;
-}
-
 static int say(const wchar_t *text)
 {
     MessageBoxW(NULL, text, L"ModTrap", MB_OK | MB_ICONERROR);
     return 2;
 }
 
-int wmain(void)
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show)
 {
     DWORD n = GetModuleFileNameW(NULL, dir, LONGEST);
     wchar_t *slash;
@@ -97,14 +92,27 @@ int wmain(void)
     _snwprintf(command, LONGEST, L"\"%ls\"%ls -m modtrap%ls%ls%ls", python, first, EXTRA_ARGS, *rest ? L" " : L"", rest);
     command[LONGEST] = 0;
 
-    SetConsoleCtrlHandler(on_console_event, TRUE);
+    (void)instance; (void)previous; (void)line; (void)show;
+
+    /* Python gets a console of its own, where ModTrap writes what it does; it starts minimised, out of the way,
+       since the same lines are on ModTrap's page (History, Log). Started with words on the command line, the
+       console is shown, for whoever asked to read the answer. */
     ZeroMemory(&si, sizeof si);
     si.cb = sizeof si;
+    si.lpTitle = title;
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = (WORD)(*rest ? SW_SHOWNORMAL : SW_SHOWMINNOACTIVE);
     ZeroMemory(&pi, sizeof pi);
-    if (!CreateProcessW(python, command, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    if (!CreateProcessW(python, command, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
         return say(L"Python could not be started.");
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    GetExitCodeProcess(pi.hProcess, &result);
+    /* Should it end at once with an error, nobody would see why in a minimised console: say so. */
+    if (WaitForSingleObject(pi.hProcess, 4000) == WAIT_OBJECT_0) {
+        GetExitCodeProcess(pi.hProcess, &result);
+        if (result != 0 && !*rest)
+            say(L"ModTrap ended right after it started.\n\nIf it was already running in the middle of a job, its page is open in your browser: let the job end there.\n\nOtherwise start ModTrap.cmd, in the same folder, to read what it says.");
+    } else {
+        result = 0;
+    }
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     return (int)result;

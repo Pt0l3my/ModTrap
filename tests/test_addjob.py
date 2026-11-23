@@ -160,6 +160,20 @@ class Adding(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         self.assertIn(("mod enabled", "Quill"), [(e["kind"], e.get("mod")) for e in history.History(self.work).all()])
 
+    def test_a_mod_goes_where_the_owner_put_it(self) -> None:
+        """MT53: a place chosen by hand is the place the add job uses."""
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        quill = inst.mod("Quill").priority
+        rep = adding.analyse(m, ["Thistle"], before="Quill")
+        j = addjob.AddJob(inst, m, addjob.plan(m, rep), self.work / "jobs" / "add-3", self.work, lambda: self.closed)
+        self.assertEqual(j.plan.mods[0]["before"], "Quill")
+        j.run()
+        inst = instance.load(self.root)
+        self.assertEqual((inst.mod("Thistle").enabled, inst.mod("Thistle").priority, inst.mod("Quill").priority), (True, quill, quill + 1))
+        self.assertEqual(j.revert(), {"left": [], "how": "whole"})
+        self.assertEqual(snapshot(self.root), self.before)
+
     def test_an_update_has_its_own_few_steps_and_is_not_judged_as_a_new_mod(self) -> None:
         """MT49: a newer version takes the older one's place; the place among all mods, the shared files, the
         records, the tools and a look in the game are a new mod's steps, not an update's. Before the add, after
@@ -196,7 +210,7 @@ class Adding(unittest.TestCase):
         # Without the word that it is an update, the same mod is judged as a new one is.
         rep = adding.analyse(m, ["Quill (1.4)"])
         self.assertFalse(rep["update"])
-        self.assertIn("play", [st["key"] for st in rep["steps"]])
+        self.assertIn("tools", [st["key"] for st in rep["steps"]])
         # The add's own record says which mod it was a newer version of.
         self.assertEqual(addjob.AddJob.summary(self.work / "jobs" / "add-2")["updates"], {"Quill (1.4)": "Quill"})
 

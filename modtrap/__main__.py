@@ -192,7 +192,7 @@ def serve(a: argparse.Namespace) -> int:
         from . import changes                     # never imported otherwise: nothing can then change a modlist
         api.changes = changes.Changes(api)
         log.warn("started with --allow-changes: ModTrap may now put mods into this modlist when you press "
-                 "“Add it for me”. Every change goes through the safe folder and can be reverted.")
+                 "“Install mod”. Every change goes through the safe folder and can be reverted.")
     if a.folder:
         api.open(a.folder, a.profile or None)
     elif not api.restore():                       # the session ModTrap was closed in comes back

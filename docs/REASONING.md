@@ -140,6 +140,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 115 | 2026-11-23 | The add did not go by itself because an entry left on Install mods' list stood in its way; the update is now carried through on the server, in an Updater of its own, with ModTrap's downloads folder and nothing downloaded twice | DECIDED | #updates #add #page |
 | 116 | 2026-11-23 | A package for Windows: CPython from NuGet, a launcher of our own built with MinGW-w64, the path set by a ._pth file; built here, and not run here, since Wine does not start in this container | METHOD | #release #windows |
 | 117 | 2026-11-23 | The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program | DECIDED | #updates #page #release #windows |
+| 118 | 2026-11-23 | The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press | DECIDED | #add #updates #page #release |
+| 119 | 2026-11-23 | The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's | DECIDED | #add #page |
+| 120 | 2026-11-23 | Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised | DECIDED | #add #page #release #windows |
 
 ## Entries
 
@@ -3100,3 +3103,108 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   to come back; a key given while an update waits is found to be a Premium account's, and the update goes on by
   itself and ends, fetched by ModTrap. Not checked, and not checkable here: the key press itself on Windows, in
   Firefox; a real fetch from Nexus with a real key.
+
+### 118. The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press
+
+`2026-11-23` · DECIDED · `#add #updates #page #release` · refs: MT53, MT52, MT50, MT49, MT21, DESIGN§16, TL01§31, WHY§114, WHY§115, WHY§117
+
+- FACT (the owner's session file at 0.3.44, started from `ModTrap.exe`): the update of a mod went through from
+  the press to the end, the file taken from the browser's folder where an earlier download had left it, moved
+  into ModTrap's downloads folder, unpacked and installed. And "a site's page was opened in a new tab; back on
+  ModTrap's tab: yes": the key press of WHY§117 works in the owner's Firefox.
+- FACT (same file): the first press was answered only after 32 seconds. Before the answer, the look for the file
+  read, in MO2's downloads folder, the record beside every one of several thousand archives. The owner, seeing
+  nothing, pressed again after 20 seconds; that second press found no update begun yet, began its own, and by
+  then the first had moved the file, so the second opened Nexus's page. The owner stopped it.
+  Mended twice over: a file is now looked for by its size as the folder lists it, and MO2's records are read only
+  where the site gave no size; and a second press for a mod whose update is still being begun starts nothing.
+- FACT (the owner's picture): a new mod with one plugin, scripts and a script extender's files was given steps to
+  run four tools "again", among them two that build plugins from the load order. The old reason was only that the
+  mod brings a plugin. DECIDED: a plugin's top groups name the kinds of records it holds, and reading them costs
+  a few seeks whatever the plugin's size. A tool that builds a plugin from plugins is named only where its output
+  and the new plugin hold records of a common kind. Where either cannot be read, the tool is named, to be on the
+  safe side. LIKELY good enough, not proven: a tool may read a kind of record it writes none of.
+- The owner asks whether a new mod can simply go last, and where else if not. A new mod placed last (before the
+  tools' outputs) wins every file it shares with an ordinary mod; that is what MO2 does with a new mod too. What
+  can be told from files is which files and whose; which mod ought to win one cannot. So ModTrap installs it
+  last, tells what it overwrites there, and leaves any other place to the owner's hand. Rejected: choosing by
+  itself a lower place where the new mod overwrites nothing; its own files would then be the ones overwritten,
+  and it would be ModTrap's guess that it should lose.
+- Manual placement is a mode of the Mods tab, not a list of its own: the owner knows that list. While it is on,
+  the list is in MO2's order with its filters off and its groups unfolded, a click on a row means the place and
+  nothing else, and leaving the tab ends it. The place is named to the server as the entry the mod goes before
+  (or "last of all"); the analysis is the Installer tool's own, made for that place, and the add job takes the
+  place from it.
+- One press: the plan that was shown first is gone for a new mod as it was for an update (WHY§115). What stood
+  in it is in the steps, and the install can be taken out again as before.
+- The favourite's mark: nothing is written when a mod is updated. An older version whose newer one carries the
+  mark is not shown as a favourite; so the list is right for updates made before this, and after an uninstall.
+- The mod the owner dropped was named after its whole file name, in the form of TL01§31. What the site added is
+  now taken off, and the number and version in it are kept as the mod's source; the time of upload in such a
+  name is read for the update check (to the minute: the end of that minute is taken).
+- One program in the package (MT53): the owner asks what the look-only program is for, and it has tripped them
+  once (WHY§117). It is dropped from the package; the command line without the switch stays as it is.
+- Checked: tests (a place chosen by hand judged there and used by the add job; "last of all"; the tools named by
+  kinds of records; names of both forms; a favourite's mark; the Installed list; a second press), and in a
+  browser against a stand-in modlist: a dropped archive named in Nexus's newer way becomes a mod of its plain
+  name with its source; no step is to be ticked; the line follows the pointer; the box tells; OK installs at the
+  place; Installed mods lists it; Uninstall takes it out; one press installs it last, before the outputs.
+  Not checked: on the owner's modlist.
+
+### 119. The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's
+
+`2026-11-23` · DECIDED · `#add #page` · refs: MT54, MT53, MT50, WHY§115, WHY§118
+
+- FACT (the owner's session file at 0.3.45): the archive was dropped, unpacked and read ("4 step(s) to go"); the
+  setting for placing by hand was switched on and the archive dropped again; in neither case was an install
+  asked for. Two minutes later the session was packed. The owner's picture shows the page scrolled to the list,
+  whose first entry read "Copy the unpacked mod into MO2's mods folder · ModTrap · to do"; the button that does
+  it was above, out of view.
+- So "one press" was understood by ModTrap as a press on "Install mod", and by the owner as the drop itself. The
+  owner's reading is the simpler one, and it is what the Updater already does with a press on the arrow
+  (WHY§115). DECIDED: the drop installs. The page watches the dropped archive until it is unpacked and read and
+  ModTrap's own reading has settled, then does what the button does; with the setting for placing by hand, it
+  opens the choosing of the place instead.
+- What must not happen by itself: an installer's questions answered by guessing (the page waits for the owner's
+  answers, then goes on); an install where a master is missing (it stops and says so); an install repeated after
+  the owner took it out again (the watch ends when it has acted once).
+- The list's words. A step of ModTrap's own that is not done yet was marked "to do", and numbered, exactly as a
+  step of the owner's. It is now marked "ModTrap does this", the list is headed as ModTrap's work, and the count
+  at the top names only what is the owner's. The button is also in the tab's top bar, where it cannot scroll away.
+- Found while doing this: the first change of the words went into the Demaster's list of steps, whose line of
+  code is the same; the browser check showed the installer's list unchanged, and the change was moved.
+- Checked in a browser against a stand-in modlist: an archive dropped, nothing pressed, is installed last before
+  the outputs; no entry is marked "to do"; with the setting for placing by hand, the drop leads to the Mods tab
+  in its placing mode; after "Uninstall" the mod waits on the list with "Ready to install" and the button at the
+  top, and is not installed again by itself.
+
+### 120. Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised
+
+`2026-11-23` · DECIDED · `#add #page #release #windows` · refs: MT55, MT54, MT53, MT21, MO01§2, WHY§116, WHY§118, WHY§119
+
+- FACT (the owner's session file at 0.3.46, and their word): a new mod was dropped, read, and installed, its
+  plugin activated; placing by hand worked too. The owner now finds the order "read, show, then press" right.
+  So the setting of MT54 is off as ModTrap comes; nothing else of it changes.
+- A separator. FACT (the owner's own list, read only for this): MO2 keeps a separator as an entry of the
+  profile's list named "<name>_separator", with either sign before it, and a folder of that name among the mods.
+  DECIDED: rather than a second way of writing MO2's list, the separator goes through the add job as a mod with
+  no files, placed before the entry that follows the one it goes below. The job's check of its result, which
+  asks of a mod that it be enabled, asks of a separator that it be in the list as a separator. So the safe
+  folder, the history and "Uninstall" hold for it as for a mod.
+- Titles that sort. The Mods tab already had three orders in a select; the titles now set the same thing, so
+  the select and the titles cannot disagree, and the order is kept with the session as before. Sorted by
+  anything but priority, the mods are one list without separators: a separator has a place only among
+  priorities. While a place is chosen by hand, the order stays MO2's.
+- The console. The owner asks whether the console can be part of the page. What it shows is already on the page
+  (the Log tab). What it also is: the place the program lives, and a way to end it. DECIDED for now: keep it,
+  minimised. The launcher is built as a program without a window of its own, and starts Python in a new console
+  that is asked to start minimised and not take the front; started with words on the command line, the console
+  is shown. Because nobody watches a minimised console, the launcher waits four seconds and says so in a box if
+  ModTrap ended by then with an error.
+  LIKELY, not checked: Windows' newer terminal may not honour the request to start minimised; ModTrap then
+  starts as before, with its console in front. Not done: running with no console at all; it would want a log
+  file to turn to when starting fails, and a test on Windows.
+- Checked: tests (a separator added below a mod, read back as one, the load order untouched, names refused,
+  taken out again), and in a browser against a stand-in modlist: titles sort the Mods tab, the Updater list and
+  Installed mods both ways with the arrow; the box asks the separator's name and the list shows it below the
+  mod. The launcher is built and is a program of the windowless kind; it was not run (WHY§116).

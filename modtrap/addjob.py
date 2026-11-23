@@ -226,7 +226,12 @@ class AddJob:
         out: list[str] = []
         for x in self.plan.mods:
             mod = inst.mod(x["name"])
-            if mod is None or not mod.enabled:
+            if x.get("separator"):
+                # A separator (MT55) is a heading of MO2's list, not a mod to enable: it is to be there, as one.
+                if mod is None or mod.kind != "separator":
+                    out.append("the separator '%s' is not in the list" % x["name"])
+                    continue
+            elif mod is None or not mod.enabled:
                 out.append("'%s' is not enabled" % x["name"])
                 continue
             if x.get("replaces"):
@@ -361,7 +366,8 @@ class AddJob:
         return {"job": work.name, "when": data.get("when", ""), "state": state,
                 "mods": [x["name"] for x in data.get("mods", [])], "plugins": [x["name"] for x in data.get("plugins", [])],
                 # the mods of this job that are newer versions, each with the mod it is a newer version of (MT49)
-                "updates": {x["name"]: x["updates"] for x in data.get("mods", []) if x.get("updates")}}
+                "updates": {x["name"]: x["updates"] for x in data.get("mods", []) if x.get("updates")},
+                "archives": {x["name"]: x.get("archive", "") for x in data.get("mods", []) if x.get("archive")}}
 
 
 __all__ = ["AddJob", "Plan", "plan", "Refused"]

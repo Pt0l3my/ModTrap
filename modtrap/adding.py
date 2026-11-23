@@ -25,7 +25,25 @@ DIFFER_SECONDS = 20.0        # the most a comparing of two versions' files may t
 EXAMPLES = 4
 TAIL_GAP = 2                   # plugins of unknown making that may sit among the tools' output at the load order's end
 ARCHIVE = re.compile(r"\.(7z|zip|rar|fomod|exe|001)$", re.IGNORECASE)
-NEXUS_TAIL = re.compile(r"(-\d+)+$")          # the numbers a download site adds to a file's name
+# What a download site adds to a file's name: "-<numbers>" one after another (Nexus's older way), or
+# " <mod's number> <version> <day>T<time>Z <code>" (its newer way, TL01§31); and a browser's "(1)".
+NEXUS_TAIL = re.compile(r"(?: ?\(\d+\))?$|(-\d+)+(?: ?\(\d+\))?$")
+LAST = "*last*"                               # a place chosen by hand: last of all in MO2's list
+NEXUS_NEW = re.compile(r" (\d{1,8}) (\S+) (\d{4}-\d\d-\d\dT\d\d-\d\dZ) ([0-9A-Za-z]{6,16})(?: ?\(\d+\))?$")
+NEXUS_OLD = re.compile(r"-(\d{1,8})-([0-9A-Za-z-]+?)-(\d{9,11})(?: ?\(\d+\))?$")
+
+
+def from_archive_name(archive: str) -> dict:
+    """What a download's name says of itself, where a site wrote it: {"stem": the name without what the site added,
+    "mod_id", "version", "code"}; the numbers are 0 or "" where the name does not say."""
+    stem = ARCHIVE.sub("", archive)
+    m = NEXUS_NEW.search(stem)
+    if m:
+        return {"stem": stem[:m.start()].strip(" ."), "mod_id": int(m.group(1)), "version": m.group(2), "code": m.group(4)}
+    m = NEXUS_OLD.search(stem)
+    if m:
+        return {"stem": stem[:m.start()].strip(" ."), "mod_id": int(m.group(1)), "version": m.group(2).replace("-", "."), "code": ""}
+    return {"stem": NEXUS_TAIL.sub("", re.sub(r" ?\(\d+\)$", "", stem)).strip(" ."), "mod_id": 0, "version": "", "code": ""}
 OUTPUT_NAME = re.compile(r"\boutputs?\b", re.IGNORECASE)
 _INSTALLED = re.compile(rb"^installationFile=(.*)$", re.MULTILINE)
 # Kinds of shared file worth a look before the mod goes in, and why.
@@ -351,7 +369,8 @@ def staged_mod(name: str, folder: Path) -> Mod:
 
 
 def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float = CONFLICT_SECONDS,
-            staged: list[Mod] | tuple[Mod, ...] = (), auto: bool = False, updates: dict[str, str] | None = None) -> dict:
+            staged: list[Mod] | tuple[Mod, ...] = (), auto: bool = False, updates: dict[str, str] | None = None,
+            before: str = "") -> dict:
     """Everything ModTrap can tell about adding these mods without xEdit. `staged` are mods unpacked in
     ModTrap's work folder, not yet in MO2: they are read where they lie. `updates` names, for a staged mod, the
     mod of the modlist it is a newer version of (MT40): it is then judged at that mod's own place, right above
@@ -372,6 +391,19 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
     cands += list(staged)
     adding = {fold(x.name) for x in cands}
     place = mod_place(m, {fold(x.name) for x in cands if not x.enabled}, memo)
+    place["chosen"] = False
+    if before:
+        # A place the owner chose (MT53): right before the mod, heading or other entry of MO2's list they named,
+        # or last of all.
+        target = inst.mod(before) if before != LAST else None
+        listed = sorted((y for y in inst.mods if y.kind in ("mod", "separator", "foreign") and fold(y.name) not in adding), key=lambda y: y.priority)
+        if before == LAST:
+            place = {"priority": (listed[-1].priority + 1) if listed else 0, "before": "", "after": listed[-1].name if listed else "", "outputs": place["outputs"],
+                     "heading": "", "chosen": True, "would_be": place["before"]}
+        elif target is not None and target.kind in ("mod", "separator", "foreign") and fold(target.name) not in adding:
+            i = next(k for k, y in enumerate(listed) if y.name == target.name)
+            place = {"priority": target.priority, "before": target.name, "after": listed[i - 1].name if i > 0 else "", "outputs": place["outputs"],
+                     "heading": place.get("heading", ""), "chosen": True, "would_be": place["before"]}
     turn = {x.name: i for i, x in enumerate(cands)}
 
     def effective(x: Mod) -> float:
@@ -543,6 +575,14 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
     # An update (MT49): every mod of the batch is a newer version of a mod of the modlist. It takes the older one's
     # place and nothing of the modlist is judged anew; the tools are named only where the files they read changed.
     update = bool(out_mods) and all(x["updates"] for x in out_mods)
+    new_kinds: set[str] = set()                # the kinds of records the new mods' plugins hold
+    for x in cands:
+        for pname in x.plugins:
+            if x.folder is not None:
+                try:
+                    new_kinds |= plugin.groups(x.folder / pname)
+                except plugin.Unreadable:
+                    new_kinds.add("?")              # not read: taken to matter to every tool that reads plugins
     if update:
         differing: dict[str, int] = {}
         for x in out_mods:
@@ -550,7 +590,7 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
                 differing[k] = differing.get(k, 0) + n
         again = run_again(m, {k: n for k, n in differing.items() if k != "plugin"}, differing.get("plugin", 0), memo)
     else:
-        again = run_again(m, kinds_all, new_plugins, memo)
+        again = run_again(m, kinds_all, new_plugins, memo, new_kinds)
     report = {"mods": out_mods, "place": place, "slots": slots, "tools": again, "cut": cut_any, "update": update,
               "unknown": [n for n in names if inst.mod(n) is None]}
     report["steps"] = compile_steps(m, report, auto)
@@ -562,9 +602,14 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
     return report
 
 
-def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dict) -> list[dict]:
+def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dict, record_kinds: set[str] | None = None) -> list[dict]:
     """The tools whose output the new mods make stale: those that built a plugin of this modlist from what the
-    mods bring (TL01, the tools data's 'reads'), and those fed by the mods' loose files (DESIGN§14)."""
+    mods bring (TL01, the tools data's 'reads'), and those fed by the mods' loose files (DESIGN§14).
+
+    `record_kinds`, where given, are the kinds of records the new plugins hold (MT53). A tool that builds a plugin
+    from the load order's plugins then counts only where its own output holds records of one of those kinds: a
+    patch of characters has nothing to do with a plugin of quests and spells. A new plugin that could not be read
+    ("?") counts for every such tool."""
     inst = m.instance
     brings = {k for k, n in kinds.items() if n}
     if new_plugins or kinds.get("plugin"):
@@ -581,6 +626,14 @@ def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dic
             t = data.get(e.tool, {})
             reads = t.get("reads", ["plugins"])            # a tool ModTrap does not know: taken to read plugins
             hit = [k for k in reads if k in brings]
+            shared: list[str] = []
+            if "plugins" in hit and record_kinds is not None and "?" not in record_kinds:
+                try:
+                    shared = sorted(plugin.groups(r.path) & record_kinds) if r.path is not None else ["?"]
+                except plugin.Unreadable:
+                    shared = ["?"]                     # its output could not be read: taken to matter
+                if not shared:
+                    hit = [k for k in hit if k != "plugins"]
             if not hit:
                 continue
             entry = found.setdefault(e.tool, {"tool": e.tool, "plugins": [], "because": hit, "known": bool(t),
@@ -589,6 +642,11 @@ def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dic
                                               "titles": []})
             if r.name not in entry["plugins"]:
                 entry["plugins"].append(r.name)
+            for k in hit:
+                if k not in entry["because"]:
+                    entry["because"].append(k)
+            entry.setdefault("records", [])
+            entry["records"] = sorted(set(entry["records"]) | {k for k in shared if k != "?"})
     for e in inst.executables:
         tool, _ = tools.of_executable(e.title, e.binary)
         if tool in found and e.title not in found[tool]["titles"]:
@@ -632,7 +690,7 @@ def _update_steps(m: model.Model, rep: dict, step, doer: str, auto: bool, held: 
          "MO2's list, the older one is disabled and not deleted, and the plugins keep their places in the load order. "
          "Nothing else of the modlist is judged anew: the place, the files it shares with other mods and the records "
          "it overrides are the older version's. Revert, in the list of what was added, puts the older version back." + (
-             " “Add it for me”, above, does all of it." if auto else " Started with --allow-changes, ModTrap does this itself (“Add it for me”)."),
+             " “Install mod”, above, does all of it." if auto else " Started with --allow-changes, ModTrap does this itself (“Install mod”)."),
          "done" if placed else "waiting" if held else "to do", items)
 
     # A plugin the older version did not have has no place to keep: it is placed as a new plugin is.
@@ -704,11 +762,9 @@ def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
     # 0. Mods ModTrap has unpacked, which MO2 does not have yet.
     unpacked = [x for x in mods if x.get("staged")]
     if unpacked:
-        step("install", "ModTrap", "Put the unpacked mod%s into MO2" % ("s" if len(unpacked) > 1 else ""),
-             "ModTrap has unpacked %s in its own work folder and read %s there; MO2 does not have %s yet. Putting "
-             "a mod into MO2's mods folder, disabled, is the first thing ModTrap does once its part that changes a "
-             "modlist is switched on (“Add it for me”, above). By hand: install the same archive in MO2 yourself and "
-             "leave it disabled; everything below already holds for it." % (("them", "them", "them") if len(unpacked) > 1 else ("it", "it", "it")),
+        step("install", "ModTrap", "Copy the unpacked mod%s into MO2's mods folder" % ("s" if len(unpacked) > 1 else ""),
+             "ModTrap has unpacked %s in its own work folder and read %s there; MO2 does not have %s yet. “Install mod”, "
+             "above, copies %s in and does every step below by itself." % (("them", "them", "them", "them") if len(unpacked) > 1 else ("it", "it", "it", "it")),
              "to do", [{"text": "%s: unpacked, %d file(s)" % (x["name"], x["files"]), "tag": "not in MO2 yet"} for x in unpacked])
 
     # 1. What the mods need.
@@ -755,12 +811,11 @@ def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
     items = [{"text": "%s: %s" % (x["name"], ("enabled, at priority %d" % x["priority"]) if x["enabled"]
                                     else "to enable, " + where), "mod": x["name"],
               "tag": "enabled" if x["enabled"] else "disabled", "cls": "good" if x["enabled"] else ""} for x in mods]
-    step("enable", doer, "Enable %s in MO2, in the right place" % ("the mods" if several else "the mod"),
-         "After every ordinary mod in MO2's list (so a higher priority than all of them: it wins the files it "
-         "shares with them), and before what the modlist's tools made, which is made again afterwards. In MO2, "
-         "with the list sorted by priority: drag the mod %s, then tick it.%s" % (
-             where, " “Add it for me”, above, does this." if auto else
-             " Started with --allow-changes, ModTrap does this itself (“Add it for me”)."),
+    step("enable", doer, "Put %s in its place in MO2's list, and enable it" % ("the mods" if several else "the mod"),
+         ("The place you chose: %s." % where) if place.get("chosen") else
+         "Last: after every ordinary mod in MO2's list (so it wins the files it shares with them), and before what the "
+         "modlist's tools made, which stays last and is made again by the tools. That is where MO2 itself puts a new "
+         "mod; “Manual placement” puts it anywhere else.",
          "done" if not off else "waiting" if needs or unpacked else "to do", items,
          note=("The modlist keeps its outputs under the heading “%s”: the mod goes right before that heading, and "
                "the %d mod(s) under it, with whatever the list keeps after them, stay after it." % (
@@ -795,83 +850,80 @@ def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
              "everything above them and are meant to stay last. Placed there, the new plugin wins over the plugins "
              "made by hand, as it does when you put it last; the step on records below shows what that overrides. In "
              "MO2: Plugins tab, tick the plugin and drag it to its place." + (
-                 " “Add it for me”, above, does this too." if auto else
-                 " Started with --allow-changes, ModTrap does this itself (“Add it for me”)."),
+                 " “Install mod”, above, does this too." if auto else
+                 " Started with --allow-changes, ModTrap does this itself (“Install mod”)."),
              "done" if not inactive else "waiting" if off or needs else "to do", items)
 
-    # 4. Files shared with other mods.
-    notable, total_w, total_l = [], 0, 0
+    # 4. What it overwrites, and what overwrites it: told, not asked (MT53).
+    told, total_w, total_l = [], 0, 0
     for x in mods:
-        for side, lst in (("replaces", x["wins"]), ("loses to", x["loses"])):
+        lead = "%s: " % x["name"] if several else ""
+        for word, lst in (("overwrites", x["wins"]), ("is overwritten by", x["loses"])):
             for c in lst:
-                if side == "replaces":
-                    total_w += c["files"]
+                n = c["files"]
+                if word == "overwrites":
+                    total_w += n
                 else:
-                    total_l += c["files"]
+                    total_l += n
+                kinds = ", ".join("%d %s" % (k, name) for name, k in sorted(c["kinds"].items(), key=lambda kv: (-kv[1], kv[0]))[:5])
+                told.append({"text": "%s%s “%s” in %d file(s): %s%s" % (lead, word, c["mod"], n, kinds,
+                                                                         "; a tool made that mod's files, and makes them again when it runs" if word != "overwrites" and c["output"] else ""),
+                             "mod": c["mod"], "tag": c["notable"][0] if c["notable"] else "", "cls": "warn" if c["notable"] else ""})
                 for k in c["notable"]:
-                    notable.append({"text": "%s %s “%s” in %d file(s): %s" % (
-                        x["name"], side, c["mod"], c["kinds"][k], NOTABLE[k]), "mod": c["mod"], "tag": k, "cls": "warn"})
-                if side == "loses to" and c["output"]:
-                    notable.append({"text": "“%s” holds %d file(s) that %s also has, and stays after it: a tool made "
-                                            "them from the older files, and makes them again when it runs." % (
-                                                c["mod"], c["files"], x["name"]), "mod": c["mod"], "tag": "tool output",
-                                    "cls": "warn"})
+                    told.append({"text": "  %s" % NOTABLE[k], "tag": k, "cls": "warn"})
     for x in mods:
         for p in x["plugins"]:
             r = p.get("replaces")
             if r:
-                notable.append({"text": "%s is also in “%s”: this mod's copy would be the one MO2 uses. %d plugin(s) "
-                                        "name it as a master and were made for the other copy." % (
-                                            p["name"], r["mod"], r["dependants"]), "mod": r["mod"], "tag": "same plugin",
-                                "cls": "warn"})
-    if total_w or total_l or notable:
-        step("files", "you", "Look at the files it shares with other mods",
-             "Where two mods have a file of the same name, MO2 uses the one of the mod with the higher priority. In "
-             "the proposed place, %d file(s) of other mods are replaced and %d are lost to mods that stay after it. "
-             "Most of that is what a mod is for; listed here are the kinds that go wrong quietly." % (total_w, total_l),
-             "to do" if notable else "not needed", notable[:120],
-             note="A judgement: tick it off when you have looked." if notable else
-             "None of the shared files is of a kind that needs a look. The full list is below the steps.",
-             manual=bool(notable))
+                told.append({"text": "%s is also in “%s”: this mod's copy would be the one MO2 uses. %d plugin(s) "
+                                     "name it as a master and were made for the other copy." % (p["name"], r["mod"], r["dependants"]),
+                             "mod": r["mod"], "tag": "same plugin", "cls": "warn"})
+    where_word = "where you put it" if place.get("chosen") else "placed last, before the tools' outputs"
+    step("files", "ModTrap", "What it overwrites, and what overwrites it",
+         "Where two mods have a file of the same name, MO2 uses the one of the mod with the higher priority. For you to "
+         "know; nothing here is asked of you. “Manual placement” puts the mod elsewhere and shows the same for that place.",
+         "done", told[:160],
+         note=("%s, it overwrites %d file(s) of other mods and %d of its own are overwritten." % (where_word[:1].upper() + where_word[1:], total_w, total_l))
+         if told else "%s, it shares no file with any other mod: nothing is overwritten either way." % (where_word[:1].upper() + where_word[1:]))
 
-    # 5. Records.
+    # 5. Records: an optional look through xEdit, never a step to tick.
     if plugs:
-        step("records", "ModTrap", "Check what the new plugin%s in other plugins' records" % (
-            "s override" if len(plugs) > 1 else " overrides"),
-             "Two plugins that change the same record do not add up: the later one wins the whole record, and the "
-             "earlier one's change to it is lost. A curated modlist carries patches that settle this between its own "
-             "mods; a new plugin placed after them takes those records back. Only xEdit can read which records: "
-             "ModTrap starts yours through MO2 with a script that only reads, and lists the records the new plugin "
-             "takes from others and those it loses. The plugin must be active first.",
-             "to do" if all(p["active"] for _, p in plugs) else "waiting",
-             note="A judgement on what it finds is yours: tick it off when you have looked.", manual=True)
+        step("records", "ModTrap", "Optional: what the new plugin%s in other plugins' records" % ("s override" if len(plugs) > 1 else " overrides"),
+             "Two plugins that change the same record do not add up: the later one wins the whole record. Only xEdit can "
+             "read which records: ModTrap starts yours through MO2 with a script that only reads, and lists the records "
+             "the new plugin takes from others and those it loses. Not needed to install the mod.",
+             "not needed")
 
-    # 6. Tools to run again.
+    # 6. The tools that have to do with it: told, not asked; only where what they build from is touched (MT53).
+    tool_items = []
     for t in rep["tools"]:
         names = t["titles"]
         if t["tool"]:
-            sure = not t["if"]
-            step("tool:" + t["tool"], "both" if names else "you",
-                 "Run %s again%s" % (t["tool"], "" if sure else ", if it applies"),
-                 "%s built %s from the modlist as it was, without %s. %s" % (
-                     t["tool"], ", ".join(t["plugins"][:4]) + (" and others" if len(t["plugins"]) > 4 else ""),
-                     "these mods" if several else "this mod",
-                     ("It applies " + t["if"] + ".") if t["if"] else
-                     "Run it after the mod is enabled and its plugins are in place, so that its output takes them in."),
-                 "to do", [{"text": "“%s” in MO2's list of tools" % n, "start": n} for n in names],
-                 note="Only you can tell when this is done: tick it off." if names else
-                 "It is not in this MO2's list of tools; run it the way the modlist's own guide says.", manual=True)
+            why = []
+            if t.get("records"):
+                why.append("its output (%s) holds records of kinds this mod's plugin also has: %s" % (
+                    ", ".join(t["plugins"][:3]) + (" and others" if len(t["plugins"]) > 3 else ""), ", ".join(t["records"][:8])))
+            elif "plugins" in t["because"]:
+                why.append("it builds %s from the load order's plugins" % (", ".join(t["plugins"][:3]) + (" and others" if len(t["plugins"]) > 3 else "")))
+            files = [k for k in t["because"] if k != "plugins"]
+            if files:
+                why.append("it builds from the mod's %s" % " and ".join(files))
+            text = "%s: %s%s" % (t["tool"], "; ".join(why), (" (it applies %s)" % t["if"]) if t["if"] else "")
         else:
-            step("tool:" + t["kind"], "both" if names else "you",
-                 "Run %s again" % (" or ".join("“%s”" % n for n in names) if names else "the tool that handles " + t["kind"]),
-                 "%s %d file(s) of %s. A tool builds its output from all such files in the modlist, and that output "
-                 "does not have the new ones in it until the tool runs again." % (
-                     "The mods bring" if several else "The mod brings", t["count"], t["kind"]),
-                 "to do", [{"text": "“%s” in MO2's list of tools" % n, "start": n} for n in names],
-                 note="Only you can tell when this is done: tick it off." if names else
-                 "No tool of that kind is set up in this MO2; if you use one outside MO2, run it.", manual=True)
+            text = "%s: the mod brings %d file(s) of %s, which such a tool builds its output from" % (
+                " or ".join("“%s”" % n for n in names) if names else "the tool that handles " + t["kind"], t["count"], t["kind"])
+        tool_items.append({"text": text, "tag": "tool"})
+        for n in names:
+            tool_items.append({"text": "“%s” in MO2's list of tools" % n, "start": n})
+    step("tools", "ModTrap", "The tools that have to do with this mod",
+         "A tool's output holds the modlist as it was when the tool last ran. Named here are only the tools that build "
+         "from something this mod brings: a plugin with records of the kinds the tool's own output holds, or files of "
+         "the kinds the tool reads. Run them when you next rebuild the modlist's outputs, or now if what the mod adds is "
+         "missing in the game; nothing here has to be ticked.",
+         "done", tool_items,
+         note="" if tool_items else "None of the modlist's tools builds from anything this mod brings.")
 
-    # 7. Health, and playing.
+    # 7. Health.
     mine = {fold(p["name"]) for x in mods for p in x["plugins"]}
     issues = [i for i in m.issues if fold(i.plugin) in mine]
     all_in = not off and all(p["active"] for _, p in plugs)
@@ -883,13 +935,6 @@ def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
            "plugin": i.plugin, "tag": "missing" if i.what == "missing" else "not active", "cls": "bad"} for i in issues[:50]],
          note=("%d problem(s) elsewhere in the modlist have nothing to do with %s." % (
              len(m.issues) - len(issues), "these mods" if several else "this mod")) if len(m.issues) > len(issues) else "")
-    scripts = sum(x["kinds"].get("scripts", 0) for x in mods)
-    step("play", "you", "Start the game and look at what the mod adds",
-         "What no file can show: whether the game plays well with it. " + (
-             "It brings %d compiled script(s): once a save has been made with it, taking it out again leaves traces "
-             "in that save, so try it on a save you can go back from. " % scripts if scripts else "") +
-         "If something is off, disable the mod again in MO2: nothing else was changed.",
-         "to do" if all_in else "waiting", manual=True)
     return out
 
 

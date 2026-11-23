@@ -21,9 +21,9 @@ def invented(root: Path) -> Path:
     """Quill and Lantern are the list's ordinary mods; an invented patcher's output sits last, under its own
     separator. Thistle is installed but disabled: the mod to add. Three more disabled mods try the needs."""
     make_instance(root, [
-        ("+", "Tool Output", {"Generated.esp": b((SKY, "Quill.esp")), "textures/shared/a.dds": b"made"}),
+        ("+", "Tool Output", {"Generated.esp": b((SKY, "Quill.esp"), kinds=("NPC_", "ARMO")), "textures/shared/a.dds": b"made"}),
         ("+", "Outputs_separator", {}),
-        ("-", "Thistle", {"Thistle.esp": b((SKY, "Quill.esp")), "textures/shared/a.dds": b"new",
+        ("-", "Thistle", {"Thistle.esp": b((SKY, "Quill.esp"), kinds=("NPC_", "QUST")), "textures/shared/a.dds": b"new",
                           "textures/shared/b.dds": b"new", "scripts/quill.pex": b"new",
                           "meta.ini": b"[General]\r\ngameName=SkyrimSE\r\ninstallationFile=Thistle-123-1-0-1700000000.7z\r\n"}),
         ("-", "Needs Absent", {"NeedsAbsent.esp": b((SKY, "Nowhere.esp"))}),
@@ -90,13 +90,13 @@ class Adding(unittest.TestCase):
                 ("-", "Not Yet Installed_separator", {}),
                 ("+", "A Shader Option", {"textures/shared/a.dds": b"option"}),
                 ("-", "Shader Options_separator", {}),
-                ("+", "List - Tool Output", {"Made One.esp": b((SKY, "Quill.esp")), "Made Two.esp": b((SKY,))}),
+                ("+", "List - Tool Output", {"Made One.esp": b((SKY, "Quill.esp"), kinds=("NPC_",)), "Made Two.esp": b((SKY,))}),
                 ("+", "Randomised Loot", {"Randomised Loot.esp": b((SKY,))}),          # no tool known for it
                 ("+", "List - Merge", {"List - Merge.esp": b((SKY, "Quill.esp"))}),
                 ("+", "Outputs_separator", {}),
                 ("+", "List - Late Loaders", {"List - Late Loaders.esp": b((SKY, "Quill.esp"))}),
                 ("-", "Patches_separator", {}),
-                ("-", "Thistle", {"Thistle.esp": b((SKY, "Quill.esp")), "textures/shared/a.dds": b"new"}),
+                ("-", "Thistle", {"Thistle.esp": b((SKY, "Quill.esp"), kinds=("NPC_",)), "textures/shared/a.dds": b"new"}),
                 ("+", "Quill", {"Quill.esp": b((SKY,)), "textures/shared/a.dds": b"old"}),
             ], load_order=["Quill.esp", "List - Late Loaders.esp", "List - Merge.esp", "Made One.esp", "Randomised Loot.esp",
                            "Made Two.esp"],
@@ -200,9 +200,12 @@ class Adding(unittest.TestCase):
 
     def test_the_files_step_names_what_goes_wrong_quietly(self) -> None:
         files = self.step(self.one("Thistle"), "files")
-        self.assertTrue(files["manual"])
-        tags = [i["tag"] for i in files["items"]]
-        self.assertEqual(tags, ["scripts", "tool output"])
+        self.assertEqual((files["manual"], files["state"]), (False, "done"))            # told, not asked (MT53)
+        texts = [i["text"] for i in files["items"]]
+        self.assertTrue(texts[0].startswith("overwrites “Quill” in 2 file(s):"), texts)
+        self.assertIn("scripts", [i["tag"] for i in files["items"]])
+        self.assertTrue(any(t.startswith("is overwritten by “Tool Output” in 1 file(s)") and "a tool made that mod's files" in t for t in texts), texts)
+        self.assertEqual(files["note"], "Placed last, before the tools' outputs, it overwrites 2 file(s) of other mods and 1 of its own are overwritten.")
 
     def test_only_shared_folders_are_entered(self) -> None:
         trie = adding._trie(["textures/shared/a.dds", "Thistle.esp"])
@@ -223,22 +226,69 @@ class Adding(unittest.TestCase):
 
     def test_the_tool_whose_output_is_now_stale_is_named(self) -> None:
         rep = self.one("Thistle")
-        self.assertEqual([(t["tool"], t["plugins"]) for t in rep["tools"]], [("Invented Patcher", ["Generated.esp"])])
-        st = self.step(rep, "tool:Invented Patcher")
-        self.assertTrue(st["manual"])
-        self.assertIn("if it applies", st["title"])                 # a tool ModTrap does not know: it cannot be sure
+        self.assertEqual([(t["tool"], t["plugins"], t["records"]) for t in rep["tools"]], [("Invented Patcher", ["Generated.esp"], ["NPC_"])])
+        st = self.step(rep, "tools")
+        self.assertEqual((st["manual"], st["state"]), (False, "done"))                  # named, never a step to tick (MT53)
+        self.assertIn("its output (Generated.esp) holds records of kinds this mod's plugin also has: NPC_", st["items"][0]["text"])
+
+    def test_a_tool_whose_output_holds_other_kinds_of_records_has_nothing_to_do_with_the_mod(self) -> None:
+        """MT53: a plugin of quests and spells does not send a patcher of characters and armour running."""
+        write(self.root / "mods" / "Thistle" / "Thistle.esp", b((SKY, "Quill.esp"), kinds=("QUST", "SPEL", "MGEF")))
+        rep = self.one("Thistle")
+        self.assertEqual(rep["tools"], [])
+        self.assertEqual(self.step(rep, "tools")["note"], "None of the modlist's tools builds from anything this mod brings.")
+        # A plugin whose records cannot be read counts for the tool, to be on the safe side.
+        write(self.root / "mods" / "Thistle" / "Thistle.esp", b"not a plugin at all")
+        self.assertEqual([t["tool"] for t in adding.run_again(model.build(instance.load(self.root)), {}, 1, {}, {"?"})], ["Invented Patcher"])
 
     def test_a_mod_without_plugins_does_not_send_a_plugin_patcher_running(self) -> None:
         write(self.root / "mods" / "Paint" / "textures" / "quill" / "only.dds", b"new")
         rep = adding.analyse(model.build(instance.load(self.root)), ["Paint"])
         self.assertEqual(rep["tools"], [])
-        self.assertEqual([s["key"] for s in rep["steps"]], ["needs", "enable", "files", "health", "play"])
-        self.assertEqual(self.step(rep, "files")["state"], "not needed")
+        self.assertEqual([s["key"] for s in rep["steps"]], ["needs", "enable", "files", "tools", "health"])
+        self.assertEqual(self.step(rep, "files")["state"], "done")
+
+    def test_a_place_chosen_by_hand_is_judged_there(self) -> None:
+        """MT53: the owner names the entry the new mod goes before; what it overwrites, and what overwrites it, is
+        told for that place."""
+        m = model.build(instance.load(self.root))
+        last = adding.analyse(m, ["Thistle"])
+        self.assertEqual((last["place"]["chosen"], last["place"]["before"]), (False, "Outputs_separator"))
+        self.assertEqual([c["mod"] for c in last["mods"][0]["wins"]], ["Quill"])                      # placed last, it wins over Quill
+        rep = adding.analyse(m, ["Thistle"], before="Quill")
+        place = rep["place"]
+        self.assertEqual((place["chosen"], place["before"], place["priority"]), (True, "Quill", m.instance.mod("Quill").priority))
+        x = rep["mods"][0]
+        self.assertEqual(x["wins"], [])
+        self.assertEqual(sorted(c["mod"] for c in x["loses"]), ["Quill", "Tool Output"])               # before Quill, Quill wins
+        self.assertIn("The place you chose: directly before “Quill” in MO2's list.", self.step(rep, "enable")["why"])
+        self.assertTrue(self.step(rep, "files")["note"].startswith("Where you put it, it overwrites 0 file(s)"))
+        rep = adding.analyse(m, ["Thistle"], before=adding.LAST)
+        self.assertEqual((rep["place"]["chosen"], rep["place"]["before"]), (True, ""))
+        self.assertEqual(sorted(c["mod"] for c in rep["mods"][0]["wins"]), ["Quill", "Tool Output"])  # last of all, it wins over the tools' output too
+        # A name that is no entry of the list leaves the place where ModTrap would put it.
+        self.assertFalse(adding.analyse(m, ["Thistle"], before="No Such Mod")["place"]["chosen"])
+
+    def test_what_a_sites_file_name_says_of_the_mod(self) -> None:
+        f = adding.from_archive_name
+        self.assertEqual(f("Thistle Main 4321 1.3.1 2026-11-22T06-39Z Ab1InventedX.zip"), {"stem": "Thistle Main", "mod_id": 4321, "version": "1.3.1", "code": "Ab1InventedX"})
+        self.assertEqual(f("Thistle Main 4321 1.3.1 2026-11-22T06-39Z Ab1InventedX(2).zip")["stem"], "Thistle Main")
+        self.assertEqual(f("Thistle-123-1-0-1700000000.7z"), {"stem": "Thistle", "mod_id": 123, "version": "1.0", "code": ""})
+        self.assertEqual(f("Just A Mod (1).zip"), {"stem": "Just A Mod", "mod_id": 0, "version": "", "code": ""})
+        self.assertEqual(f("Plain.rar")["stem"], "Plain")
+
+    def test_the_kinds_of_records_a_plugin_holds_are_read_from_its_groups(self) -> None:
+        path = write(self.root / "kinds.esp", b((SKY,), kinds=("NPC_", "QUST", "WRLD")))
+        self.assertEqual(plugin.groups(path), frozenset({"NPC_", "QUST", "WRLD"}))
+        self.assertEqual(plugin.groups(write(self.root / "none.esp", b((SKY,)))), frozenset())
+        with self.assertRaises(plugin.Unreadable):
+            plugin.groups(write(self.root / "bad.esp", b"not a plugin"))
 
     def test_the_steps_in_order(self) -> None:
         rep = self.one("Thistle")
         self.assertEqual([s["key"] for s in rep["steps"]],
-                         ["needs", "enable", "activate", "files", "records", "tool:Invented Patcher", "health", "play"])
+                         ["needs", "enable", "activate", "files", "records", "tools", "health"])
+        self.assertFalse(any(s["manual"] for s in rep["steps"]))                        # nothing is ticked by hand (MT53)
         self.assertEqual([s["state"] for s in rep["steps"][:3]], ["done", "to do", "waiting"])
         self.assertFalse(rep["complete"])
 

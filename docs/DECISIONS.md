@@ -47,6 +47,11 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   over with each release).
   MT52 (the package's one folder is named ModTrap and ModTrap.exe is the program that does the work; the browser is
   taken back to ModTrap's tab; the press at Nexus goes only with the key of a Premium account).
+  MT53 (installing a new mod: one press, placed last; what it overwrites and the tools that have to do with it are
+  told, not asked; a place chosen by hand on the Mods tab; Installed mods, Uninstall; one program in the package).
+  MT54 (a dropped mod is installed by itself, with no further press; nothing ModTrap does is shown as a step to do).
+  MT55 (a dropped mod is read and shown first, then installed at one press; a separator added below a mod; column
+  titles that sort; ModTrap's console starts minimised).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1176,3 +1181,117 @@ because so far you have failed every time."
   says at once whether the account is Premium; an update that was waiting for the press then goes on by itself.
   For an account that is not Premium the press stays, on Nexus's own page: ModTrap does not press a site's button
   in the owner's place.
+
+## MT53
+
+**Installing a new mod: one press, a place by hand, Installed mods; one program** · *2026-11-23 · The owner's ruling*
+
+**Owner's words.** "download now works, and it finishes update, but it doesn't remove favorite mark from old version.
+Is there any point for look only version and other versions? can't we just ship one executable that has all rights
+for its functions? For installing new mods, can you make ModTrap double check if they can be added simply to the
+bottom without causing any issues? that would be easiest. Also can you add Install mods tab two subtabs, make the
+current one installer tool and a new sub tab: Installed mods. Over here installed mods through Modtrap will be shows
+exactly in the same layout as modlist rows, except here only installed mods are shown with the priority, mod version,
+installation details, update button, etc. Also add Installed filter to updater. And rename "add it for me" button to
+"Install mod". I tried to install (add) a new mod, but the install tool seems to be clueless and giving me steps to
+run tools like dyndolod and synthesis, which have nothing to do with this mod. All I want from installer to is to
+determine what mods this to be installed mod would conflict with or overwrite, what tools should be used (but with
+better logic), and can it be placed as last, if not, where it should be placed, also provide manual placement button
+which would bring the user to modlist page and the user could move the cursor to a row and Modtrap would show a
+glowing line where to insert the new mod (line would be between mod rows as moved with mouse cursor, and clicking
+would mean the placement), after the user confirms manual placement then Modtrap determines if that placement
+produces any conflicts or overwrites, then shows the results as a pop up UI window to the user, the user can cancel
+or press Ok, which means the mod will be placed where user indicated regardless. Can you also add a setting that only
+Manual placement to be used by user (so skip steps that would involve prechecks and other steps made redundant)?
+Otherwise the installation should be 1 click, like demaster process (except when user has manual placement enabled
+in settings, then it will obviously involve more clicks, but other than that the installation process should be 1
+click and fully automatic). Also add uninstall button for installed mods, and uninstall button for recently installed
+mods within install page."
+
+**Settled** (WHY§118; this amends MT21 and DESIGN§16 for a new mod; the owner may overrule any of it):
+
+- **One press.** "Install mod" (the button that was "Add it for me") copies the mod in, puts it in its place,
+  enables it, activates its plugins and checks the result, with no plan to confirm first. The add job, its safe
+  folder, its check of the result and its Revert are as they were.
+- **Its place.** Last: after every ordinary mod, before what the modlist's tools made. ModTrap looks at that
+  place before installing and tells what the mod overwrites there and what overwrites it; where it shares no file
+  with any mod, it says so. It does not choose another place by itself: which of two mods should win a file is the
+  owner's to say, and "Manual placement" is how.
+- **Told, not asked.** A new mod's steps no longer hold anything to tick by hand. What it overwrites and what
+  overwrites it is one step that asks nothing. The look at records through xEdit is offered, not required. The look
+  in the game is no longer a step.
+- **The tools, by better reason.** A tool that builds a plugin from the load order's plugins is named only where
+  its own output holds records of a kind the new mod's plugin also holds; a tool that builds from files, only
+  where the mod brings files of the kinds it reads. They are named in one step that asks nothing.
+- **Manual placement.** A button beside "Install mod" takes the owner to the Mods tab, in MO2's order with every
+  group unfolded; a glowing line between two rows follows the pointer, and a click chooses the place ("Put it last
+  of all" is a button). ModTrap then shows, in a box, what the mod overwrites at that place and what overwrites it;
+  OK installs it there whatever the box lists, Cancel lets another place be chosen.
+- **A setting**, off: "Always place a new mod by hand". With it on, "Install mod" goes straight to the choosing of
+  the place.
+- **Installed mods.** "Install mods" has two tabs: "Installer tool" and "Installed mods". The second lists the
+  mods ModTrap installed that still stand (new mods and newer versions), as the modlist lists mods: priority, mod,
+  source, version, when and from which archive it was installed, its update with the update button, and "Uninstall".
+- **Uninstall** is the name of what was "Take it out again", on the Installer tool's list of recent installs, on
+  Installed mods and on the Updater tool. It is the add's own Revert.
+- **The Updater list** has an "Installed" filter beside "Favourites".
+- **A favourite's mark** goes on to the newer version: where both versions carry it, only the newer one shows it;
+  taken out again, the older one shows its mark as before.
+- **A mod's name and source from the file's name.** What a download site adds to a file's name is taken off the
+  new mod's name, and where the name carries the mod's number at Nexus and its version, they are written into the
+  mod's record, so that it can be asked about for updates.
+- **One program.** The package holds `ModTrap.exe` alone, which starts ModTrap with its switch for changes; the
+  "look only" program of MT52 is gone. ModTrap without the switch is still what its command line starts.
+
+## MT54
+
+**A dropped mod is installed by itself** · *2026-11-23 · The owner's ruling*
+
+**Owner's words.** "why is it still asking to Copy the unpacked mod into MO2's mods folder???????? remove that crap
+and make Modtrap do it. I told you to make it fully automatic process (except when manual placement setting is
+enabled, then adjust accordingly)."
+
+**Settled** (WHY§119; this amends MT53; the owner may overrule any of it):
+
+- **No further press.** A mod's archive dropped on the Installer tool is installed as soon as ModTrap has unpacked
+  and read it: the drop is the one act. With "Always place a new mod by hand" on, ModTrap takes the owner to the
+  Mods tab to choose the place instead, and installs on their OK. A setting, on, turns this off; "Install mod" then
+  does it, and it is shown at the top of the Installer tool at all times while something waits to be installed.
+- **Where it waits or stops.** Where the mod's installer asks which parts to install, ModTrap waits for the answers
+  and then goes on by itself. Where something the mod needs is missing, it stops and says so.
+- **Nothing of ModTrap's is shown as a thing to do.** What ModTrap does itself is marked "ModTrap does this", never
+  "to do"; the list is headed "What ModTrap does when it installs the mod", and afterwards "What was done". The
+  count at the top speaks of what is the owner's to settle, or says "Ready to install", "Installing" or "Installed".
+- An install taken out again with "Uninstall" is not installed again by itself.
+
+## MT55
+
+**Read and show first; a separator; titles that sort; the console minimised** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "okay, that's actually fine to first scan the added mod and then show what is involved, conflicts,
+tools, etc. then let the user press install, which then is automatic process. I tried it and the installation
+worked, including the manual placement. Can you also add right click row in modlist only: Add separator below, then
+a pop up UI window with text bracket to name it, with cancel and Ok buttons. This separator will be registered in
+MO2 as well. The pages that show row of mods (like modlist, installed mods, updater list), can you make the column
+titles to be interactive? So if the user clicks on one of them then the list will be sorted either in descending or
+ascending order, each should be indicated by downwards or upwards arrow symbol next to column title respectively.
+The default order is by priority. Would it be possible to integrate the terminal window into the browser page? does
+it have to run separately? if so, can you make it start minimized?"
+
+**Settled** (WHY§120; the owner may overrule any of it):
+
+- **Read and show, then one press.** This amends MT54: as ModTrap comes, a dropped mod is unpacked and read, what it
+  overwrites and the tools that have to do with it are shown, and "Install mod" then does everything by itself.
+  Installing at the drop is still a setting, now off.
+- **A separator.** On the Mods tab only, the right-click menu of a mod, of a separator and of an entry MO2 does not
+  manage has "Add separator below…": a box asks its name, with OK and Cancel. ModTrap makes the separator as MO2
+  keeps one (a folder named "<name>_separator" in MO2's mods folder, and its line in the profile's list, right below
+  the entry), through the add job: MO2 closed, the list copied into the job's safe folder first, the result read
+  back, the change in the history. It is listed under Installed mods, where "Uninstall" takes it out again.
+- **Titles that sort.** On the Mods tab, the Updater list and Installed mods, a click on a column's title sorts by
+  that column, a second click turns the order round; an arrow beside the title points up for ascending, down for
+  descending. Each list comes by priority. Sorted by another column, a list is shown without its separators, which
+  belong to the order by priority.
+- **The console.** ModTrap's program needs a home for what it writes and for ending it, so the console stays; it now
+  starts minimised, in the taskbar. What it writes is on the page already (History, then Log). The launcher has no
+  window of its own, and says so in a box should ModTrap end at once.
