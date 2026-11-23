@@ -141,6 +141,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 116 | 2026-11-23 | A package for Windows: CPython from NuGet, a launcher of our own built with MinGW-w64, the path set by a ._pth file; built here, and not run here, since Wine does not start in this container | METHOD | #release #windows |
 | 117 | 2026-11-23 | The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program | DECIDED | #updates #page #release #windows |
 | 118 | 2026-11-23 | The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press | DECIDED | #add #updates #page #release |
+| 119 | 2026-11-23 | The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's | DECIDED | #add #page |
 
 ## Entries
 
@@ -3148,3 +3149,30 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   name with its source; no step is to be ticked; the line follows the pointer; the box tells; OK installs at the
   place; Installed mods lists it; Uninstall takes it out; one press installs it last, before the outputs.
   Not checked: on the owner's modlist.
+
+### 119. The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's
+
+`2026-11-23` · DECIDED · `#add #page` · refs: MT54, MT53, MT50, WHY§115, WHY§118
+
+- FACT (the owner's session file at 0.3.45): the archive was dropped, unpacked and read ("4 step(s) to go"); the
+  setting for placing by hand was switched on and the archive dropped again; in neither case was an install
+  asked for. Two minutes later the session was packed. The owner's picture shows the page scrolled to the list,
+  whose first entry read "Copy the unpacked mod into MO2's mods folder · ModTrap · to do"; the button that does
+  it was above, out of view.
+- So "one press" was understood by ModTrap as a press on "Install mod", and by the owner as the drop itself. The
+  owner's reading is the simpler one, and it is what the Updater already does with a press on the arrow
+  (WHY§115). DECIDED: the drop installs. The page watches the dropped archive until it is unpacked and read and
+  ModTrap's own reading has settled, then does what the button does; with the setting for placing by hand, it
+  opens the choosing of the place instead.
+- What must not happen by itself: an installer's questions answered by guessing (the page waits for the owner's
+  answers, then goes on); an install where a master is missing (it stops and says so); an install repeated after
+  the owner took it out again (the watch ends when it has acted once).
+- The list's words. A step of ModTrap's own that is not done yet was marked "to do", and numbered, exactly as a
+  step of the owner's. It is now marked "ModTrap does this", the list is headed as ModTrap's work, and the count
+  at the top names only what is the owner's. The button is also in the tab's top bar, where it cannot scroll away.
+- Found while doing this: the first change of the words went into the Demaster's list of steps, whose line of
+  code is the same; the browser check showed the installer's list unchanged, and the change was moved.
+- Checked in a browser against a stand-in modlist: an archive dropped, nothing pressed, is installed last before
+  the outputs; no entry is marked "to do"; with the setting for placing by hand, the drop leads to the Mods tab
+  in its placing mode; after "Uninstall" the mod waits on the list with "Ready to install" and the button at the
+  top, and is not installed again by itself.

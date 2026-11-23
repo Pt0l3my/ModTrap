@@ -49,6 +49,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   taken back to ModTrap's tab; the press at Nexus goes only with the key of a Premium account).
   MT53 (installing a new mod: one press, placed last; what it overwrites and the tools that have to do with it are
   told, not asked; a place chosen by hand on the Mods tab; Installed mods, Uninstall; one program in the package).
+  MT54 (a dropped mod is installed by itself, with no further press; nothing ModTrap does is shown as a step to do).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1239,3 +1240,24 @@ mods within install page."
   mod's record, so that it can be asked about for updates.
 - **One program.** The package holds `ModTrap.exe` alone, which starts ModTrap with its switch for changes; the
   "look only" program of MT52 is gone. ModTrap without the switch is still what its command line starts.
+
+## MT54
+
+**A dropped mod is installed by itself** · *2026-11-23 · The owner's ruling*
+
+**Owner's words.** "why is it still asking to Copy the unpacked mod into MO2's mods folder???????? remove that crap
+and make Modtrap do it. I told you to make it fully automatic process (except when manual placement setting is
+enabled, then adjust accordingly)."
+
+**Settled** (WHY§119; this amends MT53; the owner may overrule any of it):
+
+- **No further press.** A mod's archive dropped on the Installer tool is installed as soon as ModTrap has unpacked
+  and read it: the drop is the one act. With "Always place a new mod by hand" on, ModTrap takes the owner to the
+  Mods tab to choose the place instead, and installs on their OK. A setting, on, turns this off; "Install mod" then
+  does it, and it is shown at the top of the Installer tool at all times while something waits to be installed.
+- **Where it waits or stops.** Where the mod's installer asks which parts to install, ModTrap waits for the answers
+  and then goes on by itself. Where something the mod needs is missing, it stops and says so.
+- **Nothing of ModTrap's is shown as a thing to do.** What ModTrap does itself is marked "ModTrap does this", never
+  "to do"; the list is headed "What ModTrap does when it installs the mod", and afterwards "What was done". The
+  count at the top speaks of what is the owner's to settle, or says "Ready to install", "Installing" or "Installed".
+- An install taken out again with "Uninstall" is not installed again by itself.

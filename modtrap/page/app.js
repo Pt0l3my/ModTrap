@@ -274,6 +274,7 @@ const SETTING_TEXT = [
   ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updater list). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
+  ["install_on_drop", "Install a dropped mod by itself", "On: a mod's archive dropped on the Installer tool is installed as soon as ModTrap has unpacked and read it, with no further press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing. Off: the dropped mod waits for “Install mod”."],
   ["manual_placement", "Always place a new mod by hand", "Off: “Install mod” puts a new mod last (before what the modlist's tools made) with one press, and tells what it overwrites there. On: “Install mod” takes you to the Mods tab instead, where you click between two mods to choose its place; ModTrap shows what the mod overwrites at that place and installs it there on your OK. An update always takes the older version's place."],
   ["stay_on_tab", "Stay on ModTrap's tab when a site's page is opened", "A browser always puts a new tab in front, and a page cannot change that. On: ModTrap's program takes the browser straight back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when the window in front is your browser's; the site's page stays open in its tab behind. Off: you stay on the site's page. Windows only."],
   ["downloads_move", "Move a mod's download from the browser's folder into ModTrap's downloads folder", "A file you download for an update in your browser lands in the browser's Downloads folder. On: ModTrap moves it into its own downloads folder (see the Downloads tab), where it is kept with where it came from and found again instead of being downloaded twice. Off: ModTrap copies it there and leaves yours where it is. A file in MO2's own downloads folder is always used from there and never moved."],
@@ -3064,6 +3065,8 @@ async function dropMods(drops) {
         const rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
         state.staged = (state.staged || []).concat(rec.id);
         state.stagedInfo = Object.assign({}, state.stagedInfo, { [rec.id]: rec });
+        // A dropped mod is installed by itself as soon as it is unpacked and read (MT54; a setting, on).
+        state.autoInstall = { ids: ((state.autoInstall || {}).ids || []).concat(rec.id), since: Date.now() };
         added++;
         renderAddPicked();
         saveUi();
@@ -3071,7 +3074,9 @@ async function dropMods(drops) {
     }
     state.addNotes = notes;
     state.addText = "";
-    if (added) toast(plural(added, "mod") + " put on the list to add."); else if (!notes.length) toast("Already on the list.");
+    if (added) toast(state.autoInstall && (state.settings || {}).install_on_drop && state.changes
+      ? ((state.settings || {}).manual_placement ? "Taken in. ModTrap unpacks it, then takes you to the Mods tab to choose its place." : "Taken in. ModTrap unpacks it and installs it by itself.")
+      : plural(added, "mod") + " put on the list."); else if (!notes.length) toast("Already on the list.");
     pollAdd(true);
   } catch (e) { problem(e.message); }
 }
@@ -3197,6 +3202,33 @@ async function askAddPlan() {
   catch (e) { state.addPlan = null; state.addPlanError = e.message; }
   state.addText = "";
   pollAdd(true);
+}
+
+// A dropped mod installs by itself (MT54): once it is unpacked and read, and nothing in it is the owner's to answer,
+// ModTrap goes on as "Install mod" would; with "Always place a new mod by hand" it goes to the choosing of the place.
+// It waits while an installer's questions are open, and gives up, saying why, where something the mod needs is missing.
+function autoInstallStep(d) {
+  const a = state.autoInstall;
+  if (!a || state.addBusy || state.placing) return;
+  const stop = (why) => { state.autoInstall = null; if (why) toast("Not installed by itself: " + why + ". “Install mod”, at the top, installs it once that is settled."); };
+  if (!(state.settings || {}).install_on_drop || !state.changes) return stop("");
+  if (Date.now() - a.since > 30 * 60 * 1000) return stop("it took too long to get ready");
+  if ((d.gone || []).some((id) => a.ids.includes(id))) return stop("the archive could not be unpacked");
+  const recs = (d.staged || []).filter((r) => a.ids.includes(r.id));
+  if (recs.length < a.ids.length || d.looking || d.unpacking || recs.some((r) => r.state === "copying" || r.state === "unpacking")) return;      // not ready yet
+  const bad = recs.find((r) => r.state === "failed");
+  if (bad) return stop(bad.note || "the archive could not be read");
+  if (recs.some((r) => r.state !== "ready")) {            // an installer asks which parts to install: ModTrap waits for the answers
+    if (!a.told) { a.told = true; toast("This mod asks which parts to install. Answer its questions below: ModTrap installs it as soon as you have."); }
+    return;
+  }
+  if (!(d.mods || []).length) return;
+  const needs = (d.steps || []).find((s) => s.key === "needs");
+  if (needs && needs.state !== "done") return stop("something the mod needs is not there yet (see “Get what the mod needs”)");
+  if (probeReason()) return stop(probeReason());
+  if (!settled()) return;                                 // ModTrap is still reading or scanning
+  state.autoInstall = null;
+  if ((state.settings || {}).manual_placement && !d.update) startPlacement(); else installNow("");
 }
 
 // "Install mod" (MT53): one press copies the mod in, puts it in its place, enables it, activates its plugins and checks
@@ -3459,7 +3491,9 @@ function addStepCard(st, d) {
   const ticked = st.manual && !!done[addKey(st.key)];
   const isDone = ticked || st.state === "done" || st.state === "not needed";
   const waiting = !isDone && st.state.startsWith("waiting");
-  const [word, cls] = ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
+  // What ModTrap does itself is never shown as something "to do": it is ModTrap's, done when the mod is installed.
+  const auto = !isDone && st.who === "ModTrap" && !!state.changes && !st.manual;
+  const [word, cls] = ticked ? ["ticked off by you", "good"] : auto ? [state.addBusy ? "ModTrap is doing this…" : "ModTrap does this", state.addBusy ? "warn" : ""] : STEP_STATE[st.state] || [st.state, ""];
   const body = el("div", {},
     el("h3", {}, st.title, whoTag(st.who),
       el("span", { class: "tag " + cls, text: word })),
@@ -3488,6 +3522,7 @@ function addStepCard(st, d) {
 }
 
 function renderAdd(d) {
+  state.addData = d;
   const box = $("add-report");
   const notes = (state.addNotes || []).concat((d.staged || []).filter((r) => r.note).map((r) => ({ name: r.archive, text: r.note, bad: r.state !== "ready" })));
   const noteCard = notes.length ? el("div", { class: "card add-notes" }, el("h2", { text: "About what you dropped" }),
@@ -3522,7 +3557,14 @@ function renderAdd(d) {
   if (d.failed) { $("add-summary").textContent = ""; box.replaceChildren(el("div", { class: "card" }, el("p", { class: "would-needs", text: d.failed }))); return; }
   let open = 0;
   const cards = d.steps.map((st) => { const [isDone, card] = addStepCard(st, d); if (!isDone) open++; return card; });
-  $("add-summary").textContent = open ? plural(open, "step") + " to go" : "Every step is done";
+  const mine = d.steps.filter((st) => st.who !== "ModTrap" && !["done", "not needed"].includes(st.state)).length;       // what is the owner's
+  const ready = ["install", "enable", "activate", "update"].some((k) => d.steps.some((x) => x.key === k && x.state !== "done"));
+  $("add-summary").textContent = state.addBusy ? "Installing…" : state.autoInstall ? "Installing by itself…" : mine ? plural(mine, "thing") + " for you to settle first"
+    : ready ? (state.changes ? "Ready to install" : plural(open, "step") + " to go") : open ? plural(open, "step") + " to go" : "Installed: every step is done";
+  const go = $("add-go");
+  go.hidden = !(ready && state.changes) || !!state.addBusy;
+  go.disabled = !!mine || !!d.looking || !!probeReason() || !!state.autoInstall;
+  go.textContent = d.update ? "Update mod" : "Install mod";
   const s = d.slots;
   const room = el("p", { class: s.full.after > s.full.limit || s.light.after > s.light.limit ? "would-needs" : "dim",
     text: "Room in the load order: full plugins " + s.full.now + (s.full.after !== s.full.now ? " → " + s.full.after : "") + " of " + s.full.limit +
@@ -3535,7 +3577,7 @@ function renderAdd(d) {
     toolCard(), addActionCard(d),
     ...askCards,
     ...d.mods.map((x) => addModCard(x, d.place, (d.staged || []).find((r) => r.installer && r.state === "ready" && r.name === x.name))),
-    el("h2", { text: "The steps, in order" }), ...cards].filter(Boolean));
+    el("h2", { text: ready && state.changes ? "What ModTrap does when it installs the mod, in order" : "What was done, in order" }), ...cards].filter(Boolean));
 }
 
 async function autoAddStep(d) {
@@ -3583,6 +3625,7 @@ async function pollAdd(force) {
     state.addKeySeen = key;
     state.addLooking = d.looking || d.unpacking;
     if (state.autoAdd) autoAddStep(d);
+    autoInstallStep(d);
     state.recGoing = !!(d.records && !["done", "failed", "stopped"].includes(d.records.state));
     const info = {};
     for (const r of d.staged || []) info[r.id] = r;
@@ -3918,6 +3961,7 @@ $("job-stop").addEventListener("click", async () => {
 $("quit").addEventListener("click", quitModTrap);
 $("steps-rescan").addEventListener("click", () => $("rescan").click());
 $("add-rescan").addEventListener("click", () => $("rescan").click());
+$("add-go").addEventListener("click", () => { if ((state.settings || {}).manual_placement && !((state.addData || {}).update)) startPlacement(); else installNow(""); });
 $("updater-clear").addEventListener("click", async () => { try { await api("/api/updater/clear", {}); } catch (e) { toast(e.message); } pollUpdater(true); });
 $("add-search").addEventListener("input", () => addMatches());
 $("add-search").addEventListener("focus", () => addMatches());
