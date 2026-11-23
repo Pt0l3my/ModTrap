@@ -476,7 +476,7 @@ main.sidebyside .tools { padding: 8px 10px; gap: 8px 10px; }
 main.sidebyside .tools input[type=search] { flex: 1 1 150px; }
 main.sidebyside #tab-plugins .split { flex-direction: column; }
 main.sidebyside #tab-plugins .detail { flex: 0 0 auto; min-width: 0; max-width: none; max-height: 34%; border-left: 0; border-top: 1px solid var(--line); }
-main.sidebyside #mods-table .k3, main.sidebyside #plugins-table .k6, main.sidebyside #plugins-table .k7, main.sidebyside #plugins-table .k8 { display: none; }
+main.sidebyside #mods-table .k3, main.sidebyside #mods-table .k5, main.sidebyside #mods-table .k6, main.sidebyside #plugins-table .k6, main.sidebyside #plugins-table .k7, main.sidebyside #plugins-table .k8 { display: none; }
 tbody tr.linked td { background: rgba(185, 163, 255, .16); }
 main.sidebyside .modinfo { max-height: 34%; overflow: auto; }
 #tabs .tabtool { margin: 4px 4px 4px auto; padding: 2px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); font-size: 13px; }
@@ -592,3 +592,13 @@ table.updates thead th, table.grid thead th { position: sticky; top: 0; z-index:
 .modal.sheet { display: flex; flex-direction: column; }
 .sheet-body { overflow: auto; min-height: 60px; max-height: calc(100vh - 190px); margin: 8px 0; }
 #health .card h3 { margin: 14px 0 4px; font-size: 15px; }
+
+/* MO2's own columns of the mods' list (MT70). */
+td.c-conf { white-space: nowrap; text-align: center; }
+.confbtn { display: inline-block; background: none; border: 1px solid transparent; border-radius: 4px; padding: 0 4px; font-size: 12.5px; line-height: 1.5; font-weight: 600; cursor: pointer; }
+span.confbtn { cursor: default; margin-left: 6px; }
+.confbtn.cf-overwrite { color: var(--good); } .confbtn.cf-overwritten { color: var(--bad); } .confbtn.cf-mixed { color: var(--warn); } .confbtn.cf-redundant { color: var(--dim); }
+button.confbtn:hover, button.confbtn:focus-visible { border-color: currentColor; box-shadow: 0 0 8px currentColor; outline: none; }
+td.c-made { white-space: nowrap; color: var(--dim); font-size: 13px; }
+td.c-notes { color: var(--dim); font-size: 13px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gconf { margin-left: 4px; } .gnotes { margin-left: 14px; font-weight: 400; }

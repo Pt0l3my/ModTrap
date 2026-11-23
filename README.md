@@ -58,6 +58,9 @@ History lists every change of the mod list (moves, renames, uninstalls) for good
 A mod that is installed or updated is named by its title and its version ("Example Mod 1.2"), and the name is
 offered in a box to change or keep.
 
+The mods' list has MO2's own Conflicts, Installation and Notes columns, worked out by MO2's rules; a press on a
+conflict mark draws the mods in conflict. The plugins' list is grouped by the mods' separators, as in MO2.
+
 ModTrap shows no window but its page in the browser: its program's console is hidden, and what it writes is on the
 page's Log. It closes when its page is closed, never in the middle of a job, and a tab the browser brings back
 starts it again.

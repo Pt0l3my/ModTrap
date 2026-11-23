@@ -1057,3 +1057,35 @@ folds the side again. A side shows up to 240 boxes; beyond that the rest stay li
 
 *Later, 2026-11-23 (MT69):* a side whose mods all fit the window without scrolling is shown whole from the start,
 with no "+ N more" and no "Show fewer"; the picture is drawn as large as the window allows.
+
+## 29. MO2's own columns, and the plugins' list in groups (MT70)
+
+**Three columns of MO2's mod list** stand in ModTrap's, before Dependants, worked out by MO2's own rules (MO04,
+`modcols`):
+
+- **Conflicts.** For every enabled mod, as MO2 marks it for loose files: its files win over other mods' (⚡+),
+  lose to them (⚡−), both (⚡±), or every one of them loses (⚡∅, redundant). Left out of the reckoning, as MO2
+  leaves them out: a mod's own record, a read-me and an installer's folder at its top, and everything hidden with
+  `.mohidden`. A file only the game's own folder has besides is no conflict. Files inside archives are not looked
+  at, as in MO2 unless its archive parsing is switched on. A folded separator shows the marks of its mods
+  together. **A press on a mark opens the mod's web** (§23) with the conflicts alone: the mods whose files it
+  wins over and loses to, and the plugins that change the same records; the other kinds are a press away in the
+  list beside the picture.
+- **Installation.** When the mod's folder was made, shown as the browser writes a date.
+- **Notes.** The comments kept with the mod or the separator.
+
+Each sorts the list by a press on its title. Installation and Notes are left out of the split view, which is
+narrow; Conflicts stays.
+
+*How it is worked out.* Installation and Notes are read from each mod's folder and record. For Conflicts every
+enabled mod's files are listed once, from the highest priority down; a path is kept as a number with the mods
+that have it. This runs in a thread of its own when a modlist is read; the cells show "…" until it is done and
+keep what they showed before while a changed list is reckoned anew. A mod's list of files is kept in memory for
+as long as its folder looks the same from above (its top entries and their times), so that a move or a tick costs
+no listing; "Rescan" lists every folder anew.
+
+**The plugins' list in groups.** Each run of plugins whose mods stand under the same separator of the mods' list
+is a group under that separator's name, with its count and its positions; a group folds on a press, "Fold all"
+and "Unfold all" stand beside the search box, and what is folded is kept with the session. The order stays the
+load order's, so a separator's name heads a group again wherever the load order comes back to its mods. A search
+or a filter opens every group; a plugin gone to is unfolded. The game's own plugins are a group of their own.

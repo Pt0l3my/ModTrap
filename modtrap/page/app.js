@@ -923,7 +923,8 @@ const naturally = (a, b) => String(a).localeCompare(String(b), undefined, { nume
 
 // The Mods tab's order, as its select names it and as its column titles set it.
 const MOD_ORDERS = { "mo2": ["priority", false], "rev": ["priority", true], "deps": ["deps", true], "deps-asc": ["deps", false],
-  "name": ["name", false], "name-desc": ["name", true], "plugins": ["plugins", false], "plugins-desc": ["plugins", true] };
+  "name": ["name", false], "name-desc": ["name", true], "plugins": ["plugins", false], "plugins-desc": ["plugins", true],
+  "conflict": ["conflict", true], "conflict-asc": ["conflict", false], "made": ["made", true], "made-asc": ["made", false], "notes": ["notes", false], "notes-desc": ["notes", true] };
 function modSort() { const o = MOD_ORDERS[$("mods-order").value] || MOD_ORDERS.mo2; return { key: o[0], desc: o[1] }; }
 function setModSort(key) {
   if (state.placing) return;                     // while a place is chosen the list stays in MO2's order
@@ -1505,7 +1506,7 @@ function currentUi() {
     tab: state.tab || "mods", split: state.splitAt || 50, swap: !!state.splitSwap, cols: state.cols || {}, picked: [...state.picked], order: $("mods-order").value,
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
-    collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
+    collapsed: [...(state.collapsed || [])], pcollapsed: [...(state.pcollapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
     ticksJob: state.ticksJob === undefined ? null : state.ticksJob,
     adding: [...(state.adding || [])], staged: [...(state.staged || [])],
   };
@@ -1538,6 +1539,7 @@ function applyUi(ui) {
     $("plugins-search").value = ui.pSearch || "";
     $("p-problems").checked = !!ui.pProblems; $("p-deps").checked = !!ui.pDeps;
     state.collapsed = new Set(Array.isArray(ui.collapsed) ? ui.collapsed : []);
+    state.pcollapsed = new Set(Array.isArray(ui.pcollapsed) ? ui.pcollapsed : []);
     state.stepsDone = ui.stepsDone && typeof ui.stepsDone === "object" ? ui.stepsDone : {};
     state.ticksJob = typeof ui.ticksJob === "string" ? ui.ticksJob : undefined;
     state.stepsText = "";
@@ -2362,9 +2364,12 @@ function modRow(m) {
     plugs.append(a);
   });
   if (m.plugins.length > 4) plugs.append(" … +" + (m.plugins.length - 4));
+  m.cells = { conf: el("td", { class: "c-conf" }), made: el("td", { class: "c-made" }), notes: el("td", { class: "c-notes" }) };
   const tr = el("tr", { class: (m.enabled ? "" : "off") + (state.picked.has(m.name) ? " picked" : "") + (can ? " tickable" : "") },
     el("td", { class: "c-tick" }, tick, on), el("td", { class: "c-num", text: m.priority < 0 ? "" : m.priority }), name, plugs,
+    m.cells.conf, m.cells.made, m.cells.notes,
     el("td", { class: "c-num" + (m.dependants ? " badnum" : ""), text: m.plugins.length ? m.dependants : "" }));
+  modColsFill(m);
   // A click on the row only shows the mod and what is tied to it; ticking is the box's alone (WHY§59).
   tr.addEventListener("click", (ev) => {
     if (ev.target.closest("input, button, a")) return;
@@ -2378,11 +2383,59 @@ function modRow(m) {
   m.hay = fold(m.name + " " + m.plugins.join(" "));
 }
 
+// MO2's own columns of the mods' list (MT70, MO04): Conflicts, Installation, Notes. The server works them out off the
+// page's requests (the conflicts need every enabled mod's files listed); the cells are filled as the answers come.
+const CONFLICT_WORDS = {
+  overwrite: ["⚡+", "Overwrites loose files: files of this mod win over the same files of mods below it"],
+  overwritten: ["⚡−", "Overwritten loose files: mods above it win over some of this mod's files"],
+  mixed: ["⚡±", "Loose files overwrite and are overwritten: some of its files win over other mods' files, some lose"],
+  redundant: ["⚡∅", "Redundant: every file of this mod is overwritten by mods above it"],
+};
+const CONFLICT_RANK = { mixed: 4, overwrite: 3, overwritten: 2, redundant: 1 };
+const madeText = (t) => { try { return new Date(t * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }); } catch (e) { return ""; } };
+function modColsFill(m) {
+  if (!m.cells) return;
+  const mc = state.modcols || {};
+  const inf = (mc.info || {})[m.name] || {};
+  const conf = m.enabled || m.kind === "overwrite" ? (mc.conflicts || {})[m.kind === "overwrite" ? "<overwrite>" : m.name] : "";
+  m.conflict = conf || "";
+  m.made = inf.installed || 0;
+  m.notes = inf.notes || "";
+  if (conf && CONFLICT_WORDS[conf]) {
+    const b = el("button", { type: "button", class: "confbtn cf-" + conf, text: CONFLICT_WORDS[conf][0], title: CONFLICT_WORDS[conf][1] + ".\nPress for the mods it is in conflict with, drawn as its web.", "aria-label": CONFLICT_WORDS[conf][1] });
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); if (!state.placing) webOpen(m.name, { conflicts: true }); });
+    m.cells.conf.replaceChildren(b);
+  } else m.cells.conf.replaceChildren(!mc.conflicts && m.enabled && m.kind === "mod" && state.modcolsGoing ? el("span", { class: "dim", text: "…", title: "Every enabled mod's files are being listed, to know which win and which lose" }) : "");
+  m.cells.made.textContent = m.made ? madeText(m.made) : "";
+  m.cells.notes.textContent = m.notes.replace(/\s+/g, " ");
+  m.cells.notes.title = m.notes;
+}
+async function loadModCols() {
+  if (state.status !== "ready" || state.modcolsAsking) return;
+  state.modcolsAsking = true;
+  let d;
+  try { d = await api("/api/modcols"); } catch (e) { state.modcolsAsking = false; return; }
+  state.modcolsAsking = false;
+  state.modcolsFor = state.loaded;
+  state.modcolsGoing = d.state !== "done";
+  // What was known before stays on show until the new answer is whole: the list does not go blank at every change.
+  state.modcols = { info: d.info || (state.modcols || {}).info, conflicts: d.conflicts || (d.state === "done" ? {} : (state.modcols || {}).conflicts), cut: d.cut };
+  for (const g of state.groups || []) {
+    if (g.sep) { const inf = (state.modcols.info || {})[g.sep.name]; g.notes.textContent = inf && inf.notes ? inf.notes.replace(/\s+/g, " ") : ""; g.notes.title = inf ? inf.notes || "" : ""; }
+    g.mods.forEach(modColsFill);
+  }
+  if (state.groups) filterMods();
+  clearTimeout(state.modcolsTimer);
+  if (state.modcolsGoing) state.modcolsTimer = setTimeout(loadModCols, 1500);
+}
+
 function groupRow(g) {
   const arrow = el("span", { class: "arrow", text: "▾" });
   const info = el("span", { class: "dim ginfo" });
   const btn = el("button", { type: "button", class: "gtoggle", "aria-expanded": "true" }, arrow, g.sep.name.replace(/_separator$/i, ""));
-  const tr = el("tr", { class: "sep" }, el("td", { colSpan: 5 }, btn, info));
+  g.conf = el("span", { class: "gconf" });
+  g.notes = el("span", { class: "dim gnotes" });
+  const tr = el("tr", { class: "sep" }, el("td", { colSpan: 8 }, btn, info, g.conf, g.notes));
   tr.dataset.sep = g.sep.name;
   tr.addEventListener("contextmenu", (ev) => sepMenu(ev, g));
   btn.addEventListener("click", () => {
@@ -2402,6 +2455,7 @@ function renderMods() {
   }
   layoutMods();
   colSetup($("mods-table"));
+  if (state.modcolsFor !== state.loaded) loadModCols();
 }
 
 function layoutMods() {
@@ -2410,8 +2464,10 @@ function layoutMods() {
   state.grouped = sort.key === "priority";
   if (!state.grouped) {
     // By a column other than priority: one list of the mods, without the separators, which belong to the priority order.
-    const flat = state.groups.flatMap((g) => g.mods).filter((m) => m.kind === "mod" && (sort.key !== "deps" || m.plugins.length));
-    const by = sort.key === "name" ? (a, b) => naturally(a.name, b.name) : sort.key === "plugins" ? (a, b) => a.plugins.length - b.plugins.length : (a, b) => a.dependants - b.dependants;
+    const flat = state.groups.flatMap((g) => g.mods).filter((m) => m.kind === "mod" && (sort.key !== "deps" || m.plugins.length) && (sort.key !== "conflict" || m.conflict) && (sort.key !== "notes" || m.notes));
+    const by = sort.key === "name" ? (a, b) => naturally(a.name, b.name) : sort.key === "plugins" ? (a, b) => a.plugins.length - b.plugins.length
+      : sort.key === "conflict" ? (a, b) => (CONFLICT_RANK[a.conflict] || 0) - (CONFLICT_RANK[b.conflict] || 0) : sort.key === "made" ? (a, b) => (a.made || 0) - (b.made || 0)
+        : sort.key === "notes" ? (a, b) => naturally(a.notes || "", b.notes || "") : (a, b) => a.dependants - b.dependants;
     flat.sort((a, b) => (sort.desc ? -by(a, b) : by(a, b)) || a.priority - b.priority);
     flat.forEach((m) => frag.append(m.row));
     state.flat = new Set(flat);
@@ -2423,7 +2479,7 @@ function layoutMods() {
     }
     state.flat = null;
   }
-  sortHeads($("mods-table"), [null, "priority", "name", "plugins", "deps"], sort, setModSort);
+  sortHeads($("mods-table"), [null, "priority", "name", "plugins", "conflict", "made", "notes", "deps"], sort, setModSort);
   $("mods-table").tBodies[0].replaceChildren(frag);
   $("collapse-all").disabled = $("expand-all").disabled = !state.grouped;
   if (state.focus) paintFocus();
@@ -2488,6 +2544,8 @@ function filterMods() {
       g.btn.setAttribute("aria-expanded", folded ? "false" : "true");
       g.info.textContent = (filtering ? match + " of " + g.mods.length + " shown" : plural(g.mods.length, "mod")) +
         (ticked ? " · " + ticked + " ticked" : "");
+      const kinds = folded ? ["mixed", "overwrite", "overwritten", "redundant"].filter((k) => g.mods.some((m) => m.conflict === k)) : [];
+      g.conf.replaceChildren(...kinds.map((k) => el("span", { class: "confbtn cf-" + k, text: CONFLICT_WORDS[k][0], title: "Among its mods: " + CONFLICT_WORDS[k][1].toLowerCase() })));
     }
   }
   saveUi();
@@ -3300,6 +3358,7 @@ async function webOpen(name, opts) {
     document.body.append(back);
   } else if (!o.back && w.name && w.name !== name) w.trail.push(w.name);
   Object.assign(w, { name, sel: null, more: null, error: "", going: false, data: null, open: new Set(), frameTop: undefined });
+  if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output", "loses", "wins"]);         // from the Conflicts column (MT70): what wins over what, and no more
   const key = webKey(name);
   const here = () => state.web === w && w.name === name;
   let kept = webCache.get(key);
@@ -3894,7 +3953,8 @@ $("split-bar").addEventListener("keydown", (ev) => {
 const COL_MIN = 28;
 const COL_FIXED = { "mods-table": 3, "plugins-table": 4 };          // the columns that keep their place; any other table: 2
 function colKey(table) {
-  return table.id || "t:" + [...table.tHead.rows[0].cells].map((th) => th.childNodes[0] && th.childNodes[0].nodeType === 3 ? th.childNodes[0].textContent.trim() : th.textContent.trim()).join("|").slice(0, 120);
+  if (table.id) return table.id + (table.id === "mods-table" ? ":" + table.tHead.rows[0].cells.length : "");      // a table that gained columns starts afresh
+  return "t:" + [...table.tHead.rows[0].cells].map((th) => th.childNodes[0] && th.childNodes[0].nodeType === 3 ? th.childNodes[0].textContent.trim() : th.textContent.trim()).join("|").slice(0, 120);
 }
 const colOf = (cell) => Number(cell.dataset.c);
 const colShown = (th) => getComputedStyle(th).display !== "none";
@@ -4111,10 +4171,55 @@ function pluginMarks(p) {
   }
   cell.replaceChildren(...kids);
 }
+// The plugins' list in groups (MT70), as MO2 shows it: each run of plugins whose mods stand under the same separator
+// of the mods' list is a group under that separator's name, and can be folded. The order is the load order's, so a
+// separator's name heads a group again wherever the load order comes back to its mods.
+function pluginGroupOf() {
+  const of = new Map();
+  let sep = "";
+  for (const m of [...state.mods].reverse()) {             // by priority, lowest first, as MO2 lists them
+    if (m.kind === "separator") sep = bare(m.name);
+    else of.set(m.name, sep);
+  }
+  // A plugin whose file no enabled mod has (its mod is disabled) says nothing of its own: it stays in the group it stands in.
+  return (p) => p.mod === "<game>" || p.primary ? "The game" : p.mod === "<overwrite>" ? "Overwrite" : !p.mod ? "" : of.get(p.mod) || "Before the first separator";
+}
+function pluginGroupRow(g) {
+  g.arrow = el("span", { class: "arrow", text: "▾" });
+  g.info = el("span", { class: "dim ginfo" });
+  g.btn = el("button", { type: "button", class: "gtoggle", "aria-expanded": "true" }, g.arrow, g.name);
+  g.btn.addEventListener("click", () => {
+    state.pcollapsed = state.pcollapsed || new Set();
+    if (state.pcollapsed.has(g.key)) state.pcollapsed.delete(g.key); else state.pcollapsed.add(g.key);
+    filterPlugins();
+  });
+  g.row = el("tr", { class: "sep pgroup" }, el("td", { colSpan: 9 }, g.btn, g.info));
+}
+function pluginsFold(all) {
+  state.pcollapsed = new Set(all ? (state.pgroups || []).map((g) => g.key) : []);
+  filterPlugins();
+}
+
 function renderPlugins() {
   const body = $("plugins-table").tBodies[0];
   const frag = document.createDocumentFragment();
+  const groupOf = pluginGroupOf();
+  const seen = new Map();
+  state.pgroups = [];
+  state.pcollapsed = state.pcollapsed || new Set();
+  let group = null;
   for (const p of state.plugins) {
+    const gname = groupOf(p) || (group ? group.name : "Before the first separator");
+    if (!group || group.name !== gname) {
+      const n = (seen.get(gname) || 0) + 1;
+      seen.set(gname, n);
+      group = { name: gname, key: gname + (n > 1 ? " #" + n : ""), plugins: [] };
+      pluginGroupRow(group);
+      state.pgroups.push(group);
+      frag.append(group.row);
+    }
+    group.plugins.push(p);
+    p.group = group;
     const name = el("td", {}, p.name);
     if (!p.active) name.append(el("span", { class: "tag", text: "not active" }));
     if (p.primary) name.append(el("span", { class: "tag", text: "game" }));
@@ -4192,7 +4297,7 @@ function pdragEnd() {
 }
 $("plugins-table").addEventListener("mousedown", (ev) => {
   if (ev.button !== 0 || !state.changes || ev.target.closest("input, button")) return;
-  const tr = ev.target.closest("#plugins-table tbody tr");
+  const tr = ev.target.closest("#plugins-table tbody tr[data-plugin]");
   const p = tr ? state.plugins.find((x) => x.name === tr.dataset.plugin) : null;
   if (p && p.position != null && !p.primary) pdrag = { tr, name: p.name, x: ev.clientX, y: ev.clientY, going: false, at: null,
     listed: state.plugins.filter((x) => x.position != null).map((x) => x.name) };
@@ -4220,7 +4325,7 @@ document.addEventListener("mousemove", (ev) => {
   pdrag.py = ev.clientY;
   pdrag.ghost.style.left = (ev.clientX + 14) + "px";
   pdrag.ghost.style.top = (ev.clientY + 12) + "px";
-  const tr = ev.target.closest ? ev.target.closest("#plugins-table tbody tr") : null;
+  const tr = ev.target.closest ? ev.target.closest("#plugins-table tbody tr[data-plugin]") : null;
   let at = null;
   if (tr && !tr.hidden) {
     const r = tr.getBoundingClientRect(), below = ev.clientY > r.top + r.height / 2;
@@ -4261,12 +4366,23 @@ function filterPlugins() {
   const pr = $("p-problems").checked, dp = $("p-deps").checked;
   let shown = 0, target = null;
   const found = [];
+  const filtering = !!(q || pr || dp);
+  const folded = state.pcollapsed || new Set();
+  for (const p of state.plugins) if (Number.isFinite(star) && p.position === star) { target = p; if (p.group) folded.delete(p.group.key); }      // a place gone to is unfolded
+  for (const g of state.pgroups || []) g.match = 0;
   for (const p of state.plugins) {
     const ok = (!q || p.hay.includes(q)) && (!pr || p.issues.length || p.unreadable) && (!dp || p.dependants > 0);
-    p.row.hidden = !ok;
-    if (ok) shown++;
+    const shut = !filtering && p.group && folded.has(p.group.key);          // while a search or a filter narrows the list, every group is open
+    p.row.hidden = !ok || shut;
+    if (ok) { shown++; if (p.group) p.group.match++; }
     if (ok && q) found.push(p.row);
-    if (Number.isFinite(star) && p.position === star) target = p;
+  }
+  for (const g of state.pgroups || []) {
+    const shut = !filtering && folded.has(g.key);
+    g.row.hidden = filtering && !g.match;
+    g.arrow.textContent = shut ? "▸" : "▾";
+    g.btn.setAttribute("aria-expanded", shut ? "false" : "true");
+    g.info.textContent = filtering ? g.match + " of " + g.plugins.length + " shown" : plural(g.plugins.length, "plugin") + (g.plugins.length ? " · positions " + g.plugins[0].position + " to " + g.plugins[g.plugins.length - 1].position : "");
   }
   $("plugins-shown").textContent = (q || pr || dp) ? shown + " of " + state.plugins.length + " shown" : state.plugins.length + " plugins";
   $("plugins-empty").hidden = shown > 0;
@@ -4287,6 +4403,7 @@ function gotoPlugin(name) {
   const p = state.plugins.find((x) => fold(x.name) === fold(name));
   if (!p) { toast(name + " is not in this profile's load order."); return; }
   if (!onPlugins()) showTab("plugins");
+  if (p.group && state.pcollapsed && state.pcollapsed.delete(p.group.key)) filterPlugins();        // its group is unfolded
   if (p.row.hidden) clearPluginFilters();
   flash(p.row);
   showPlugin(p.name, p.row);
@@ -6005,6 +6122,8 @@ $("job-stop").addEventListener("click", async () => {
 $("quit").addEventListener("click", quitModTrap);
 $("steps-rescan").addEventListener("click", () => $("rescan").click());
 $("scan-list").addEventListener("click", () => { showTab("health"); listScan(true); });
+$("plugins-fold").addEventListener("click", () => pluginsFold(true));
+$("plugins-unfold").addEventListener("click", () => pluginsFold(false));
 $("s-scan").addEventListener("click", () => showTab("health"));
 $("add-rescan").addEventListener("click", () => $("rescan").click());
 $("add-go").addEventListener("click", () => { if (chosenPlace()) installNow(chosenPlace().before); else if ((state.settings || {}).manual_placement && !((state.addData || {}).update)) startPlacement(); else installNow(""); });

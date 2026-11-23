@@ -239,5 +239,24 @@ class PageTests(unittest.TestCase):
         self.assertIn("else if (whole && all.length > WEB_CAP[side] && !(quiet && quiet.has(side))) items[side].push({ fewer: true, side });", self.js)
         self.assertIn('window.addEventListener("resize", () => { clearTimeout(state.webResize);', self.js)
 
+    def test_the_mods_list_has_mo2s_columns_and_the_plugins_list_its_groups(self):
+        """MT70."""
+        heads = re.findall(r"<th[^>]*>([^<]*)</th>", self.html[self.html.index('id="mods-table"'):self.html.index('id="mods-table"') + 2500])
+        self.assertEqual(heads[:8], ["", "Priority", "Mod", "Plugins", "Conflicts", "Installation", "Notes", "Dependants"])
+        self.assertIn('sortHeads($("mods-table"), [null, "priority", "name", "plugins", "conflict", "made", "notes", "deps"], sort, setModSort);', self.js)
+        for state in ("overwrite", "overwritten", "mixed", "redundant"):            # the four states MO2's Conflicts column has for loose files
+            self.assertRegex(self.js, r"\n  %s: \[\"⚡" % state)
+            self.assertIn(".confbtn.cf-%s { color:" % state, self.css)
+        self.assertIn('if (!state.placing) webOpen(m.name, { conflicts: true });', self.js)
+        self.assertIn('if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output", "loses", "wins"]);', self.js)
+        self.assertIn('if (table.id) return table.id + (table.id === "mods-table" ? ":" + table.tHead.rows[0].cells.length : "");', self.js)
+        for option in ("conflict", "conflict-asc", "made", "made-asc", "notes", "notes-desc"):
+            self.assertIn('<option value="%s">' % option, self.html)
+        # The plugins' list: groups by the mods' separators, folded and unfolded, and open while a search narrows it.
+        self.assertIn('g.row = el("tr", { class: "sep pgroup" }, el("td", { colSpan: 9 }, g.btn, g.info));', self.js)
+        self.assertIn('const shut = !filtering && p.group && folded.has(p.group.key);', self.js)
+        self.assertIn('ev.target.closest("#plugins-table tbody tr[data-plugin]")', self.js)
+        self.assertIn('id="plugins-fold"', self.html)
+
 if __name__ == "__main__":
     unittest.main()

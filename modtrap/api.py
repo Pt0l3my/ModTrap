@@ -20,7 +20,7 @@ import urllib.parse
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import console, downloads, dupes, evaluate, loadcheck, modweb, process, selfupdate, startlink, tabback, updater, updating, version
+from . import console, downloads, dupes, evaluate, loadcheck, modcols, modweb, process, selfupdate, startlink, tabback, updater, updating, version
 from . import updates as updates_mod
 from .server import Bad
 
@@ -156,6 +156,8 @@ class Api:
         self.argv: list[str] = []                     # what this ModTrap was started with, for starting itself again (MT58)
         self.port = 0                                 # the port its page is on
         self.own_console = False                      # the console it writes to is its own, and may be hidden (MT63)
+        self._modcols: dict = {"for": None, "info": None, "conflicts": None, "state": "idle", "progress": (0, 0), "error": ""}     # MO2's own columns (MT70)
+        self._mod_files: dict = {}                    # each mod's list of files, kept while its folder looks the same from above
         self._wanted_names: dict[str, str] = {}       # the mod being updated, folded -> the name the owner gave its newer version (MT67)
         self._listscan: dict = {"for": None, "quick": None, "deep": None, "state": "idle", "progress": (0, 0), "error": ""}      # MT65
         self.job: dryrun.Job | None = None
@@ -485,6 +487,7 @@ class Api:
                 return
             self.status, self.message, self.model, self.profile = "ready", "", m, inst.profile
         self._scan_quick(m)
+        self._columns(m)
         try:
             self.updating.at_launch(m, *self._updates_for(), bool(self.settings().get("updates_at_launch")))
         except Exception as e:                                  # the update check is beside the point of reading a modlist
@@ -624,6 +627,42 @@ class Api:
                 if sc["state"] == "looking":
                     sc["state"] = "idle"
         threading.Thread(target=run, name="quickscan", daemon=True).start()
+
+    def _columns(self, m: model.Model) -> None:
+        """MO2's own columns for the mods' list (MT70): Installation and Notes first, then Conflicts, which lists
+        every enabled mod's files. In a thread of its own, once for a modlist as read."""
+        with self._lock:
+            if self._modcols["for"] is m:
+                return
+            mc = self._modcols = {"for": m, "info": None, "conflicts": None, "state": "looking", "progress": (0, 0), "error": ""}
+
+        def run() -> None:
+            try:
+                started = time.monotonic()
+                mc["info"] = modcols.info(m.instance)
+                took = time.monotonic() - started
+                got = modcols.conflicts(m, self._mod_files, lambda i, n: mc.update(progress=(i, n)))
+                mc["conflicts"] = got
+                tally: dict[str, int] = {}
+                for v in got["mods"].values():
+                    tally[v] = tally.get(v, 0) + 1
+                log.info("MO2's columns for the mods' list: installation and notes of %d entr%s (%.1f s); conflicts of %d enabled mod(s), %s file(s), %d folder(s) listed anew, %.1f s%s: %s",
+                         len(mc["info"]), "y" if len(mc["info"]) == 1 else "ies", took, got["enabled"], format(got["files"], ","), got["listed"], got["seconds"],
+                         ", cut short" if got["cut"] else "", ", ".join("%d %s" % (n, k) for k, n in sorted(tally.items())) or "none in conflict")
+            except Exception as e:
+                mc["error"] = logbook.why(e)
+                log.warn("MO2's columns for the mods' list could not be worked out: %s", logbook.why(e))
+            finally:
+                mc["state"] = "done"
+        threading.Thread(target=run, name="modcols", daemon=True).start()
+
+    def modcols_state(self) -> dict:
+        m = self._need()
+        self._columns(m)
+        mc = self._modcols
+        got = mc["conflicts"] or {}
+        return {"state": mc["state"], "progress": list(mc["progress"]), "error": mc["error"], "info": mc["info"], "conflicts": got.get("mods"),
+                "cut": bool(got.get("cut")), "seconds": got.get("seconds")}
 
     def listscan_brief(self, m: model.Model) -> dict:
         sc = self._listscan
@@ -2435,6 +2474,8 @@ class Api:
             return 200, self.self_state()
         if path == "/api/listscan":
             return 200, self.listscan()
+        if path == "/api/modcols":
+            return 200, self.modcols_state()
         if path == "/api/downloads":
             m = self.model
             return 200, {"rows": downloads.rows(self._updates_for()[0] if m is not None else "", m.instance.downloads_dir if m is not None else None),
@@ -2558,6 +2599,7 @@ class Api:
         if path == "/api/rescan":
             if not self.folder:
                 raise Bad("no modlist is open")
+            self._mod_files.clear()                     # a rescan asked for lists every mod's files anew (MT70)
             if self._busy():
                 raise Bad("a dry run is going; rescan when it has ended")
             self.open(self.folder, self.profile or None, session=self.session)
