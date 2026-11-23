@@ -69,6 +69,27 @@ class MO2sRule(unittest.TestCase):
         self.assertEqual(got, ["Skyrim.esm", CORE, "Odd.esm", "Quill.esp", "Lantern.esp"])
 
 
+class AMovedPlugin(unittest.TestCase):
+    """MO03§3, §4: the limits MO2 keeps when a plugin is moved by hand."""
+
+    ORDER = [{"name": "Skyrim.esm", "master": True, "primary": True, "masters": ()}, {"name": CORE, "master": True, "primary": False, "masters": ("Skyrim.esm",)},
+             {"name": "Quill.esp", "master": False, "primary": False, "masters": (CORE,)}, {"name": "Lantern.esp", "master": False, "primary": False, "masters": ("Quill.esp",)},
+             {"name": "Other.esp", "master": False, "primary": False, "masters": ()}]
+
+    def test_where_it_may_stand(self):
+        go = lambda name, before: loadcheck.place_moved(self.ORDER, name, before)       # noqa: E731
+        self.assertEqual(go("Other.esp", "Quill.esp"), ("Quill.esp", ""))
+        self.assertEqual(go("Other.esp", "Lantern.esp"), ("Lantern.esp", ""))
+        self.assertEqual(go("Lantern.esp", "Quill.esp"), ("Other.esp", "it needs Quill.esp, which must load before it"))
+        self.assertEqual(go("Quill.esp", ""), ("Lantern.esp", "Lantern.esp needs it, and must load after it"))
+        self.assertEqual(go("Other.esp", CORE), ("Quill.esp", "it is no master, and the game loads masters before every other plugin"))
+        self.assertEqual(go(CORE, ""), ("Quill.esp", "it is a master, and the game loads masters before every other plugin"))
+        self.assertEqual(go(CORE, "Skyrim.esm"), ("Quill.esp", "the game's own plugins come first"))
+        for name, before in (("Skyrim.esm", ""), ("Nobody.esp", ""), ("Other.esp", "Nobody.esp"), ("Other.esp", "Other.esp")):
+            with self.assertRaises(loadcheck.Refused):
+                go(name, before)
+
+
 class TheModlistPage(unittest.TestCase):
     def setUp(self):
         logbook.set_console(False)
@@ -293,6 +314,87 @@ class TheModlistPage(unittest.TestCase):
         self.post("/api/list/set", {"mods": ["Needs Absent"], "on": True, "sure": True})
         got = self.post("/api/list/scan", {"mod": "Needs Absent"})
         self.assertEqual((got["safe"], got["plugins"][0]["problems"]), (False, ["its master Nowhere.esp is missing"]))
+
+    # --- the Plugins tab (MT58) ------------------------------------------------------------------------------------
+
+    def plugin_rows(self):
+        return {r["name"]: r for r in self.api.get("/api/plugins", {})[1]["plugins"]}
+
+    def test_a_plugin_is_switched_off_without_a_question_and_what_follows_shows_on_the_rows(self):
+        before = self.lists()
+        got = self.post("/api/list/plugins/set", {"plugins": ["Quill.esp"], "on": False})
+        self.assertEqual((got["done"], got["text"], sorted(got["lack"])), (True, "Deactivated Quill.esp", ["Generated.esp", "Lantern.esp"]))
+        self.assertEqual(self.order()[:2], [(CORE, True), ("Quill.esp", False)])
+        rows = self.plugin_rows()
+        self.assertEqual((rows["Lantern.esp"]["inactive"], rows["Generated.esp"]["inactive"], rows["Quill.esp"]["active"]), (["Quill.esp"], ["Quill.esp"], False))
+        self.assertEqual(self.lists()["modlist.txt"], before["modlist.txt"])
+        self.assertEqual(self.events()[-1], ("plugin deactivated", "Quill.esp"))
+        self.assertTrue(self.post("/api/list/plugins/set", {"plugins": ["Quill.esp"], "on": False})["nothing"])
+        self.post("/api/list/undo", {})
+        self.assertEqual(self.lists(), before)
+        for body in ({"plugins": ["Skyrim.esm"], "on": False}, {"plugins": ["Nobody.esp"], "on": True}, {"plugins": [], "on": True}, {"plugins": ["Quill.esp"]}):
+            with self.assertRaises(api.Bad):
+                self.post("/api/list/plugins/set", body)
+
+    def test_a_plugin_the_load_order_does_not_name_yet_is_activated_at_the_end(self):
+        profile.set_mods(self.pdir, {"Thistle": True})              # enabled elsewhere: its plugin has a file, and no line yet
+        self.api.open(str(self.root), wait=True)
+        self.assertIsNone(self.plugin_rows()["Thistle.esp"]["position"])
+        got = self.post("/api/list/plugins/set", {"plugins": ["Thistle.esp"], "on": True})
+        self.assertTrue(got["done"])
+        self.assertEqual(self.order()[-1], ("Thistle.esp", True))
+        # A plugin whose mod is not enabled has no file to load: refused, in words.
+        with self.assertRaises(api.Bad) as e:
+            self.post("/api/list/plugins/set", {"plugins": ["Beacon.esm"], "on": True})
+        self.assertIn("not a plugin of this modlist", str(e.exception))
+
+    def test_a_plugin_is_moved_and_keeps_its_state(self):
+        before = self.lists()
+        got = self.post("/api/list/plugins/move", {"plugin": "Generated.esp", "before": "Lantern.esp"})
+        self.assertEqual((got["done"], got["why"], got["position"]), (True, "", len(fx.GAME_PLUGINS) + 2))
+        self.assertEqual([n for n, _a in self.order()], [CORE, "Quill.esp", "Generated.esp", "Lantern.esp"])
+        self.assertTrue(all(a for _n, a in self.order()))
+        self.assertEqual((self.events()[-1], self.lists()["modlist.txt"]), (("plugin moved", "Generated.esp"), before["modlist.txt"]))
+        self.assertEqual(self.api.get("/api/list", {})[1]["undo"]["text"], "Moved Generated.esp to place %d of the load order" % (len(fx.GAME_PLUGINS) + 2))
+        # An inactive plugin stays inactive when it is moved.
+        self.post("/api/list/plugins/set", {"plugins": ["Lantern.esp"], "on": False})
+        self.post("/api/list/plugins/move", {"plugin": "Lantern.esp", "before": "Generated.esp"})
+        self.assertEqual(self.order(), [(CORE, True), ("Quill.esp", True), ("Lantern.esp", False), ("Generated.esp", True)])
+        for _ in range(3):
+            self.post("/api/list/undo", {})
+        self.assertEqual(self.lists(), before)
+
+    def test_a_moved_plugin_stays_within_the_limits_mo2_keeps(self):
+        before = self.lists()
+        # Above its own master: it stays right after it, which is where it is.
+        got = self.post("/api/list/plugins/move", {"plugin": "Lantern.esp", "before": "Quill.esp"})
+        self.assertEqual((got["done"], got["nothing"]), (False, True))
+        self.assertIn("it needs Quill.esp", got["why"])
+        # A master's plugin below a plugin that needs it: it stops right above the first that does.
+        got = self.post("/api/list/plugins/move", {"plugin": "Quill.esp", "before": ""})
+        self.assertTrue(got["nothing"])
+        self.assertIn("Lantern.esp needs it", got["why"])
+        # No master among the masters, and nothing above the game's own plugins.
+        got = self.post("/api/list/plugins/move", {"plugin": "Generated.esp", "before": CORE})
+        self.assertEqual((got["done"], got["before"]), (True, "Lantern.esp"))
+        self.assertIn("it needs Quill.esp", got["why"])
+        self.assertEqual(self.lists()["modlist.txt"], before["modlist.txt"])
+        for body in ({"plugin": "Skyrim.esm", "before": ""}, {"plugin": "Nobody.esp", "before": ""}, {"plugin": "Quill.esp", "before": "Nobody.esp"},
+                     {"plugin": "Quill.esp", "before": "Quill.esp"}):
+            with self.assertRaises(api.Bad):
+                self.post("/api/list/plugins/move", body)
+
+    def test_a_plugin_that_loads_before_its_master_is_marked_and_one_plugin_is_scanned(self):
+        lo = self.pdir / "loadorder.txt"
+        lo.write_bytes(lo.read_bytes().replace(b"Quill.esp\r\nLantern.esp\r\n", b"Lantern.esp\r\nQuill.esp\r\n"))
+        self.api.open(str(self.root), wait=True)
+        rows = self.plugin_rows()
+        self.assertEqual((rows["Lantern.esp"]["early"], rows["Quill.esp"]["early"]), (["Quill.esp"], []))
+        got = self.post("/api/list/scan", {"plugin": "Lantern.esp"})
+        self.assertEqual(([p["name"] for p in got["plugins"]], got["plugins"][0]["problems"], got["safe"]),
+                         (["Lantern.esp"], ["it loads before its master Quill.esp"], False))
+        got = self.post("/api/list/scan", {"plugin": "Generated.esp"})
+        self.assertEqual(got["plugins"][0]["masters"], [{"name": CORE, "records": 1, "kinds": {"GLOB": 1}}])
 
 
 if __name__ == "__main__":

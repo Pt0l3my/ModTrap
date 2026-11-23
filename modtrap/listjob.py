@@ -238,6 +238,66 @@ class ListJob:
         text = "Moved “%s”%s to priority %d" % (_bare(first.name), " and %d more" % (len(block) - 1) if len(block) > 1 else "", new[first.name])
         return self._done(text)
 
+    # --- plugins: active or not, and their place (MT58) ---------------------------------------------------------------
+
+    def plugin_set(self, rows: list[dict], on: bool) -> dict:
+        """Activates or deactivates plugins, each {"name", "kind", "mod", "listed", "before"}: one the load order
+        names keeps its place; one it does not name yet is put where `before` says (MO2's rule, worked out by
+        the caller). Only the star changes for the rest."""
+        if not rows:
+            raise Refused("there is nothing to change: the plugin is already %s" % ("active" if on else "not active"))
+        self._begin("plugin on" if on else "plugin off", [self.pdir / n for n in ("plugins.txt", "loadorder.txt")], plugins=rows)
+        try:
+            for n in ("loadorder.txt", "plugins.txt"):
+                self.safe.may_change(self.pdir / n)
+            try:
+                for r in rows:
+                    named = {fold(n) for n, _a in instance.parse_plugins(instance._decode(instance._read_bytes(self.pdir / "plugins.txt")))}
+                    if fold(r["name"]) in named:
+                        profile.set_plugins(self.pdir, {r["name"]: on})
+                    elif on:
+                        profile.place_plugins(self.pdir, [(r["name"], r["before"])])       # not named there yet: placed, with its star
+            finally:
+                for n in ("loadorder.txt", "plugins.txt"):
+                    self.safe.wrote(self.pdir / n)
+            _mods, order, active = self._now()
+            wrong = [r["name"] for r in rows if (fold(r["name"]) in active) != on or (on and fold(r["name"]) not in {fold(n) for n in order})]
+            if wrong:
+                raise Refused("the lists do not read back as planned: %s" % ", ".join(wrong[:4]))
+        except (Refused, profile.Refused, safe.Refused, OSError) as e:
+            self._fail(e)
+        where = {fold(n): i for i, n in enumerate(order)}
+        for r in rows:
+            self.history.add("plugin activated" if on else "plugin deactivated", plugin=r["name"], position=where.get(fold(r["name"])),
+                             plugin_kind=r["kind"], mod=r["mod"], why="on the Plugins tab")
+        text = "%s %s" % ("Activated" if on else "Deactivated", rows[0]["name"] + (" and %d more" % (len(rows) - 1) if len(rows) > 1 else ""))
+        return self._done(text)
+
+    def plugin_move(self, name: str, before: str, was_before: str, kind: str = "", mod: str = "") -> dict:
+        """Moves one plugin to directly before `before` in the load order ("" for the end). Its state stays."""
+        self._begin("plugin move", [self.pdir / n for n in ("plugins.txt", "loadorder.txt")], plugin=name, before=before, was_before=was_before,
+                    kind=kind, mod=mod)
+        was = self._now()
+        try:
+            for n in ("loadorder.txt", "plugins.txt"):
+                self.safe.may_change(self.pdir / n)
+            try:
+                profile.place_plugins(self.pdir, [(name, before)], activate=False)
+            finally:
+                for n in ("loadorder.txt", "plugins.txt"):
+                    self.safe.wrote(self.pdir / n)
+            _mods, order, active = self._now()
+            f = fold(name)
+            rest_was, rest_now = [n for n in was[1] if fold(n) != f], [n for n in order if fold(n) != f]
+            i = next((k for k, n in enumerate(order) if fold(n) == f), None)
+            if rest_was != rest_now or i is None or fold(order[i + 1] if i + 1 < len(order) else "") != fold(before) or active != was[2]:
+                raise Refused("the lists do not read back as planned")
+        except (Refused, profile.Refused, safe.Refused, OSError) as e:
+            self._fail(e)
+        old = next((k for k, n in enumerate(was[1]) if fold(n) == f), None)
+        self.history.add("plugin moved", plugin=name, position=i, position_before=old, plugin_kind=kind, mod=mod, **({"before": before} if before else {}))
+        return dict(self._done("Moved %s to place %d of the load order" % (name, i)), position=i, was=old)
+
     # --- rename a separator -------------------------------------------------------------------------------------------
 
     def rename(self, old: str, new: str) -> dict:
@@ -300,6 +360,10 @@ class ListJob:
             self.safe.mark_reverted()
         rec["undone"], rec["how"] = time.strftime("%Y-%m-%dT%H:%M:%S"), how
         self._save()
+        if op in ("plugin on", "plugin off"):
+            for r in rec["plugins"]:
+                self.history.add("plugin deactivated" if op == "plugin on" else "plugin activated", plugin=r["name"], plugin_kind=r["kind"], mod=r["mod"],
+                                 why="a change on the Plugins tab was undone")
         if op in ("enable", "disable"):
             for x in rec["mods"]:
                 self.history.add("mod disabled" if op == "enable" else "mod enabled", mod=x["name"], priority=x["priority"], why="a change on the Modlist page was undone")
@@ -346,6 +410,15 @@ class ListJob:
         elif op == "rename":
             for p in rec["profiles"]:
                 attempt(p, lambda p=p: profile.rename_mod(self.inst.profiles_dir / p, rec["new"], rec["old"]))
+        elif op in ("plugin on", "plugin off"):
+            for r in rec["plugins"]:
+                attempt(r["name"], lambda r=r: profile.set_plugins(self.pdir, {r["name"]: op == "plugin off"}))
+        elif op == "plugin move":
+            names = {fold(n) for n in self._now()[1]}
+            if rec["was_before"] and fold(rec["was_before"]) not in names:
+                notes.append("%s stays: %s, which it stood before, is no longer in the load order" % (rec["plugin"], rec["was_before"]))
+            else:
+                attempt(rec["plugin"], lambda: profile.place_plugins(self.pdir, [(rec["plugin"], rec["was_before"])], activate=False))
         self.safe.mark_reverted()
         return notes
 

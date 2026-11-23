@@ -36,6 +36,8 @@ LOCATE_PATH = "/api/locate"
 SAVE_PATH = "/api/save/download"  # the packed session, handed out once (WHY§48)
 UPLOAD_PATH = "/api/add/upload"   # a dropped mod archive, as its bytes (DESIGN§16.1)
 LIST_PATH = "/api/updates/upload" # the list of a dropped Wabbajack file, as its bytes (DESIGN§20)
+SELF_PATH = "/api/selfupdate/upload"   # a ModTrap release file, as its bytes (MT58)
+SELF_MAX = 600 * 1024 * 1024
 METAS_PATH = "/api/updates/metas" # dropped meta files, as their texts
 METAS_MAX = 4 * 1024 * 1024
 UPLOAD_MAX = 64 * 1024 ** 3
@@ -343,7 +345,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             n = -1
-        cap = LOCATE_MAX if path == LOCATE_PATH else UPLOAD_MAX if path in (UPLOAD_PATH, LIST_PATH) else METAS_MAX if path == METAS_PATH else POST_MAX
+        cap = LOCATE_MAX if path == LOCATE_PATH else UPLOAD_MAX if path in (UPLOAD_PATH, LIST_PATH) else METAS_MAX if path == METAS_PATH else SELF_MAX if path == SELF_PATH else POST_MAX
         if n < 0:
             self._will_not_read()
             return self.send(400, {"error": "no length"})
@@ -357,6 +359,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(404, {"error": "not found"})
             try:
                 return self.send(200, take(urllib.parse.parse_qs(self.path.partition("?")[2], keep_blank_values=True), n, self.rfile))
+            except Exception as e:
+                self.close_connection = True          # what is left of the body is not read
+                return self._error(e)
+        if path == SELF_PATH:
+            take = getattr(self.app.api, "self_upload", None)
+            if take is None:
+                self._will_not_read()
+                return self.send(404, {"error": "not found"})
+            try:
+                query = urllib.parse.parse_qs(self.path.partition("?")[2], keep_blank_values=True)
+                return self.send(200, take(query.get("name", [""])[0], n, self.rfile))
             except Exception as e:
                 self.close_connection = True          # what is left of the body is not read
                 return self._error(e)

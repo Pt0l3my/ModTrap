@@ -64,7 +64,7 @@ class PageTests(unittest.TestCase):
         """MT57: the drop's place is read before the header folds back (WHY§122); the run asks with its own
         archives and its place; a list's place is noted while it is shown and given back when it is shown again."""
         drop = re.search(r'document\.addEventListener\("drop", \(e\) => \{(.+?)\n\}\);', self.js, re.S).group(1)
-        self.assertLess(drop.index("fileOver(e)"), drop.index("dragOn(false)"))
+        self.assertLess(drop.index("const at = fileOver(e)"), drop.rindex("dragOn(false)"))
         self.assertIn("if (at) dropAtPlace(e, at);", drop)
         self.assertIn('const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before });', self.js)
         self.assertIn('api("/api/add/run", body())', self.js)
@@ -72,6 +72,21 @@ class PageTests(unittest.TestCase):
         self.assertIn("scrollTops.set(t, t.scrollTop);", self.js)
         self.assertRegex(self.js, r"state\.tab = name;\n  restoreScroll\(\);")
         self.assertNotIn("if (pane && !fresh) pane.scrollTop = top;", self.js)       # read after the list was hidden: always 0
+
+
+    def test_the_plugins_tab_changes_the_load_order_and_the_version_is_a_button(self):
+        """MT58: the Plugins tab's box, drag and row symbols; ModTrap's own update behind the version."""
+        self.assertIn('<button id="version" type="button"', self.html)
+        self.assertIn('$("version").addEventListener("click", () => selfUpdateBox());', self.js)
+        for path in ("/api/list/plugins/set", "/api/list/plugins/move", "/api/selfupdate/upload", "/api/selfupdate/apply"):
+            self.assertIn(path, self.js)
+        self.assertIn('if (p.issues.length) mark("bad", "⚠"', self.js)
+        self.assertIn('mark("warn", "⇄"', self.js)
+        for needle in ('id="plugins-undo"', 'class="c-mark"'):
+            self.assertIn(needle, self.html)
+        # A plugin's tick asks nothing: no question box in its function.
+        body = re.search(r"function pluginSet\(names, on, box\) \{(.+?)\n\}\n", self.js, re.S).group(1)
+        self.assertNotIn("modalBox", body)
 
 
 if __name__ == "__main__":

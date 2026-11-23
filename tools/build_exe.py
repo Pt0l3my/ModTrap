@@ -108,9 +108,12 @@ Your browser opens ModTrap's page. ModTrap's console window starts minimised, in
 is on the page too (History, then Log). Quit on the page, or closing that window, ends ModTrap.
 
 %(python)s
+To update ModTrap later: press the version at the top of its page and give it the newer release file (this kind of
+zip). ModTrap checks it, keeps the version in use aside, puts the new one in place and starts again.
+
 ModTrap keeps its sessions, settings and downloads in its own folder under your Windows profile, not in here, so a
-newer ModTrap can simply replace this folder: the folder is named ModTrap in every version, and the version is in
-the archive's name and in the programs' Properties.
+newer ModTrap can also simply replace this folder: the folder is named ModTrap in every version, and the version is
+in the archive's name and in the programs' Properties.
 
 Windows may warn about a program it does not know, the first time: "More info", then "Run anyway". Or, before
 unpacking: right-click the zip file, Properties, tick "Unblock".

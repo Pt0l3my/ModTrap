@@ -20,7 +20,8 @@ with `--allow-changes`): it does its whole work once on three tiny invented plug
 removes them again. No mod of yours is touched by it.
 
 ModTrap also helps to **add** a mod: drop the mod's archive on the page. ModTrap unpacks it in its own work folder
-(a .7z or .rar needs 7-Zip installed), asks the mod's own installer questions if it has any, and tells what the mod
+(a .zip and a .7z with its own readers; a .rar, or a .7z packed in a rare way, through 7-Zip or the unpacker
+Windows 11 comes with), asks the mod's own installer questions if it has any, and tells what the mod
 needs, where it should go among the mods and in the load order, which files of which mods it would replace, which
 tools must run again, and the steps in order. From the steps it can start your xEdit, read-only, to list the records
 the new plugin takes from other plugins, and start the modlist's tools through MO2 for you to work.
@@ -33,6 +34,13 @@ enable or disable it (its plugins are placed by MO2's own rule: a new one last, 
 block, none before its own masters), drag a row to move it, rename a separator. What is not safe is asked first;
 every change can be undone; and a scanner tells, for a mod, whether its plugins stand safely in the load order and
 which records and files it overwrites. The ticks that choose mods for a demaster are on Demaster's "Pick mods" tab.
+
+The Plugins tab works the same way: tick a plugin to activate or deactivate it, drag it to another place in the load
+order (within the limits MO2 itself keeps), and a symbol on a plugin's row says when something is wrong with it or
+when it overwrites what other plugins change; a press on the symbol tells it in full.
+
+ModTrap updates itself: the version at the top of the page is a button, and a release file dropped in its box is
+checked, put in place (the version in use is kept aside), tried, and started.
 
 To try it on Windows from the package (`ModTrap-<version>-win64.zip`, built by `tools/build_exe.py`): unpack it and
 start `ModTrap.exe`, which starts it with `--allow-changes`. It runs on the Python

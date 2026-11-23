@@ -753,3 +753,17 @@ installed, checked), in a box on the Modlist page, and hands over to the Install
 installer asks questions or something the mod needs is missing. Every list keeps its place when it is shown again
 (WHY§122).
 
+**The Plugins tab (MT58).** The same jobs serve the load order: a plugin activated or deactivated, a plugin moved
+(`loadcheck.place_moved` keeps MO2's limits and says where it stands and why). Nothing is asked; a row carries ⚠
+for what is wrong with its plugin and ⇄ or ✓ for what a scan of it found, and the pane beside the list tells it.
+
+## 22. Unpacking, and ModTrap's own update (MT58)
+
+**Archives.** A .zip and a .7z are unpacked by ModTrap's own readers (`unpack._unzip`, `sevenz_read`); a .7z its
+reader does not read, and a .rar, by the owner's 7-Zip or else Windows' `tar.exe` (WHY§123). §16.1's checks hold
+for all of them.
+
+**ModTrap's own update** (`selfupdate`, WHY§124). The version on the page is a button; a release package given
+there is checked, the version in use is copied to ModTrap's own folder, the files are replaced, the new program is
+tried, and ModTrap starts again and takes over (§17). ModTrap run from its source folder is not updated this way.
+

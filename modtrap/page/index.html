@@ -9,7 +9,7 @@
 <body data-token="__TOKEN__">
 <header>
   <div class="top">
-    <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
+    <div class="brand"><span class="mark">ModTrap</span><button id="version" type="button" class="verbtn" title="This ModTrap's version. Press to update ModTrap from a release file."></button></div>
     <ol id="steps" class="steps" hidden>
       <li data-step="open" data-tab="mods"><span class="n">1</span><span class="t">Modlist open</span></li>
       <li data-step="pick" data-tab="pick"><span class="n">2</span><span class="t" id="step-pick">Tick the mods to take out</span></li>
@@ -153,10 +153,14 @@
       <label title="Plugins with a missing or inactive master, or that could not be read"><input type="checkbox" id="p-problems"> With problems</label>
       <label title="Plugins that other plugins list as a master"><input type="checkbox" id="p-deps"> Needed by others</label>
       <span id="plugins-shown" class="dim"></span>
+      <button id="plugins-undo" type="button" hidden></button>
+      <span id="plugins-hint" class="dim"></span>
     </div>
     <div class="split">
       <div class="scroll"><table id="plugins-table">
-        <thead><tr><th class="c-num" title="The plugin's place in the load order">Position</th><th>Plugin</th>
+        <thead><tr><th class="c-tick" title="Ticked: the plugin is active. Tick or untick it to activate or deactivate the plugin"></th>
+          <th class="c-num" title="The plugin's place in the load order">Position</th>
+          <th class="c-mark" title="Issues and conflicts: press a symbol for what it stands for"></th><th>Plugin</th>
           <th title="esm: a master file; esl: a light plugin; esp+esl: an .esp flagged light">Kind</th><th>Mod</th><th class="c-num">Mod priority</th>
           <th class="c-num" title="How many plugins this one lists as its masters">Masters</th>
           <th class="c-num" title="How many plugins list this one as a master">Needed by</th></tr></thead>

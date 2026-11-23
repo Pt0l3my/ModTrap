@@ -164,6 +164,7 @@ def serve(a: argparse.Namespace) -> int:
               % (NAME, was or "(an earlier version)", NAME))
         return 1
     api = api_mod.Api()
+    api.argv = list(sys.argv[1:])
     app = server.App(api)
     try:
         httpd = server.Server(a.port, app)
@@ -176,6 +177,7 @@ def serve(a: argparse.Namespace) -> int:
             print("%s could not open a port on this PC: %s" % (NAME, logbook.why(e)))
             return 2
     url = "http://127.0.0.1:%d/" % httpd.port
+    api.port = httpd.port
     log = logbook.get("app")
     log.info("%s %s, Python %s on %s", NAME, VERSION, sys.version.split()[0], sys.platform)
     if version.DIFFERS:

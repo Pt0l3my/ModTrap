@@ -145,6 +145,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 120 | 2026-11-23 | Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised | DECIDED | #add #page #release #windows |
 | 121 | 2026-11-23 | The Modlist page changes MO2's lists as MO2 does: one job per change, MO2's own rule for plugins, a disabled mod's plugin keeps its line, a scanner that reads record headers | DECIDED | #page #mo2 #safety |
 | 122 | 2026-11-23 | A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list | DECIDED | #page #add |
+| 123 | 2026-11-23 | ModTrap reads .7z itself; what its reader does not read goes to 7-Zip or to Windows' own unpacker | METHOD | #adding #safety #licence |
+| 124 | 2026-11-23 | The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again | DECIDED | #page #mo2 #release #safety |
 
 ## Entries
 
@@ -850,6 +852,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   password, with or without its names hidden, is refused in words; one holding a link is refused. Its listing
   shows a link as a mode starting with "l", which the reader now looks for. Still not run: 7-Zip on Windows, whose
   listing gives attribute letters instead of a mode.
+- **Later (2026-11-23).** ModTrap now reads .7z itself, and Windows' `tar` is the last resort for what it does
+  not read: WHY§123.
 
 ### 42. Carrying out an add: written and tested against invented lists, switched off
 
@@ -3281,4 +3285,57 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   one point that was read into the words.
 - Rejected: the mod's own installer questions inside the box. They need the Installer tool's whole card; the box
   hands over, and the place goes with it.
+
+### 123. ModTrap reads .7z itself; what its reader does not read goes to 7-Zip or to Windows' own unpacker
+
+`2026-11-23` · METHOD · `#adding #safety #licence` · refs: MT58, MT21, WHY§41, WHY§48, DESIGN§16.1
+
+- FACT (the owner's session file at 0.3.49): a mod dropped as .7z was refused, "needs 7-Zip, which ModTrap did not
+  find on this PC". WHY§41 had ruled out an unpacker of ModTrap's own "for now" and left Windows' `tar` as untried.
+- The owner's point decides it: ModTrap writes .7z itself (WHY§48), so it can read it. METHOD: `sevenz_read.py`,
+  from the format's published description, nothing copied. Python's own lzma, zlib and bz2 do the decompression;
+  the reader parses the header (also a compressed one), builds each folder's chain of coders, and checks every
+  file's CRC, so a mistake of the reader cannot pass as a file.
+- What 7-Zip puts before the packer. BCJ and Delta are filters Python's decoder knows, but only in a chain that
+  ends in LZMA2 and so says where it ends. FACT (tried): with old-style LZMA under BCJ, the last bytes never came
+  out. METHOD: where the filter stands before anything but LZMA2, the unpacked bytes are packed again lightly and
+  unpacked through a chain that ends in LZMA2. BCJ2, 7-Zip's x86 filter with four streams, is decoded by our own
+  code, in memory, up to 512 MB.
+- Checked against 7-Zip 23.01 with invented files and real programs as the programs' part: default, ultra,
+  non-solid, header not packed, LZMA, BCJ, BCJ2, Delta, ARM, Deflate, BZip2, stored: every file the same. A
+  password (also over the header) is told as one; PPMd is told as not read. A .7z written by ModTrap on the
+  owner's PC read through, 354 files, every checksum right. Not checked: an archive from Nexus (none is here, and
+  none may be kept); the owner's next drop is that check.
+- The order for a .7z: ModTrap's reader; if it says "not read" or "damaged", the owner's 7-Zip; else Windows'
+  `tar.exe`. A .rar: 7-Zip, else `tar.exe`. FACT: `tar.exe` is bsdtar; tried here as the same program (3.7.2):
+  it lists and unpacks .7z, refuses a step upwards, and names a password. LIKELY, not seen: the one of Windows 11
+  from 23H2 has the LZMA part (the one of Windows 10 has not; ModTrap asks it what it is and says so).
+- Safety as before (WHY§41): names checked before anything is written, links refused, sizes capped, the result
+  walked for links; with `tar`, what was written is measured too, since its listing is only what the archive says.
+
+### 124. The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again
+
+`2026-11-23` · DECIDED · `#page #mo2 #release #safety` · refs: MT58, MT56, MT22, MO03§3, MO03§4, WHY§68, WHY§121, DESIGN§17, DESIGN§21
+
+- Plugins. The owner asked for marks on rows, not boxes that ask. So a tick is carried out at once and its
+  consequences are shown: the rows of plugins that now lack a master carry ⚠, the Health count rises, and Undo
+  is one press. Different from mods (MT56), where the unsafe is asked first: there one tick can switch off many
+  plugins at once.
+- Dragging within limits, not freely with warnings. MO2 does not let a plugin stand where the game would not
+  load it as listed (MO03§3, §4); a list ModTrap wrote otherwise would be changed by MO2 at its next start. The
+  server works out the nearest allowed place and says why (`loadcheck.place_moved`); the page shows it.
+- The scan's mark is per plugin and asked for, or follows a move: scanning every plugin of a list of 3,700 up
+  front would take minutes. Marks of scans are dropped when the order changes, since they describe the old one.
+- Self-update: files, not a network. The owner hands ModTrap a release package; ModTrap fetches nothing. The
+  package is trusted as the owner's; what is checked is that it is one, stays inside its folder, and is whole
+  (its program's mark is the one its `version.json` names, MT22).
+- Order of the update: copy the version in use aside; write; compare the mark on disk; start the new program once
+  in a process of its own (import only); put the copy back if any of it fails. Then start anew: the new start
+  takes over from the running one as any second start does (WHY§68), on the same port, and the open page asks
+  the address until another start answers, then loads itself anew.
+- The Python inside a package is left alone: the running one holds its files. A package with Python inside
+  updates the program only.
+- Checked here, on Linux, with a package folder made of ModTrap's own files: box, a wrong file, the release file,
+  update, restart, page anew at the new version, 2.4 s. Not checked: Windows, where a running `ModTrap.exe` cannot
+  be written over (it is then renamed aside first) and where the new start gets a console of its own, minimised.
 

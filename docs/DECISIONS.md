@@ -57,6 +57,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   Demaster, as its first tab).
   MT57 (a mod's file dropped on the Modlist page's list is installed at the place it is dropped, shown in a box on
   that page; a list keeps its place when it is shown again).
+  MT58 (the Plugins tab as MO2's own list, with issues and conflicts as a symbol on the row; ModTrap unpacks .7z
+  itself; ModTrap updates itself from a release file, behind the version at the top).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1386,4 +1388,46 @@ modlist return where it was?"
 - **The Installer tool has the mod too**, from the moment it is taken in, and shows everything it shows for any mod.
 - **A list keeps its place.** The Mods list, and every other list of the page, comes back scrolled to where it was:
   after a change that makes ModTrap read the modlist again, after a Rescan, and after a look at another tab.
+
+## MT58
+
+**The Plugins tab as MO2's own; ModTrap's own .7z unpacker; ModTrap updates itself** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "build the same for the Plugins tab (to be able to drag plugins, and warn user about conflicts or
+issues, but not as pop up but as a symbol on the plugin row that can be clicked).
+
+looks like the install didn't work because ModTrap does not have the tool to decompress file. 7z is part of windows
+11 by the way.
+
+Can you also add updater feature, make the version text a button, clicking on it a pop up window with colored drop
+zone and Add file button in middle. Make it so that ModTrap release files can be read by this feature."
+
+And, while it was being built: "but modtrap should already have its own unpacker, it compresses logs into 7z
+already"
+
+**Settled** (WHY§123, WHY§124; the owner may overrule any of it):
+
+- **Plugins: the box is the plugin's state.** Ticking it activates or deactivates the plugin, as in MO2. Nothing is
+  asked first. What follows (active plugins that now lack a master) is said in a line, and shows on their rows.
+- **Plugins: dragging.** A row is dragged to another place in the load order. The limits MO2 itself keeps (MO03§3,
+  §4) are kept: nothing above the game's own plugins, masters among the masters and no other plugin there, no
+  plugin above a master of its own or below a plugin that needs it. A plugin let go where it may not stand comes
+  to stand at the nearest place it may, and the page says why. A plugin keeps its state when it is moved.
+- **Plugins: the symbol on the row.** ⚠ where something is wrong with an active plugin (a master missing, not
+  active, or loading after it; its file gone or unreadable); ⇄ where a scan found that it overwrites what other
+  plugins changed, or that others overwrite what it changes; ✓ where a scan found nothing. A press on the symbol
+  opens the plugin's pane beside the list with all of it. The scan is asked for in the pane, and runs by itself
+  after a plugin is moved or activated (the setting of MT56).
+- **Plugins: Undo** as on the Mods tab, by its button and Ctrl+Z; the changes are jobs of the same kind (MT56).
+- **A .7z is unpacked by ModTrap itself.** Its own reader, written as its writer was, with Python's own
+  decompression: LZMA and LZMA2, the filters 7-Zip puts before them for programs (BCJ, BCJ2) and for sound (Delta),
+  Deflate, BZip2 and stored data; every file's checksum is checked. What it does not read (PPMd, a rare method)
+  goes to the owner's 7-Zip where there is one, else to the unpacker Windows 11 comes with (`tar.exe`), which is
+  also what a .rar goes through. A password is refused in words by all three.
+- **ModTrap updates itself.** The version at the top is a button. Its box has a coloured drop zone with "Add file"
+  in the middle; a release file dropped anywhere on the page opens it too. The file must be a ModTrap release
+  package whose program is whole (the mark its own version names). One press then: the version in use is copied
+  aside, the new files are written, the new version is tried once, and ModTrap starts again while the page waits
+  and loads itself anew. A version that does not start is put back. An older release file is taken too ("Go back
+  to …"). The Python ModTrap runs on is never replaced. Nothing is fetched from anywhere: the owner gives the file.
 

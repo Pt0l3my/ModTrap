@@ -283,11 +283,12 @@ def set_plugins(profile_dir: Path, wanted: dict[str, bool], expect: str | None =
     return change
 
 
-def place_plugins(profile_dir: Path, placements: list[tuple[str, str]]) -> list[Change]:
+def place_plugins(profile_dir: Path, placements: list[tuple[str, str]], activate: bool = True) -> list[Change]:
     """Puts plugins at their places in the load order and activates them: each directly before the plugin named
     with it, or at the end when that is "". Both of MO2's lists are written, in agreement (MO2 takes the order
     from the newer one, MO01§2): `loadorder.txt`, which names every plugin, and `plugins.txt`, which leaves the
-    game's own out and marks the active ones. A plugin already listed is moved."""
+    game's own out and marks the active ones. A plugin already listed is moved. Without `activate` each plugin
+    keeps the state it has (one the list did not name stays inactive)."""
     lo_path, pl_path = profile_dir / "loadorder.txt", profile_dir / "plugins.txt"
     lo_old, pl_old = _read(lo_path), _read(pl_path)
     lo, pl = _split(lo_old), _split(pl_old)
@@ -350,9 +351,10 @@ def place_plugins(profile_dir: Path, placements: list[tuple[str, str]]) -> list[
             if later is not None and (j := find(pl, later, True)) is not None:
                 pl_at = j
                 break
-        pl.insert(pl_at, b"*" + pl_name + pl_end)
+        star = activate or was == "active"
+        pl.insert(pl_at, (b"*" if star else b"") + pl_name + pl_end)
         lo_change.lines.append({"plugin": name, "position": None, "before": before})
-        pl_change.lines.append({"plugin": name, "from": was or "", "to": "active", "before": before})
+        pl_change.lines.append({"plugin": name, "from": was or "", "to": "active" if star else "inactive", "before": before})
     final = [fold(n) for n in (name_of(ln, False) for ln in lo) if n is not None]
     for ln in lo_change.lines:
         ln["position"] = final.index(fold(ln["plugin"]))        # where it ended up, once every plugin was placed

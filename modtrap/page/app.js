@@ -1273,7 +1273,8 @@ function renderState(s) {
   state.session = s.session;
   renderSessions(s);
   $("version").textContent = s.version ? "version " + s.version + (s.version_differs ? " · files differ" : "") : "";
-  $("version").title = s.version_differs ? "The files in ModTrap's folder are not exactly those of this version: an update unpacked over an older folder, a copy cut short, or files changed by hand. Best unpack an update into an empty folder." : "";
+  state.version = s.version || "";
+  $("version").title = "Press to update ModTrap from a release file. " + (s.version_differs ? "The files in ModTrap's folder are not exactly those of this version: an update unpacked over an older folder, a copy cut short, or files changed by hand. Best unpack an update into an empty folder." : "");
   if (document.activeElement !== $("folder") && s.folder && (!$("folder").value || s.status === "ready")) $("folder").value = s.folder;
   const ready = s.status === "ready";
   $("summary").hidden = !ready;
@@ -2431,6 +2432,7 @@ function listDo(run) {
 }
 function listChanged(text) {
   if (text) toast(text);
+  state.pscan = {};                                // what plugins overwrite depends on the order: asked anew
   state.scan = null;
   $("scan-note").hidden = true;
   clearTimeout(state.scanTimer);
@@ -2443,11 +2445,14 @@ async function loadListState() {
   renderUndo();
 }
 function renderUndo() {
-  const b = $("list-undo"), u = state.listState && state.listState.undo;
-  b.hidden = picking() || !u || !state.changes;
-  if (!u) return;
-  b.textContent = "Undo: " + u.text;
-  b.title = "Turns back the last change made on this page (Ctrl+Z): " + u.text + ". MO2 must be closed.";
+  const u = state.listState && state.listState.undo;
+  for (const b of [$("list-undo"), $("plugins-undo")]) {
+    b.hidden = (b.id === "list-undo" && picking()) || !u || !state.changes;
+    if (!u) continue;
+    b.textContent = "Undo: " + u.text;
+    b.title = "Turns back the last change made on the Modlist section's lists (Ctrl+Z): " + u.text + ". MO2 must be closed.";
+  }
+  $("plugins-hint").textContent = state.changes ? "Tick to activate or deactivate · drag a row to move it · ⚠ and ⇄ on a row: press for what they stand for" : "";
 }
 function listUndo() {
   if (!state.changes || !(state.listState && state.listState.undo)) return;
@@ -2681,6 +2686,28 @@ function scanNote(name, d, error) {
   box.replaceChildren(el("b", { text: "Scan of “" + name + "”: " }), bits.join("; ") + "." + (d.cut || d.files.cut ? " (The look was cut short: there may be more.)" : ""), el("div", { class: "actions" }, show, close));
   box.hidden = false;
 }
+// What the scan found of one plugin, as parts for a card or a pane: its place and whether it stands safely, the
+// records it changes, the plugins whose change it overwrites and the ones that overwrite its own.
+function scanPluginParts(p, titled) {
+  const out = [];
+  const kinds = (k) => Object.entries(k).map(([a, b]) => (KIND_WORDS[a] || a) + ": " + b).join(", ");
+  const many = (list, line) => el("ul", { class: "small" }, ...list.slice(0, 12).map(line), list.length > 12 ? el("li", { class: "dim", text: "and " + (list.length - 12) + " more" }) : null);
+  if (titled) {
+      out.push(el("h3", {}, p.name + " ", el("span", { class: "tag", text: p.kind || "?" }), " ",
+        el("span", { class: "tag " + (p.problems.length ? "bad" : "good"), text: p.problems.length ? "not safe" : "stands safely" }),
+        p.position != null ? el("span", { class: "dim small", text: "  place " + p.position + " of " + p.of + " in the load order" }) : null));
+  }
+    if (p.problems.length) out.push(el("ul", { class: "findings" }, ...p.problems.map((x) => el("li", { class: "bad", text: x }))));
+    if (p.notes.length) out.push(el("ul", { class: "findings" }, ...p.notes.map((x) => el("li", { class: "warn", text: x }))));
+    if (p.records) out.push(el("p", { class: "small", text: plural(p.records, "record") + ": " + p.own + " of its own" + (p.masters.length ? "; it changes " + p.masters.map((x) => plural(x.records, "record") + " of " + x.name + " (" + kinds(x.kinds) + ")").join(", ") : "; it changes none of its masters'") + "." }));
+    if (p.overwrites.length) out.push(el("p", { class: "small" }, el("b", { text: "It overwrites what " + plural(p.overwrites.length, "plugin") + " before it changed in the same records:" })),
+      many(p.overwrites, (x) => el("li", {}, pluginLink(x.plugin), " (" + x.mod + "): " + plural(x.records, "record") + " · " + kinds(x.kinds))));
+    if (p.overwritten_by.length) out.push(el("p", { class: "small" }, el("b", { text: plural(p.overwritten_by.length, "plugin") + " after it overwrite" + (p.overwritten_by.length === 1 ? "s" : "") + " what it changes in the same records:" })),
+      many(p.overwritten_by, (x) => el("li", {}, pluginLink(x.plugin), " (" + x.mod + "): " + plural(x.records, "record") + " · " + kinds(x.kinds))));
+    if (p.records && !p.overwrites.length && !p.overwritten_by.length && p.masters.length) out.push(el("p", { class: "dim small", text: "No other active plugin changes the same records." }));
+    if (p.cut) out.push(el("p", { class: "dim small", text: "The look through the load order was cut short: there may be more." }));
+  return out;
+}
 // The scan's findings in full, for the mod's card.
 function scanView(name) {
   const sc = state.scan && state.scan.mod === name ? state.scan : null;
@@ -2694,20 +2721,7 @@ function scanView(name) {
     out.push(el("h3", { text: "The mod is disabled. Enabling it would do this:" }));
     out.push(d.plan && findings(d.plan) || el("p", { class: "dim", text: "Nothing in the load order: it brings no plugin of its own." }));
   }
-  for (const p of d.plugins) {
-    out.push(el("h3", {}, p.name + " ", el("span", { class: "tag", text: p.kind || "?" }), " ",
-      el("span", { class: "tag " + (p.problems.length ? "bad" : "good"), text: p.problems.length ? "not safe" : "stands safely" }),
-      p.position != null ? el("span", { class: "dim small", text: "  place " + p.position + " of " + p.of + " in the load order" }) : null));
-    if (p.problems.length) out.push(el("ul", { class: "findings" }, ...p.problems.map((x) => el("li", { class: "bad", text: x }))));
-    if (p.notes.length) out.push(el("ul", { class: "findings" }, ...p.notes.map((x) => el("li", { class: "warn", text: x }))));
-    if (p.records) out.push(el("p", { class: "small", text: plural(p.records, "record") + ": " + p.own + " of its own" + (p.masters.length ? "; it changes " + p.masters.map((x) => plural(x.records, "record") + " of " + x.name + " (" + kinds(x.kinds) + ")").join(", ") : "; it changes none of its masters'") + "." }));
-    if (p.overwrites.length) out.push(el("p", { class: "small" }, el("b", { text: "It overwrites what " + plural(p.overwrites.length, "plugin") + " before it changed in the same records:" })),
-      many(p.overwrites, (x) => el("li", {}, pluginLink(x.plugin), " (" + x.mod + "): " + plural(x.records, "record") + " · " + kinds(x.kinds))));
-    if (p.overwritten_by.length) out.push(el("p", { class: "small" }, el("b", { text: plural(p.overwritten_by.length, "plugin") + " after it overwrite" + (p.overwritten_by.length === 1 ? "s" : "") + " what it changes in the same records:" })),
-      many(p.overwritten_by, (x) => el("li", {}, pluginLink(x.plugin), " (" + x.mod + "): " + plural(x.records, "record") + " · " + kinds(x.kinds))));
-    if (p.records && !p.overwrites.length && !p.overwritten_by.length && p.masters.length) out.push(el("p", { class: "dim small", text: "No other active plugin changes the same records." }));
-    if (p.cut) out.push(el("p", { class: "dim small", text: "The look through the load order was cut short: there may be more." }));
-  }
+  for (const p of d.plugins) out.push(...scanPluginParts(p, true));
   const f = d.files;
   const fileLine = (x) => el("li", {}, modLink(x.mod), ": " + plural(x.files, "file") + " (" + Object.entries(x.kinds).map(([k, v]) => v + " " + k).join(", ") + ")",
     x.notable.length ? el("span", { class: "tag warn", text: x.notable.join(", ") }) : null, x.output ? el("span", { class: "tag", title: x.output, text: "a tool's output" }) : null);
@@ -2896,8 +2910,129 @@ document.addEventListener("keydown", (ev) => {
   if (run.state !== "going") dropClose();
 }, true);
 
+// --- ModTrap updates itself (MT58) -------------------------------------------------------------------------------------
+// The version at the top is a button. It opens a box with a drop zone and "Add file": a ModTrap release file
+// (ModTrap-<version>-win64.zip) given there is read by ModTrap's program, which says what version it is; one press
+// then puts it in place and starts ModTrap again, and this page loads itself anew.
+const SELF_NAME = /^ModTrap-\d[\d.]*-win64.*\.zip$/i;
+async function selfUpdateBox(file) {
+  if (state.selfBox) { if (file) selfTake(file); return; }
+  let st = { version: state.version, can: false, why: "", name: "ModTrap-<version>-win64.zip" };
+  try { st = await api("/api/selfupdate"); } catch (e) { st.why = e.message; }
+  const pick = el("input", { type: "file", accept: ".zip" });
+  const add = el("button", { type: "button", class: "primary", text: "Add file", disabled: !st.can });
+  add.addEventListener("click", () => pick.click());
+  pick.addEventListener("change", () => { if (pick.files && pick.files[0]) selfTake(pick.files[0]); pick.value = ""; });
+  const zone = el("div", { class: "selfdrop" + (st.can ? "" : " off") }, el("b", { text: "Drop a ModTrap release file here" }),
+    el("span", { class: "dim", text: st.name }), add, pick);
+  const said = el("div", { class: "selfsaid" });
+  const close = el("button", { type: "button", text: "Close" });
+  const box = el("div", { class: "modal selfbox", role: "dialog", "aria-modal": "true" },
+    el("p", {}, el("b", { text: "Update ModTrap" })),
+    el("p", { text: "This is ModTrap " + st.version + ". Give it a newer release file and it puts that in place itself: the version in use is copied aside first, the new one is tried, and ModTrap starts again. Your sessions and settings stay as they are." }),
+    zone, said, el("div", { class: "actions" }, close));
+  const back = el("div", { class: "modal-back" }, box);
+  const done = () => { if (state.selfBox && state.selfBox.busy) return; document.removeEventListener("keydown", key, true); back.remove(); state.selfBox = null; };
+  const key = (ev) => { if (ev.key === "Escape" && document.querySelectorAll(".modal-back").length === 1) { ev.preventDefault(); ev.stopPropagation(); done(); } };
+  close.addEventListener("click", done);
+  back.addEventListener("mousedown", (ev) => { if (ev.target === back) done(); });
+  document.addEventListener("keydown", key, true);
+  document.body.append(back);
+  state.selfBox = { said, zone, add, close, busy: false, st };
+  if (!st.can) said.replaceChildren(el("p", { class: "would-needs", text: st.why || "This ModTrap cannot update itself." }));
+  (st.can ? add : close).focus();
+  if (file) selfTake(file);
+}
+function selfTake(file) {
+  const b = state.selfBox;
+  if (!b || b.busy) return;
+  if (!b.st.can) return;
+  b.busy = true;
+  b.add.disabled = true;
+  b.said.replaceChildren(el("p", { class: "dim" }, el("span", { class: "spinner small" }), " Reading “" + file.name + "”…"));
+  const x = new XMLHttpRequest();
+  x.open("POST", "/api/selfupdate/upload?name=" + encodeURIComponent(file.name));
+  x.setRequestHeader("X-ModTrap-Token", TOKEN);
+  x.setRequestHeader("Content-Type", "application/octet-stream");
+  const fail = (text) => { b.busy = false; b.add.disabled = false; b.said.replaceChildren(el("p", { class: "would-needs", text })); };
+  x.onerror = () => fail("The file did not reach ModTrap.");
+  x.onload = () => {
+    let d = {};
+    try { d = JSON.parse(x.responseText); } catch (e) { /* no answer to read */ }
+    if (x.status !== 200) return fail(d.error || (x.status === 413 ? "That file is larger than a ModTrap release file can be." : "The file was not accepted (" + x.status + ")."));
+    b.busy = false;
+    b.add.disabled = false;
+    const go = el("button", { type: "button", class: "primary", text: d.order > 0 ? "Update to " + d.version : d.order < 0 ? "Go back to " + d.version : "Put " + d.version + " in place again" });
+    go.addEventListener("click", () => selfApply(d, go));
+    b.said.replaceChildren(el("p", {}, el("b", { text: "This file is ModTrap " + d.version + ". " }),
+      d.order > 0 ? "It is newer than the one in use (" + d.current + ")." : d.order < 0 ? "It is older than the one in use (" + d.current + ")." : "That is the version in use.",
+      d.python ? " It has a Python of its own inside; the Python ModTrap runs on now is kept." : ""),
+      el("div", { class: "actions" }, go));
+    go.focus();
+  };
+  x.send(file);
+}
+async function selfApply(d, go) {
+  const b = state.selfBox;
+  if (!b || b.busy) return;
+  b.busy = true;
+  go.disabled = b.add.disabled = b.close.disabled = true;
+  b.said.replaceChildren(el("p", { class: "dim" }, el("span", { class: "spinner small" }), " Putting ModTrap " + d.version + " in place: copying the version in use aside, writing the new files, trying the new version…"));
+  let done;
+  try { done = await call("/api/selfupdate/apply", { id: d.id }); }
+  catch (e) {
+    b.busy = false;
+    b.add.disabled = b.close.disabled = false;
+    b.said.replaceChildren(el("p", { class: "would-needs", text: e.message }));
+    return;
+  }
+  // The new ModTrap is starting and takes over from this one. This page waits for it, then loads itself anew.
+  state.selfRestart = true;
+  b.said.replaceChildren(el("p", {}, el("span", { class: "spinner small" }), " ModTrap " + done.version + " is in place and starting. This page loads itself anew as soon as it answers…"));
+  for (let i = 0; i < 120; i++) {
+    await sleep(1000);
+    try {
+      const r = await fetch("/", { cache: "no-store" });
+      const m = r.ok ? /data-token="([^"]+)"/.exec(await r.text()) : null;
+      if (m && m[1] !== TOKEN) { window.removeEventListener("beforeunload", siteGuard); location.reload(); return; }
+    } catch (e) { /* between the two: nobody answers yet */ }
+  }
+  b.busy = false;
+  b.close.disabled = false;
+  b.said.replaceChildren(el("p", { class: "would-needs", text: "ModTrap " + done.version + " is in place but has not answered. Start ModTrap.exe again; if it does not start, the version before is kept in ModTrap's own folder, under updates." }));
+}
+$("version").addEventListener("click", () => selfUpdateBox());
+
 // --- the Plugins tab -------------------------------------------------------------------------------------------------
 
+// The Plugins tab as MO2's own list (MT58): the box is the plugin's state, a row is moved by dragging it, and what is
+// wrong with a plugin, or what it overwrites, shows as a symbol on its row; a press on the symbol tells it in the pane.
+function pluginIssues(p) {
+  const out = [];
+  if (!p.active) return out;                       // the game does not load it: nothing of it can go wrong
+  if (p.unreadable) out.push(p.mod ? "it could not be read: " + p.unreadable : "it is active, but no enabled mod holds its file");
+  for (const x of p.missing || []) out.push("its master " + x + " is missing");
+  for (const x of p.inactive || []) out.push("its master " + x + " is not active");
+  for (const x of p.early || []) out.push("it loads before its master " + x);
+  return out;
+}
+function pluginMarks(p) {
+  const cell = p.marks;
+  if (!cell) return;
+  const kids = [];
+  const mark = (cls, text, title) => { const b = el("button", { type: "button", class: "rowmark " + cls, text, title, "aria-label": title }); b.addEventListener("click", (ev) => { ev.stopPropagation(); showPlugin(p.name, p.row); }); kids.push(b); };
+  if (p.issues.length) mark("bad", "⚠", plural(p.issues.length, "issue") + ": " + p.issues.join("; ") + ". Press for the details.");
+  const sc = (state.pscan || {})[p.name];
+  if (sc && sc.going) kids.push(el("span", { class: "spinner small", title: "Looking through the load order for what it overwrites…" }));
+  else if (sc && sc.data) {
+    const sum = (list) => list.reduce((a, x) => a + x.records, 0);
+    const over = sc.data.overwrites, under = sc.data.overwritten_by;
+    if (over.length || under.length) mark("warn", "⇄", [over.length ? "it overwrites what " + plural(over.length, "plugin") + " before it changed (" + plural(sum(over), "record") + ")" : "",
+      under.length ? plural(under.length, "plugin") + " after it overwrite" + (under.length === 1 ? "s" : "") + " what it changes (" + plural(sum(under), "record") + ")" : ""].filter(Boolean).join("; ") + ". Press for the details.");
+    else if (!sc.data.problems.length) mark("good", "✓", "Scanned: no other active plugin changes the same records.");
+  }
+  cell.replaceChildren(...kids);
+}
 function renderPlugins() {
   const body = $("plugins-table").tBodies[0];
   const frag = document.createDocumentFragment();
@@ -2905,29 +3040,147 @@ function renderPlugins() {
     const name = el("td", {}, p.name);
     if (!p.active) name.append(el("span", { class: "tag", text: "not active" }));
     if (p.primary) name.append(el("span", { class: "tag", text: "game" }));
-    if (p.unreadable) name.append(el("span", { class: "tag bad", text: p.mod ? "unreadable" : "no file" }));
-    if (p.missing.length) name.append(el("span", { class: "tag bad", text: plural(p.missing.length, "missing master") }));
-    if (p.inactive.length) name.append(el("span", { class: "tag warn", text: plural(p.inactive.length, "inactive master") }));
+    if (p.unreadable) name.append(el("span", { class: "tag " + (p.active ? "bad" : ""), text: p.mod ? "unreadable" : "no file" }));
+    p.issues = pluginIssues(p);
+    const can = state.changes && !p.primary && (p.active || !!p.mod);
+    const on = el("input", { type: "checkbox", disabled: !can, checked: !!p.active, "aria-label": "Activate " + p.name,
+      title: p.primary ? "One of the game's own plugins: always active" : !state.changes ? NO_CHANGES : !p.mod && !p.active ? "No enabled mod holds its file: enable its mod first"
+        : p.active ? "Active. Untick to deactivate the plugin" : "Not active. Tick to activate the plugin" });
+    on.addEventListener("change", () => pluginSet([p.name], on.checked, on));
+    on.addEventListener("click", (ev) => ev.stopPropagation());
+    p.marks = el("td", { class: "c-mark" });
     const mod = p.mod === "<game>" ? "the game" : p.mod === "<overwrite>" ? "Overwrite" : p.mod;
     const tr = el("tr", { class: "clickable" + (p.active ? "" : " off") },
-      el("td", { class: "c-num", text: p.position == null ? "" : p.position }), name, el("td", { text: p.kind }),
+      el("td", { class: "c-tick" }, on), el("td", { class: "c-num", text: p.position == null ? "" : p.position }), p.marks, name, el("td", { text: p.kind }),
       el("td", { text: mod }), el("td", { class: "c-num", text: p.mod_priority == null || p.mod_priority < 0 ? "" : p.mod_priority }),
       el("td", { class: "c-num", text: p.masters }), el("td", { class: "c-num" + (p.dependants ? " badnum" : ""), text: p.dependants }));
     tr.addEventListener("click", () => showPlugin(p.name, tr));
+    tr.dataset.plugin = p.name;
     p.row = tr;
     p.hay = fold(p.name + " " + p.mod);
+    pluginMarks(p);
     frag.append(tr);
   }
   body.replaceChildren(frag);
   filterPlugins();
 }
 
+// Activates or deactivates plugins, as their tick in MO2 does. Nothing is asked: what follows is told, and shows on the rows.
+function pluginSet(names, on, box) {
+  const put = (v) => { if (box) box.checked = v; };
+  if (!state.changes) { put(!on); toast(NO_CHANGES); return; }
+  listDo(async () => {
+    try {
+      if (!await mo2Closed()) { put(!on); return; }
+      const got = await api("/api/list/plugins/set", { plugins: names, on });
+      if (got.nothing) return;
+      listChanged(got.text + "." + (got.lacking ? " " + plural(got.lacking, "active plugin") + " now lack" + (got.lacking === 1 ? "s" : "") + " a master (" + got.lack.slice(0, 3).join(", ") + (got.lacking > 3 ? ", …" : "") + "): see ⚠ on their rows." : ""));
+      if (on && names.length === 1 && (state.settings || {}).scan_on_enable !== false) state.scanTimer = setTimeout(() => scanPlugin(names[0]), 1200);
+    } catch (e) { put(!on); toast(e.message); }
+  });
+}
+// What one plugin overwrites, for its row's symbol and its pane. Asked for in the pane, and by itself after a plugin
+// is moved or activated.
+async function scanPlugin(name) {
+  state.pscan = state.pscan || {};
+  const mine = state.pscan[name] = { going: true };
+  const paint = () => { const p = state.plugins.find((x) => x.name === name); if (p) pluginMarks(p); if (state.plugin === name && state.tab === "plugins") showPlugin(name, p && p.row); };
+  paint();
+  for (let i = 0; i < 300; i++) {
+    let s;
+    try { s = await api("/api/state"); } catch (e) { break; }
+    if (s.status !== "reading") break;
+    await sleep(200);
+  }
+  let d = null, error = "";
+  try { d = await api("/api/list/scan", { plugin: name }); } catch (e) { error = e.message; }
+  if ((state.pscan || {})[name] !== mine) return;          // the order changed meanwhile: this answer is of the old one
+  state.pscan[name] = d && d.plugins[0] ? { data: Object.assign(d.plugins[0], { cut: d.plugins[0].cut || d.cut }) } : { error: error || "no answer" };
+  paint();
+}
+
+// Dragging a plugin to another place in the load order. MO2's own limits are kept by ModTrap's program: a plugin
+// let go where it may not stand comes to stand at the nearest place it may, and the page says why.
+let pdrag = null;
+function pdragEnd() {
+  if (!pdrag) return;
+  clearInterval(pdrag.timer);
+  if (pdrag.ghost) pdrag.ghost.remove();
+  pdrag.tr.classList.remove("drag-src");
+  document.body.classList.remove("dragging-mod");
+  placeLine(null);
+  pdrag = null;
+}
+$("plugins-table").addEventListener("mousedown", (ev) => {
+  if (ev.button !== 0 || !state.changes || ev.target.closest("input, button")) return;
+  const tr = ev.target.closest("#plugins-table tbody tr");
+  const p = tr ? state.plugins.find((x) => x.name === tr.dataset.plugin) : null;
+  if (p && p.position != null && !p.primary) pdrag = { tr, name: p.name, x: ev.clientX, y: ev.clientY, going: false, at: null,
+    listed: state.plugins.filter((x) => x.position != null).map((x) => x.name) };
+});
+document.addEventListener("mousemove", (ev) => {
+  if (!pdrag) return;
+  if (!pdrag.going) {
+    if (Math.abs(ev.clientX - pdrag.x) + Math.abs(ev.clientY - pdrag.y) < 7) return;
+    pdrag.going = true;
+    pdrag.ghost = el("div", { class: "dragghost", text: pdrag.name });
+    document.body.append(pdrag.ghost);
+    document.body.classList.add("dragging-mod");
+    pdrag.tr.classList.add("drag-src");
+    const sel = window.getSelection && window.getSelection();
+    if (sel) sel.removeAllRanges();
+    const pane = $("plugins-table").closest(".scroll");
+    pdrag.timer = setInterval(() => {
+      if (!pdrag || !pane || pdrag.py == null) return;
+      const r = pane.getBoundingClientRect();
+      const d = pdrag.py < r.top + 36 ? -1 : pdrag.py > r.bottom - 36 ? 1 : 0;
+      if (d) pane.scrollTop += d * 26;
+    }, 40);
+  }
+  ev.preventDefault();
+  pdrag.py = ev.clientY;
+  pdrag.ghost.style.left = (ev.clientX + 14) + "px";
+  pdrag.ghost.style.top = (ev.clientY + 12) + "px";
+  const tr = ev.target.closest ? ev.target.closest("#plugins-table tbody tr") : null;
+  let at = null;
+  if (tr && !tr.hidden) {
+    const r = tr.getBoundingClientRect(), below = ev.clientY > r.top + r.height / 2;
+    const i = pdrag.listed.indexOf(tr.dataset.plugin);
+    if (i >= 0) {                                          // below a row: right after it in the load order, whatever is filtered away
+      const before = below ? (i + 1 < pdrag.listed.length ? pdrag.listed[i + 1] : "") : pdrag.listed[i];
+      const mine = pdrag.listed.indexOf(pdrag.name);
+      if (before !== pdrag.name && before !== (mine + 1 < pdrag.listed.length ? pdrag.listed[mine + 1] : "")) at = { tr, below, before };
+    }
+  }
+  pdrag.at = at;
+  placeLine(at ? at.tr : null, at && at.below);
+});
+document.addEventListener("mouseup", () => {
+  if (!pdrag) return;
+  const d = pdrag, went = pdrag.going;
+  pdragEnd();
+  if (!went) return;
+  state.dragged = Date.now();
+  if (!d.at) return;
+  listDo(async () => {
+    try {
+      const got = await api("/api/list/plugins/move", { plugin: d.name, before: d.at.before });
+      if (got.nothing) { toast(got.why ? d.name + " stays where it is: " + got.why + "." : d.name + " is there already."); return; }
+      listChanged(got.text + "." + (got.why ? " Not where you let go: " + got.why + "." : ""));
+      if ((state.settings || {}).scan_on_enable !== false) state.scanTimer = setTimeout(() => scanPlugin(d.name), 1200);
+    } catch (e) { toast(e.message); }
+  });
+});
+document.addEventListener("keydown", (ev) => { if (pdrag && ev.key === "Escape") pdragEnd(); });
+window.addEventListener("blur", pdragEnd);
+$("plugins-undo").addEventListener("click", listUndo);
+
 function filterPlugins() {
   const q = fold($("plugins-search").value.trim());
   const pr = $("p-problems").checked, dp = $("p-deps").checked;
   let shown = 0;
   for (const p of state.plugins) {
-    const ok = (!q || p.hay.includes(q)) && (!pr || p.missing.length || p.inactive.length || p.unreadable) && (!dp || p.dependants > 0);
+    const ok = (!q || p.hay.includes(q)) && (!pr || p.issues.length || p.unreadable) && (!dp || p.dependants > 0);
     p.row.hidden = !ok;
     if (ok) shown++;
   }
@@ -2987,7 +3240,24 @@ async function showPlugin(name, tr) {
     p.unreadable ? el("p", { class: "message bad", text: "Could not be read: " + p.unreadable }) : null,
     p.also_in.length ? el("p", { class: "dim", text: "Also in, and overridden: " + p.also_in.join(", ") }) : null,
     p.author ? el("p", { class: "dim", text: "Author field: " + p.author }) : null,
+    ...pluginPane(name),
     ...list("Masters", p.masters, p), ...list("Needed by", p.dependants)].filter(Boolean));
+}
+
+// A plugin's pane, the part of MT58: what is wrong with it (the row's ⚠), and what it overwrites (the row's ⇄).
+function pluginPane(name) {
+  const row = state.plugins.find((x) => x.name === name);
+  const out = [];
+  if (row && row.issues.length) out.push(el("h3", { text: plural(row.issues.length, "issue") }), el("ul", { class: "findings" }, ...row.issues.map((x) => el("li", { class: "bad", text: x }))));
+  const sc = (state.pscan || {})[name];
+  const scan = el("button", { type: "button", text: sc && sc.data ? "Scan again" : "Scan what it overwrites", disabled: !!(sc && sc.going) || !row || row.position == null,
+    title: "Looks through the load order for the plugins that change the same records: the ones before it, whose change it overwrites, and the ones after it, which overwrite its own. It only reads." });
+  scan.addEventListener("click", () => scanPlugin(name));
+  out.push(el("div", { class: "actions" }, scan));
+  if (sc && sc.going) out.push(el("p", { class: "dim" }, el("span", { class: "spinner small" }), " Looking through the load order…"));
+  else if (sc && sc.error) out.push(el("p", { class: "would-needs", text: "The scan did not run: " + sc.error }));
+  else if (sc && sc.data) out.push(el("div", { class: "scan" }, ...scanPluginParts(sc.data, false).filter(Boolean)));
+  return out;
 }
 
 // --- the Selection tab -----------------------------------------------------------------------------------------------
@@ -3925,7 +4195,7 @@ function endPlacement() {
   placeLine(null);
 }
 function placeLine(tr, below) {
-  for (const x of document.querySelectorAll("#mods-table tr.place-above, #mods-table tr.place-below")) x.classList.remove("place-above", "place-below");
+  for (const x of document.querySelectorAll("tr.place-above, tr.place-below")) x.classList.remove("place-above", "place-below");
   if (tr) tr.classList.add(below ? "place-below" : "place-above");
 }
 // The row under the pointer and whether the line is above or below it; and what the new mod would then stand before.
@@ -4371,7 +4641,7 @@ async function loadLists(key, s) {
 }
 
 async function tick() {
-  if (state.quit) return;
+  if (state.quit || state.selfRestart) return;
   let s;
   try { s = await api("/api/state"); } catch (e) { showMessage("ModTrap is not answering: " + e.message, true); return; }
   const was = state.status;
@@ -4578,6 +4848,18 @@ document.addEventListener("dragover", (e) => {
 document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) { dragOn(false); fileOver(null); } });
 document.addEventListener("drop", (e) => {
   e.preventDefault();
+  if (state.selfBox) {                                     // the box for ModTrap's own update is open: the file is for it
+    dragDepth = 0; dragOn(false);
+    const f = Array.from((e.dataTransfer && e.dataTransfer.files) || [])[0];
+    if (f) selfTake(f);
+    return;
+  }
+  const own = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+  if (own.length === 1 && SELF_NAME.test(own[0].name)) {   // a ModTrap release file, dropped anywhere on the page
+    dragDepth = 0; dragOn(false); fileOver(null);
+    selfUpdateBox(own[0]);
+    return;
+  }
   const at = fileOver(e);                                  // before the header folds again: that moves the rows
   dragDepth = 0; dragOn(false);
   fileOver(null);
@@ -4643,7 +4925,7 @@ $("job-copy").addEventListener("click", () => copyText($("job-log").textContent,
 document.addEventListener("keydown", (ev) => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   const box = state.tab === "plugins" ? $("plugins-search") : state.tab === "mods" || state.tab === "pick" ? $("mods-search") : null;
-  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z" && !typing && state.tab === "mods" && !document.querySelector(".modal-back")) { ev.preventDefault(); listUndo(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z" && !typing && (state.tab === "mods" || state.tab === "plugins") && !document.querySelector(".modal-back")) { ev.preventDefault(); listUndo(); return; }
   if (ev.key === "/" && !typing && box && !$("tabs").hidden) { ev.preventDefault(); box.focus(); box.select(); }
   if (ev.key === "Escape" && !$("picker").hidden) { pickerClose(); return; }
   if (ev.key === "Escape" && !$("session-panel").hidden) { $("session-panel").hidden = true; $("session-btn").setAttribute("aria-expanded", "false"); $("session-btn").focus(); }

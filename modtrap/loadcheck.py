@@ -216,6 +216,56 @@ def _is_master(r: model.PluginRow) -> bool:
     return adding.is_master(r.kind) if r.kind else _master_name(r.name)
 
 
+# --- a plugin moved by hand: where MO2 lets it stand (MO03§3, §4) --------------------------------------------------------
+
+def place_moved(order: list[dict], name: str, before: str) -> tuple[str, str]:
+    """Where a plugin dragged to directly before `before` ("" for the end) comes to stand, by the limits MO2 itself
+    keeps: not above the game's own plugins; a master in the masters' block and no other plugin in it; not above a
+    master of its own; not below a plugin that needs it. `order` is the load order, each {"name", "master",
+    "primary", "masters"}. Returns the plugin it then stands directly before ("" for the end) and, where the place
+    asked for was not allowed, why it stands elsewhere."""
+    me = next((x for x in order if fold(x["name"]) == fold(name)), None)
+    if me is None:
+        raise Refused("%s is not in the load order" % name)
+    if me.get("primary"):
+        raise Refused("%s is one of the game's own plugins: its place is fixed" % me["name"])
+    rest = [x for x in order if x is not me]
+    if before and fold(before) == fold(name):
+        raise Refused("a plugin cannot be placed before itself")
+    want = next((i for i, x in enumerate(rest) if fold(x["name"]) == fold(before)), None) if before else len(rest)
+    if want is None:
+        raise Refused("%s is not in the load order" % before)
+    at = {fold(x["name"]): i for i, x in enumerate(rest)}
+    lo, lo_why, hi, hi_why = 0, "", len(rest), ""
+    game = [i for i, x in enumerate(rest) if x.get("primary")]
+    if game:
+        lo, lo_why = max(game) + 1, "the game's own plugins come first"
+    masters = [i for i, x in enumerate(rest) if x["master"]]
+    if me["master"]:
+        first_other = next((i for i, x in enumerate(rest) if not x["master"]), len(rest))
+        if first_other < hi:
+            hi, hi_why = first_other, "it is a master, and the game loads masters before every other plugin"
+    elif masters and max(masters) + 1 > lo:
+        lo, lo_why = max(masters) + 1, "it is no master, and the game loads masters before every other plugin"
+    own = [(at[fold(x)], x) for x in me["masters"] if fold(x) in at and (not me["master"] or rest[at[fold(x)]]["master"])]
+    if own and max(own)[0] + 1 > lo:
+        lo, lo_why = max(own)[0] + 1, "it needs %s, which must load before it" % max(own)[1]
+    needed = [(i, x["name"]) for i, x in enumerate(rest) if any(fold(y) == fold(name) for y in x["masters"])]
+    if needed and min(needed)[0] < hi:
+        hi, hi_why = min(needed)[0], "%s needs it, and must load after it" % min(needed)[1]
+    if lo > hi:
+        hi, hi_why = lo, lo_why                             # an order that is broken already: its own masters first
+    final = min(max(want, lo), hi)
+    why = "" if final == want else (lo_why if want < lo else hi_why)
+    return (rest[final]["name"] if final < len(rest) else ""), why
+
+
+def load_order(m: model.Model) -> list[dict]:
+    """The load order for `place_moved`."""
+    return [{"name": r.name, "master": _is_master(r), "primary": r.primary, "masters": r.masters}
+            for r in (m.plugins[f] for f in m.order) if r.position is not None]
+
+
 # --- what a mod's plugins overwrite (the scanner) ------------------------------------------------------------------
 
 def _kinds(keys, index) -> dict[str, int]:
@@ -226,10 +276,11 @@ def _kinds(keys, index) -> dict[str, int]:
     return dict(sorted(out.items(), key=lambda kv: -kv[1])[:8])
 
 
-def overrides(m: model.Model, mod: Mod, seconds: float = SCAN_SECONDS) -> dict:
+def overrides(m: model.Model, mod: Mod, seconds: float = SCAN_SECONDS, only: list[model.PluginRow] | None = None) -> dict:
     """What the plugins this mod provides overwrite, in the load order as it is. Per plugin: its place, whether its
     masters are there and before it, the records of its masters it changes, and the other active plugins that change
-    the same records: the ones before it (it overwrites their change) and after it (they overwrite its change)."""
+    the same records: the ones before it (it overwrites their change) and after it (they overwrite its change).
+    With `only`, those plugins are looked at, whatever mod they come from."""
     until = time.monotonic() + seconds
     rows = [m.plugins[f] for f in m.order if m.plugins[f].position is not None]
     listed = len(rows)
@@ -237,7 +288,7 @@ def overrides(m: model.Model, mod: Mod, seconds: float = SCAN_SECONDS) -> dict:
     memo: dict = {}
     _pos, made = adding.tail_start(m, memo, False)
     made_f = {fold(n) for n in made}
-    for r in m.provided_by(mod):
+    for r in (only if only is not None else m.provided_by(mod)):
         entry: dict = {"name": r.name, "kind": r.kind, "active": r.active, "position": r.position, "of": listed, "problems": [], "notes": [],
                        "records": 0, "own": 0, "masters": [], "overwrites": [], "overwritten_by": [], "cut": False}
         out["plugins"].append(entry)
@@ -347,4 +398,4 @@ def files(m: model.Model, mod: Mod, seconds: float = FILES_SECONDS) -> dict:
     return out
 
 
-__all__ = ["Refused", "files", "overrides", "place", "plan_set"]
+__all__ = ["Refused", "files", "load_order", "overrides", "place", "place_moved", "plan_set"]
