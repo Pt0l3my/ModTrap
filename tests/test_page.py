@@ -43,7 +43,7 @@ class PageTests(unittest.TestCase):
         self.assertGreater(len(tabs), 12)
         for t in tabs:
             # "Pick mods" shows the mods' table too: one table serves it and the Modlist section's Mods tab (MT56).
-            self.assertIn('id="tab-%s"' % ("mods" if t == "pick" else t), self.html)
+            self.assertIn('id="tab-%s"' % ("mods" if t in ("pick", "split") else t), self.html)   # the split view shows two sections (MT59)
 
     def test_the_mods_list_is_modlists_own_tab_and_the_demasters_first(self):
         """MT56: Modlist › Mods is MO2's own list; the demaster's ticks are Demaster's first tab, on the same table."""
@@ -70,7 +70,8 @@ class PageTests(unittest.TestCase):
         self.assertIn('api("/api/add/run", body())', self.js)
         self.assertIn("if (chosenPlace()) installNow(chosenPlace().before);", self.js)
         self.assertIn("scrollTops.set(t, t.scrollTop);", self.js)
-        self.assertRegex(self.js, r"state\.tab = name;\n  restoreScroll\(\);")
+        show = self.js[self.js.index("function showTab(name) {"):]
+        self.assertLess(show.index("state.tab = name;"), show.index("restoreScroll();"))          # given back as the tab is shown
         self.assertNotIn("if (pane && !fresh) pane.scrollTop = top;", self.js)       # read after the list was hidden: always 0
 
 
@@ -87,6 +88,17 @@ class PageTests(unittest.TestCase):
         # A plugin's tick asks nothing: no question box in its function.
         body = re.search(r"function pluginSet\(names, on, box\) \{(.+?)\n\}\n", self.js, re.S).group(1)
         self.assertNotIn("modalBox", body)
+
+
+    def test_the_split_view_shows_both_lists_with_a_line_to_drag(self):
+        """MT59: a tab of the Modlist section with the mods' and the plugins' sections side by side."""
+        tabs = re.findall(r'<button data-group="([^"]+)" data-tab="([^"]+)"', self.html)
+        self.assertEqual([t for g, t in tabs if g == "modlist"][:3], ["mods", "plugins", "split"])
+        # The line stands between the two sections it parts.
+        self.assertRegex(self.html, r'(?s)<section id="tab-mods".+?</section>\s*<div id="split-bar" class="splitbar"[^>]*hidden></div>\s*<section id="tab-plugins"')
+        self.assertIn('const panes = split ? ["tab-mods", "tab-plugins"] : ["tab-" + pane];', self.js)
+        self.assertIn("split: state.splitAt || 50", self.js)
+        self.assertIn(".splitbar { flex: 0 0 9px; position: relative; cursor: col-resize;", self.css)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,8 @@ The Plugins tab works the same way: tick a plugin to activate or deactivate it, 
 order (within the limits MO2 itself keeps), and a symbol on a plugin's row says when something is wrong with it or
 when it overwrites what other plugins change; a press on the symbol tells it in full.
 
+A split view shows the mods and the plugins side by side, parted by a line that is dragged sideways.
+
 ModTrap updates itself: the version at the top of the page is a button, and a release file dropped in its box is
 checked, put in place (the version in use is kept aside), tried, and started.
 

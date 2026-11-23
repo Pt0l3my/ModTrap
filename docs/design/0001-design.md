@@ -767,3 +767,7 @@ for all of them.
 there is checked, the version in use is copied to ModTrap's own folder, the files are replaced, the new program is
 tried, and ModTrap starts again and takes over (§17). ModTrap run from its source folder is not updated this way.
 
+**The split view (MT59).** A tab of the Modlist section shows the mods' and the plugins' sections side by side,
+parted by a line the owner drags; nothing is built twice (WHY§125). A mod looked at marks its plugins on the other
+side, a plugin its mod.
+

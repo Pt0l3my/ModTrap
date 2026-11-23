@@ -67,6 +67,7 @@
 <nav id="tabs" hidden>
   <button data-group="modlist" data-tab="mods" class="on" title="MO2's own list: tick a mod to enable or disable it, drag a row to move it, right-click for more">Mods</button>
   <button data-group="modlist" data-tab="plugins">Plugins</button>
+  <button data-group="modlist" data-tab="split" title="The mods and the plugins side by side: drag the line between them sideways to give one side more room">Split view</button>
   <button data-group="modlist" data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-group="modlist" data-tab="tools">Tools</button>
   <button data-group="demaster" data-tab="pick" title="Tick the mods to take out: what is ticked here goes to the dry run and the demaster">Pick mods</button>
@@ -146,6 +147,8 @@
     <p id="mods-empty" class="empty" hidden>No mod matches. <button type="button" id="mods-clear">Clear the search and filters</button></p>
     </div>
   </section>
+
+  <div id="split-bar" class="splitbar" role="separator" aria-orientation="vertical" tabindex="0" title="Drag sideways to give one side more room; double-click for equal halves; the arrow keys move it too" hidden></div>
 
   <section id="tab-plugins" class="tab" hidden>
     <div class="tools">

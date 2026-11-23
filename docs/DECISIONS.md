@@ -59,6 +59,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   that page; a list keeps its place when it is shown again).
   MT58 (the Plugins tab as MO2's own list, with issues and conflicts as a symbol on the row; ModTrap unpacks .7z
   itself; ModTrap updates itself from a release file, behind the version at the top).
+  MT59 (a split view in the Modlist section: the mods and the plugins side by side, parted by a line that is
+  dragged sideways).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1430,4 +1432,25 @@ already"
   aside, the new files are written, the new version is tried once, and ModTrap starts again while the page waits
   and loads itself anew. A version that does not start is put back. An older release file is taken too ("Go back
   to …"). The Python ModTrap runs on is never replaced. Nothing is fetched from anywhere: the owner gives the file.
+
+## MT59
+
+**A split view: the mods and the plugins side by side** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "can you also add split view to Modlist as sub tab? on that page user will have modslist rows and
+plugin page rows split view, split by a vertical glow line that can be moved sideways to adjust which side gets more
+area shown"
+
+**Settled** (WHY§125; the owner may overrule any of it):
+
+- **A tab of its own.** Modlist has "Split view" after Mods and Plugins. It shows the mods' list on the left and
+  the plugins' list on the right, each exactly as on its own tab: the same rows, ticks, drags, menus, search,
+  filters, Undo, and a mod's file dropped on the left is installed at its place.
+- **The line.** A glowing vertical line parts the two. Dragged sideways, it gives one side more room (between 15
+  and 85 in a hundred); a double-click makes the halves equal; with the keyboard, the arrow keys move it. Where it
+  stands is kept with the session.
+- **The two sides know each other**, as MO2's two panes do: a mod looked at marks its plugins on the right, and a
+  plugin looked at marks its mod on the left, each brought into view.
+- **To fit.** In the split view the mods' list leaves its Plugins column out (the plugins are beside it), the
+  plugins' list its three last columns, and the plugin's pane stands below its list, not beside it.
 

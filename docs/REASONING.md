@@ -147,6 +147,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 122 | 2026-11-23 | A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list | DECIDED | #page #add |
 | 123 | 2026-11-23 | ModTrap reads .7z itself; what its reader does not read goes to 7-Zip or to Windows' own unpacker | METHOD | #adding #safety #licence |
 | 124 | 2026-11-23 | The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again | DECIDED | #page #mo2 #release #safety |
+| 125 | 2026-11-23 | The split view shows the two sections that exist, side by side, and builds nothing twice | METHOD | #page |
 
 ## Entries
 
@@ -3338,4 +3339,20 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked here, on Linux, with a package folder made of ModTrap's own files: box, a wrong file, the release file,
   update, restart, page anew at the new version, 2.4 s. Not checked: Windows, where a running `ModTrap.exe` cannot
   be written over (it is then renamed aside first) and where the new start gets a console of its own, minimised.
+
+### 125. The split view shows the two sections that exist, side by side, and builds nothing twice
+
+`2026-11-23` · METHOD · `#page` · refs: MT59, MT58, MT56, WHY§121, WHY§122, DESIGN§21
+
+- The page's sections already stand in a row that shows one of them. The split view shows two, the mods' and the
+  plugins', with a bar between them, and sets the left one's share. No second table: 3,500 mod rows and 3,700
+  plugin rows exist once, and every handler (tick, drag, menu, the line of a place, Undo, the dropped file) serves
+  both views without knowing which is shown. What asked "is the Mods tab shown" now asks "are the mods shown".
+- The line's place is kept in the session's saved view, with the tab and the filters.
+- Marking across the sides is done on the owner's click only, never while the lists are drawn again: bringing a
+  row into view while they scroll would pull the list from under them.
+- Each list keeps its own scroll place in the split view too (WHY§122: the place belongs to the list, not the tab).
+- Checked in a browser on a stand-in modlist: the line dragged and its place kept across a re-reading and a change
+  of tab, the double-click, a tick on the left and a drag on the right, Ctrl+Z, the marks across the sides, and the
+  plain tabs whole again afterwards.
 

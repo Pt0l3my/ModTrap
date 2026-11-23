@@ -466,7 +466,7 @@ async function modMenu(ev, mod) {
     r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => openTab(page) },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
-    ...(state.tab === "mods" && m && m.kind === "mod" ? [null,
+    ...(onMods() && m && m.kind === "mod" ? [null,
       { text: m.enabled ? "Disable it" : "Enable it", off: !state.changes || !m.listed, note: state.changes ? "As its tick does: the mod's line in MO2's list, and its plugins by MO2's own rule" : NO_CHANGES, run: () => listSet([mod], !m.enabled) },
       { text: "Move to priority…", off: !state.changes || !m.listed, note: state.changes ? "For a place far away; nearby, drag the row" : NO_CHANGES, run: () => moveToPriority(mod) },
       { text: "Scan what it overwrites", note: "Whether its plugins stand safely in the load order, the records and files it overwrites, and what overwrites its own. It only reads.", run: () => scanMod(mod, true) },
@@ -474,7 +474,7 @@ async function modMenu(ev, mod) {
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
     state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => { gotoMod(mod); focusMod(mod, true); } } : { text: "Show it on the Updater list", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
-    state.tab !== "mods" && m && m.row && m.row.classList.contains("tickable") ? { text: state.picked.has(mod) ? "Untick it" : "Tick it, to take it out", run: () => { togglePick(mod, !state.picked.has(mod)); updateTray(); } } : undefined,
+    !onMods() && m && m.row && m.row.classList.contains("tickable") ? { text: state.picked.has(mod) ? "Untick it" : "Tick it, to take it out", run: () => { togglePick(mod, !state.picked.has(mod)); updateTray(); } } : undefined,
   ].filter((v) => v !== undefined);
   menuAt(x, y, mod, rows);
 }
@@ -1352,7 +1352,7 @@ const STATUS_WORDS = { active: "holds the modlist", waiting: "waiting, locked", 
 
 function currentUi() {
   return {
-    tab: state.tab || "mods", picked: [...state.picked], order: $("mods-order").value,
+    tab: state.tab || "mods", split: state.splitAt || 50, picked: [...state.picked], order: $("mods-order").value,
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
@@ -1378,6 +1378,7 @@ function applyUi(ui) {
   ui = ui || {};
   state.applying = true;
   try {
+    state.splitAt = Number.isFinite(ui.split) ? Math.max(15, Math.min(85, ui.split)) : 50;
     $("mods-order").value = Object.keys(MOD_ORDERS).includes(ui.order) ? ui.order : "mo2";
     $("mods-search").value = ui.search || "";
     $("f-enabled").checked = !!ui.fEnabled; $("f-plugins").checked = !!ui.fPlugins; $("f-deps").checked = !!ui.fDeps;
@@ -2293,6 +2294,7 @@ function relatedTo(name) {
 function focusMod(name, keep) {
   state.focus = state.focus === name && !keep ? "" : name;
   if (!state.focus) state.onlyRelated = false;
+  linkPlugins(state.focus, true);
   paintFocus();
   if (state.groups) filterMods();
 }
@@ -2360,7 +2362,7 @@ function flash(row) {
 function gotoMod(name) {
   const m = findMod(name);
   if (!m) return;
-  showTab(picking() ? "pick" : "mods");
+  if (state.tab !== "split") showTab(picking() ? "pick" : "mods");
   clearModFilters();
   if (modSort().key !== "priority") { $("mods-order").value = "mo2"; layoutMods(); }
   const g = state.groups.find((x) => x.mods.includes(m));
@@ -2751,7 +2753,7 @@ function chosenPlace() {
 function fileOver(ev) {
   let at = null;
   const types = ev && ev.dataTransfer ? Array.from(ev.dataTransfer.types || []) : [];
-  if (ev && types.includes("Files") && state.tab === "mods" && state.status === "ready" && state.changes && !state.placing && !state.dropRun
+  if (ev && types.includes("Files") && onMods() && state.status === "ready" && state.changes && !state.placing && !state.dropRun
       && state.grouped && !modSort().desc && !document.querySelector(".modal-back")) {
     if (!state.fileListed || state.fileListed.gen !== state.loaded) state.fileListed = { gen: state.loaded, names: listedNames() };
     at = exactPlace(placeAt(ev), state.fileListed.names);
@@ -3003,6 +3005,61 @@ async function selfApply(d, go) {
 }
 $("version").addEventListener("click", () => selfUpdateBox());
 
+// --- the split view (MT59): the mods and the plugins side by side ---------------------------------------------------
+// One tab of the Modlist section shows both lists at once, each as it is on its own tab: the same rows, ticks,
+// drags and menus. The line between them is dragged sideways to give one side more room. As in MO2's two panes, a
+// mod looked at marks its plugins on the other side, and a plugin looked at marks its mod.
+const onMods = () => state.tab === "mods" || state.tab === "split";
+const onPlugins = () => state.tab === "plugins" || state.tab === "split";
+function splitSet(pct) {
+  const left = $("tab-mods");
+  if (state.tab !== "split") { left.style.flex = ""; return; }
+  state.splitAt = Math.max(15, Math.min(85, Math.round(pct * 10) / 10));
+  left.style.flex = "0 0 calc(" + state.splitAt + "% - 5px)";
+  $("split-bar").setAttribute("aria-valuenow", String(Math.round(state.splitAt)));
+}
+function linkPlugins(mod, scroll) {
+  let first = null;
+  for (const p of state.plugins || []) {
+    if (!p.row) continue;
+    const on = state.tab === "split" && !!mod && p.mod === mod;
+    p.row.classList.toggle("linked", on);
+    if (on && !first && !p.row.hidden) first = p.row;
+  }
+  if (first && scroll) first.scrollIntoView({ block: "nearest" });
+}
+function linkMod(plugin, scroll) {
+  const p = plugin ? (state.plugins || []).find((x) => x.name === plugin) : null;
+  const want = state.tab === "split" && p ? p.mod : "";
+  let row = null;
+  for (const g of state.groups || []) for (const m of g.mods) if (m.row) { const on = !!want && m.name === want; m.row.classList.toggle("linked", on); if (on && !m.row.hidden) row = m.row; }
+  if (row && scroll) row.scrollIntoView({ block: "nearest" });
+}
+$("split-bar").addEventListener("mousedown", (ev) => {
+  if (ev.button !== 0) return;
+  ev.preventDefault();
+  state.splitting = true;
+  document.body.classList.add("splitting");
+});
+document.addEventListener("mousemove", (ev) => {
+  if (!state.splitting) return;
+  const r = $("split-bar").parentNode.getBoundingClientRect();
+  if (r.width > 0) splitSet(100 * (ev.clientX - r.left) / r.width);
+});
+document.addEventListener("mouseup", () => {
+  if (!state.splitting) return;
+  state.splitting = false;
+  document.body.classList.remove("splitting");
+  saveUi();
+});
+$("split-bar").addEventListener("dblclick", () => { splitSet(50); saveUi(); });
+$("split-bar").addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  ev.preventDefault();
+  splitSet((state.splitAt || 50) + (ev.key === "ArrowLeft" ? -2 : 2));
+  saveUi();
+});
+
 // --- the Plugins tab -------------------------------------------------------------------------------------------------
 
 // The Plugins tab as MO2's own list (MT58): the box is the plugin's state, a row is moved by dragging it, and what is
@@ -3054,7 +3111,7 @@ function renderPlugins() {
       el("td", { class: "c-tick" }, on), el("td", { class: "c-num", text: p.position == null ? "" : p.position }), p.marks, name, el("td", { text: p.kind }),
       el("td", { text: mod }), el("td", { class: "c-num", text: p.mod_priority == null || p.mod_priority < 0 ? "" : p.mod_priority }),
       el("td", { class: "c-num", text: p.masters }), el("td", { class: "c-num" + (p.dependants ? " badnum" : ""), text: p.dependants }));
-    tr.addEventListener("click", () => showPlugin(p.name, tr));
+    tr.addEventListener("click", () => { showPlugin(p.name, tr); linkMod(p.name, true); });
     tr.dataset.plugin = p.name;
     p.row = tr;
     p.hay = fold(p.name + " " + p.mod);
@@ -3084,7 +3141,7 @@ function pluginSet(names, on, box) {
 async function scanPlugin(name) {
   state.pscan = state.pscan || {};
   const mine = state.pscan[name] = { going: true };
-  const paint = () => { const p = state.plugins.find((x) => x.name === name); if (p) pluginMarks(p); if (state.plugin === name && state.tab === "plugins") showPlugin(name, p && p.row); };
+  const paint = () => { const p = state.plugins.find((x) => x.name === name); if (p) pluginMarks(p); if (state.plugin === name && onPlugins()) showPlugin(name, p && p.row); };
   paint();
   for (let i = 0; i < 300; i++) {
     let s;
@@ -3198,7 +3255,7 @@ function clearPluginFilters() {
 function gotoPlugin(name) {
   const p = state.plugins.find((x) => fold(x.name) === fold(name));
   if (!p) { toast(name + " is not in this profile's load order."); return; }
-  showTab("plugins");
+  if (!onPlugins()) showTab("plugins");
   if (p.row.hidden) clearPluginFilters();
   flash(p.row);
   showPlugin(p.name, p.row);
@@ -4560,10 +4617,17 @@ function showTab(name) {
   $("tabs").classList.toggle("single", shown < 2);
   document.querySelectorAll("#groups button[data-group]").forEach((b) => b.classList.toggle("on", b.dataset.group === group));
   const pane = name === "pick" ? "mods" : name;                  // the mods' table serves two tabs (MT56)
-  document.querySelectorAll(".tab").forEach((t) => { t.hidden = t.id !== "tab-" + pane; });
+  const split = name === "split";                                // and stands beside the plugins' in the split view (MT59)
+  const panes = split ? ["tab-mods", "tab-plugins"] : ["tab-" + pane];
+  document.querySelectorAll(".tab").forEach((t) => { t.hidden = !panes.includes(t.id); });
+  $("split-bar").hidden = !split;
+  $("split-bar").parentNode.classList.toggle("sidebyside", split);
   state.tab = name;
+  splitSet(state.splitAt || 50);
+  if (!split) for (const r of document.querySelectorAll("tr.linked")) r.classList.remove("linked");
+  else { linkPlugins(state.focus || "", false); linkMod(state.plugin || "", false); }
   restoreScroll();
-  if (pane === "mods") modsMode();
+  if (pane === "mods" || split) modsMode();
   updateTray();
   saveUi();
   if (name === "history") { state.historyText = ""; pollHistory(); }
@@ -4571,7 +4635,7 @@ function showTab(name) {
   if (name === "updater") pollUpdater(true);
   if (name === "installed") loadInstalled();
   if (name !== "mods" && state.placing) endPlacement();
-  if (pane !== "mods") dragEnd();
+  if (pane !== "mods" && !split) dragEnd();
   if (name === "downloads") loadDownloads();
   if (name === "job") paneFollow("job-log");
   if (name === "log") paneFollow("log");
@@ -4924,8 +4988,8 @@ $("save-session").addEventListener("click", saveSession);
 $("job-copy").addEventListener("click", () => copyText($("job-log").textContent, "The dry run's lines"));
 document.addEventListener("keydown", (ev) => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-  const box = state.tab === "plugins" ? $("plugins-search") : state.tab === "mods" || state.tab === "pick" ? $("mods-search") : null;
-  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z" && !typing && (state.tab === "mods" || state.tab === "plugins") && !document.querySelector(".modal-back")) { ev.preventDefault(); listUndo(); return; }
+  const box = state.tab === "plugins" ? $("plugins-search") : state.tab === "mods" || state.tab === "pick" || state.tab === "split" ? $("mods-search") : null;
+  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z" && !typing && (onMods() || onPlugins()) && !document.querySelector(".modal-back")) { ev.preventDefault(); listUndo(); return; }
   if (ev.key === "/" && !typing && box && !$("tabs").hidden) { ev.preventDefault(); box.focus(); box.select(); }
   if (ev.key === "Escape" && !$("picker").hidden) { pickerClose(); return; }
   if (ev.key === "Escape" && !$("session-panel").hidden) { $("session-panel").hidden = true; $("session-btn").setAttribute("aria-expanded", "false"); $("session-btn").focus(); }
