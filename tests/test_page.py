@@ -60,6 +60,19 @@ class PageTests(unittest.TestCase):
         for path in ("/api/list/move", "/api/list/rename", "/api/list/undo", "/api/separator/add"):
             self.assertIn('"%s"' % path, closed)
 
+    def test_a_file_dropped_on_the_list_is_installed_at_its_place_and_a_list_keeps_its_place(self):
+        """MT57: the drop's place is read before the header folds back (WHY§122); the run asks with its own
+        archives and its place; a list's place is noted while it is shown and given back when it is shown again."""
+        drop = re.search(r'document\.addEventListener\("drop", \(e\) => \{(.+?)\n\}\);', self.js, re.S).group(1)
+        self.assertLess(drop.index("fileOver(e)"), drop.index("dragOn(false)"))
+        self.assertIn("if (at) dropAtPlace(e, at);", drop)
+        self.assertIn('const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before });', self.js)
+        self.assertIn('api("/api/add/run", body())', self.js)
+        self.assertIn("if (chosenPlace()) installNow(chosenPlace().before);", self.js)
+        self.assertIn("scrollTops.set(t, t.scrollTop);", self.js)
+        self.assertRegex(self.js, r"state\.tab = name;\n  restoreScroll\(\);")
+        self.assertNotIn("if (pane && !fresh) pane.scrollTop = top;", self.js)       # read after the list was hidden: always 0
+
 
 if __name__ == "__main__":
     unittest.main()

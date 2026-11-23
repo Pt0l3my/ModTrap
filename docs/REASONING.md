@@ -144,6 +144,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 119 | 2026-11-23 | The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's | DECIDED | #add #page |
 | 120 | 2026-11-23 | Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised | DECIDED | #add #page #release #windows |
 | 121 | 2026-11-23 | The Modlist page changes MO2's lists as MO2 does: one job per change, MO2's own rule for plugins, a disabled mod's plugin keeps its line, a scanner that reads record headers | DECIDED | #page #mo2 #safety |
+| 122 | 2026-11-23 | A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list | DECIDED | #page #add |
 
 ## Entries
 
@@ -3253,4 +3254,31 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   its answers, three ticks in a row, a drag with the list scrolling on at its edge, a folded separator dragged
   with its mods, rename, "Move to priority…", Undo by its button and by Ctrl+Z, the scan's note and card, and Pick
   mods with its own ticks. Not checked on Windows: only the owner's PC can.
+
+### 122. A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list
+
+`2026-11-23` · DECIDED · `#page #add` · refs: MT57, MT56, MT55, MT53, WHY§121, WHY§116, DESIGN§16.8, DESIGN§21
+
+- The list snapped to its top. FACT (seen in a browser): while ModTrap reads the modlist again, the page hides
+  every tab's section, and a section that is not shown reads as scrolled to 0 and comes back at 0. The place
+  0.3.48 kept was read after the section was hidden: always 0. The check of 0.3.48 used a row near the top, where
+  0 was also the right answer; it proved nothing. METHOD: each list's place is noted from its own scroll events,
+  only while it is shown and the modlist is ready, and given back whenever its section is shown again. That also
+  covers a look at another tab, which lost the place the same way. Checked 36,000 px deep in a list of 3,500 mods:
+  after a tick, Undo, Rescan, another tab and back, and a dropped install, the list stood where it was; the
+  Plugins list kept a place of its own.
+- A dropped file's place. The browser's own drag events are used here (a file from Explorer comes no other way);
+  the line and the place are the ones of Manual placement and of a dragged row, from one function. FACT: when
+  the file is let go the header folds back and the rows move up; the place read after that was one row off. It is
+  now read before the header folds.
+- The run is the page's own, with only the dropped archives in it. The Installer tool's list may hold other mods
+  still waiting; "Install mod" there installs the whole list, and a drop at a place must not carry them along
+  (WHY§116 met the same with a stale entry). So the run asks for the analysis and the install with its own
+  archives and its place; the archives are put on the Installer tool's list as well, which then shows them as it
+  shows any mod. Nothing new on the server: the analysis and the add job already take a place.
+- Rejected: asking once more before the install. The owner's order of words puts the install before the box of
+  details, and the drop names both mod and place; a wrong drop is one "Uninstall" away. Recorded in MT57 as the
+  one point that was read into the words.
+- Rejected: the mod's own installer questions inside the box. They need the Installer tool's whole card; the box
+  hands over, and the place goes with it.
 

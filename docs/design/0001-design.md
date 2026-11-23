@@ -747,3 +747,9 @@ mods below and above. Record headers only, bounded in time; no xEdit.
 **Moving** is by dragging a row (a folded separator with its mods) or "Move to priority…"; a place is always
 "directly before" an entry of MO2's list, or last.
 
+**A file dropped on the list (MT57).** Over the rows of Modlist › Mods a dragged file shows the line of a place;
+let go, the page runs the install itself with the dropped archives alone and that place (taken in, unpacked, read,
+installed, checked), in a box on the Modlist page, and hands over to the Installer tool, with the place, where an
+installer asks questions or something the mod needs is missing. Every list keeps its place when it is shown again
+(WHY§122).
+
