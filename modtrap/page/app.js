@@ -272,8 +272,8 @@ const SETTING_TEXT = [
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
   ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
   ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updates tab). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
-  ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing."],
-  ["site_window_closes", "Let ModTrap close the site's page itself, which brings you back here", "On: when the file is here, or the waiting ends, ModTrap closes the tab or window it opened, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
+  ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
+  ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
   ["updates_go", "Add a newer file without asking, when its plan leaves nothing to you", "One press on a mod's update button then goes all the way: the file is fetched (or taken from your Downloads folder once you have pressed download on the site), unpacked, and added as the mod's newer version, with the older one disabled. ModTrap still stops and shows the plan when the archive has an installer with questions, when something the mod needs is missing, or when more than this one mod is on the Add mods list. Revert undoes it. Off: the newer file waits on the Add mods tab for “Add it for me”."],
   ["mo2_leave_alone", "When a tool's compiler crashes inside MO2, have MO2 leave the compiler alone", "MO2 hooks every program a tool starts, so that it sees the modlist's files. Synthesis starts the C# compiler to build its patchers; the compiler reads nothing of the modlist, and on some PCs it crashes when hooked. MO2 has its own list of programs it leaves alone (Settings, Workarounds, Executables Blacklist). On: when Synthesis's own log shows the compiler crashing, ModTrap adds the compiler (csc.exe and VBCSCompiler.dll) to that list in MO2's settings file, with MO2 closed and a copy of the file kept with the session, and the row of tools starts Synthesis once more. Off: ModTrap only says so."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
@@ -460,7 +460,7 @@ async function modMenu(ev, mod) {
     m && m.kind === "mod" ? { text: "Manual update…", note: "For a file you downloaded yourself, from any site: it goes to Add mods as a newer version of this mod", off: !state.changes, run: () => manualUpdate(mod) } : undefined,
     r ? { text: r.fav ? "Remove from favourites" : "Mark as favourite", run: () => setFavourite(mod, !r.fav) } : undefined,
     r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
-    { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => window.open(page, "_blank", "noopener,noreferrer") },
+    { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => openTab(page) },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
@@ -617,9 +617,16 @@ const UP_HOST = { nexus: "Nexus", github: "GitHub", loverslab: "LoversLab", url:
 // here or the waiting ends, which brings the owner back to ModTrap's tab, and asks before its own tab is sent
 // anywhere while such a page is open.
 const SITE_KNOWN = /(^|\.)(nexusmods\.com|github\.com|loverslab\.com)$/i;
+// A new tab for an address, with no tie to ModTrap's tab: by a link pressed for the owner, never by window.open with
+// "noopener" among its features, which Firefox answers with a window of its own instead of a tab (WHY§113).
+function openTab(url) {
+  const a = el("a", { href: url, target: "_blank", rel: "noopener noreferrer", hidden: "hidden" });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
 function siteWindow() {
   const st = state.settings || {};
-  if (!st.site_window && !st.site_window_closes) return null;      // a plain tab, cut loose: opened once the address is known
   try {
     const w = st.site_window
       ? window.open("", "modtrap-site", "popup=yes,width=1040,height=820,left=" + Math.max(0, window.screenX + window.outerWidth - 1080) + ",top=" + Math.max(0, window.screenY + 60))
@@ -655,7 +662,7 @@ function openSite(url, mod, win) {
       return;
     } catch (e) { try { win.close(); } catch (e2) { /* gone */ } }
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  openTab(url);
 }
 // The browser itself opened the mod's page (Ctrl+click, a middle click): ModTrap only starts watching for the file.
 async function watchOnly(mod) {
@@ -675,7 +682,8 @@ async function getUpdate(mod) {
   try { got = await api("/api/updates/get", { mod }); } catch (e) { if (win) win.close(); toast(e.message); return; }
   if (got.open) {
     openSite(got.open, mod, win);
-    toast("Its page is opened: " + got.why + "." + (got.watching ? " Press its download button there: ModTrap watches your Downloads folder and MO2's, and takes the file to Add mods when it is whole." : ""));
+    toast((got.watching ? "Now press the download button on the page that opened (“Start download” at Nexus): ModTrap cannot press it for you. It then watches your Downloads folder, takes the file to Add mods when it is whole"
+      + ((state.settings || {}).site_window_closes ? ", and closes that page." : ".") + " " : "") + "Why a page: " + got.why + ".");
     state.upSig = "";
     loadUpdates();
     return;
@@ -973,7 +981,10 @@ function renderUpdates(listOnly) {
       const stop = el("button", { type: "button", class: "upget unsure", text: "×", "aria-label": "Stop waiting for the download of " + r.mod,
         title: "ModTrap is waiting for the download you start on the mod's page (" + waits.minutes + " more minutes)" + (waits.saw ? ": " + waits.saw : "; nothing new has come into the watched folders yet") + ". Press to stop waiting." });
       stop.addEventListener("click", async (ev) => { ev.stopPropagation(); closeSiteWindow(r.mod); try { await api("/api/updates/wait", { mod: r.mod }); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); });
-      return el("span", {}, el("span", { class: "spinner small", "aria-hidden": "true" }), stop, el("div", { class: "dim small upsaw", text: waits.saw ? "coming in…" : "waiting for your press on the site" }));
+      const pct = /(\d+)%/.exec(waits.saw || ""), size = /\(([^()]+)\)/.exec(waits.saw || "");
+      return el("span", {}, el("span", { class: "spinner small", "aria-hidden": "true" }), stop,
+        el("div", { class: "small upsaw" + (waits.saw ? " upcoming" : " dim"), text: waits.saw ? "downloading" + (pct ? " " + pct[1] + "%" : size ? " · " + size[1] : "…")
+          : r.host === "nexus" ? "press “Start download” on Nexus's page" : "press download on the site's page" }));
     }
     const known = r.state === "update" || r.state === "maybe";
     const title = (sure ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") : known ? "Unclear whether a newer file is out: look at the mod's files" : "This site cannot be asked for versions: look at the mod's page yourself") + ". "

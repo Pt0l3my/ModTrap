@@ -105,7 +105,7 @@ SETTINGS = {
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
     "site_window": False,      # a site's page for a download opens in a small window of its own, not a tab (MT46, MT47)
-    "site_window_closes": False,   # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT46, WHY§111)
+    "site_window_closes": True,    # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT48, WHY§111)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",

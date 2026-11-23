@@ -984,6 +984,19 @@ class TheDownloadsOwnName(unittest.TestCase):
         self.assertEqual([(n, m) for n, m, _v, _ in self.staged], [("renamed.zip", "Quill")])
         self.assertEqual(list(self.up.waiting), ["Reed"])
 
+    def test_a_download_in_progress_is_told_with_how_far_it_is(self):
+        """WHY§113: what is being written is shown while it comes, by the file's own size, not the folder's listing."""
+        v = dict(self.verdict(), size=1000)
+        self.up._expect(self.row, v)
+        fx.write(self.browser / "anything.zip.part", b"x" * 400)
+        self.looks(1)
+        saw = self.up.waiting["Quill"]["saw"]
+        self.assertIn("a download is being written in your browser's Downloads folder", saw)
+        self.assertIn("40%", saw)
+        self.assertEqual(self.staged, [])
+        account = {m: w.get("saw") for m, w in self.up.waiting.items()}
+        self.assertEqual(list(account), ["Quill"])
+
     def test_one_mod_waited_for_takes_an_archive_named_as_its_file_is_on_the_page(self):
         self.up._expect(self.row, self.verdict())
         data = a_zip({"readme.txt": b"x"})

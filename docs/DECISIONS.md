@@ -40,6 +40,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT46 (a "Manual update" box and favourites in a mod's menu, a Favourites filter; a site's page for a download in a
   small window of its own, so that ModTrap's tab stays).
   MT47 (the owner's correction: a site's page opens as a tab, not a window; the download is taken whatever its name).
+  MT48 (ModTrap closes the download's tab when the download is here; still a window in the owner's browser, mended).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1028,3 +1029,23 @@ add a setting to open as new tab, but stay on ModTrap tab, don't switch to Nexus
   the press, whatever its name, and an archive is known by its first bytes, with or without an ending to its name.
 - **The watch runs by itself**, not only while ModTrap's tab is looked at, and writes to the log every file that
   came after the press and what it made of it.
+
+## MT48
+
+**The download's tab is closed when the download is here** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "still not downloading the file, also still opens new browser window instead of a tab. Once you
+fixed those, can you also make ModTrap to close the download page browser tab after the download is completed?"
+
+**Settled** (WHY§113; the owner may overrule any of it):
+
+- **Closing the tab.** The setting of MT46 and MT47 by which ModTrap closes the site's page is now on as ModTrap
+  comes, at the owner's asking: when the file is whole and taken to Add mods, or the waiting ends, ModTrap closes
+  the tab it opened and the browser returns to ModTrap. What it costs is unchanged and said with the setting: the
+  site's page stays tied to ModTrap's tab; it is done only for Nexus, GitHub and LoversLab; the browser asks before
+  ModTrap's tab goes anywhere while such a page is open. A tab the browser opened itself (Ctrl or the middle
+  button) cannot be closed by ModTrap.
+- **A tab, in the owner's browser too.** ModTrap no longer opens a page in the way the owner's browser answers
+  with a window.
+- **The press on the site stays the owner's**, and ModTrap now says so in as many words: on the row, "press
+  “Start download” on Nexus's page", and while the file comes, how far it is.

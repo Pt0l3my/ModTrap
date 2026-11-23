@@ -678,3 +678,7 @@ the small window is a setting, off. The update button is a real link: with Ctrl 
 opens the page behind ModTrap's tab and ModTrap only watches. Nexus's page is opened for a download by the browser
 itself, not by a mod manager. The watch runs by itself while a download is waited for, knows an archive by its first
 bytes and a download by its size to the byte, asked at the press, and tells the log of every file that came.
+
+**Closing the tab (MT48, WHY§113).** ModTrap closes the tab it opened for a download when the file is whole and
+taken, or the waiting ends (a setting, on; only for Nexus, GitHub and LoversLab). While a file is being written, the
+row says how far it is; before that, that the press on the site's download button is the owner's.

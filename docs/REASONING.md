@@ -135,6 +135,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 110 | 2026-11-22 | A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name | FACT | #updates #network |
 | 111 | 2026-11-22 | A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting | DECIDED | #updates #page #safety |
 | 112 | 2026-11-23 | The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again | DECIDED | #updates #page #network |
+| 113 | 2026-11-23 | Still a window in the owner's browser, and nothing told of a download in progress: Firefox answers window.open with “noopener” among its features with a window; a folder's listing on Windows gives a file being written no size | LIKELY | #updates #page #windows |
 
 ## Entries
 
@@ -2906,3 +2907,36 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   a tab that sees no opener; the nameless file is taken to Add mods as the mod's newer version; a middle click
   is left to the browser and starts the watch; with the tie kept, ModTrap closes the tab when the file arrives.
   Not checked: a real download from Nexus on the owner's PC, and under which name the browser saves it.
+
+### 113. Still a window in the owner's browser, and nothing told of a download in progress: Firefox answers window.open with “noopener” among its features with a window; a folder's listing on Windows gives a file being written no size
+
+`2026-11-23` · LIKELY · `#updates #page #windows` · refs: MT48, MT47, WHY§111, WHY§112
+
+- The owner's session file at 0.3.40. FACT: at the press the log says the download is known by the mod's number,
+  its size to the byte and the time of its upload, and that the browser's folder is there. No file is told of in
+  the 107 seconds until the session was packed. The owner's picture, taken in that time, shows Nexus's page with
+  its "Start download" button not yet pressed, in a window of its own with next to no furniture.
+- So two things are open and cannot be told apart from here: the button on the site was not pressed, or it was
+  and the download had not ended when the session was packed (a file of that size takes a minute or two).
+- LIKELY, from what is commonly told of Windows' file system and not checked on Windows from here: what a folder's listing says of a
+  file lags on Windows while the file is being written; its size reads as nothing until the writing ends. The
+  watch took a file's size and time from the listing, so a download in progress was not told of, on the page or
+  in the log, and the row went on saying that ModTrap waited for the press. Each file that came after the press
+  is now asked of itself. A file counts as having come after the press by when it was made or last written,
+  whichever is later, where the system keeps the time of making.
+- The row now says what to do ("press “Start download” on Nexus's page") and, once a file is being written, how
+  far it is, against the size the site gave. The log gets a line every half minute while the watch waits: how
+  many files came since the press and how far the one being written is; so the next session file tells which of
+  the two it was.
+- LIKELY, from the owner's picture and not checked in Firefox from here: Firefox answers `window.open` that has
+  "noopener" among its features with a window of its own, where Chromium opens a tab. With the window of MT46
+  switched off, ModTrap still opened the page that way. A tab with no tie is now opened by a link with
+  `rel="noopener noreferrer"` pressed for the owner, and the tab for a download by `window.open` with no features
+  at all, at the press itself, cut loose or tied afterwards (WHY§111). Nowhere is "noopener" given as a feature.
+- DECIDED (MT48): closing the site's page is on as ModTrap comes, because the owner asked for it; the reasons it
+  was off (WHY§111) stand and are said with the setting.
+- Not done, and the owner's to decide: reading the browser's own settings for where it saves downloads. Where
+  the browser saves elsewhere than Windows' Downloads folder, the owner names the folder on the Updates tab.
+- Checked: tests (a download in progress is told with how far it is), and in Chromium against a stand-in: a
+  plain press opens a tab, the row says to press, then "downloading 27%", then the tab is closed by ModTrap and
+  Add mods holds the file; "Open its page" opens a tab that sees no opener. Not checked: Firefox, Windows.

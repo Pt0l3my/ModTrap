@@ -24,6 +24,19 @@ PREFS = "update-prefs.json"          # the folder the owner's browser saves down
 WAIT_SECONDS = 45 * 60               # how long ModTrap waits for a download the owner started in the browser
 LOOK_EVERY = 2.0                     # seconds between two looks into the watched folders
 NEXUS_NAME = re.compile(r"-(\d+)-.*-(\d{9,11})\.(?:zip|7z|rar)$", re.IGNORECASE)   # a Nexus download's name: mod's number … time of upload
+STILL_EVERY = 30.0       # seconds between two lines in the log that say the watch still waits
+
+
+def _when(st) -> float:
+    """When a file came to be or was last written, whichever is later: a download may carry an older time of
+    writing (one the site gave, or its own from before it was moved into the folder), but it was made after the
+    press. The time of making is asked only where the system keeps one."""
+    born = getattr(st, "st_birthtime", None)
+    if born is None and os.name == "nt":
+        born = st.st_ctime                       # on Windows, the time the file was made
+    return max(st.st_mtime, born or 0.0)
+
+
 MAGIC = ((b"PK\x03\x04", ".zip"), (b"PK\x05\x06", ".zip"), (b"7z\xbc\xaf\x27\x1c", ".7z"), (b"Rar!\x1a\x07", ".rar"))    # an archive's first bytes
 PARTIAL = (".crdownload", ".part", ".partial", ".tmp", ".download", ".unfinished", ".opdownload")
 LIST_MAX = 2 * 1024 * 1024 * 1024    # the bytes of a dropped list, at most
@@ -57,6 +70,7 @@ class Updating:
         self.by_itself = True                      # the watch looks by itself; off in tests that count the looks
         self._look_lock = threading.Lock()
         self._told: set[tuple[str, str]] = set()   # what the log has been told of a file already
+        self._said = 0.0                           # when the log was last told that the watch still waits
 
     # --- the Wabbajack file of a modlist ---------------------------------------------------------------------------
     def _places(self) -> dict:
@@ -366,6 +380,7 @@ class Updating:
                                     "game": row.get("game") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
                                     "installed": list(row.get("files") or []), "url": row.get("url") or "", "saw": ""}
         w = self.waiting[row["mod"]]
+        self._said = time.time()
         browser = self.downloads_folder()
         # Said without the folder's own path, which holds the owner's name on the PC.
         log.info("waiting for the download of “%s”: known by %s; your browser's folder for downloads is %s, MO2's own is watched too",
@@ -431,6 +446,11 @@ class Updating:
         sizes: dict[str, int] = {}
         found: list[tuple[str, Path, str, str]] = []                                 # (mod, file, where, the name to unpack it by)
         writing = ""                                                                 # what is being written now, for the page
+        came = {"new": 0, "partial": 0, "bytes": 0}                                  # what came since the press, for the log
+        one = next(iter(self.waiting.values())) if len(self.waiting) == 1 else None
+
+        def of_whole(n: int) -> str:
+            return "%s of %s, %d%%" % (mb(n), mb(one["size"]), min(99, 100 * n // one["size"])) if one and one.get("size") else "%s so far" % mb(n)
         for where, folder in (("MO2's downloads folder", model.instance.downloads_dir), ("your browser's Downloads folder", self.downloads_folder())):
             if folder is None:
                 continue
@@ -446,21 +466,25 @@ class Updating:
                 if low.endswith((".meta", ".ini", ".lnk")) or mo2 and not updates.ARCHIVE.search(e.name) and not low.endswith(PARTIAL):
                     continue
                 try:
-                    st = e.stat()
+                    if _when(e.stat()) < first - 5:
+                        continue                                # there before the press
+                    # Asked of the file itself: what a folder's listing says of a file that is being written lags
+                    # on Windows, where its size reads as nothing until the writing ends (WHY§113).
+                    st = os.stat(e.path)
                 except OSError:
                     continue
-                if st.st_mtime < first - 5:
-                    continue                                    # there before the press
+                came["new"] += 1
                 if low.endswith(PARTIAL):
-                    if st.st_size > 0:
-                        writing = "a download is being written in %s (%s so far)" % (where, mb(st.st_size))
-                        self._tell(e.path, "partial", "in %s a download is being written: “%s”", where, e.name)
+                    came["partial"] += 1
+                    came["bytes"] = max(came["bytes"], st.st_size)
+                    writing = "a download is being written in %s (%s)" % (where, of_whole(st.st_size))
+                    self._tell(e.path, "partial", "in %s a download is being written: “%s”", where, e.name)
                     continue
                 if st.st_size <= 0:
                     continue                                    # the empty file a browser puts down first
                 sizes[e.path] = st.st_size
                 if self._sizes.get(e.path) != st.st_size:
-                    writing = writing or "a new file is being written in %s (%s so far)" % (where, mb(st.st_size))
+                    writing = writing or "a new file is being written in %s (%s)" % (where, of_whole(st.st_size))
                     continue                                    # seen first now, or still growing: next look
                 try:
                     with open(e.path, "rb") as f:
@@ -480,7 +504,7 @@ class Updating:
                 marked = next((m for m in marked if m), None)
                 named = NEXUS_NAME.search(plain(as_name))            # "…-<mod's number>-<version>-<time of upload>.7z"
                 for mod, w in self.waiting.items():
-                    if st.st_mtime < w["since"] - 5:
+                    if _when(st) < w["since"] - 5:
                         continue
                     if meta.get("mod_id") and w["mod_id"]:
                         # MO2's own record beside the archive: the mod's and the file's number.
@@ -510,7 +534,7 @@ class Updating:
                     # one mod waited for where its size is not known to differ and its name begins as the file's
                     # name on its page does, or as the installed archive's, or tells nothing at all (a storage
                     # code, a site that gives no name); never while several are waited for.
-                    alike = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and w["archive"] and not w["size"]
+                    alike = [mod for mod, w in self.waiting.items() if _when(st) >= w["since"] - 5 and w["archive"] and not w["size"]
                              and shape(w["archive"]) == shape(plain(as_name))]
                     if len(alike) == 1:
                         mine, how = alike[0], "its name, shaped as the installed archive's"
@@ -519,7 +543,7 @@ class Updating:
                         lead = letters(as_name[:-len(kind)] if kind and as_name.endswith(kind) else as_name)
                         starts = [letters(x)[:12] for x in (w.get("label") or "", re.sub(r"-\d+.*$", "", w["archive"])) if len(letters(x)) >= 4]
                         nameless = not w["name"] and (not w["mod_id"] or not re.search(r"[g-z]", re.sub(r"\.\w+$", "", low)))    # a code of hex digits says nothing
-                        if st.st_mtime >= w["since"] - 5 and not w["size"] and (nameless or any(lead.startswith(x) for x in starts)):
+                        if _when(st) >= w["since"] - 5 and not w["size"] and (nameless or any(lead.startswith(x) for x in starts)):
                             mine, how = mod, "being the one archive that came while only this mod was waited for"
                 if mine is None:
                     self._tell(e.path, "nobody", "in %s a new archive fits no download waited for and is left alone: “%s”, %s bytes%s", where, e.name, format(st.st_size, ","),
@@ -531,6 +555,12 @@ class Updating:
         self._sizes = sizes
         for w in self.waiting.values():
             w["saw"] = writing
+        if now - self._said > STILL_EVERY:
+            # A line now and then while nothing is taken, so that the log tells afterwards what the watch saw.
+            self._said = now
+            log.info("still waiting for %s, %d s after the press: %d file(s) came into the watched folders since, %d of them being written%s",
+                     ", ".join("“%s”" % m for m in self.waiting), int(now - first), came["new"], came["partial"],
+                     " (%s)" % of_whole(came["bytes"]) if came["partial"] else "; no download has begun" if not came["new"] else "")
         for mod, path, where, as_name in found:
             w = self.waiting.pop(mod)
             try:
