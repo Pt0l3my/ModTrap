@@ -28,7 +28,11 @@ the new plugin takes from other plugins, and start the modlist's tools through M
 Putting the mod into MO2 for you ("Add it for me", with "Take it out again") is built but switched off: it exists
 only when ModTrap is started with `--allow-changes`, and that is meant for once it has been proven on a real modlist.
 
-To try it (Windows, Python 3.10 or newer): download this repository, then double-click `ModTrap.cmd`, or run
+To try it on Windows from the package (`ModTrap-<version>-win64.zip`, built by `tools/build_exe.py`): unpack it and
+start `ModTrap.exe`; `ModTrap (changes allowed).exe` starts it with `--allow-changes`. It runs on the Python
+installed on the PC (3.10 or newer), or on its own where the package was built with Python inside.
+
+To try it from this repository (Windows, Python 3.10 or newer): download it, then double-click `ModTrap.cmd`, or run
 
 ```
 python -m modtrap

@@ -41,7 +41,21 @@ of them is copied: ModTrap keeps only names, marks and facts, as data and notes.
 3. Dependencies
 ---------------
 
-None. The plan is the Python standard library only.
+None. ModTrap is written against the Python standard library only.
+
+3a. What the package for Windows contains beside ModTrap
+---------------------------------------------------------
+
+The package for Windows (tools/build_exe.py; never in this repository) holds ModTrap's own launcher and, where it
+is built with Python inside, so that nothing needs installing:
+
+- CPython for Windows (Python Software Foundation License Version 2), as the Python Software Foundation publishes
+  it on NuGet, in the package's "python" folder with its LICENSE.txt, which also names the licences of what CPython
+  itself builds on (OpenSSL, SQLite, libffi, bzip2, liblzma, expat and others). Nothing in it is changed; the parts
+  ModTrap never uses are left out (pip and its installer, the C headers and libraries, venv's and the tests'
+  files), and one file is added, python313._pth, which tells that Python where its library and ModTrap lie.
+- ModTrap's own launcher (tools/exe/launcher.c, our code, MIT), built with the MinGW-w64 cross compiler; the
+  compiler's runtime start-up code that ends up in the program is under MinGW-w64's own permissive licences.
 
 4. Mods
 -------

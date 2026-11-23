@@ -395,3 +395,11 @@ table.updates .c-get { width: 34px; padding-left: 0; padding-right: 4px; }
 a.upget { display: inline-block; box-sizing: border-box; text-decoration: none; text-align: center; cursor: pointer; line-height: 24px; }
 .upsaw { white-space: nowrap; }
 .upcoming { color: var(--good); }
+.uprun { margin-bottom: 16px; }
+.uprun.s-yours { border-color: var(--accent); }
+.uprun.s-failed { border-color: var(--bad); }
+.uprun-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.uprun-head b { font-size: 15px; }
+.uprun .stage-head b { font-weight: 650; font-size: 15px; }
+.uprun .flow { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px 34px; }
+tr.dimrow td { color: var(--dim); }

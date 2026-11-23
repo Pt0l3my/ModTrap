@@ -19,7 +19,7 @@ import tempfile
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import process, updating, version
+from . import downloads, process, updater, updating, version
 from .server import Bad
 
 
@@ -106,10 +106,11 @@ SETTINGS = {
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
     "site_window": False,      # a site's page for a download opens in a small window of its own, not a tab (MT46, MT47)
     "site_window_closes": True,    # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT48, WHY§111)
+    "downloads_move": True,    # a mod's download in the browser's folder is moved into ModTrap's own downloads folder, not copied (MT50)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
-                                "/api/demaster/install", "/api/add/run", "/api/probe/start"))
+                                "/api/demaster/install", "/api/add/run", "/api/probe/start", "/api/updater/start"))
 
 
 class Api:
@@ -128,6 +129,7 @@ class Api:
         self._making_tools = 0                        # readings of what the tools made that are going (WHY§92)
         self._scanning = 0                            # looks through the modlist's settings files that are going (WHY§98)
         self.updating = updating.Updating(VERSION)    # the update check (MT37): reads and asks, changes nothing
+        self.updater = updater.Updater(self)          # the Updater (MT50): one press takes a mod to its newer version
         self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
         self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
@@ -448,9 +450,33 @@ class Api:
         threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
         return self._staged_public(rec)
 
+    def updater_do(self, what: str, body: dict) -> dict:
+        """The Updater's presses (MT50), and the naming of ModTrap's downloads folder."""
+        text = lambda k, n=300: body.get(k) if isinstance(body.get(k), str) and len(body.get(k)) <= n else ""
+        try:
+            if what == "updater/start":
+                if not text("mod"):
+                    raise Bad("which mod?")
+                log.info("%s %s is asked for: update of a mod", NAME, VERSION)
+                return self.updater.start(text("mod"), text("staged", 40))
+            if what == "updater/stop":
+                return self.updater.stop(text("run", 40))
+            if what == "updater/reopen":
+                return self.updater.reopen(text("run", 40))
+            if what == "updater/revert":
+                return self.updater.revert(text("run", 40))
+            if what == "updater/clear":
+                return self.updater.clear()
+            if what == "downloads/folder":
+                return {"folder": str(downloads.set_folder(text("path", 1000)))}
+        except (updater.Bad, downloads.Bad, updating.Bad) as e:
+            raise Bad(str(e)) from None
+        raise Bad("that is not something the Updater does")
+
     def updates_state(self) -> dict:
+        # A download the watch finds goes to the update that waits for it; with none waiting, to Install mods.
         return self.updating.account(self._need(), *self._updates_for(),
-                                     stage=self.stage_where_it_lies if self.changes is not None and self.session is not None else None)
+                                     stage=self.updater.arrived if self.changes is not None and self.session is not None else None)
 
     def updates_upload(self, query: dict, length: int, stream) -> dict:
         """The list of a dropped Wabbajack file, as its bytes (WHY§103)."""
@@ -498,7 +524,7 @@ class Api:
                 else:
                     only_open = False
                 return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open,
-                                         in_place=self.stage_where_it_lies if self.session is not None else None)
+                                         in_place=self.updater.arrived if self.session is not None else None)
             if what == "folder":
                 path = body.get("path", "")
                 if not isinstance(path, str) or len(path) > 1000:
@@ -1867,6 +1893,12 @@ class Api:
             return 200, self.scanner()
         if path == "/api/updates":
             return 200, self.updates_state()
+        if path == "/api/updater":
+            return 200, self.updater.state()
+        if path == "/api/downloads":
+            m = self.model
+            return 200, {"rows": downloads.rows(self._updates_for()[0] if m is not None else "", m.instance.downloads_dir if m is not None else None),
+                         "folder": str(downloads.folder()), "own": downloads.folder() == paths.home() / "downloads"}
         if path == "/api/history":
             return 200, self.history_events()
         if path == "/api/log":
@@ -1891,6 +1923,8 @@ class Api:
             return 200, self.settings_set(body), None
         if path.startswith("/api/updates/"):
             return 200, self.updates_do(path[len("/api/updates/"):], body), None
+        if path.startswith("/api/updater/") or path == "/api/downloads/folder":
+            return 200, self.updater_do(path[len("/api/"):], body), None
         if path in NEEDS_SAME_VERSION:
             log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":

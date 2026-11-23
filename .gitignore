@@ -14,3 +14,7 @@ __pycache__/
 
 # wp's section index (tools/workplan): generated
 tools/workplan/data/
+
+# The package for Windows (tools/build_exe.py): built, never committed
+dist/
+build/
