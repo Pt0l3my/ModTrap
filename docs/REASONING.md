@@ -156,6 +156,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 131 | 2026-11-23 | A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing | DECIDED | #page #launcher #safety |
 | 132 | 2026-11-23 | An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it | METHOD | #page #safety #model |
 | 133 | 2026-11-23 | A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes | METHOD | #adding #page #updates |
+| 134 | 2026-11-23 | On the owner's list nearly every "same plugin twice" was a patch; a double is a title, and what is said of it depends on whether it is in the game | FACT | #model #page |
 
 ## Entries
 
@@ -3624,3 +3625,28 @@ them; the addresses were read by a session that can), and the time the second pa
   of the web opened (rows below, a second column to the right), no boxes overlapping, folded again. **Not
   checked:** the Updater's question against a live update (it needs the sites), and a side of several hundred
   boxes for how it reads.
+
+### 134. On the owner's list nearly every "same plugin twice" was a patch; a double is a title, and what is said of it depends on whether it is in the game
+
+`2026-11-23` · FACT · `#model #page` · refs: MT68, MT65, DESIGN§25, WHY§130
+
+- FACT (the owner's session file at 0.3.57 and their screenshot): the look at opening gave 132 findings on a list
+  of 3,579 mods: 129 "worth a look", nearly all "a plugin of the same name in two enabled mods", where the winner
+  was a patch, a fix or the list author's own version of the mod. A list of 129 warnings that are all as intended
+  hides the one that is not.
+- FACT (same): the one "likely fault" was one file installed as two mods of different names, each a part of it:
+  intended. And an older version left disabled beside the newer one was told with the same words as a fault.
+- So a double is no longer "the same file" or "the same plugin's name" but the same title, compared whole. What
+  is said depends on what is in the game: nothing of a disabled older version is (obsolete, a note); nothing of
+  an enabled mod wholly inside its newer version is (redundant, a note); files of two enabled versions that do
+  not cover each other are (worth a look).
+- "Wholly inside" is looked at for the pair alone: the lower mod's files are listed and the higher mod is asked
+  for each. That is a few pairs on a list, not a listing of every mod.
+- Two mods from the same file with different titles are compared as well, but only told where the lower is
+  disabled and older, or wholly inside the higher: a part of a file installed on its own is neither.
+- FACT (same log): the look took 32 to 35 seconds at the first opening and ran twice at once, once from the
+  opening and once from the page asking; the second opening took 1.5 seconds. The time went into reading every
+  mod's own record from a cold disk and listing every mod's script extender folder. The folders are no longer
+  listed, the look runs in a thread of its own, once for a modlist as read, and the page is told "looking".
+- FACT (same log): ModTrap's own update from 0.3.54 over 0.3.55 to 0.3.57 worked on the owner's PC, and a mod's
+  picture was fetched from its site there (the first time either ran outside this session's stand-ins).

@@ -320,9 +320,9 @@ def shared(m: model.Model, mod: Mod, mine: list[str], stop: float) -> tuple[list
                         by[(kind, wins)].append("   %s: the winning file is much smaller (%s bytes against %s): fewer bones, most likely" % (f, format(win, ","), format(lose, ",")))
 
     WORDS = {
-        "plugin": ("bad", "A plugin of the same name", "the whole plugin is replaced: every plugin that names it as a master gets the winner's instead. Right only where one mod is a "
-                   "newer version of the other, or made to replace its plugin"),
-        "script extender plugin": ("bad", "The same script extender plugin twice", "only the winner's is loaded. Two copies mostly mean the same mod twice, in two versions"),
+        "plugin": ("warn", "A plugin of the same name", "the whole plugin is replaced: every plugin that names it as a master gets the winner's instead. Right only where one mod is a "
+                   "newer version of the other, or a patch made to replace its plugin, as modlists' authors often make them"),
+        "script extender plugin": ("warn", "The same script extender plugin twice", "only the winner's is loaded. Two copies mostly mean the same mod twice, in two versions, or a mod and a fix that replaces its plugin"),
         "skeleton": ("warn", "A skeleton is replaced", "every animation and every physics mod counts on the bones of the skeleton that wins. One with fewer bones crashes the game when a "
                      "character loads; the skeleton with the most bones should be the last"),
         "scripts": ("warn", "Compiled scripts are replaced", "only the winner's script runs, and each mod was made for its own. Right where the winner is a patch for the other or "
@@ -368,7 +368,7 @@ def mod(m: model.Model, target: Mod, seconds: float = SECONDS, duplicates: list[
     out["files"] = len(mine)
     findings: list[dict] = []
     for d in duplicates or []:
-        findings.append(_finding("duplicate", "bad" if d.get("enabled") and target.enabled else "warn", "The same mod is in the modlist already",
+        findings.append(_finding("duplicate", "warn" if d.get("enabled") and target.enabled else "info", "The same mod is in the modlist already",
                                  "“%s” (%s%s, priority %d) is the same mod%s. This one is %s. Two copies of a mod overwrite each other file for file; where their plugins "
                                  "have the same name only one is loaded. Keep the newer one."
                                  % (d["mod"], "version %s, " % d["version"] if d.get("version") else "", "enabled" if d.get("enabled") else "disabled", d.get("priority", 0),

@@ -102,10 +102,10 @@ class AModWeighed(unittest.TestCase):
         self.assertEqual(f["shared:scripts:wins"]["level"], "warn")
         self.assertEqual(f["shared:scripts:wins"]["items"], ["“Quill”: 1 file (scripts/quillscript.pex)"])
         plug = f["shared:plugin:wins"]
-        self.assertEqual(plug["level"], "bad")
+        self.assertEqual(plug["level"], "warn")
         self.assertIn("   Shared.esp: this mod's has the masters Core.esm, Quill.esp; “Quill”'s has Core.esm", plug["items"])
         self.assertTrue(any("the winning file is much smaller" in x for x in f["shared:skeleton:wins"]["items"]))
-        self.assertEqual(f["shared:script extender plugin:wins"]["level"], "bad")
+        self.assertEqual(f["shared:script extender plugin:wins"]["level"], "warn")
         # A colour picture from this mod over a mod that has the surface picture too: a set from two mods, and smaller.
         self.assertTrue(any("textures/set/wall.dds (colour from this mod, surface from “Quill”)" == x for x in f["mixed-textures"]["items"]))
         self.assertTrue(any("1024×1024 in place of 4096×4096" in x for x in f["smaller-textures"]["items"]))
@@ -124,11 +124,10 @@ class AModWeighed(unittest.TestCase):
         self.assertEqual([e["how"] for e in dupes.same_as(self.m, rows, "Quill (2).zip")], ["it has the name this file gives its mod"])
         self.assertEqual((dupes.newer("1.10", "1.9"), dupes.newer("2.0", "2.0.0"), dupes.newer("", "1")), (1, 0, 0))
         quick = {f["key"]: f for f in dupes.quick(self.m, rows)}
-        self.assertEqual((quick["duplicate"]["level"], quick["duplicate"]["mods"]), ("bad", ["Newcomer (2)", "Newcomer"]))
-        self.assertIn("in different versions", quick["duplicate"]["text"])
-        self.assertEqual(quick["plugin-twice"]["mods"], ["Newcomer", "Quill"])
-        self.assertEqual(quick["extender-twice"]["mods"], ["Quill", "Newcomer"])
-        self.assertNotIn("copy-name", quick)                              # the pair is told once, as the same mod
+        # The same title, both enabled, and the higher one does not hold the lower one's file: twice in the game.
+        self.assertEqual((sorted(quick), quick["twice"]["level"], quick["twice"]["mods"]), (["twice"], "warn", ["Newcomer (2)", "Newcomer"]))
+        self.assertIn("1 of the lower one's 1 files are not in the higher one", quick["twice"]["items"][0])
+        # A plugin of the same name in two enabled mods (Newcomer's Shared.esp over Quill's) is what a patch does: no word of it.
 
     def test_the_whole_list_mods_that_do_nothing_and_old_formats(self):
         seen = []
@@ -175,6 +174,60 @@ class AModsName(unittest.TestCase):
             self.assertEqual(adding.info_version(Path(d) / "Fomod"), "")
 
 
+class ObsoleteAndRedundant(unittest.TestCase):
+    """MT68: what counts as the same mod, and what is said of it."""
+
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        nexus = lambda number, version, archive: meta(gameName="SkyrimSE", modid=number, version=version, installationFile=archive).encode()     # noqa: E731
+        root = Path(self.tmp.name) / "Example List"
+        fx.make_instance(root, [
+            ("+", "Lantern (2.0b)", {"Lantern.esp": pf((CORE,)), "meta.ini": nexus(900, "2.0b", "Lantern-900-2-0b-1800000000.7z")}),
+            ("-", "Lantern", {"Lantern.esp": pf((CORE,)), "meta.ini": nexus(900, "1.9", "Lantern-900-1-9-1700000000.7z")}),          # obsolete: disabled, newer one enabled
+            ("+", "Moss 2.0", {"textures/m/a.dds": b"2", "textures/m/b.dds": b"2", "textures/m/c.dds": b"2"}),
+            ("+", "Moss", {"textures/m/a.dds": b"1", "textures/m/b.dds": b"1", "readme.txt": b"about"}),                               # redundant: wholly inside its newer version
+            ("+", "Kit - AIO - Overwrite", {"meshes/kit/over.nif": b"o", "meta.ini": nexus(555, "1.0", "Kit All In One-555-1-0-1700000000.7z")}),
+            ("+", "Kit - AIO", {"meshes/kit/base.nif": b"b", "Kit.esp": pf((CORE,)), "meta.ini": nexus(555, "1.0", "Kit All In One-555-1-0-1700000000.7z")}),   # one file, two mods: left alone
+            ("+", "Quill - Fixes", {"Quill.esp": pf((CORE,))}),                                                                         # a patch that replaces the plugin: left alone
+            ("+", "Quill", {"Quill.esp": pf((CORE,)), "textures/q/a.dds": b"q"}),
+            ("+", "Quill AE", {"textures/q/a.dds": b"q"}),                                                                              # another title that holds the same words
+            ("-", "Beacon (2)", {"Beacon.esp": pf((CORE,))}),
+            ("-", "Beacon", {"Beacon.esp": pf((CORE,))}),                                                                               # both disabled: nothing of them is in the game
+            ("+", "Thistle (2)", {"textures/t/new.dds": b"n"}),
+            ("+", "Thistle", {"textures/t/old.dds": b"o", "textures/t/new.dds": b"o"}),                                                 # twice in the game
+            ("+", "Core", {CORE: pf(())}),
+        ], load_order=[CORE, "Quill.esp", "Kit.esp", "Lantern.esp"])
+        self.m = model.build(instance.load(root))
+        from modtrap import sources
+        self.rows = [dict(sources.mod_meta(x.folder), mod=x.name, enabled=x.enabled, host="nexus" if sources.mod_meta(x.folder).get("mod_id") else "")
+                     for x in self.m.instance.mods if x.kind == "mod"]
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def test_titles_are_the_same_only_when_they_are_and_not_when_one_holds_the_other(self):
+        same = lambda a, b: dupes.base_title(a) == dupes.base_title(b)          # noqa: E731
+        self.assertTrue(same("Lantern", "Lantern (2.0b)") and same("Lantern 1.9", "Lantern v2.0") and same("Moss", "Moss (2)") and same("Moss", "Moss - Copy"))
+        self.assertFalse(same("Quill", "Quill AE") or same("Quill", "Quill - Fixes") or same("Kit - AIO", "Kit - AIO - Overwrite") or same("Lantern", "Lantern Patch"))
+
+    def test_three_notes_each_a_list_and_patches_left_alone(self):
+        got = {f["key"]: f for f in dupes.quick(self.m, self.rows)}
+        self.assertEqual(sorted(got), ["obsolete", "redundant", "twice"])
+        self.assertEqual((got["obsolete"]["level"], got["obsolete"]["mods"]), ("info", ["Lantern"]))
+        self.assertIn("“Lantern” version 1.9 (disabled, priority", got["obsolete"]["items"][0])
+        self.assertIn("its newer version is “Lantern (2.0b)” version 2.0b (enabled", got["obsolete"]["items"][0])
+        self.assertEqual((got["redundant"]["level"], got["redundant"]["mods"]), ("info", ["Moss"]))
+        self.assertIn("all 2 of its files are in “Moss 2.0”", got["redundant"]["items"][0])           # its read-me is a paper, and does not count
+        self.assertEqual((got["twice"]["level"], got["twice"]["mods"]), ("warn", ["Thistle", "Thistle (2)"]))
+        named = " ".join(n for f in got.values() for n in f["mods"])
+        for left_alone in ("Kit", "Quill", "Beacon"):
+            self.assertNotIn(left_alone, named)
+
+
 class TheScansRoutes(unittest.TestCase):
     def setUp(self):
         logbook.set_console(False)
@@ -189,7 +242,7 @@ class TheScansRoutes(unittest.TestCase):
 
     def tearDown(self):
         for _ in range(400):                              # what was begun when the modlist opened ends before its folder goes
-            if self.api.updating.work["state"] != "going" and self.api.updating.reading["state"] != "going" and self.api._listscan["state"] != "going":
+            if self.api.updating.work["state"] != "going" and self.api.updating.reading["state"] != "going" and self.api._listscan["state"] not in ("going", "looking"):
                 break
             time.sleep(0.01)
         os.environ.pop("MODTRAP_HOME", None)
@@ -198,9 +251,14 @@ class TheScansRoutes(unittest.TestCase):
 
     def test_doubles_are_looked_for_when_the_modlist_opens_and_the_scan_goes_through_every_mod(self):
         st = self.api.get("/api/state", {})[1]
-        self.assertEqual((st["scan"]["bad"], st["scan"]["deep"], st["scan"]["going"]), (1, False, False))
-        first = self.api.get("/api/listscan", {})[1]
-        self.assertEqual((first["deep"], [f["key"] for f in first["quick"]][:1]), (None, ["duplicate"]))
+        self.assertEqual((st["scan"]["deep"], st["scan"]["going"]), (False, False))
+        for _ in range(400):
+            first = self.api.get("/api/listscan", {})[1]
+            if first["state"] != "looking":
+                break
+            time.sleep(0.02)
+        self.assertEqual((first["deep"], [f["key"] for f in first["quick"]]), (None, ["twice"]))
+        self.assertEqual((self.api.get("/api/state", {})[1]["scan"]["found"], self.api.get("/api/state", {})[1]["scan"]["bad"]), (1, 0))
         self.api.post("/api/listscan/start", {})
         for _ in range(400):
             got = self.api.get("/api/listscan", {})[1]
@@ -213,7 +271,7 @@ class TheScansRoutes(unittest.TestCase):
     def test_a_mod_is_weighed_with_its_double_named(self):
         got = self.api.post("/api/mod/evaluate", {"mod": "Newcomer"})[1]
         dup = next(f for f in got["findings"] if f["key"] == "duplicate")
-        self.assertEqual((got["verdict"], dup["level"], dup["items"]), ("problem", "bad", ["Newcomer (2)"]))
+        self.assertEqual((got["verdict"], dup["level"], dup["items"]), ("problem", "warn", ["Newcomer (2)"]))
         self.assertIn("“Newcomer (2)” (version 1.0, enabled, priority", dup["text"])
         self.assertIn("This one is version 2.0", dup["text"])
         with self.assertRaises(api.Bad):

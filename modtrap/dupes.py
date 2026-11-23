@@ -2,9 +2,9 @@
 
 Two looks at a whole modlist, both reading only:
 
-- `quick`, when a modlist is opened: from what is in memory and one listing per mod. The same file of the same mod
-  at Nexus installed twice; a mod whose name is another's with a copy's mark; a plugin of the same name in two
-  enabled mods; the same script extender plugin in two enabled mods.
+- `quick`, when a modlist is opened: from the mods' own records and a look at a few pairs. Obsolete mods (disabled,
+  with a newer version enabled), redundant ones (enabled, wholly inside their newer version), and two copies of
+  one mod both in the game (MT68).
 - `deep`, when the owner asks for a scan: every enabled mod's files are listed once, from the highest priority
   down. A mod whose every file is overwritten does nothing where it stands; a mod most of whose files are in one
   other mod is likely that mod again. Archives of the older game and script extender plugins for another version of
@@ -103,74 +103,89 @@ def _told(e: dict) -> str:
     return "“%s”%s, %s, priority %d" % (e["mod"], " version %s" % e["version"] if e["version"] else "", "enabled" if e["enabled"] else "disabled", e["priority"])
 
 
+def base_title(name: str, version: str = "") -> str:
+    """A mod's title as two mods are compared by it: without a copy's mark and without a version at its end, its
+    letters and digits alone. Two mods are "the same title" only where these are equal: "Lantern" and "Lantern 2.1"
+    are, "Lantern" and "Lantern Patch" are not."""
+    bare = COPY_MARK.sub("", name)
+    return letters(adding.title_of(bare, version))
+
+
+def _inside(lower, higher, seconds: float = 4.0) -> tuple[int, int]:
+    """How many of the lower mod's files the higher mod has too, and how many the lower has: (shared, all).
+    Papers and the mod's own record do not count."""
+    stop = time.monotonic() + seconds
+    files, cut = steps.walk(lower.folder)
+    real = [f for f in files if f.lower() != "meta.ini" and not evaluate.PAPERS.search(f.lower())]
+    if cut or not real:
+        return 0, 0
+    found, cut2 = adding.shared_files(higher.folder, adding._trie(real), stop)
+    return (0, 0) if cut2 else (len(found), len(real))
+
+
 def quick(m: model.Model, rows: list[dict]) -> list[dict]:
-    """What can be told without listing every file."""
-    out: list[dict] = []
-    grouped: set[str] = set()
-    # The same file of the same mod at Nexus, twice.
-    by: dict[tuple, list[dict]] = {}
-    for r in rows:
+    """What can be told from the mods' own records and a look at a few pairs of them (MT68). Three notes, each a
+    list, none of them more than a note unless two copies of one mod are both in the game:
+
+    - obsolete: a disabled mod whose newer version is enabled;
+    - redundant: an enabled mod whose every file is in its own newer version (or its copy), which wins them;
+    - twice: two mods of the same title, both enabled, where the higher does not replace the lower whole.
+
+    Two mods are "the same mod" where their titles are the same (`base_title`), or where both were installed from
+    the same file of the same Nexus page. A patch, a fix or a version of the list's author that carries another
+    mod's name in its own is a different title, and is left alone; so is one file installed as two mods with
+    different names, each holding part of it."""
+    by_row = {r["mod"]: r for r in rows}
+    groups: dict[tuple, list] = {}
+    for x in m.instance.mods:
+        if x.kind != "mod" or x.folder is None:
+            continue
+        r = by_row.get(x.name) or {}
+        version = r.get("version") or adding.version_in(x.name)
+        title = base_title(x.name, r.get("version") or "")
+        if len(title) >= 3:
+            groups.setdefault(("title", title), []).append((x, version, title))
         if r.get("host") == "nexus" and r.get("mod_id") and _stem(r.get("archive") or ""):
-            by.setdefault((r.get("game"), r["mod_id"], _stem(r["archive"])), []).append(r)
-    for (_game, _mod_id, _s), rs in sorted(by.items(), key=lambda kv: fold(kv[1][0]["mod"])):
-        if len(rs) < 2:
-            continue
-        es = sorted((_entry(m, r) for r in rs), key=lambda e: e["priority"])
-        live = sum(e["enabled"] for e in es)
-        grouped.update(e["mod"] for e in es)
-        versions = {e["version"] for e in es if e["version"]}
-        out.append(_finding("duplicate", "bad" if live > 1 else "info", "The same mod %s" % ("twice" if len(es) == 2 else "%d times" % len(es)),
-                            "These were installed from the same file of the same page at Nexus%s. %s"
-                            % (", in different versions" if len(versions) > 1 else "",
-                               "More than one is enabled: they overwrite each other file for file, and of plugins with the same name only one is loaded. Keep the newer one enabled."
-                               if live > 1 else "Only one of them is enabled, so nothing is doubled in the game."), [_told(e) for e in es], [e["mod"] for e in es]))
-    # A name that is another mod's name with a copy's mark.
-    names = {fold(x.name): x for x in m.instance.mods if x.kind == "mod"}
-    for x in m.instance.mods:
-        base = COPY_MARK.sub("", x.name)
-        twin = names.get(fold(base)) if x.kind == "mod" and base != x.name else None
-        if twin is None or (x.name in grouped and twin.name in grouped):
-            continue
-        both = x.enabled and twin.enabled
-        out.append(_finding("copy-name", "warn" if both else "info", "A mod named as a copy of another",
-                            "“%s” has the name of “%s” with a copy's mark. %s" % (x.name, twin.name, "Both are enabled." if both else "Only one of the two is enabled."),
-                            ["“%s”, %s, priority %d" % (y.name, "enabled" if y.enabled else "disabled", y.priority) for y in (twin, x)], [twin.name, x.name]))
-    # A plugin of the same name in two enabled mods: the lower one's is never loaded.
-    hidden: dict[str, list[str]] = {}
-    for x in m.instance.mods:
-        if x.kind != "mod" or not x.enabled:
-            continue
-        for p in x.plugins:
-            row = m.row(p)
-            if row is not None and row.source not in (None, x.name):
-                hidden.setdefault(row.source, []).append("%s: “%s” has it too, and its copy is not the one loaded" % (p, x.name))
-                hidden.setdefault("\0" + row.source, []).append(x.name)
-    for winner in sorted((k for k in hidden if not k.startswith("\0")), key=fold):
-        out.append(_finding("plugin-twice", "warn", "A plugin of the same name in two enabled mods",
-                            "MO2 loads the plugin of the mod with the higher priority, “%s”. The other mod's plugin of that name is never read: right for a patch or a "
-                            "newer version made to replace it, a fault where two different mods happen to share a name." % winner,
-                            hidden[winner], [winner] + sorted(set(hidden["\0" + winner]), key=fold)))
-    # The same script extender plugin in two enabled mods.
-    dlls: dict[str, list] = {}
-    for x in m.instance.mods:
-        if x.kind != "mod" or not x.enabled or x.folder is None:
-            continue
-        d = _find(x.folder, "skse", "plugins")
-        if d is None:
-            continue
-        try:
-            for n in os.listdir(d):
-                if n.lower().endswith(".dll"):
-                    dlls.setdefault(n.lower(), []).append(x)
-        except OSError:
-            continue
-    for name, xs in sorted(dlls.items()):
-        if len(xs) < 2:
-            continue
-        xs.sort(key=lambda y: y.priority)
-        out.append(_finding("extender-twice", "warn", "The same script extender plugin in %d enabled mods" % len(xs),
-                            "%s is in each of them; only the one of “%s” is loaded. Mostly this is one mod in two versions, or a mod and an older fix for it." % (name, xs[-1].name),
-                            ["“%s”, priority %d%s" % (y.name, y.priority, ": loaded" if y is xs[-1] else "") for y in xs], [y.name for y in xs]))
+            groups.setdefault(("file", r.get("game"), r["mod_id"], _stem(r["archive"])), []).append((x, version, title))
+    obsolete, redundant, twice, seen = [], [], [], set()
+    told = lambda x, v: "“%s”%s (%s, priority %d)" % (x.name, " version %s" % v if v else "", "enabled" if x.enabled else "disabled", x.priority)      # noqa: E731
+    for key, members in sorted(groups.items(), key=lambda kv: (kv[0][0] != "title", fold(kv[1][0][0].name))):
+        live = [t for t in members if t[0].enabled]
+        if len(members) < 2 or not live:
+            continue                                    # alone, or none of them in the game
+        keeper, kv, ktitle = max(live, key=lambda t: t[0].priority)
+        for x, v, title in members:
+            pair = frozenset((x.name, keeper.name))
+            if x is keeper or pair in seen:
+                continue
+            same_title = title == ktitle
+            if not x.enabled:
+                if same_title or newer(kv, v) > 0:      # by its file alone, only where the enabled one is the newer
+                    seen.add(pair)
+                    obsolete.append((x, "%s: its %s is %s" % (told(x, v), "newer version" if newer(kv, v) > 0 else "other copy", told(keeper, kv))))
+                continue
+            shared, total = _inside(x, keeper)
+            if total and shared == total:
+                seen.add(pair)
+                redundant.append((x, "%s: all %d of its files are in %s too" % (told(x, v), total, told(keeper, kv))))
+            elif same_title:
+                seen.add(pair)
+                twice.append((x, keeper, "%s and %s: %s" % (told(x, v), told(keeper, kv), "%d of the lower one's %d files are not in the higher one, and still load" % (total - shared, total)
+                                                         if total else "the lower one's files could not be compared")))
+    out: list[dict] = []
+    if twice:
+        out.append(_finding("twice", "warn", "%d mod%s twice in the game" % (len(twice), " is" if len(twice) == 1 else "s are"),
+                            "Two mods of the same title are both enabled, and the one with the higher priority does not replace the other whole: the files only the lower "
+                            "one has are loaded together with the higher one's. If they are two versions of one mod, keep the newer one enabled.",
+                            [t for _x, _k, t in twice], [n for x, k, _t in twice for n in (x.name, k.name)]))
+    if redundant:
+        out.append(_finding("redundant", "info", "Redundant: %d enabled mod%s wholly inside %s" % (len(redundant), "" if len(redundant) == 1 else "s", "its newer version" if len(redundant) == 1 else "their newer versions"),
+                            "Each of these is enabled, but every file of it is in the other mod too, which has the higher priority: the game loads nothing of it. "
+                            "Disabling it changes nothing in the game.", [t for _x, t in redundant], [x.name for x, _t in redundant]))
+    if obsolete:
+        out.append(_finding("obsolete", "info", "Obsolete: %d disabled mod%s a newer version enabled" % (len(obsolete), " has" if len(obsolete) == 1 else "s have"),
+                            "Each of these is disabled, and the same mod is enabled in another version: nothing of the older one is in the game. It can stay, as the way "
+                            "back, or be uninstalled.", [t for _x, t in obsolete], [x.name for x, _t in obsolete]))
     return out
 
 
@@ -228,9 +243,9 @@ def deep(m: model.Model, progress=None, seconds: float = DEEP_SECONDS) -> dict:
         progress(len(mods), len(mods))
     if nothing:
         nothing.sort(key=lambda t: -t[1])
-        out.append(_finding("does-nothing", "warn", "%d enabled mod%s nothing where %s" % (len(nothing), " does" if len(nothing) == 1 else "s do", "it stands" if len(nothing) == 1 else "they stand"),
+        out.append(_finding("does-nothing", "info", "Redundant: %d enabled mod%s wholly overwritten by the mods above %s" % (len(nothing), " is" if len(nothing) == 1 else "s are", "it" if len(nothing) == 1 else "them"),
                             "Every file of each of these is overwritten by mods above it, so the game loads none of it. Often it is an older version left enabled beside the "
-                            "newer one, or a mod another mod has taken in whole. (A mod whose plugin alone matters has that plugin among its files, and is not listed here.)",
+                            "newer one, or a mod another mod has taken in whole. Disabling one changes nothing in the game.",
                             ["“%s” (priority %d, %d file%s): overwritten by %s" % (x.name, x.priority, n, "" if n == 1 else "s", ", ".join("“%s” (%d)" % t for t in top)) for x, n, top in nothing],
                             [x.name for x, _n, _t in nothing]))
     if mostly:
@@ -250,4 +265,4 @@ def deep(m: model.Model, progress=None, seconds: float = DEEP_SECONDS) -> dict:
     return {"findings": out, "mods": len(mods), "files": files, "cut": cut, "seconds": round(time.monotonic() - started, 1)}
 
 
-__all__ = ["deep", "letters", "newer", "quick", "same_as"]
+__all__ = ["base_title", "deep", "letters", "newer", "quick", "same_as"]

@@ -77,6 +77,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   uninstalls, moves and renames are in the History for good, each with its Revert; a mod can be renamed).
   MT67 (a mod is named by its title and its version, from the source, the file's name or a file inside; the name is
   asked at every install and update; "+ N more" in a mod's web shows that side's mods as boxes).
+  MT68 (doubles are told by title: obsolete and redundant mods are notes, each one list; patches that replace a mod's
+  plugin are left alone).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1753,3 +1755,35 @@ everything that names a real mod is.)
   off; the pen on the Installer tool's list stays.
 - **"+ N more"** shows that side's mods as boxes in the picture as well as in the list beside it, with "Show
   fewer" to fold it again.
+
+## MT68
+
+**Doubles are told by title, not by shared words: obsolete, redundant, and patches left alone** · *2026-11-23 · The owner's correction*
+
+**Owner's words.** "about duplications, we need to make look up logic better because right now it considers
+duplications by simple same words (but overall different title, e.g. XYZ vs XYZ-AE (both contains XYZ)), a
+disabled mod and an enabled (active) mod both containing same words (even if different versions (in this case the
+note should be about "Obsolete" because there is a newer version active, and if both are active but newer version
+overwrites it completely, then that's about "Redundancy", both cases should be collective notes, so stack them in
+the same note, not as separate since they are not critical or even important)). If you look at these warning and
+the actual modlist, you can see the modlist author created many patches that contain mod name with "patch" or
+something like that added, which only overwrites part of the mod they want, so those should be left alone (no
+note or warning needed)."
+
+**Settled** (DESIGN§25 as amended, WHY§134; the owner may overrule any of it). This replaces MT65's list of what
+is looked for when a modlist is opened:
+
+- **The same mod** is two mods of the same title: the names without a copy's mark and without a version at the
+  end, compared whole. "XYZ" and "XYZ-AE" are two titles; so are a mod and its patch. Two mods installed from the
+  same file of the same page are compared too, whatever their names.
+- **Obsolete** (a note): a disabled mod whose newer version is enabled. One note lists them all.
+- **Redundant** (a note): an enabled mod whose every file is also in its newer version or its copy, which has
+  the higher priority. One note lists them all. The Scan's "wholly overwritten by the mods above it" is a note of
+  the same kind, no longer "worth a look".
+- **Twice in the game** (worth a look, the only one that is): two mods of the same title, both enabled, where the
+  higher one does not replace the lower whole, so that files only the older one has still load.
+- **Left alone, with no word:** a plugin of the same name in two enabled mods (what a patch of the list's author
+  does); the same script extender plugin in two enabled mods; one file installed as two mods of different titles,
+  each with part of it; two mods of one title that are both disabled.
+- **At an install** the evaluation still says when the mod replaces another mod's plugin or script extender
+  plugin, as worth a look and no longer as a likely fault: there it is about the one mod just put in.

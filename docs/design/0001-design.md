@@ -951,6 +951,11 @@ the header:
 - *when a modlist is opened* (`quick`, from what is in memory and one listing per mod): the same file of the same
   Nexus page installed twice; a mod named as a copy of another; a plugin of the same name in two enabled mods; the
   same script extender plugin in two enabled mods;
+  *Later, 2026-11-23 (MT68):* this list is replaced. What is looked for now: mods of the same title (and mods from
+  the same file) where the older one is disabled and a newer one enabled (obsolete, a note), where an enabled one
+  is wholly inside its newer version (redundant, a note), or where two are enabled and do not cover each other
+  (worth a look). Each is one finding that lists its mods. A plugin or a script extender plugin of the same name
+  in two enabled mods is what a patch does, and is not told. The look runs in a thread of its own;
 - *on "Scan" in the header* (`deep`): every enabled mod's files are listed once, from the highest priority down.
   A mod whose every file is overwritten does nothing where it stands; a mod nine tenths of whose files are in one
   mod above it is likely that mod again; archives of the older game's format and script extender plugins for

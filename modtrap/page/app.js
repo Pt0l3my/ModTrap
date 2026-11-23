@@ -1438,26 +1438,27 @@ async function listScan(start) {
   catch (e) { toast(e.message); return; }
   state.listScanFor = state.loaded;
   renderHealth(state.last || {});
-  if (state.listScan.state === "going") { clearTimeout(state.listScanTimer); state.listScanTimer = setTimeout(() => listScan(false), 700); }
+  if (state.listScan.state === "going" || state.listScan.state === "looking") { clearTimeout(state.listScanTimer); state.listScanTimer = setTimeout(() => listScan(false), 900); }
 }
 function scanCard() {
   const d = state.listScan;
   const go = el("button", { type: "button", class: d && d.deep ? "" : "primary", text: d && d.deep ? "Scan again" : "Scan the modlist", disabled: !!(d && d.state === "going"),
     title: "Lists every enabled mod's files once and compares them: mods that do nothing where they stand, mods that are mostly inside another, archives and script extender plugins that do not fit this game. It only reads; on a large modlist it takes a while." });
   go.addEventListener("click", () => listScan(true));
-  const card = el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Doubles, and mods that do nothing" }), go));
+  const card = el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Obsolete and redundant mods" }), go));
   if (!d) { card.append(el("p", { class: "dim", text: "Looking…" })); return card; }
   const onMod = (n) => showInList(n);
   if (d.state === "going") card.append(el("p", {}, el("span", { class: "spinner small" }), " Looking through the mods' files: " + (d.progress[1] ? d.progress[0].toLocaleString("en-GB") + " of " + d.progress[1].toLocaleString("en-GB") + " mods" : "starting") + "…"));
   if (d.error) card.append(el("p", { class: "would-needs", text: "The scan stopped: " + d.error }));
-  card.append(el("p", { class: "dim", text: "Looked for when the modlist was opened: the same mod installed twice, a mod named as a copy of another, a plugin or a script extender plugin of the same name in two enabled mods." }));
-  card.append(d.quick.length ? findingList(d.quick, "quick", onMod) : el("p", {}, el("span", { class: "tag good", text: "fine" }), " No mod is in the modlist twice, and no plugin of the same name is in two enabled mods."));
+  card.append(el("p", { class: "dim", text: "Looked for when the modlist was opened, among mods of the same title and mods installed from the same file: an older version left disabled beside the newer one (obsolete), an enabled mod wholly inside its newer version (redundant), and two copies of one mod both in the game. A patch or a fix that carries another mod's name is a mod of its own, and is left alone." }));
+  if (d.state === "looking") card.append(el("p", {}, el("span", { class: "spinner small" }), " Looking through the mods' own records…"));
+  else card.append(d.quick.length ? findingList(d.quick, "quick", onMod) : el("p", {}, el("span", { class: "tag good", text: "fine" }), " No mod has an older version beside it, and none is in the game twice."));
   if (d.deep) {
     const l = d.looked || {};
     card.append(el("h3", { text: "The scan of every mod's files" }),
       el("p", { class: "dim", text: (l.mods || 0).toLocaleString("en-GB") + " enabled mods, " + (l.files || 0).toLocaleString("en-GB") + " files, in " + (l.seconds || 0) + " s" + (l.cut ? ". It was cut short: there may be more." : ".") }),
       d.deep.length ? findingList(d.deep, "deep", onMod) : el("p", {}, el("span", { class: "tag good", text: "fine" }), " No enabled mod is wholly overwritten, and no archive or script extender plugin is of a kind this game does not load."));
-  } else if (d.state !== "going") card.append(el("p", { class: "dim", text: "“Scan the modlist” looks further: through every enabled mod's files, for mods that do nothing where they stand and for files this game does not load." }));
+  } else if (d.state !== "going") card.append(el("p", { class: "dim", text: "“Scan the modlist” looks further: through every enabled mod's files, for mods wholly overwritten by the mods above them and for files this game does not load." }));
   return card;
 }
 

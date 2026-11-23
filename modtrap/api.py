@@ -603,30 +603,40 @@ class Api:
             return []
 
     def _scan_quick(self, m: model.Model) -> None:
-        """When a modlist is opened: the look that costs next to nothing. Never in the way of the opening."""
-        try:
-            started = time.monotonic()
-            found = dupes.quick(m, self._rows(m))
-            self._listscan = {"for": m, "quick": found, "deep": None, "state": "idle", "progress": (0, 0), "error": ""}
-            if found:
-                log.info("the modlist was looked through for doubles: %s (%.1f s). They are on the Health tab.",
-                         ", ".join("%d %s" % (n, k) for k, n in _tally(found).items()), time.monotonic() - started)
-        except Exception as e:
-            log.warn("the look for doubles was passed over: %s", logbook.why(e))
+        """When a modlist is opened: the look for obsolete and redundant mods, in a thread of its own, once for a
+        modlist as it was read. Never in the way of the opening, nor of a request."""
+        with self._lock:
+            if self._listscan["for"] is m:
+                return
+            sc = self._listscan = {"for": m, "quick": None, "deep": None, "state": "looking", "progress": (0, 0), "error": ""}
+
+        def run() -> None:
+            try:
+                started = time.monotonic()
+                found = dupes.quick(m, self._rows(m))
+                sc.update(quick=found)
+                log.info("the modlist was looked through for obsolete and redundant mods: %s (%.1f s)%s",
+                         ", ".join("%d %s" % (n, k) for k, n in _tally(found).items()) or "none", time.monotonic() - started, ". They are on the Health tab." if found else "")
+            except Exception as e:
+                sc.update(quick=[], error=logbook.why(e))
+                log.warn("the look for obsolete and redundant mods was passed over: %s", logbook.why(e))
+            finally:
+                if sc["state"] == "looking":
+                    sc["state"] = "idle"
+        threading.Thread(target=run, name="quickscan", daemon=True).start()
 
     def listscan_brief(self, m: model.Model) -> dict:
         sc = self._listscan
         if sc["for"] is not m:
-            return {"found": 0, "bad": 0, "going": False, "deep": False}
+            return {"found": 0, "bad": 0, "notes": 0, "going": False, "deep": False}
         both = (sc["quick"] or []) + ((sc["deep"] or {}).get("findings") or [])
-        return {"found": sum(f["level"] in ("bad", "warn") for f in both), "bad": sum(f["level"] == "bad" for f in both), "going": sc["state"] == "going", "deep": sc["deep"] is not None}
+        return {"found": sum(f["level"] in ("bad", "warn") for f in both), "bad": sum(f["level"] == "bad" for f in both), "notes": sum(f["level"] == "info" for f in both),
+                "going": sc["state"] == "going", "deep": sc["deep"] is not None}
 
     def listscan(self) -> dict:
         m = self._need()
+        self._scan_quick(m)
         sc = self._listscan
-        if sc["for"] is not m:
-            self._scan_quick(m)
-            sc = self._listscan
         deep = sc["deep"] or {}
         return {"state": sc["state"], "progress": list(sc["progress"]), "error": sc["error"], "quick": sc["quick"] or [], "deep": deep.get("findings"),
                 "looked": {k: deep[k] for k in ("mods", "files", "cut", "seconds") if k in deep}}
@@ -634,8 +644,7 @@ class Api:
     def listscan_start(self) -> dict:
         """The scan the owner asks for: every enabled mod's files, listed once. Off the request; the page asks how far it is."""
         m = self._need()
-        if self._listscan["for"] is not m:
-            self._scan_quick(m)
+        self._scan_quick(m)
         sc = self._listscan
         if sc["state"] == "going":
             return self.listscan()
