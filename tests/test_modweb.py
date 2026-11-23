@@ -126,8 +126,8 @@ class ThePopUpsRoutes(unittest.TestCase):
         self.api.open(str(self.root), wait=True)
 
     def tearDown(self):
-        for _ in range(300):
-            if self.api.status == "ready":
+        for _ in range(400):                              # what was begun when the modlist opened ends before its folder goes
+            if self.api.updating.work["state"] != "going" and self.api.updating.reading["state"] != "going" and self.api._listscan["state"] != "going":
                 break
             time.sleep(0.01)
         os.environ.pop("MODTRAP_HOME", None)

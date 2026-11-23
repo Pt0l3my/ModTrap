@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 import threading
+import time
 import webbrowser
 
 from . import NAME, VERSION, instance, logbook, model, paths
@@ -213,8 +214,25 @@ def serve(a: argparse.Namespace) -> int:
         folder = paths.load_settings().get("folder")
         if isinstance(folder, str) and folder:
             api.open(folder, paths.load_settings().get("profile") or None)
-    if not a.no_browser:
+    if not a.no_browser and not a.from_page:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    api.start_link(bool(api.settings().get("start_from_page", True)))
+    stop_watch = threading.Event()
+
+    def watch() -> None:
+        """MT64: ModTrap closes when its page is closed, with nothing in hand; a start asked for by a page that
+        then does not come opens the page itself."""
+        began = time.monotonic()
+        while not stop_watch.wait(2.0):
+            if a.from_page and not app.watch.ever and time.monotonic() - began > 25:
+                a.from_page = False
+                webbrowser.open(url)
+            why = app.watch.due()
+            after = api.left_alone(why) if why else None
+            if after is not None:
+                after()
+                return
+    threading.Thread(target=watch, name="pagewatch", daemon=True).start()
     print("%s %s is running. Its page is at %s. Quit on the page, or Ctrl+C here, stops it; closing this window stops it too."
           % (NAME, VERSION, url), file=sys.stderr)
     if mine:
@@ -225,6 +243,7 @@ def serve(a: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        stop_watch.set()
         api.save_log()
         httpd.server_close()
         handover.clear(app.handover)
@@ -240,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     for p in (ap, v):
         p.add_argument("--port", type=int, default=DEFAULT_PORT, help="the port on 127.0.0.1 (default %(default)s)")
         p.add_argument("--no-browser", action="store_true", help="do not open the browser")
+        p.add_argument("--from-page", action="store_true", help=argparse.SUPPRESS)        # started by ModTrap's own page through its link (MT64): the page is open
         p.add_argument("--own-console", action="store_true", help=argparse.SUPPRESS)      # the launcher's: the console is ModTrap's own (MT63)
         p.add_argument("--folder", help="open this modlist folder at start")
         p.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")

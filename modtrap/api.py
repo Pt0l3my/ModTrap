@@ -20,7 +20,7 @@ import urllib.parse
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import console, downloads, loadcheck, modweb, process, selfupdate, tabback, updater, updating, version
+from . import console, downloads, dupes, evaluate, loadcheck, modweb, process, selfupdate, startlink, tabback, updater, updating, version
 from . import updates as updates_mod
 from .server import Bad
 
@@ -112,6 +112,8 @@ SETTINGS = {
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
     "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
     "install_on_drop": False,  # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55)
+    "quit_with_page": True,    # ModTrap closes when its page is closed, with nothing in hand (MT64)
+    "start_from_page": True,   # a link of ModTrap's own kind starts ModTrap.exe, so that a page brought back can start it (MT64)
     "console_window": False,   # ModTrap's own console window is shown, minimised; off: it is hidden, its lines being on the page (MT63)
     "mod_pictures": True,      # a mod's pop-up shows the picture its page opens with, fetched from its site (MT62)
     "scan_on_enable": True,    # a mod enabled on the Modlist page is then scanned for what its plugins overwrite (MT56)
@@ -119,6 +121,15 @@ SETTINGS = {
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
                                 "/api/demaster/install", "/api/add/run", "/api/probe/start", "/api/updater/start"))
+
+
+def _tally(findings: list[dict]) -> dict[str, int]:
+    """How many findings of each level, for a line in the log."""
+    words = {"bad": "likely fault(s)", "warn": "worth a look", "info": "note(s)", "good": "fine"}
+    out: dict[str, int] = {}
+    for f in findings:
+        out[words[f["level"]]] = out.get(words[f["level"]], 0) + 1
+    return out
 
 
 class Api:
@@ -144,6 +155,7 @@ class Api:
         self.argv: list[str] = []                     # what this ModTrap was started with, for starting itself again (MT58)
         self.port = 0                                 # the port its page is on
         self.own_console = False                      # the console it writes to is its own, and may be hidden (MT63)
+        self._listscan: dict = {"for": None, "quick": None, "deep": None, "state": "idle", "progress": (0, 0), "error": ""}      # MT65
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
@@ -322,6 +334,30 @@ class Api:
         self.save_log()
         return {"quit": True}, self.on_quit
 
+    def in_hand(self) -> str:
+        """What ModTrap is in the middle of that must not be left, or "" when it could close now."""
+        if self._busy():
+            return "a dry run"
+        if self.changes is not None and self.changes.busy():
+            return "a change to the modlist"
+        if self.tooljob is not None and self.tooljob.state in ("starting", "preparing", "running"):
+            return "a tool's run"
+        if self._listscan["state"] == "going":
+            return "a scan of the modlist"
+        try:
+            work = self.working()
+        except Exception:
+            work = []
+        return work[0]["text"] if work else ""
+
+    def left_alone(self, why: str) -> Callable[[], None] | None:
+        """ModTrap's page is gone (MT64): with nothing in hand and the setting on, this ModTrap saves and closes.
+        Returns what to do after, or None while it stays."""
+        if not self.settings().get("quit_with_page", True) or self.in_hand():
+            return None
+        log.info("%s: ModTrap saves its session and closes. Started again, it is back where it was", why[:1].upper() + why[1:])
+        return self.quit({})[1]
+
     def handover(self) -> tuple[dict, Callable[[], None] | None]:
         """Another start of ModTrap on this PC takes over (WHY§68): this one saves and closes, unless it is in the
         middle of something."""
@@ -331,6 +367,20 @@ class Api:
         log.info("ModTrap was started again on this PC: this one (%s) saves its session and closes", VERSION)
         answer, after = self.quit({})
         return dict(answer, version=VERSION), after
+
+    def start_link(self, on: bool) -> None:
+        """The link that starts ModTrap (MT64): entered for this Windows account, or taken out again."""
+        root = selfupdate.package_root()
+        exe = root / "ModTrap.exe" if root is not None else None
+        if exe is None or not exe.is_file():
+            return                                  # run from its source folder: there is no program to point a link at
+        try:
+            if on and startlink.enter(exe):
+                log.info("links of the kind “%s:” now start this ModTrap, for this Windows account (Settings: “Let ModTrap's page start ModTrap”)", startlink.SCHEME)
+            elif not on and startlink.remove(exe):
+                log.info("links of the kind “%s:” no longer start ModTrap: the entry for this Windows account was taken out", startlink.SCHEME)
+        except OSError as e:
+            log.warn("the link that starts ModTrap could not be %s: %s", "entered" if on else "taken out", logbook.why(e))
 
     def _locked(self) -> str:
         """Why the session in use may not start a job, or "" when it may."""
@@ -432,6 +482,7 @@ class Api:
             if run != self._run:
                 return
             self.status, self.message, self.model, self.profile = "ready", "", m, inst.profile
+        self._scan_quick(m)
         try:
             self.updating.at_launch(m, *self._updates_for(), bool(self.settings().get("updates_at_launch")))
         except Exception as e:                                  # the update check is beside the point of reading a modlist
@@ -539,6 +590,85 @@ class Api:
             pass
         log.info("the picture of “%s” was fetched from its site (%s, %s bytes)", name, kind, format(len(data), ","))
         return {"type": kind, "data": base64.b64encode(data).decode("ascii")}
+
+    # --- the same mod twice, mods that do nothing, and one mod weighed at its place (MT65) ----------------------------
+
+    def _rows(self, m: model.Model) -> list[dict]:
+        try:
+            return self.updating.rows(m, *self._updates_for())[0]
+        except Exception as e:
+            log.warn("the mods' sources could not be read: %s", logbook.why(e))
+            return []
+
+    def _scan_quick(self, m: model.Model) -> None:
+        """When a modlist is opened: the look that costs next to nothing. Never in the way of the opening."""
+        try:
+            started = time.monotonic()
+            found = dupes.quick(m, self._rows(m))
+            self._listscan = {"for": m, "quick": found, "deep": None, "state": "idle", "progress": (0, 0), "error": ""}
+            if found:
+                log.info("the modlist was looked through for doubles: %s (%.1f s). They are on the Health tab.",
+                         ", ".join("%d %s" % (n, k) for k, n in _tally(found).items()), time.monotonic() - started)
+        except Exception as e:
+            log.warn("the look for doubles was passed over: %s", logbook.why(e))
+
+    def listscan_brief(self, m: model.Model) -> dict:
+        sc = self._listscan
+        if sc["for"] is not m:
+            return {"found": 0, "bad": 0, "going": False, "deep": False}
+        both = (sc["quick"] or []) + ((sc["deep"] or {}).get("findings") or [])
+        return {"found": sum(f["level"] in ("bad", "warn") for f in both), "bad": sum(f["level"] == "bad" for f in both), "going": sc["state"] == "going", "deep": sc["deep"] is not None}
+
+    def listscan(self) -> dict:
+        m = self._need()
+        sc = self._listscan
+        if sc["for"] is not m:
+            self._scan_quick(m)
+            sc = self._listscan
+        deep = sc["deep"] or {}
+        return {"state": sc["state"], "progress": list(sc["progress"]), "error": sc["error"], "quick": sc["quick"] or [], "deep": deep.get("findings"),
+                "looked": {k: deep[k] for k in ("mods", "files", "cut", "seconds") if k in deep}}
+
+    def listscan_start(self) -> dict:
+        """The scan the owner asks for: every enabled mod's files, listed once. Off the request; the page asks how far it is."""
+        m = self._need()
+        if self._listscan["for"] is not m:
+            self._scan_quick(m)
+        sc = self._listscan
+        if sc["state"] == "going":
+            return self.listscan()
+        sc.update(state="going", progress=(0, 0), error="")
+
+        def run() -> None:
+            try:
+                quick = dupes.quick(m, self._rows(m))
+                got = dupes.deep(m, lambda i, n: sc.update(progress=(i, n)))
+                sc.update(quick=quick, deep=got, state="idle")
+                log.info("scan of the modlist: %d enabled mod(s), %s file(s), %.1f s%s; found: %s", got["mods"], format(got["files"], ","), got["seconds"],
+                         ", cut short" if got["cut"] else "", ", ".join("%d %s" % (n, k) for k, n in _tally(quick + got["findings"]).items()) or "nothing of note")
+            except Exception as e:
+                sc.update(state="idle", error=logbook.why(e))
+                log.error("the scan of the modlist stopped: %s", logbook.why(e))
+        threading.Thread(target=run, name="listscan", daemon=True).start()
+        return self.listscan()
+
+    def mod_evaluate(self, body: dict) -> dict:
+        """One mod weighed at the place it has: what its overwrites come to, and its own files (DESIGN§25)."""
+        m = self._need()
+        name = body.get("mod")
+        mod = m.instance.mod(name) if isinstance(name, str) and len(name) <= 300 else None
+        if mod is None or mod.kind not in ("mod", "overwrite"):
+            raise Bad("that mod is not in the modlist as ModTrap has read it; if it was only just installed, the list is still being read")
+        rows = self._rows(m)
+        mine = next((r for r in rows if r["mod"] == mod.name), None)
+        twins = [e for e in dupes.same_as(m, [r for r in rows if r["mod"] != mod.name], mine.get("archive") or "", mod.name)] if mine is not None and mine.get("archive") else []
+        for e in twins:
+            e["mine"] = (mine or {}).get("version") or ""
+        started = time.monotonic()
+        out = evaluate.mod(m, mod, duplicates=twins)
+        log.info("“%s” weighed at priority %d: %s (%s), %.1f s%s", mod.name, mod.priority, out["verdict"],
+                 ", ".join("%d %s" % (n, k) for k, n in _tally(out["findings"]).items()) or "nothing found", time.monotonic() - started, ", cut short" if out["cut"] else "")
+        return out
 
     # --- ModTrap updates itself from a release file (MT58) -----------------------------------------------------------
 
@@ -864,6 +994,8 @@ class Api:
             out.append({"key": "tools", "text": "reading what the modlist's tools made"})
         if self._scanning:
             out.append({"key": "scanner", "text": "looking through the modlist's settings files"})
+        if self._listscan["state"] == "going":
+            out.append({"key": "listscan", "text": "scanning every mod's files"})
         try:
             if any(r.get("state") in ("copying", "unpacking") for r in list(self._staged.values())):
                 out.append({"key": "unpack", "text": "unpacking a dropped archive"})
@@ -1467,14 +1599,23 @@ class Api:
         stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", stem).strip(" .")[:120] or "New mod"
         name, n = stem, 2
         if updates:
-            version = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", version).strip(" .")[:30]
+            version = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", version or said.get("version", "")).strip(" .")[:30]      # the file's own name says it, where nothing else does
             stem = updates[:120]
             name = "%s (%s)" % (stem, version) if version else "%s (new)" % stem
         while instance.fold(name) in taken:
             name, n = "%s (%d)" % (stem, n), n + 1
         rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
                "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {},
-               "updates": updates, "meta": self._source_for(updates, name) if updates else self._source_said(said)}
+               "updates": updates, "meta": self._source_for(updates, name) if updates else self._source_said(said),
+               "version": said.get("version", ""), "already": []}
+        if m is not None and not updates:                 # is this mod in the modlist already? (MT65)
+            try:
+                rec["already"] = dupes.same_as(m, self.updating.rows(m, *self._updates_for())[0], archive)
+            except Exception as e:
+                log.warn("whether “%s” is in the modlist already could not be told: %s", archive, logbook.why(e))
+            for e in rec["already"]:
+                log.info("“%s” is in the modlist already as “%s”%s (%s); the file given is %s", archive, e["mod"], " version %s" % e["version"] if e["version"] else "",
+                         e["how"], "version %s" % e["mine"] if e["mine"] else "of no version its name tells")
         self._staged[sid] = rec
         self._save_staged(rec)
         return rec
@@ -1702,6 +1843,8 @@ class Api:
         out["updates"] = rec.get("updates", "")
         out["installer"] = bool(rec.get("installer"))
         out["picks"] = rec.get("picks") or {}
+        out["already"] = rec.get("already") or []
+        out["version"] = rec.get("version", "")
         return out
 
     def add(self, body: dict) -> dict:
@@ -2020,6 +2163,7 @@ class Api:
                 "notes": [logbook.mask(n) for n in inst.notes],
                 "issues": [{"plugin": i.plugin, "master": i.master, "what": i.what} for i in m.issues[:500]],
                 "issue_count": len(m.issues),
+                "scan": self.listscan_brief(m),
             })
         return out
 
@@ -2043,6 +2187,8 @@ class Api:
         log.info("setting “%s” is now %s", name, "on" if value else "off")
         if name == "console_window" and self.own_console:           # at once, not at the next start (MT63)
             console.show(console.MINIMISED if value else console.HIDE)
+        if name == "start_from_page":
+            self.start_link(value)
         return now
 
     def tools_made(self) -> dict:
@@ -2188,6 +2334,8 @@ class Api:
             return 200, self.list_state()
         if path == "/api/selfupdate":
             return 200, self.self_state()
+        if path == "/api/listscan":
+            return 200, self.listscan()
         if path == "/api/downloads":
             m = self.model
             return 200, {"rows": downloads.rows(self._updates_for()[0] if m is not None else "", m.instance.downloads_dir if m is not None else None),
@@ -2220,6 +2368,10 @@ class Api:
             return 200, self.updater_do(path[len("/api/"):], body), None
         if path == "/api/list/scan":
             return 200, self.list_scan(body), None
+        if path == "/api/listscan/start":
+            return 200, self.listscan_start(), None
+        if path == "/api/mod/evaluate":
+            return 200, self.mod_evaluate(body), None
         if path == "/api/mod/web":
             return 200, self.mod_web(body), None
         if path == "/api/mod/picture":

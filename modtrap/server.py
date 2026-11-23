@@ -22,7 +22,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Callable, Protocol
 
-from . import NAME, logbook
+from . import NAME, VERSION, logbook, pagewatch, startlink
 
 HOST = "127.0.0.1"
 PAGE_DIR = Path(__file__).resolve().parent / "page"
@@ -49,7 +49,10 @@ POST_MAX = 64 * 1024
 LINGER_BYTES = 8 * 1024 * 1024
 LINGER_SECONDS = 3.0
 CSP = ("default-src 'none'; script-src 'nonce-%s'; style-src 'nonce-%s'; connect-src 'self'; img-src 'self' data:; "
-       "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+       "worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+BYE_PATH = "/bye"                 # a page's word as it goes (MT64): no header of its own can be sent with it
+BYE_MAX = 400
+PAGE_HEADER = "X-ModTrap-Page"    # the mark of the page a request comes from (MT64)
 # A browser that closes or resets a connection mid-answer (a reload, a closed tab): dropped without a line.
 # ConnectionError covers ConnectionResetError, ConnectionAbortedError and BrokenPipeError.
 QUIET_ERRORS = (ConnectionError, TimeoutError)
@@ -82,11 +85,16 @@ class App:
         self.origins: set[str] = set()
         self.api = api
         self.page = b""
+        self.worker = b""                             # the page's worker in the browser, and the page it keeps (MT64)
+        self.offline = b""
+        self.watch = pagewatch.Watch()
 
     def bound(self, port: int) -> None:
         self.hosts = {"127.0.0.1:%d" % port, "localhost:%d" % port}
         self.origins = {"http://127.0.0.1:%d" % port, "http://localhost:%d" % port}
         self.page = assemble(self.nonce, self.token)
+        self.worker = (PAGE_DIR / "sw.js").read_text(encoding="utf-8").replace("__VERSION__", "%s-%s" % (VERSION, self.nonce[:6])).encode("utf-8")
+        self.offline = (PAGE_DIR / "offline.html").read_text(encoding="utf-8").replace("__NONCE__", self.nonce).replace("__SCHEME__", startlink.SCHEME).encode("utf-8")
 
 
 def _joined(folder: Path, names: tuple[str, ...]) -> str:
@@ -251,7 +259,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             got = self.headers.get(TOKEN_HEADER, "").encode("utf-8", "surrogateescape")
             if not hmac.compare_digest(got, self.app.token.encode("ascii")):
                 return "no token"
+            self.app.watch.seen(self.headers.get(PAGE_HEADER))
         return ""
+
+    def _bye(self) -> None:
+        """A page's word as it goes (MT64): its mark, this start's token and what it says, in the body, since a
+        page can send no header of its own with its last word."""
+        try:
+            n = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            n = -1
+        if not 0 < n <= BYE_MAX:
+            return self._refuse("not a goodbye")
+        try:
+            said = {k: v[0] for k, v in urllib.parse.parse_qs(self.rfile.read(n).decode("ascii", "replace")).items()}
+        except ValueError:
+            said = {}
+        if not hmac.compare_digest(said.get("token", "").encode("utf-8", "surrogateescape"), self.app.token.encode("ascii")):
+            return self.send(403, {"error": "no token"})
+        return self.send(200, {"heard": self.app.watch.said(said.get("page"), said.get("what", ""))})
 
     def _refuse(self, why: str) -> None:
         _refusals.note(why)
@@ -285,6 +311,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path == "/":
                 return self.send(200, self.app.page, "text/html; charset=utf-8")
+            if path == "/sw.js":
+                return self.send(200, self.app.worker, "text/javascript; charset=utf-8")
+            if path == "/offline":
+                return self.send(200, self.app.offline, "text/html; charset=utf-8")
             if path == SAVE_PATH and self.app.api is not None:
                 take = getattr(self.app.api, "save_take", None)
                 got = take() if take is not None else None
@@ -338,6 +368,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if why:
             return self._refuse(why)
         path = self.path.split("?")[0]
+        if path == BYE_PATH:
+            return self._bye()
         if self.headers.get("Transfer-Encoding"):
             self._will_not_read()
             return self.send(400, {"error": "a request needs its length"})

@@ -1,0 +1,197 @@
+"""A mod weighed at its place, and a modlist looked through for the same mod twice (MT65), on an invented modlist."""
+
+import os
+import struct
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+from modtrap import api, dupes, evaluate, instance, logbook, model, probe
+from tests import _fixtures as fx
+from tests.test_modweb import CORE, pf
+from tests.test_updates import FakeNet, meta
+
+SE_BSA = b"BSA\0" + struct.pack("<I", 105) + b"\0" * 28
+LE_BSA = b"BSA\0" + struct.pack("<I", 104) + b"\0" * 28
+HKX = b"\x57\xe0\xe0\x57\x10\xc0\xc0\x10" + struct.pack("<II", 0, 8)
+
+
+def nif(stream: int) -> bytes:
+    return b"Gamebryo File Format, Version 20.2.0.7\n" + struct.pack("<IBIII", 0x14020007, 1, 12, 3, stream) + b"\0" * 16
+
+
+def dds(w: int, h: int) -> bytes:
+    return b"DDS " + struct.pack("<IIII", 124, 0, h, w) + b"\0" * 108
+
+
+def deleting() -> bytes:
+    refs = [probe.record(b"REFR", 0xA01, [(b"NAME", struct.pack("<I", 0xA00))], flags=0x20), probe.record(b"REFR", 0xA02, [(b"NAME", struct.pack("<I", 0xA00))])]
+    navs = [probe.record(b"NAVM", 0xB01, [(b"NVNM", b"\0" * 8)], flags=0x20)]
+    return probe.plugin_file([CORE], [probe.group(b"REFR", refs), probe.group(b"NAVM", navs)], 3, 0x900, "invented")
+
+
+def exe(a: int, b: int, c: int) -> bytes:
+    return b"MZ" + b"\0" * 300 + b"\xbd\x04\xef\xfe" + struct.pack("<III", 0x10000, (a << 16) | b, c << 16) + b"\0" * 40
+
+
+def invented(root: Path) -> Path:
+    fx.make_instance(root, [
+        ("+", "Tool Output", {"Generated.esp": pf((CORE,)), "meshes/built/a.nif": nif(100)}),
+        ("+", "Newcomer", {
+            "Newcomer.esp": deleting(), "Old.bsa": LE_BSA, "readme.txt": b"about the newcomer", "Shared.esp": pf((CORE, "Quill.esp")),
+            "meshes/actors/character/skeleton.nif": nif(100) + b"\0" * 10, "meshes/old/le.nif": nif(83), "meshes/actors/anim/idle.hkx": HKX + b"\x04\x01\x00\x01",
+            "meshes/built/a.nif": nif(100) + b"mine", "scripts/quillscript.pex": b"newer script", "scripts/same.pex": b"one and the same",
+            "textures/set/wall.dds": dds(1024, 1024), "skse/plugins/thing.dll": b"MZ...SKSEPlugin_Query\0...",
+            "meta.ini": meta(gameName="SkyrimSE", modid=777, version="2.0", installationFile="Newcomer-777-2-0-1700000000.7z").encode()}),
+        ("+", "Quill", {
+            "Quill.esp": pf((CORE,)), "Shared.esp": pf((CORE,)), "New.bsa": SE_BSA, "readme.txt": b"about quill", "scripts/quillscript.pex": b"older script",
+            "scripts/same.pex": b"one and the same", "meshes/actors/character/skeleton.nif": nif(100) + b"\0" * 400, "meshes/actors/anim/idle.hkx": HKX + b"\x08\x01\x00\x01",
+            "textures/set/wall.dds": dds(4096, 4096), "textures/set/wall_n.dds": dds(4096, 4096), "skse/plugins/thing.dll": b"MZ...SKSEPlugin_Version\0...SKSEPlugin_Query\0"}),
+        ("+", "Newcomer (2)", {"Other.esp": pf((CORE,)), "meta.ini": meta(gameName="SkyrimSE", modid=777, version="1.0", installationFile="Newcomer-777-1-0-1600000000.7z").encode()}),
+        ("+", "Shadowed", {"textures/set/wall.dds": dds(512, 512), "textures/set/wall_n.dds": dds(512, 512)}),
+        ("+", "Wrapped", {"Wrapped Mod/meshes/x.nif": nif(100), "Wrapped Mod/Wrapped.esp": pf((CORE,))}),
+        ("+", "Core", {CORE: pf(())}),
+    ], load_order=[CORE, "Quill.esp", "Shared.esp", "Other.esp", "Newcomer.esp", "Generated.esp"],
+        profile_settings="[custom_overwrites]\r\nInvented%20Patcher=Tool Output\r\n")
+    fx.write(root / "Game" / "SkyrimSE.exe", exe(1, 6, 1170))
+    return root
+
+
+class AModWeighed(unittest.TestCase):
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        self.root = invented(Path(self.tmp.name) / "Example List")
+        self.m = model.build(instance.load(self.root))
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def found(self, name: str) -> dict:
+        got = evaluate.mod(self.m, self.m.instance.mod(name))
+        return {f["key"]: f for f in got["findings"]} | {"": got}
+
+    def test_the_games_version_is_read_from_its_program(self):
+        self.assertEqual(evaluate.game_version(self.m.instance.game_dir), (1, 6, 1170))
+        self.assertIsNone(evaluate.game_version(Path(self.tmp.name) / "nowhere"))
+
+    def test_the_mods_own_files_formats_of_the_older_game_and_what_does_not_load(self):
+        f = self.found("Newcomer")
+        self.assertEqual((f["archive-format"]["level"], f["archive-format"]["items"]), ("bad", ["Old.bsa"]))
+        self.assertEqual((f["old-animations"]["level"], f["old-animations"]["items"]), ("bad", ["meshes/actors/anim/idle.hkx"]))
+        self.assertEqual((f["old-meshes"]["level"], f["old-meshes"]["items"]), ("warn", ["meshes/old/le.nif"]))
+        self.assertEqual(f["extender-version"]["items"], ["skse/plugins/thing.dll: built for game version 1.5, this game is 1.6.1170"])
+        self.assertEqual((f["deleted-navmesh"]["level"], f["deleted-references"]["level"]), ("bad", "warn"))
+        self.assertIn("deletes 1 placed object outright", f["deleted-references"]["text"])
+        self.assertEqual(f[""]["verdict"], "problem")
+        quill = self.found("Quill")                                 # the newer formats, and a plugin for both versions: nothing said
+        self.assertFalse({"archive-format", "old-animations", "old-meshes", "extender-version"} & set(quill))
+        wrapped = self.found("Wrapped")
+        self.assertEqual((wrapped["misplaced"]["level"], wrapped["misplaced"]["items"]), ("bad", ["Wrapped Mod"]))
+
+    def test_what_its_overwrites_come_to(self):
+        f = self.found("Newcomer")
+        got = f[""]
+        self.assertEqual((got["counts"]["same"], got["counts"]["papers"]), (1, 1))              # the same script, and a read-me
+        self.assertIn("1 shared file is the same, byte for byte", f["same"]["title"])
+        self.assertEqual(f["papers"]["level"], "good")
+        self.assertEqual(f["shared:scripts:wins"]["level"], "warn")
+        self.assertEqual(f["shared:scripts:wins"]["items"], ["“Quill”: 1 file (scripts/quillscript.pex)"])
+        plug = f["shared:plugin:wins"]
+        self.assertEqual(plug["level"], "bad")
+        self.assertIn("   Shared.esp: this mod's has the masters Core.esm, Quill.esp; “Quill”'s has Core.esm", plug["items"])
+        self.assertTrue(any("the winning file is much smaller" in x for x in f["shared:skeleton:wins"]["items"]))
+        self.assertEqual(f["shared:script extender plugin:wins"]["level"], "bad")
+        # A colour picture from this mod over a mod that has the surface picture too: a set from two mods, and smaller.
+        self.assertTrue(any("textures/set/wall.dds (colour from this mod, surface from “Quill”)" == x for x in f["mixed-textures"]["items"]))
+        self.assertTrue(any("1024×1024 in place of 4096×4096" in x for x in f["smaller-textures"]["items"]))
+        # And where a tool's output is overwritten, or overwrites.
+        self.assertNotIn("over-output", f)                                # the output is above it: as it should be
+        self.assertIn("shared:meshes:loses", f)
+
+    def test_the_same_mod_twice_is_told_by_its_page_and_its_files_name(self):
+        rows = [{"mod": "Newcomer", "host": "nexus", "mod_id": 777, "game": "skyrimspecialedition", "version": "2.0", "archive": "Newcomer-777-2-0-1700000000.7z", "enabled": True},
+                {"mod": "Newcomer (2)", "host": "nexus", "mod_id": 777, "game": "skyrimspecialedition", "version": "1.0", "archive": "Newcomer-777-1-0-1600000000.7z", "enabled": True},
+                {"mod": "Quill", "host": "", "mod_id": 0, "game": "", "version": "", "archive": "", "enabled": True}]
+        got = dupes.same_as(self.m, rows, "Newcomer-777-3-0-1800000000.7z")
+        self.assertEqual([(e["mod"], e["version"], e["mine"], e["newer"], e["how"]) for e in got],
+                         [("Newcomer", "2.0", "3.0", 1, "the same file of the same page at Nexus"), ("Newcomer (2)", "1.0", "3.0", 1, "the same file of the same page at Nexus")])
+        self.assertEqual(dupes.same_as(self.m, rows, "Newcomer Patch-777-1-0-1800000000.7z"), [])              # another file of the same page: not the same mod
+        self.assertEqual([e["how"] for e in dupes.same_as(self.m, rows, "Quill (2).zip")], ["it has the name this file gives its mod"])
+        self.assertEqual((dupes.newer("1.10", "1.9"), dupes.newer("2.0", "2.0.0"), dupes.newer("", "1")), (1, 0, 0))
+        quick = {f["key"]: f for f in dupes.quick(self.m, rows)}
+        self.assertEqual((quick["duplicate"]["level"], quick["duplicate"]["mods"]), ("bad", ["Newcomer (2)", "Newcomer"]))
+        self.assertIn("in different versions", quick["duplicate"]["text"])
+        self.assertEqual(quick["plugin-twice"]["mods"], ["Newcomer", "Quill"])
+        self.assertEqual(quick["extender-twice"]["mods"], ["Quill", "Newcomer"])
+        self.assertNotIn("copy-name", quick)                              # the pair is told once, as the same mod
+
+    def test_the_whole_list_mods_that_do_nothing_and_old_formats(self):
+        seen = []
+        got = dupes.deep(self.m, lambda i, n: seen.append((i, n)))
+        by = {f["key"]: f for f in got["findings"]}
+        self.assertEqual(by["does-nothing"]["mods"], ["Shadowed"])
+        self.assertIn("overwritten by “Newcomer” (1), “Quill” (1)", by["does-nothing"]["items"][0])
+        self.assertEqual(by["archive-format"]["items"], ["“Newcomer”: Old.bsa"])
+        self.assertEqual(by["extender-version"]["items"], ["“Newcomer”: skse/plugins/thing.dll, built for game version 1.5"])
+        self.assertEqual((got["mods"], got["cut"], seen[-1]), (7, False, (7, 7)))
+
+
+class TheScansRoutes(unittest.TestCase):
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        self.root = invented(Path(self.tmp.name) / "Example List")
+        self.api = api.Api()
+        self.api.updating.net = FakeNet({})
+        self.api.updating.by_itself = False
+        self.api.running = lambda image: False
+        self.api.open(str(self.root), wait=True)
+
+    def tearDown(self):
+        for _ in range(400):                              # what was begun when the modlist opened ends before its folder goes
+            if self.api.updating.work["state"] != "going" and self.api.updating.reading["state"] != "going" and self.api._listscan["state"] != "going":
+                break
+            time.sleep(0.01)
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def test_doubles_are_looked_for_when_the_modlist_opens_and_the_scan_goes_through_every_mod(self):
+        st = self.api.get("/api/state", {})[1]
+        self.assertEqual((st["scan"]["bad"], st["scan"]["deep"], st["scan"]["going"]), (1, False, False))
+        first = self.api.get("/api/listscan", {})[1]
+        self.assertEqual((first["deep"], [f["key"] for f in first["quick"]][:1]), (None, ["duplicate"]))
+        self.api.post("/api/listscan/start", {})
+        for _ in range(400):
+            got = self.api.get("/api/listscan", {})[1]
+            if got["state"] == "idle":
+                break
+            time.sleep(0.02)
+        self.assertEqual((got["error"], got["looked"]["mods"], sorted(f["key"] for f in got["deep"])), ("", 7, ["archive-format", "does-nothing", "extender-version"]))
+        self.assertTrue(self.api.get("/api/state", {})[1]["scan"]["deep"])
+
+    def test_a_mod_is_weighed_with_its_double_named(self):
+        got = self.api.post("/api/mod/evaluate", {"mod": "Newcomer"})[1]
+        dup = next(f for f in got["findings"] if f["key"] == "duplicate")
+        self.assertEqual((got["verdict"], dup["level"], dup["items"]), ("problem", "bad", ["Newcomer (2)"]))
+        self.assertIn("“Newcomer (2)” (version 1.0, enabled, priority", dup["text"])
+        self.assertIn("This one is version 2.0", dup["text"])
+        with self.assertRaises(api.Bad):
+            self.api.post("/api/mod/evaluate", {"mod": "Nobody"})
+
+    def test_a_file_given_for_a_mod_that_is_there_already_says_so(self):
+        rec = self.api._new_staged("Newcomer-777-3-0-1800000000.7z", "upload")
+        pub = self.api._staged_public(rec)
+        self.assertEqual((pub["name"], pub["version"], [(e["mod"], e["version"], e["newer"]) for e in pub["already"]]),
+                         ("Newcomer (3)", "3.0", [("Newcomer", "2.0", 1), ("Newcomer (2)", "1.0", 1)]))
+        self.assertEqual(self.api._staged_public(self.api._new_staged("Lantern-900-1-0-1800000000.7z", "upload"))["already"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

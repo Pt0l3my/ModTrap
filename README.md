@@ -47,8 +47,14 @@ A click on a mod's name opens its web: the mod in the middle of every mod it has
 needs it, patches for it, what it overwrites and what overwrites it, records two plugins both change), each in the
 colour of its kind, with a link to the mod's page and, from Nexus or GitHub, the one picture that page opens with.
 
+An installed mod is weighed at its place: which of its overwrites change nothing, which are what a patch or a
+retexture is for, and which are the usual ways a modlist breaks; and whether its own files fit this game. A mod
+that is in the modlist already is said so before it is installed, with both versions. Doubles are looked for when
+a modlist is opened, and "Scan" in the header looks through every mod's files; what is found is on the Health tab.
+
 ModTrap shows no window but its page in the browser: its program's console is hidden, and what it writes is on the
-page's Log.
+page's Log. It closes when its page is closed, never in the middle of a job, and a tab the browser brings back
+starts it again.
 
 ModTrap updates itself: the version at the top of the page is a button, and a release file dropped in its box is
 checked, put in place (the version in use is kept aside), tried, and started.

@@ -105,9 +105,12 @@ Unpack this whole folder somewhere of your own (not inside the game's folder, no
   ModTrap.exe
 
 Your browser opens ModTrap's page, and that is all there is to see: ModTrap has no window of its own. What its
-program writes is on the page (History, then Log). "Quit" at the top of the page ends ModTrap. Closing the browser
-tab does not: start ModTrap.exe again and the page is back, as you left it. To see the program's console window
-after all, minimised in the taskbar: Settings, "Show ModTrap's console window".
+program writes is on the page (History, then Log). ModTrap closes when you close its tab (never in the middle
+of a job), or with "Quit" at the top of the page. When your browser brings the tab back and ModTrap is not running,
+the tab offers to start it: your browser asks whether the page may open ModTrap; say yes. For that, ModTrap enters
+one kind of link (modtrap:) for your Windows account; Settings, "Let ModTrap's page start ModTrap" takes it out
+again. To see the program's console window after all, minimised in the taskbar: Settings, "Show ModTrap's console
+window".
 
 %(python)s
 To update ModTrap later: press the version at the top of its page and give it the newer release file (this kind of

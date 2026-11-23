@@ -152,6 +152,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 127 | 2026-11-23 | Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest | METHOD | #page |
 | 128 | 2026-11-23 | Every column has its own width and the table is their sum; a mod's web is one box for each mod, read in two passes; a conflict is told by masters, not by what is inside a record; the picture goes through the server | METHOD | #page #model #updates #safety |
 | 129 | 2026-11-23 | The console is hidden, not done without; only a console of ModTrap's own is hidden | METHOD | #launcher #safety |
+| 130 | 2026-11-23 | An evaluation compares files and reads formats' marks, and says what it cannot tell; a double is told by its page and its file's name, not by its page alone; the list is scanned in one pass from the top | METHOD | #adding #model #page |
+| 131 | 2026-11-23 | A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing | DECIDED | #page #launcher #safety |
 
 ## Entries
 
@@ -3489,3 +3491,67 @@ them; the addresses were read by a session that can), and the time the second pa
   takes over, WHY§68), and whether it should end itself is the owner's to say: MT64.
 - **Not checked:** any of it on Windows. The launcher is built here and its source read by a test; what a hidden
   console does on the owner's PC is for the owner's first start to show.
+
+### 130. An evaluation compares files and reads formats' marks, and says what it cannot tell; a double is told by its page and its file's name, not by its page alone; the list is scanned in one pass from the top
+
+`2026-11-23` · METHOD · `#adding #model #page` · refs: MT65, MT66, MT9, DESIGN§25, TL01§33, WHY§121, WHY§128
+
+- FACT (the owner's screenshot at 0.3.55): a mod dropped on the list overwrote one file each of 25 mods, and the
+  box could only list them. Whether that matters could not be read from it. LIKELY those 25 files are one paper
+  (a read-me or the like) that many mods carry under one name; the evaluation now says so in one line.
+- FACT (`api._new_staged`): a new mod whose name is taken was named "name (2)" without a word. That is how the
+  owner got a second copy of a mod. The check now comes before anything is installed.
+- What can be told without a tool, and is: whether two files are the same (byte for byte, within a budget of
+  bytes and time); what kind a file is, by its path; what format it is in, by its first bytes (TL01§33); which
+  version of the game is installed, from the game's program file.
+- What cannot, and is said in the box: what two plugins change inside one record; whether a mesh and a texture
+  from two mods fit each other; whether a script that replaces another is the better one. For these the finding
+  says why it matters and where to look.
+- Levels by what the modding community's own guides report (TL01§33): an older-format archive and an older-format
+  animation are faults; an older-form plugin is mostly harmless, so it is a note; an older-format mesh is worth a
+  look.
+- A double is not "the same page at Nexus": FACT (the owner's list, WHY§103) one page gives a main file and its
+  patches, installed as several mods. It is the same page and the same file name without its version, or the
+  name the file would give its mod. Tested: another file of the same page is not a double.
+- The whole-list scan lists every enabled mod's files once, from the highest priority down, keeping for each path
+  only a number for the path and the mod that wins it. A mod is then weighed against all the mods above it in
+  the same pass. Rejected: comparing every pair of mods. Rejected for the scan: reading files' content; only
+  archives' first bytes and script extender plugins are opened.
+- Not built: a whole-list table of records two plugins both change. By the rule of WHY§128 a large list has
+  thousands of such pairs; it would be a list nobody can act on. Said to the owner.
+- "Show it in the list" missed because the mod's card opens above the list after the row was brought into view,
+  which moves the list under it. The card now comes first, and the row is looked for again after the page has
+  settled.
+- Checked in a browser on a stand-in list: an install weighed, the two tabs, a second drop of the same mod asked
+  about, cancelled and taken as an update, the menu's entries, the Scan button and the Health tab. **Not
+  checked:** the time the deep scan takes on the owner's list (bounded at four minutes, and it says when it was
+  cut short); the formats' marks against real files, which are not to hand here (TL01§33 says what each rests on).
+
+### 131. A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing
+
+`2026-11-23` · DECIDED · `#page #launcher #safety` · refs: MT64, MT63, MT22, DESIGN§26, DESIGN§2, WHY§68, WHY§129
+
+- MT64's worry was a wait that is wrong. The page's goodbye (sent as the page is left) removes most of the wait:
+  the last page gone is known in seconds. A reload sends it too and is back at once, hence eight seconds' grace.
+  The four-minute silence is only for a browser that ended without a word.
+- LIKELY (browsers' own behaviour, as their makers describe it): a hidden tab's timers are slowed to about one a
+  minute, so a page that still lives asks at least that often; a tab put to sleep runs nothing, and is told
+  first, so it can say so and is then not counted as gone.
+- A wrong close must cost nothing: ModTrap closes only with nothing in hand, the session is saved as Quit saves
+  it, and the page can start it again.
+- A page cannot start a program. The ways there are: a link of a kind Windows knows a program for; or a helper
+  that keeps running to be asked. A helper is the unseen program MT63 took away. So: a link.
+- The link is entered without "%1": Windows then hands nothing of the link to the program. FACT (tested on the
+  entry's text): the command is the program's path and one fixed word. A link that could carry a folder or a
+  switch would let any web page that the owner allowed once choose what ModTrap opens.
+- A tab brought back with ModTrap gone shows the browser's own error unless something of ModTrap's answers in
+  the browser: a service worker. It answers only a page being asked for, only when ModTrap does not, and only
+  with the one small page it kept. Rejected: keeping ModTrap's own page in the browser. It holds the start's
+  token, and a page from an earlier start is of no use.
+- The content policy gains `worker-src 'self'`, for that one file; nothing else changes.
+- The kept page waits ten seconds before it opens the link by itself: a ModTrap that is starting anyway (after
+  its own update, or by hand) is there within that. After a Quit it does not open it by itself at all.
+- Checked in a browser against a real start of ModTrap here: a reload does not close it; ModTrap ended under the
+  page brings the kept page; ModTrap started again brings its page back by itself; the tab closed ends ModTrap
+  in about eight seconds; a tab opened with ModTrap gone shows the kept page. **Not checked:** the link itself
+  and the registry entry (Windows only), the browser's question, and a tab put to sleep by a real browser.

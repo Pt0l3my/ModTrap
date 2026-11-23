@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ModTrap</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style nonce="__NONCE__">
+body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #15171c; color: #e4e7ee; font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+main { max-width: 560px; padding: 24px; text-align: center; }
+h1 { color: #b9a3ff; font-size: 26px; margin: 0 0 10px; }
+p { margin: 0 0 12px; }
+.dim { color: #9aa2b4; font-size: 13.5px; }
+button { font: inherit; padding: 8px 18px; border-radius: 7px; border: 1px solid #b9a3ff; background: #b9a3ff; color: #1a1330; cursor: pointer; }
+button:hover { box-shadow: 0 0 12px rgba(185, 163, 255, .6); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ModTrap is not running</h1>
+  <p id="said">It closed with its page, or with the PC. Your session is saved: started again, it is back where you were.</p>
+  <p><button type="button" id="start">Start ModTrap</button></p>
+  <p class="dim" id="how">Your browser asks whether this page may open ModTrap; say yes. If nothing happens, start ModTrap.exe yourself: this page then carries on by itself.</p>
+</main>
+<script nonce="__NONCE__">
+"use strict";
+(function () {
+  const said = document.getElementById("said"), start = document.getElementById("start");
+  let asked = 0, tries = 0;
+  const begin = () => {
+    asked = Date.now();
+    said.textContent = "Starting ModTrap…";
+    try { location.assign("__SCHEME__:start"); } catch (e) { said.textContent = "This browser would not open ModTrap. Start ModTrap.exe yourself."; }
+  };
+  start.addEventListener("click", begin);
+  const quit = (() => { try { return sessionStorage.getItem("modtrap-quit") === "1"; } catch (e) { return false; } })();
+  if (quit) said.textContent = "You closed it with Quit. Your session is saved: started again, it is back where you were.";
+  // ModTrap may be starting already (an update of its own, a start by hand): it is waited for a little before it is
+  // asked for, and never asked for by itself after a Quit.
+  const look = async () => {
+    tries += 1;
+    try {
+      const r = await fetch("/", { method: "HEAD", cache: "no-store" });
+      if (r.ok) { try { sessionStorage.removeItem("modtrap-quit"); } catch (e) { /* no storage */ } location.replace("/"); return; }
+    } catch (e) { /* not there yet */ }
+    if (tries === 10 && !asked && !quit) begin();
+    if (asked && Date.now() - asked > 45000) { asked = 0; said.textContent = "ModTrap did not start. Press the button, or start ModTrap.exe yourself."; }
+    setTimeout(look, 1000);
+  };
+  look();
+})();
+</script>
+</body>
+</html>

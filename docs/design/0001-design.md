@@ -904,3 +904,93 @@ console itself stays, hidden: the console programs ModTrap starts write to it an
 it. `console` hides only a console that is ModTrap's own (the launcher says so, or ModTrap is alone in it), shows
 it minimised where the setting says so, and shows it whole, waiting for a key, when a start fails. Quit on the page
 ends ModTrap; a closed tab does not, and starting ModTrap again brings its page back (§17).
+
+## 25. A mod weighed at its place, and the scan of the whole list (MT65)
+
+§21's scanner says which files a mod shares with which mods. **The evaluation** (`evaluate`) says what that comes
+to, and looks at the mod's own files. It only reads, and is bounded in time.
+
+**Where it shows.** In the install box of §21, which has two tabs once a mod is in: *Overwrites* (the lists as
+before; a list cut short opens whole on a press, and the tab's body scrolls) and *Evaluation*, made as soon as the
+list has been read anew with the mod in it. From a mod's menu, "Evaluate it at its place…" shows the same for any
+mod.
+
+**Every finding** has a level (likely a fault; worth a look; a note; fine), a title, why it matters in a
+sentence, and the files or mods it is about. The verdict is the gravest level found.
+
+**What its overwrites come to** (each shared file compared with the file it wins over or loses to):
+
+- the same file byte for byte, and papers the game never loads (read-mes, licences, pictures, installer files):
+  counted, and said to change nothing;
+- a plugin of the same name: the whole plugin is replaced; the two plugins' masters are compared and told where
+  they differ;
+- the same script extender plugin twice; compiled scripts; a skeleton (with the sizes compared: a much smaller
+  winner has fewer bones); face files; an archive of the same name; animation and behaviour files; distant-view
+  files; menus; settings files; meshes; textures;
+- a texture set put together from two mods (the colour picture from one, the surface picture from the other);
+  a smaller texture over a larger one;
+- files a tool of the modlist built, overwritten by the mod: the mod stands above an output it belongs below.
+
+**The mod's own files** (TL01§33): an archive in the older game's format or another game's; a plugin saved in the
+older game's form; deleted references and deleted navmeshes; animations in the older game's 32-bit format; meshes
+in the older game's format; a script extender plugin built for another version of the game than the one installed
+(the game's version is read from its program file); and files that lie one folder too deep for the game to find.
+
+**What it does not do.** It does not read what two plugins change inside the same record (§23 names the records;
+xEdit shows their content), and it starts no tool.
+
+**The same mod twice** (`dupes.same_as`). A file given to be installed is compared with the modlist before
+anything is installed: a mod installed from a file of the same name at the same Nexus page, a mod that has the
+name the file would give its mod, or one installed from a file of the same name. Where there is one, the box says
+so, with the version in the modlist and the version of the file, and offers: update that mod with it (the default
+where the file is newer), install it as a second mod, or cancel (the default where it is older or the same).
+
+**The scan of the whole list** (`dupes`), with its findings on the Health tab and their count on the tab and in
+the header:
+
+- *when a modlist is opened* (`quick`, from what is in memory and one listing per mod): the same file of the same
+  Nexus page installed twice; a mod named as a copy of another; a plugin of the same name in two enabled mods; the
+  same script extender plugin in two enabled mods;
+- *on "Scan" in the header* (`deep`): every enabled mod's files are listed once, from the highest priority down.
+  A mod whose every file is overwritten does nothing where it stands; a mod nine tenths of whose files are in one
+  mod above it is likely that mod again; archives of the older game's format and script extender plugins for
+  another version of the game are named. It runs off the page's requests, shows how far it is, and nothing that
+  changes the modlist is begun while it runs (§18's rule).
+
+**Uninstall** in a mod's menu is §16's "take it out again", for a mod ModTrap installed. A mod it did not install
+it can only disable (MT9); whether that should change is MT66.
+
+## 26. ModTrap closes with its page, and starts from it (MT64)
+
+**Closing.** ModTrap has no window (§24), so it closes when its page does (`pagewatch`). Every request carries the
+mark of the page it comes from; a page that is left says goodbye as it goes; a page the browser puts to sleep
+says so first. ModTrap closes, saving its session as Quit does, when
+
+- the last page said goodbye and none has asked anything for eight seconds (a page loaded anew is back within
+  that), or
+- no page has asked anything for four minutes and none said it was asleep (a browser ended without a word).
+
+It never closes in the middle of a job, a tool's run, a download being unpacked or a scan: it waits until that has
+ended. It never closes before a page was first open. A PC that slept ends nothing: the time it slept is not
+counted. The setting "Close ModTrap when its page is closed" switches it off.
+
+**Starting from the page.** A page cannot start a program, and a tab the browser brings back when ModTrap is not
+running would show the browser's own error. Two things together make it work:
+
+- *ModTrap's worker in the browser* (`page/sw.js`), entered by the page when it is first open. It answers one
+  kind of request itself, and only when ModTrap does not answer: the page being asked for. Its answer is a small
+  page it kept (`page/offline.html`), which says that ModTrap is not running and offers to start it. Nothing of
+  ModTrap's own page is kept in the browser, and the kept page holds no token: it cannot ask ModTrap anything
+  but whether it is there.
+- *A link of ModTrap's own kind* (`modtrap:`, `startlink`), entered for the owner's Windows account when ModTrap
+  starts from its package: Windows starts this ModTrap.exe for it. The kept page opens that link (by itself after
+  ten seconds without ModTrap, on a press at once, and never by itself after a Quit), then waits for ModTrap and
+  loads its page.
+
+**Why that is safe.** The entry names one program and hands on nothing of the link: whatever a link says, ModTrap
+is started the one same way, as a double-click does, and its launcher takes that start as a plain one. Any page
+on the web can show such a link, and the browser asks before opening it; all it can do is start ModTrap, which
+then answers only its own page, by this start's token, as always (§2). The entry is under the account's own part
+of the registry, is written only for a ModTrap run from its package, and the setting "Let ModTrap's page start
+ModTrap" takes it out again. A ModTrap started this way that finds no page asking within 25 seconds opens its
+page itself.

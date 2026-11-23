@@ -68,7 +68,12 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   rows, and columns are moved by their headings; a click on a mod's name opens its web: the mod in the middle of
   every mod it has to do with, coloured by kind, with its page as a link and its one picture).
   MT63 (no window but the browser: ModTrap's console is hidden, its lines being on the page).
-- **Open.** MT64 (whether ModTrap ends itself some time after its page was closed, now that it has no window); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  MT64, answered (ModTrap closes when its page is closed, and a page brought back starts it again).
+  MT65 (an install is weighed: an Evaluation tab beside Overwrites, lists that open whole; a mod that is in the
+  modlist already is said so before it is installed, with both versions, and an update offered; doubles are looked
+  for when a modlist is opened, and a Scan in the header looks through every mod; Uninstall in the mod's menu; a
+  mod shown in the list stays in view).
+- **Open.** MT66 (whether "Uninstall" should also take out a mod ModTrap did not install); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1609,3 +1614,82 @@ lost either way.
 **Recommendation: A for now**, with B as a setting if the unseen program turns out to be a nuisance. A browser
 gives a page no sure way to say that its tab was closed, so B rests on a wait, and a wait that is wrong ends
 ModTrap under the owner's hands.
+
+**Answer, 2026-11-23.** The owner: "Yes, when closing the browser tab/window, the process needs to close as well.
+If the user reopens the browser as a whole, which then has the ModTrap session open, then restart the executable
+(or whatever it needs to restore session active). Is that safe? how can we make this safe to achieve what I asked
+for?"
+
+**Settled** (DESIGN§26, WHY§131; the owner may overrule any of it):
+
+- **B, made safe by three things.** A page says goodbye as it goes, so a closed tab is known within seconds and
+  not guessed from a wait; ModTrap never closes with anything in hand; and a ModTrap that did close wrongly is one
+  press away, because the page can start it again.
+- **Starting from the page** needs two things a page does not have by itself: something of ModTrap's that still
+  answers in the browser when ModTrap is gone (a worker that keeps one small page), and a way for that page to
+  start a program (a link of ModTrap's own kind, entered for the Windows account).
+- **Is it safe?** Yes, as built: the link carries nothing into ModTrap, starts only this ModTrap.exe, and the
+  browser asks before opening it. It is the one change ModTrap makes to the PC outside its own folders and the
+  modlist, so it has its own setting, on by default because the owner asked for what it does; off takes the
+  entry out.
+- **After a Quit** the page brought back does not start ModTrap by itself: Quit means closed. Its button does.
+
+## MT65
+
+**An install is weighed; the same mod twice is told; a scan of the whole list** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "I installed a mod and it here's the image of that. I would like the user to be able to click
+on "and 11 more" and extend to see full list, if the list is linger then the window space, then make it scrollable
+area. Also, currently the install pop up UI window only states what is overwritten, but there is no evaluation
+done if those overwrites are clean, or they cause any issues (usual issues with mods added/removed in Skyrim
+modding, look them up). So we could add tabs on this window, "Overwrites" would be the current one, and also add
+"Evaluation" which will show what I just asked for.
+
+Also the installed mod was named “[the mod's name] (2)” is it because the mod is already part of the list? if
+that's the case the installer should warn about that, and tell the user this mod is already installed/part of the
+modlist and show the installed mod version, and the to be installed mod's version, then suggest to instead update
+if the added mod is newer version.
+
+Also, can you make ModTrap generally scan for duplicates when opening a modlist or launching ModTrap? Also add a
+scan button to the header, so the user can scan for duplicates, conflicts, etc.
+
+Add uninstall to the right click menu.
+
+I clicked on "Show on the list" button and that actually snapped the modlist to a place where the actual mod isn't
+shown (about 2 scrolls further down, could be an issue due to the mod being almost at the bottom of the list)."
+
+(The mod's own name stood in the owner's message; it is left out here, as every real mod's name is.)
+
+**Settled** (DESIGN§25, WHY§130; the owner may overrule any of it):
+
+- **"and 11 more"** is a press that opens the whole list, in the install box and wherever ModTrap cuts a list of
+  findings short; the tab's body scrolls where it is longer than the window.
+- **Two tabs,** Overwrites and Evaluation. The evaluation is made once the mod is installed, by comparing every
+  shared file and by reading what format the mod's own files are in; DESIGN§25 lists what it looks for. Each
+  finding says how grave it is and why it matters. The same evaluation is in every mod's menu.
+- **Yes, the “(2)” was a second copy:** a mod of that name was in the modlist, and ModTrap named the new one
+  apart without a word. Now it asks first: which mod is there, its version, the file's version, and whether the
+  file is newer; with "Update it" (the default where the file is newer), "Install it as a second mod", "Cancel".
+- **Doubles are looked for when a modlist is opened,** from what is already read, and shown on the Health tab,
+  with their count in the header. **"Scan" in the header** looks through every enabled mod's files: mods that do
+  nothing where they stand, mods mostly inside another, and files this game does not load. Read into "conflicts":
+  conflicts between files across the list. Records that two plugins both change are told mod by mod in the mod's
+  web (MT62); a table of them for the whole list would name thousands of pairs on a large list.
+- **Uninstall in the menu** takes out a mod ModTrap installed, as the install box's Uninstall does. For a mod it
+  did not install the entry is there, greyed, and says why (MT9); MT66 asks whether that should change.
+- **"Show it in the list"** now shows the mod: its card, which opens above the list, pushed the row out of view.
+
+## MT66
+
+**Should "Uninstall" also take out a mod ModTrap did not install?** · *2026-11-23 · **Open***
+
+MT9 says ModTrap never deletes a mod: it only disables. "Uninstall" for a mod ModTrap installed keeps to that,
+because it puts back what was there before the install. For any other mod there is no "before" to put back.
+
+- **A. As built:** Uninstall only for what ModTrap installed; any other mod can be disabled.
+- **B. Uninstall any mod, by moving it:** the mod's line leaves MO2's list and its folder is moved into the job's
+  safe folder, whole, with Undo to put both back. Nothing is deleted, so MT9's reason holds; the mod is gone from
+  MO2 until undone.
+
+**Recommendation: B**, if the owner wants it: it is what "uninstall" means in MO2, and moving is as safe as
+disabling. It is not built, because it widens what MT9 allows and that is the owner's to say.
