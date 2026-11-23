@@ -19,7 +19,7 @@ import tempfile
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import downloads, process, tabback, updater, updating, version
+from . import downloads, loadcheck, process, tabback, updater, updating, version
 from .server import Bad
 
 
@@ -110,6 +110,7 @@ SETTINGS = {
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
     "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
     "install_on_drop": False,  # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55)
+    "scan_on_enable": True,    # a mod enabled on the Modlist page is then scanned for what its plugins overwrite (MT56)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -452,6 +453,40 @@ class Api:
         self._save_staged(rec)
         threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
         return self._staged_public(rec)
+
+    def list_state(self) -> dict:
+        """The changes made on the Modlist page in this session (MT56), newest first, and the one "Undo" would turn
+        back: the newest that still stands."""
+        m = self._need()
+        jobs = self.changes.list_jobs() if self.changes is not None else []
+        undo = next((j for j in jobs if not j["undone"] and j["profile"] in ("", m.instance.profile)), None)
+        return {"jobs": jobs[:30], "undo": undo, "can_change": self.changes is not None}
+
+    def list_scan(self, body: dict) -> dict:
+        """The scanner of the Modlist page (MT56): for one mod, whether its plugins stand safely in the load order
+        and what they overwrite there, and which files it shares with the mods below and above it. Reading only."""
+        m = self._need()
+        name = body.get("mod")
+        if not isinstance(name, str) or len(name) > 300:
+            raise Bad("which mod was not said")
+        mod = m.instance.mod(name)
+        if mod is None or mod.kind not in ("mod", "overwrite"):
+            raise Bad("that is not a mod of this modlist")
+        started = time.monotonic()
+        out = loadcheck.overrides(m, mod) if mod.enabled else {"mod": mod.name, "plugins": [], "cut": False, "looked": 0, "safe": True}
+        out["enabled"] = mod.enabled
+        out["priority"] = mod.priority
+        if not mod.enabled:
+            # A disabled mod: what enabling it would do, by the same plan the tick itself uses.
+            try:
+                out["plan"] = loadcheck.plan_set(m, [mod.name], True, read=self._cache.read)
+            except loadcheck.Refused as e:
+                out["plan"] = {"plugins": [], "notes": [], "warnings": [{"level": "warn", "text": str(e)}], "ask": False}
+        out["files"] = loadcheck.files(m, mod)
+        log.info("scanned what “%s” overwrites: %d plugin(s), %d other plugin(s) looked through, %d file(s) shared, %.1f s%s",
+                 mod.name, len(out["plugins"]), out["looked"], sum(e["files"] for e in out["files"]["wins"] + out["files"]["loses"]),
+                 time.monotonic() - started, ", cut short" if out["cut"] or out["files"]["cut"] else "")
+        return out
 
     def installed(self) -> dict:
         """The mods installed through ModTrap that still stand (MT53), newest first: each with the install it came
@@ -1955,6 +1990,8 @@ class Api:
             return 200, self.updater.state()
         if path == "/api/installed":
             return 200, self.installed()
+        if path == "/api/list":
+            return 200, self.list_state()
         if path == "/api/downloads":
             m = self.model
             return 200, {"rows": downloads.rows(self._updates_for()[0] if m is not None else "", m.instance.downloads_dir if m is not None else None),
@@ -1985,6 +2022,8 @@ class Api:
             return 200, self.updates_do(path[len("/api/updates/"):], body), None
         if path.startswith("/api/updater/") or path == "/api/downloads/folder":
             return 200, self.updater_do(path[len("/api/"):], body), None
+        if path == "/api/list/scan":
+            return 200, self.list_scan(body), None
         if path in NEEDS_SAME_VERSION:
             log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":

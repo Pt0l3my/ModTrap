@@ -28,6 +28,12 @@ the new plugin takes from other plugins, and start the modlist's tools through M
 Putting the mod into MO2 for you ("Add it for me", with "Take it out again") is built but switched off: it exists
 only when ModTrap is started with `--allow-changes`, and that is meant for once it has been proven on a real modlist.
 
+With `--allow-changes`, the Modlist section's Mods tab works as MO2's own list does, with MO2 closed: tick a mod to
+enable or disable it (its plugins are placed by MO2's own rule: a new one last, a master at the end of the masters'
+block, none before its own masters), drag a row to move it, rename a separator. What is not safe is asked first;
+every change can be undone; and a scanner tells, for a mod, whether its plugins stand safely in the load order and
+which records and files it overwrites. The ticks that choose mods for a demaster are on Demaster's "Pick mods" tab.
+
 To try it on Windows from the package (`ModTrap-<version>-win64.zip`, built by `tools/build_exe.py`): unpack it and
 start `ModTrap.exe`, which starts it with `--allow-changes`. It runs on the Python
 installed on the PC (3.10 or newer), or on its own where the package was built with Python inside.

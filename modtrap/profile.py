@@ -223,6 +223,28 @@ def remove_mod_line(profile_dir: Path, name: str, expect: str | None = None) -> 
     return change
 
 
+def rename_mod(profile_dir: Path, old: str, new: str, expect: str | None = None) -> Change:
+    """Gives a mod's line another name: its sign and its place stay. MO2 does the same in every profile when a mod
+    is renamed (MO03§6). A list that does not name the mod is left alone, and the change then has no lines."""
+    if not new.strip() or any(c in new for c in "\r\n") or new[0] in "+-*#":
+        raise Refused("that is not a name a mod can have in the list")
+    path = profile_dir / "modlist.txt"
+    old_data = _read(path)
+    lines = _split(old_data)
+    change = Change(file="modlist.txt", before="", after="")
+    for i, ln in enumerate(lines):
+        body = _body(ln)
+        if not body or body.startswith(b"#") or body[:1] not in (b"+", b"-"):
+            continue
+        if fold(_decode(body[1:]).strip()) == fold(new) and fold(new) != fold(old):
+            raise Refused("'%s' is already in this profile's mod list" % new)
+        if fold(_decode(body[1:]).strip()) == fold(old) and not change.lines:
+            lines[i] = body[:1] + new.encode("utf-8") + ln[len(body):]
+            change.lines.append({"mod": new, "was_named": old, "from": chr(body[0]), "to": chr(body[0])})
+    change.before, change.after = _write(path, old_data, lines, expect)
+    return change
+
+
 # --- plugins.txt --------------------------------------------------------------------------------------------------
 
 def set_plugins(profile_dir: Path, wanted: dict[str, bool], expect: str | None = None) -> Change:

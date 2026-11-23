@@ -143,6 +143,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 118 | 2026-11-23 | The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press | DECIDED | #add #updates #page #release |
 | 119 | 2026-11-23 | The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's | DECIDED | #add #page |
 | 120 | 2026-11-23 | Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised | DECIDED | #add #page #release #windows |
+| 121 | 2026-11-23 | The Modlist page changes MO2's lists as MO2 does: one job per change, MO2's own rule for plugins, a disabled mod's plugin keeps its line, a scanner that reads record headers | DECIDED | #page #mo2 #safety |
+| 122 | 2026-11-23 | A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list | DECIDED | #page #add |
 
 ## Entries
 
@@ -3208,3 +3210,75 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   taken out again), and in a browser against a stand-in modlist: titles sort the Mods tab, the Updater list and
   Installed mods both ways with the arrow; the box asks the separator's name and the list shows it below the
   mod. The launcher is built and is a program of the windowless kind; it was not run (WHY§116).
+
+### 121. The Modlist page changes MO2's lists as MO2 does: one job per change, MO2's own rule for plugins, a disabled mod's plugin keeps its line, a scanner that reads record headers
+
+`2026-11-23` · DECIDED · `#page #mo2 #safety` · refs: MT56, MT55, MT14, MT15, MT9, MO03§2, MO03§3, MO03§4, MO03§5, MO03§6, MO01§2, DESIGN§8, DESIGN§11, WHY§64, WHY§120
+
+- One table, two tabs. The mods' table is built once and shown on two tabs; each row has both boxes and the tab
+  decides which shows. Building 3,500 rows a second time for the second tab would have cost what a rescan costs.
+- A job per change, not a pending list. MO2 writes its lists at every tick; a page that gathered changes and wrote
+  them at a press would be a third way of working for the owner. So each tick, drag and rename is a small job
+  (`listjob`): the guards of every job that writes, the lists copied first, the result read back, the history,
+  and "Undo", which puts the copied files back while they are still as the job left them and otherwise turns back
+  only the job's own lines (DESIGN§11). The page sends one change after the other and waits for ModTrap to have
+  read the modlist again in between.
+- The read-back reads the three list files only. Reading the whole modlist again inside the job (as the add job
+  does) looks into every mod's folder: twice per tick on the owner's list. METHOD: the job checks the lines
+  themselves (every other line as it was, its own lines as planned); the full reading follows once, as after
+  every job. Measured on an invented list of 3,500 mods and 2,300 plugins: about 2 s from the tick to the list
+  shown again, most of it that one reading.
+- MO2's rule, written from the facts (MO03§2 to §4), not from its code. FACT: new plugins go last; masters keep to
+  their block; nothing loads before its own masters. LIKELY: MO2's code, to the letter, puts a new master one
+  place before the block's last; ModTrap puts it at the block's end, which MO2 then leaves alone (MO03§3).
+- Rejected: the installer's smarter place (before what the tools made, DESIGN§16.3) for a ticked mod. The owner
+  asked for MO2's logic, and a list that behaves in two ways under one tick would surprise. Instead the plan and
+  the scanner say when a plugin lands after a tool's output, and whether the two change the same records.
+- A disabled mod's plugin keeps its line. MO2 drops it (MO03§2), and with it the place it had. ModTrap switches
+  the plugin off and leaves the line: enabled again, it stands where it stood. A line without a file is what MO2
+  itself meets after a mod was removed, and it drops it at its next write; then the plugin is new, and goes last.
+- What is asked and what is told. Asked first: a master missing or inactive, other mods' plugins that would lose a
+  master, the game's limit on plugins (254 full ones). Told afterwards: a plugin placed after a tool's output, a
+  second file of the same name, several plugins activated together (MO2's own remark, MO03§5).
+- The scanner reads headers, not fields. With ModTrap's own reader (WHY§64) a record is known by the plugin it
+  belongs to and its id there; two plugins that hold the same record of a master both change it, and the later
+  one wins. Looking through 2,300 small invented plugins took 0.3 s; on real ones it is bounded (12 s, then "cut
+  short"). It cannot tell whether the later plugin carries the earlier one's change forward: that is the record
+  check through xEdit.
+- Dragging is done with the mouse's own events, not the browser's drag and drop: that one is taken on this page
+  by dropped folders and archives, and gives a page no say over the line shown.
+- A moved or renamed line keeps its sign. FACT (the tests' invented list, and WHY§120's reading of the owner's):
+  a separator's line carries either sign. The move first wrote "-" for every separator; the read-back refused it,
+  and the sign is now taken from the line itself.
+- Checked in a browser against stand-in modlists, small and large: tick on and off, the question box and both of
+  its answers, three ticks in a row, a drag with the list scrolling on at its edge, a folded separator dragged
+  with its mods, rename, "Move to priority…", Undo by its button and by Ctrl+Z, the scan's note and card, and Pick
+  mods with its own ticks. Not checked on Windows: only the owner's PC can.
+
+### 122. A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list
+
+`2026-11-23` · DECIDED · `#page #add` · refs: MT57, MT56, MT55, MT53, WHY§121, WHY§116, DESIGN§16.8, DESIGN§21
+
+- The list snapped to its top. FACT (seen in a browser): while ModTrap reads the modlist again, the page hides
+  every tab's section, and a section that is not shown reads as scrolled to 0 and comes back at 0. The place
+  0.3.48 kept was read after the section was hidden: always 0. The check of 0.3.48 used a row near the top, where
+  0 was also the right answer; it proved nothing. METHOD: each list's place is noted from its own scroll events,
+  only while it is shown and the modlist is ready, and given back whenever its section is shown again. That also
+  covers a look at another tab, which lost the place the same way. Checked 36,000 px deep in a list of 3,500 mods:
+  after a tick, Undo, Rescan, another tab and back, and a dropped install, the list stood where it was; the
+  Plugins list kept a place of its own.
+- A dropped file's place. The browser's own drag events are used here (a file from Explorer comes no other way);
+  the line and the place are the ones of Manual placement and of a dragged row, from one function. FACT: when
+  the file is let go the header folds back and the rows move up; the place read after that was one row off. It is
+  now read before the header folds.
+- The run is the page's own, with only the dropped archives in it. The Installer tool's list may hold other mods
+  still waiting; "Install mod" there installs the whole list, and a drop at a place must not carry them along
+  (WHY§116 met the same with a stale entry). So the run asks for the analysis and the install with its own
+  archives and its place; the archives are put on the Installer tool's list as well, which then shows them as it
+  shows any mod. Nothing new on the server: the analysis and the add job already take a place.
+- Rejected: asking once more before the install. The owner's order of words puts the install before the box of
+  details, and the drop names both mod and place; a wrong drop is one "Uninstall" away. Recorded in MT57 as the
+  one point that was read into the words.
+- Rejected: the mod's own installer questions inside the box. They need the Installer tool's whole card; the box
+  hands over, and the place goes with it.
+

@@ -19,7 +19,7 @@ import json
 
 import shutil
 
-from . import addjob, demaster, dryrun, history, logbook, paths, plugin, probejob, profile, safe
+from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, probejob, profile, safe
 from . import process
 from .instance import fold
 from .server import Bad
@@ -29,6 +29,7 @@ TOOL_KEEP_FILES = 5000                 # a tool's output is kept for Revert up t
 TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is to be made again after a Revert
 
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert", "/api/separator/add",
+         "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
          "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
@@ -285,6 +286,139 @@ class Changes:
                 raise Bad(str(e)) from None
         api.open(api.folder, api.profile or None, session=api.session)
         return {"job": work.name, "name": full, "priority": done["mods"][0]["priority"]}
+
+    # --- the Modlist page's own changes (MT56): enable, disable, move, rename a separator, undo ----------------------
+
+    def _list_job(self) -> tuple[object, listjob.ListJob]:
+        """The guards of a change made on the Modlist page, and a job for it. Called with the lock held."""
+        api = self.api
+        if self.gate():
+            raise Bad(self.gate())
+        m = api._need()
+        if api._busy():
+            raise Bad("something else is going; wait for it to end")
+        if api._locked():
+            raise Bad(api._locked())
+        if api.status != "ready":
+            raise Bad("the modlist is being read; try again in a moment")
+        base = self._jobs_dir()
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        work, n = base / ("list-" + stamp), 2
+        while work.exists():
+            work, n = base / ("list-%s-%d" % (stamp, n)), n + 1
+        return m, listjob.ListJob(m.instance, m, work, api.store.dir(api.session.id), self.closed)
+
+    def _names(self, body: dict, key: str = "mods") -> list[str]:
+        names = body.get(key)
+        if not isinstance(names, list) or not names or len(names) > 5000 or not all(isinstance(n, str) and 0 < len(n) <= 300 for n in names):
+            raise Bad("which mods was not said")
+        return names
+
+    def list_set(self, body: dict) -> dict:
+        """Enables or disables mods as MO2 does (MT56): the mods' lines, and their plugins by MO2's own rule
+        (MO03). Without `sure`, a change with something unsafe about it is only told, for the owner to say yes."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        names, on = self._names(body), body.get("on")
+        if not isinstance(on, bool):
+            raise Bad("enable or disable was not said")
+        with self._lock:
+            m, job = self._list_job()
+            try:
+                plan = loadcheck.plan_set(m, names, on, read=api._cache.read)
+            except loadcheck.Refused as e:
+                raise Bad(str(e)) from None
+            if not plan["mods"]:
+                return {"done": False, "nothing": True, "plan": plan}
+            if body.get("look") or (plan["ask"] and body.get("sure") is not True):
+                return {"done": False, "ask": plan["ask"], "plan": plan}
+            log.info("%s %d mod(s) on the Modlist page: %s", "enabling" if on else "disabling", len(plan["mods"]),
+                     ", ".join(x["name"] for x in plan["mods"][:5]))
+            try:
+                done = job.set(plan)
+            except listjob.Refused as e:
+                log.error("%s", e)
+                raise Bad(str(e)) from None
+            for x in plan["plugins"]:
+                log.info("  %s: %s%s", x["name"], "active, " + x["why"] if on else "not active any more", "")
+            for w in plan["warnings"]:
+                log.warn("  %s", w["text"])
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, "plan": plan, **done}
+
+    def list_move(self, body: dict) -> dict:
+        """Moves mods or separators to another place in MO2's list (MT56): directly before `before`, or with ""
+        to the highest priority."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        names, before = self._names(body), body.get("before")
+        if not isinstance(before, str) or len(before) > 300:
+            raise Bad("where to was not said")
+        with self._lock:
+            _m, job = self._list_job()
+            try:
+                done = job.move(names, before)
+            except listjob.Refused as e:
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, **done}
+
+    def list_rename(self, body: dict) -> dict:
+        """Renames a separator (MT56), in MO2's own way: its folder, and its line in every profile's list."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        old, new = body.get("name"), body.get("to")
+        if not isinstance(old, str) or not isinstance(new, str) or len(old) > 300:
+            raise Bad("the separator's name did not arrive")
+        new = re.sub(r"\s+", " ", new).strip()
+        if new.lower().endswith("_separator"):
+            new = new[:-len("_separator")].strip()
+        if not new or len(new) > 100 or re.search(r'[<>:"/\\|?*\x00-\x1f]', new) or new[0] in "+-*#" or new.endswith("."):
+            raise Bad("give the separator a name of up to 100 characters, without any of  < > : \" / \\ | ? *  and not beginning with + - * or #")
+        with self._lock:
+            _m, job = self._list_job()
+            try:
+                done = job.rename(old, new + "_separator")
+            except listjob.Refused as e:
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, "name": new + "_separator", **done}
+
+    def list_jobs(self) -> list[dict]:
+        """The changes made on the Modlist page in this session, newest first."""
+        try:
+            folders = sorted((p for p in self._jobs_dir().iterdir() if p.is_dir() and p.name.startswith("list-")), reverse=True)
+        except (OSError, Bad):
+            return []
+        return [x for x in (listjob.ListJob.summary(p) for p in folders[:200]) if x is not None]
+
+    def list_undo(self, body: dict) -> dict:
+        """Undoes a change made on the Modlist page: the newest one that still stands, or the one named."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        name = body.get("job")
+        if name is not None and (not isinstance(name, str) or not re.fullmatch(r"list-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name)):
+            raise Bad("that is not one of this session's changes")
+        with self._lock:
+            m = api._need()
+            if api._busy():
+                raise Bad("something else is going; wait for it to end")
+            if api.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            if name is None:
+                name = next((j["job"] for j in self.list_jobs() if not j["undone"] and j["profile"] in ("", m.instance.profile)), None)
+                if name is None:
+                    raise Bad("there is no change of the mod list to undo")
+            work = self._jobs_dir() / name
+            if not work.is_dir():
+                raise Bad("that change is not in this session")
+            try:
+                job = listjob.ListJob(m.instance, m, work, api.store.dir(api.session.id), self.closed)
+                done = job.undo()
+            except listjob.Refused as e:
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, **done}
 
     def revert(self, body: dict) -> dict:
         self.api.wait_mo2_gone()                # a MO2 of ModTrap's own last run may still be leaving (WHY§67)
@@ -1020,6 +1154,14 @@ class Changes:
             return self.plan(body)
         if path == "/api/separator/add":
             return self.separator(body)
+        if path == "/api/list/set":
+            return self.list_set(body)
+        if path == "/api/list/move":
+            return self.list_move(body)
+        if path == "/api/list/rename":
+            return self.list_rename(body)
+        if path == "/api/list/undo":
+            return self.list_undo(body)
         if path == "/api/add/run":
             return self.run(body)
         return self.revert(body)

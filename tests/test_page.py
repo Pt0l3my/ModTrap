@@ -39,9 +39,39 @@ class PageTests(unittest.TestCase):
         self.assertIn('document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); });', self.js)
 
     def test_every_tab_button_has_its_section(self):
-        tabs = re.findall(r'<button data-tab="([^"]+)"', self.html)
+        tabs = re.findall(r'<button data-group="[^"]+" data-tab="([^"]+)"', self.html)
+        self.assertGreater(len(tabs), 12)
         for t in tabs:
-            self.assertIn('id="tab-%s"' % t, self.html)
+            # "Pick mods" shows the mods' table too: one table serves it and the Modlist section's Mods tab (MT56).
+            self.assertIn('id="tab-%s"' % ("mods" if t == "pick" else t), self.html)
+
+    def test_the_mods_list_is_modlists_own_tab_and_the_demasters_first(self):
+        """MT56: Modlist › Mods is MO2's own list; the demaster's ticks are Demaster's first tab, on the same table."""
+        tabs = re.findall(r'<button data-group="([^"]+)" data-tab="([^"]+)"', self.html)
+        self.assertEqual([t for g, t in tabs if g == "modlist"][0], "mods")
+        self.assertEqual([t for g, t in tabs if g == "demaster"][:2], ["pick", "selection"])
+        self.assertIn('demaster: "pick"', self.js)
+        self.assertIn('const pane = name === "pick" ? "mods" : name;', self.js)
+        self.assertIn("#mods-table.picking .onbox, #mods-table:not(.picking) .pickbox { display: none; }", self.css)
+        for path in ("/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo", "/api/list/scan"):
+            self.assertIn('"%s"' % path, self.js)
+        # What changes MO2's lists is begun only with MO2 closed.
+        closed = re.search(r"const NEEDS_MO2_CLOSED = new Set\(\[(.+?)\]\);", self.js, re.S).group(1)
+        for path in ("/api/list/move", "/api/list/rename", "/api/list/undo", "/api/separator/add"):
+            self.assertIn('"%s"' % path, closed)
+
+    def test_a_file_dropped_on_the_list_is_installed_at_its_place_and_a_list_keeps_its_place(self):
+        """MT57: the drop's place is read before the header folds back (WHY§122); the run asks with its own
+        archives and its place; a list's place is noted while it is shown and given back when it is shown again."""
+        drop = re.search(r'document\.addEventListener\("drop", \(e\) => \{(.+?)\n\}\);', self.js, re.S).group(1)
+        self.assertLess(drop.index("fileOver(e)"), drop.index("dragOn(false)"))
+        self.assertIn("if (at) dropAtPlace(e, at);", drop)
+        self.assertIn('const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before });', self.js)
+        self.assertIn('api("/api/add/run", body())', self.js)
+        self.assertIn("if (chosenPlace()) installNow(chosenPlace().before);", self.js)
+        self.assertIn("scrollTops.set(t, t.scrollTop);", self.js)
+        self.assertRegex(self.js, r"state\.tab = name;\n  restoreScroll\(\);")
+        self.assertNotIn("if (pane && !fresh) pane.scrollTop = top;", self.js)       # read after the list was hidden: always 0
 
 
 if __name__ == "__main__":
