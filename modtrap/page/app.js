@@ -1365,7 +1365,7 @@ const STATUS_WORDS = { active: "holds the modlist", waiting: "waiting, locked", 
 
 function currentUi() {
   return {
-    tab: state.tab || "mods", split: state.splitAt || 50, swap: !!state.splitSwap, picked: [...state.picked], order: $("mods-order").value,
+    tab: state.tab || "mods", split: state.splitAt || 50, swap: !!state.splitSwap, cols: state.cols || {}, picked: [...state.picked], order: $("mods-order").value,
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
@@ -1392,6 +1392,8 @@ function applyUi(ui) {
   state.applying = true;
   try {
     state.splitAt = Number.isFinite(ui.split) ? Math.max(15, Math.min(85, ui.split)) : 50;
+    state.cols = ui.cols && typeof ui.cols === "object" && !Array.isArray(ui.cols) ? ui.cols : {};
+    colSetupAll(true);
     state.splitSwap = !!ui.swap;
     $("mods-order").value = Object.keys(MOD_ORDERS).includes(ui.order) ? ui.order : "mo2";
     $("mods-search").value = ui.search || "";
@@ -3126,6 +3128,114 @@ $("split-bar").addEventListener("keydown", (ev) => {
   saveUi();
 });
 
+// --- columns whose width the owner sets (MT61) ----------------------------------------------------------------------
+// Every table with a heading row has a thin line at the right edge of each heading but the last. Held and moved
+// sideways, the line glows and sets that column's width; the other columns keep theirs, and the last one takes
+// what is left (the list scrolls sideways when the columns are wider than their pane). A double-click on a line
+// gives the table its own widths back. The widths are kept with the session, for each kind of table.
+const COL_MIN = 28;
+function colKey(table) {
+  return table.id || "t:" + [...table.tHead.rows[0].cells].map((th) => th.childNodes[0] && th.childNodes[0].nodeType === 3 ? th.childNodes[0].textContent.trim() : th.textContent.trim()).join("|").slice(0, 120);
+}
+// The headings, and the last one that is shown: that column takes the room the others leave, so it has no line and
+// no width of its own (the split view hides some columns; then another column is the last).
+function colHeads(table) {
+  const ths = [...table.tHead.rows[0].cells];
+  const shown = ths.filter((th) => getComputedStyle(th).display !== "none");
+  return { ths, rest: shown[shown.length - 1] || null };
+}
+function colWidths(table, saved) {
+  const { ths, rest } = colHeads(table);
+  let sum = 0;
+  ths.forEach((th, i) => {
+    const w = Number(saved[i]);
+    const own = Number.isFinite(w) && th !== rest;
+    th.style.width = own ? Math.max(COL_MIN, w) + "px" : "";
+    th.classList.toggle("nogrip", th === rest);
+    if (own && getComputedStyle(th).display !== "none") sum += Math.max(COL_MIN, w);
+  });
+  table.classList.add("colfixed");
+  // The column that takes the rest keeps at least the width it had when the widths were first set.
+  table.style.minWidth = (sum + (rest === ths[ths.length - 1] ? Math.max(60, Number(saved.rest) || 0) : 60)) + "px";
+}
+function colApply(table) {
+  const saved = (state.cols || {})[table.dataset.colKey];
+  if (saved) { colWidths(table, saved); return; }
+  const { ths, rest } = colHeads(table);
+  for (const th of ths) th.classList.toggle("nogrip", th === rest);
+  if (!table.classList.contains("colfixed")) return;
+  table.classList.remove("colfixed");
+  table.style.minWidth = "";
+  if (table.dataset.colOwnWidth) table.style.width = "";
+  for (const th of ths) th.style.width = "";
+}
+function colSetup(table) {
+  if (!table.tHead || !table.tHead.rows[0] || table.tHead.rows[0].cells.length < 2) return;
+  const ths = [...table.tHead.rows[0].cells];
+  table.dataset.colKey = colKey(table);
+  ths.forEach((th, i) => {
+    if (th.querySelector(":scope > .colgrip")) return;
+    if (getComputedStyle(th).position === "static") th.style.position = "relative";
+    const grip = el("span", { class: "colgrip", role: "separator", "aria-orientation": "vertical", title: "Hold and move sideways to set this column's width; double-click to give the table its own widths back" });
+    grip.addEventListener("mousedown", (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const key = table.dataset.colKey;
+      if (!(state.cols || {})[key]) {                      // the widths as they are now are fixed first: only this column changes
+        const { ths: all, rest } = colHeads(table);
+        const now = {};
+        all.forEach((x, k) => { if (x !== rest) now[k] = Math.round(x.getBoundingClientRect().width); });
+        now.rest = rest ? Math.round(rest.getBoundingClientRect().width) : 0;
+        if (table.classList.contains("plain")) { table.style.width = table.offsetWidth + "px"; table.dataset.colOwnWidth = "1"; }
+        state.cols = Object.assign({}, state.cols, { [key]: now });
+        colWidths(table, now);
+      }
+      state.colDrag = { key, index: i, x: ev.clientX, w: th.getBoundingClientRect().width };
+      grip.classList.add("on");
+      document.body.classList.add("colsizing");
+    });
+    grip.addEventListener("click", (ev) => ev.stopPropagation());          // a press on the line is not a press on the heading (which sorts)
+    grip.addEventListener("dblclick", (ev) => {
+      ev.stopPropagation();
+      if (state.cols) delete state.cols[table.dataset.colKey];
+      colApply(table);
+      saveUi();
+    });
+    th.append(grip);
+  });
+  colApply(table);
+}
+function colSetupAll(again) {
+  for (const t of document.querySelectorAll("main table")) if (t.tHead && (again || !t.dataset.colKey || t.tHead.querySelectorAll(".colgrip").length === 0)) colSetup(t);
+  // A list drawn anew while one of its lines is held: the new table's line takes the glow over.
+  const d = state.colDrag;
+  if (d) for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === d.key) { const g = t.tHead.rows[0].cells[d.index] && t.tHead.rows[0].cells[d.index].querySelector(".colgrip"); if (g) g.classList.add("on"); }
+}
+// The widths are kept by the kind of table, not by the table: a list that is drawn anew while a line is held
+// (the Updater list does that as answers come in) goes on from the kept widths.
+document.addEventListener("mousemove", (ev) => {
+  const d = state.colDrag;
+  if (!d) return;
+  const saved = Object.assign({}, (state.cols || {})[d.key]);
+  saved[d.index] = Math.max(COL_MIN, Math.round(d.w + ev.clientX - d.x));
+  state.cols = Object.assign({}, state.cols, { [d.key]: saved });
+  for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === d.key) colWidths(t, saved);
+});
+document.addEventListener("mouseup", () => {
+  const d = state.colDrag;
+  if (!d) return;
+  state.colDrag = null;
+  for (const g of document.querySelectorAll(".colgrip.on")) g.classList.remove("on");
+  document.body.classList.remove("colsizing");
+  saveUi();
+});
+// Tables are drawn anew as the lists change: each new one gets its lines and its kept widths.
+{
+  let wait = 0;
+  new MutationObserver(() => { clearTimeout(wait); wait = setTimeout(() => colSetupAll(false), 60); }).observe(document.querySelector("main"), { childList: true, subtree: true });
+}
+
 // --- the Plugins tab -------------------------------------------------------------------------------------------------
 
 // The Plugins tab as MO2's own list (MT58): the box is the plugin's state, a row is moved by dragging it, and what is
@@ -4703,6 +4813,7 @@ function showTab(name) {
   if (!split) for (const r of document.querySelectorAll("tr.linked")) r.classList.remove("linked");
   else { linkPlugins(state.focus || "", false); linkMod(state.plugin || "", false); }
   restoreScroll();
+  colSetupAll(true);                                             // the split view hides some columns: the widths are fitted again
   if (pane === "mods" || split) modsMode();
   updateTray();
   saveUi();

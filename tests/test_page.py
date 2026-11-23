@@ -117,5 +117,16 @@ class PageTests(unittest.TestCase):
         self.assertIn("tbody tr.found td { box-shadow:", self.css)
 
 
+    def test_every_table_has_lines_to_set_its_columns_widths(self):
+        """MT61: a plain line between the headings, which glows while it is held; the widths kept with the session."""
+        self.assertIn('for (const t of document.querySelectorAll("main table"))', self.js)
+        self.assertIn("cols: state.cols || {}", self.js)
+        self.assertIn('grip.addEventListener("click", (ev) => ev.stopPropagation());', self.js)
+        line = re.search(r"\.colgrip::before \{([^}]+)\}", self.css).group(1)
+        self.assertNotIn("box-shadow", line)                                       # no glow as it stands
+        self.assertIn("box-shadow", re.search(r"\.colgrip\.on::before \{([^}]+)\}", self.css).group(1))   # a glow while held
+        self.assertIn("table.colfixed { table-layout: fixed; }", self.css)
+
+
 if __name__ == "__main__":
     unittest.main()

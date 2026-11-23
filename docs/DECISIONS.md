@@ -63,6 +63,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   dragged sideways).
   MT60 (a star and a number in a search box goes to the row with that priority or position; the rows a search
   finds glow).
+  MT61 (every table's columns are set in width by lines between the headings, which glow while held).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1482,4 +1483,27 @@ borders."
 - **The grey text** of each box names it: "…, or *138 for priority 138" (for plugins: "position 138").
 - **The glow.** The row a number went to glows, with a border all round. The rows a search by words found glow
   too, as long as they are a hundred or fewer; with more, the narrowed list is the answer and nothing glows.
+
+## MT61
+
+**Columns whose width the owner sets** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "can you add column space adjusters at the top for modlist, plugins, update list (all lists with
+a table), so users can adjust width of each column. Normal separator lines without glow between columns, and when
+clicked on to adjust, they gain glow."
+
+**Settled** (WHY§127; the owner may overrule any of it):
+
+- **Where.** Every table with a heading row: the mods' list, the plugins' list, the Updater list, Installed mods,
+  Downloads, the History's tables and the Tools tab's.
+- **The lines.** A thin plain line stands at the right edge of each heading but the last one shown. Held with the
+  mouse and moved sideways, it glows and sets that column's width. The other columns keep theirs; the last one
+  takes what is left, and never less than it had; where the columns are wider than their pane, the list scrolls
+  sideways. A press on a line does not sort the list.
+- **Back to the table's own widths:** a double-click on any of its lines.
+- **Kept** with the session, for each kind of table, so a list drawn anew, a Rescan and a new start of the page
+  show the widths as they were set. In the split view, which leaves some columns out, the columns that are shown
+  keep their widths.
+- **The Updater list's heading row** now stays at the top of its list while it is scrolled, as the Mods and
+  Plugins lists' do, so that its lines are in reach anywhere in the list.
 

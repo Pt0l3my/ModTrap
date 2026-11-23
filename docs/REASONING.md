@@ -149,6 +149,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 124 | 2026-11-23 | The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again | DECIDED | #page #mo2 #release #safety |
 | 125 | 2026-11-23 | The split view shows the two sections that exist, side by side, and builds nothing twice | METHOD | #page |
 | 126 | 2026-11-23 | A star-number is a place to go to, not a filter; a found row is brought into view once per number; each search box waits on its own | METHOD | #page |
+| 127 | 2026-11-23 | Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest | METHOD | #page |
 
 ## Entries
 
@@ -3379,4 +3380,24 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked in a browser on stand-in lists of 3,500 mods and 2,000 plugins: a number inside a folded group, a
   separator's number, a number nobody has, the star alone, words that find ten rows and words that find
   thousands, Enter after scrolling away, both boxes of the split view at once, and the Updater list.
+
+### 127. Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest
+
+`2026-11-23` · METHOD · `#page` · refs: MT61, MT59, MT55, WHY§122, WHY§125
+
+- One mechanism for every table, not one per list: the page watches for tables being drawn and gives each its
+  lines and its kept widths. Several lists are drawn anew at every change (the Updater list, Installed mods,
+  Downloads); nothing had to be added where they are drawn.
+- Until a line is first held, a table lays itself out as before. Then the widths it has are fixed, so that only
+  the column being set changes. One column must take what the others leave, or the browser spreads the spare room
+  over all of them: the last column that is shown has no line and no width. FACT (seen): in the split view the
+  plugins' last columns are left out, and with the widths put on all the shown ones every column grew; the
+  "last shown" is now worked out each time the tab changes.
+- FACT (seen): a list drawn anew while a line was held left the drag working on a table no longer on the page.
+  The widths are therefore kept by the table's kind while the line is held, and every table of that kind follows.
+- FACT (seen): the Updater list's heading row scrolled away with the list, which put its lines out of reach (and
+  out of the browser check's window, which is how it was noticed). It now stays at the top.
+- Checked in a browser on stand-in lists, small and of 3,500 mods: a column narrowed and widened, the glow only
+  while held, a press on the line not sorting, a press on the heading sorting, the widths after a Rescan, after
+  the page was loaded anew, after a search drew the Updater list anew and in the split view, and the double-click.
 
