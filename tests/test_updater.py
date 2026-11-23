@@ -178,6 +178,31 @@ class TheUpdater(unittest.TestCase):
         with self.assertRaises(api.Bad):
             self.api.post("/api/updater/start", {"mod": "Quill"})
 
+    def test_a_separator_is_added_below_a_mod_and_registered_in_mo2(self):
+        """MT55: a folder "<name>_separator" in MO2's mods folder and its line in the profile's list, right below the
+        mod named; through the add job, so that it can be taken out again."""
+        before = instance.load(self.root)
+        quill = before.mod("Quill").priority
+        got = self.api.post("/api/separator/add", {"name": "  My   Things ", "below": "Quill"})[1]
+        self.assertEqual((got["name"], got["priority"]), ("My Things_separator", quill + 1))
+        inst = instance.load(self.root)
+        sep = inst.mod("My Things_separator")
+        self.assertEqual((sep.kind, sep.priority, inst.mod("Quill").priority), ("separator", quill + 1, quill))
+        self.assertTrue((self.root / "mods" / "My Things_separator").is_dir())
+        self.assertIn(b"My Things_separator\r\n", (self.root / "profiles" / "Default" / "modlist.txt").read_bytes())
+        self.assertEqual([n for n, _a in inst.load_order], [n for n, _a in before.load_order])            # the load order is untouched
+        for _ in range(400):
+            if not self.api.unsettled():
+                break
+            time.sleep(0.02)
+        self.assertIn("My Things_separator", [x["mod"] for x in self.api.get("/api/installed", {})[1]["rows"]])
+        for bad in ({"name": "", "below": "Quill"}, {"name": "a/b", "below": "Quill"}, {"name": "My Things", "below": "Quill"}, {"name": "Other", "below": "No Such Mod"}):
+            with self.assertRaises(api.Bad):
+                self.api.post("/api/separator/add", bad)
+        self.api.post("/api/add/revert", {"job": got["job"]})
+        self.assertIsNone(instance.load(self.root).mod("My Things_separator"))
+        self.assertFalse((self.root / "mods" / "My Things_separator").exists())
+
     def test_modtraps_downloads_folder_can_be_named(self):
         other = Path(self.tmp.name) / "My ModTrap downloads"
         self.assertEqual(self.api.post("/api/downloads/folder", {"path": str(other)})[1]["folder"], str(other))

@@ -407,3 +407,6 @@ tr.dimrow td { color: var(--dim); }
 body.placing #mods-table tbody tr { cursor: copy; }
 #mods-table tr.place-above td { box-shadow: inset 0 3px 0 0 var(--accent), inset 0 12px 14px -10px var(--accent); }
 #mods-table tr.place-below td { box-shadow: inset 0 -3px 0 0 var(--accent), inset 0 -12px 14px -10px var(--accent); }
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--accent); }
+.sortarrow { color: var(--accent); }

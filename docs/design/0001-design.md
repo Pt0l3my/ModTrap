@@ -542,8 +542,9 @@ click is the place, a box tells what the mod overwrites there and what overwrite
 steps hold nothing to tick: what the mod overwrites and what overwrites it, and the tools that have to do with it,
 are told. A tool that builds a plugin from plugins is named only where its output and the new plugin hold records of
 a common kind. "Installed mods" lists what ModTrap installed that still stands, as the modlist lists mods, each with
-its update and "Uninstall" (the add's Revert). A dropped archive is installed by itself once it is unpacked and read
-(MT54; a setting, on); with the setting for placing by hand, the drop leads to the choosing of the place.
+its update and "Uninstall" (the add's Revert). A dropped archive is read and shown, and "Install mod" installs it;
+installing at the drop is a setting, off (MT54, MT55). The Mods tab's menu adds a separator below an entry, through
+the add job (MT55). The Mods tab, the Updater list and Installed mods sort by a click on a column's title.
 
 ## 17. Versions, and one ModTrap at a time (MT22)
 

@@ -19,7 +19,7 @@ import json
 
 import shutil
 
-from . import addjob, demaster, dryrun, history, logbook, paths, plugin, probejob, safe
+from . import addjob, demaster, dryrun, history, logbook, paths, plugin, probejob, profile, safe
 from . import process
 from .instance import fold
 from .server import Bad
@@ -28,7 +28,7 @@ log = logbook.get("add")
 TOOL_KEEP_FILES = 5000                 # a tool's output is kept for Revert up to this many files
 TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is to be made again after a Revert
 
-PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert",
+PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert", "/api/separator/add",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
          "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
@@ -230,6 +230,61 @@ class Changes:
                 log.info("  %s: active at position %s", x["name"], x["position"])
         api.open(api.folder, api.profile or None, session=api.session)          # read the modlist as it now is
         return {"job": work.name, "done": done}
+
+    def separator(self, body: dict) -> dict:
+        """Adds a separator to MO2's mod list right below a mod or separator (MT55): an empty folder named
+        "<name>_separator" in MO2's mods folder, which is how MO2 itself keeps a separator, and its line in the
+        profile's list. It goes through the add job like any mod ModTrap puts in: the list is copied into the job's
+        safe folder first, the result is read back and checked, the change is in the history, and "Uninstall" on
+        Installed mods takes it out again."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        name, below = body.get("name"), body.get("below")
+        if not isinstance(name, str) or not isinstance(below, str) or len(below) > 300:
+            raise Bad("the separator's name did not arrive")
+        name = re.sub(r"\s+", " ", name).strip()
+        if name.lower().endswith("_separator"):
+            name = name[:-len("_separator")].strip()
+        if not name or len(name) > 100 or re.search(r'[<>:"/\\|?*\x00-\x1f]', name) or name[0] in "+-*#" or name.endswith("."):
+            raise Bad("give the separator a name of up to 100 characters, without any of  < > : \" / \\ | ? *  and not beginning with + - * or #")
+        full = name + "_separator"
+        with self._lock:
+            if self.gate():
+                raise Bad(self.gate())
+            m = api._need()
+            if api._busy():
+                raise Bad("something else is going; wait for it to end")
+            if api.unsettled():
+                raise Bad(api.unsettled() + "; try again in a moment")
+            inst = m.instance
+            target = inst.mod(below)
+            if target is None or target.kind not in ("mod", "separator", "foreign"):
+                raise Bad("that is not an entry of MO2's mod list a separator can go below")
+            if inst.mod(full) is not None or (inst.mods_dir / full).exists():
+                raise Bad("MO2 already has a separator called “%s”" % name)
+            listed = sorted((y for y in inst.mods if y.kind in ("mod", "separator", "foreign")), key=lambda y: y.priority)
+            i = next(k for k, y in enumerate(listed) if y.name == target.name)
+            before = listed[i + 1].name if i + 1 < len(listed) else ""        # right below `below`: before what follows it
+            base = self._jobs_dir()
+            work = base / ("add-" + time.strftime("%Y%m%d-%H%M%S"))
+            n = 2
+            while work.exists():
+                work, n = base / ("add-%s-%d" % (time.strftime("%Y%m%d-%H%M%S"), n)), n + 1
+            empty = api._incoming() / ("separator-" + work.name)
+            empty.mkdir(parents=True, exist_ok=True)
+            pdir = inst.profiles_dir / inst.profile
+            p = addjob.Plan(mods=[{"name": full, "before": before, "staged": True, "root": str(empty), "archive": "", "enabled": False, "meta": {},
+                                   "updates": "", "replaces": "", "separator": True}],
+                            lists={x: profile.checksum(pdir / x) for x in addjob.LISTS})
+            job = addjob.AddJob(inst, m, p, work, api.store.dir(api.session.id), self.closed)
+            log.info("adding the separator “%s” below “%s”", name, below)
+            try:
+                done = job.run()
+            except addjob.Refused as e:
+                log.error("%s", e)
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"job": work.name, "name": full, "priority": done["mods"][0]["priority"]}
 
     def revert(self, body: dict) -> dict:
         self.api.wait_mo2_gone()                # a MO2 of ModTrap's own last run may still be leaving (WHY§67)
@@ -963,6 +1018,8 @@ class Changes:
             return self.jobs_clear(body)
         if path == "/api/add/plan":
             return self.plan(body)
+        if path == "/api/separator/add":
+            return self.separator(body)
         if path == "/api/add/run":
             return self.run(body)
         return self.revert(body)

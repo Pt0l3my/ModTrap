@@ -104,8 +104,8 @@ Unpack this whole folder somewhere of your own (not inside the game's folder, no
 
   ModTrap.exe
 
-A console window opens and says where ModTrap's page is; your browser opens it. Closing the window, or Quit on the
-page, ends ModTrap.
+Your browser opens ModTrap's page. ModTrap's console window starts minimised, in the taskbar: what it writes there
+is on the page too (History, then Log). Quit on the page, or closing that window, ends ModTrap.
 
 %(python)s
 ModTrap keeps its sessions, settings and downloads in its own folder under your Windows profile, not in here, so a
@@ -174,7 +174,7 @@ def main() -> int:
         rc.write_text(VERSION_RC % {"commas": commas, "version": ver, "what": what, "file": exe}, encoding="ascii")
         res = work / "version.o"
         subprocess.run([RESOURCES, "-O", "coff", "-i", str(rc), "-o", str(res)], check=True)
-        cmd = [COMPILER, "-O2", "-s", "-municode", "-Wall", "-Wextra", "-o", str(out / exe), str(src), str(res), "-luser32"]
+        cmd = [COMPILER, "-O2", "-s", "-municode", "-mwindows", "-Wall", "-Wextra", "-o", str(out / exe), str(src), str(res), "-luser32"]
         if extra:
             cmd.insert(1, '-DEXTRA_ARGS=L"%s"' % extra)
         subprocess.run(cmd, check=True)

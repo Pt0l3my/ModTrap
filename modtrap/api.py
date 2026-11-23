@@ -109,7 +109,7 @@ SETTINGS = {
     "downloads_move": True,    # a mod's download in the browser's folder is moved into ModTrap's own downloads folder, not copied (MT50)
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
     "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
-    "install_on_drop": True,   # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54)
+    "install_on_drop": False,  # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",

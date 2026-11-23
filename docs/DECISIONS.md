@@ -50,6 +50,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT53 (installing a new mod: one press, placed last; what it overwrites and the tools that have to do with it are
   told, not asked; a place chosen by hand on the Mods tab; Installed mods, Uninstall; one program in the package).
   MT54 (a dropped mod is installed by itself, with no further press; nothing ModTrap does is shown as a step to do).
+  MT55 (a dropped mod is read and shown first, then installed at one press; a separator added below a mod; column
+  titles that sort; ModTrap's console starts minimised).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1261,3 +1263,35 @@ enabled, then adjust accordingly)."
   "to do"; the list is headed "What ModTrap does when it installs the mod", and afterwards "What was done". The
   count at the top speaks of what is the owner's to settle, or says "Ready to install", "Installing" or "Installed".
 - An install taken out again with "Uninstall" is not installed again by itself.
+
+## MT55
+
+**Read and show first; a separator; titles that sort; the console minimised** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "okay, that's actually fine to first scan the added mod and then show what is involved, conflicts,
+tools, etc. then let the user press install, which then is automatic process. I tried it and the installation
+worked, including the manual placement. Can you also add right click row in modlist only: Add separator below, then
+a pop up UI window with text bracket to name it, with cancel and Ok buttons. This separator will be registered in
+MO2 as well. The pages that show row of mods (like modlist, installed mods, updater list), can you make the column
+titles to be interactive? So if the user clicks on one of them then the list will be sorted either in descending or
+ascending order, each should be indicated by downwards or upwards arrow symbol next to column title respectively.
+The default order is by priority. Would it be possible to integrate the terminal window into the browser page? does
+it have to run separately? if so, can you make it start minimized?"
+
+**Settled** (WHY§120; the owner may overrule any of it):
+
+- **Read and show, then one press.** This amends MT54: as ModTrap comes, a dropped mod is unpacked and read, what it
+  overwrites and the tools that have to do with it are shown, and "Install mod" then does everything by itself.
+  Installing at the drop is still a setting, now off.
+- **A separator.** On the Mods tab only, the right-click menu of a mod, of a separator and of an entry MO2 does not
+  manage has "Add separator below…": a box asks its name, with OK and Cancel. ModTrap makes the separator as MO2
+  keeps one (a folder named "<name>_separator" in MO2's mods folder, and its line in the profile's list, right below
+  the entry), through the add job: MO2 closed, the list copied into the job's safe folder first, the result read
+  back, the change in the history. It is listed under Installed mods, where "Uninstall" takes it out again.
+- **Titles that sort.** On the Mods tab, the Updater list and Installed mods, a click on a column's title sorts by
+  that column, a second click turns the order round; an arrow beside the title points up for ascending, down for
+  descending. Each list comes by priority. Sorted by another column, a list is shown without its separators, which
+  belong to the order by priority.
+- **The console.** ModTrap's program needs a home for what it writes and for ending it, so the console stays; it now
+  starts minimised, in the taskbar. What it writes is on the page already (History, then Log). The launcher has no
+  window of its own, and says so in a box should ModTrap end at once.

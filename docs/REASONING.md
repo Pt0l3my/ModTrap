@@ -142,6 +142,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 117 | 2026-11-23 | The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program | DECIDED | #updates #page #release #windows |
 | 118 | 2026-11-23 | The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press | DECIDED | #add #updates #page #release |
 | 119 | 2026-11-23 | The owner dropped a mod and waited: the install waited for a button further up the page, under a list that read like tasks for the owner; a dropped mod now installs by itself, and ModTrap's own steps are named as ModTrap's | DECIDED | #add #page |
+| 120 | 2026-11-23 | Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised | DECIDED | #add #page #release #windows |
 
 ## Entries
 
@@ -3176,3 +3177,34 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   the outputs; no entry is marked "to do"; with the setting for placing by hand, the drop leads to the Mods tab
   in its placing mode; after "Uninstall" the mod waits on the list with "Ready to install" and the button at the
   top, and is not installed again by itself.
+
+### 120. Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised
+
+`2026-11-23` · DECIDED · `#add #page #release #windows` · refs: MT55, MT54, MT53, MT21, MO01§2, WHY§116, WHY§118, WHY§119
+
+- FACT (the owner's session file at 0.3.46, and their word): a new mod was dropped, read, and installed, its
+  plugin activated; placing by hand worked too. The owner now finds the order "read, show, then press" right.
+  So the setting of MT54 is off as ModTrap comes; nothing else of it changes.
+- A separator. FACT (the owner's own list, read only for this): MO2 keeps a separator as an entry of the
+  profile's list named "<name>_separator", with either sign before it, and a folder of that name among the mods.
+  DECIDED: rather than a second way of writing MO2's list, the separator goes through the add job as a mod with
+  no files, placed before the entry that follows the one it goes below. The job's check of its result, which
+  asks of a mod that it be enabled, asks of a separator that it be in the list as a separator. So the safe
+  folder, the history and "Uninstall" hold for it as for a mod.
+- Titles that sort. The Mods tab already had three orders in a select; the titles now set the same thing, so
+  the select and the titles cannot disagree, and the order is kept with the session as before. Sorted by
+  anything but priority, the mods are one list without separators: a separator has a place only among
+  priorities. While a place is chosen by hand, the order stays MO2's.
+- The console. The owner asks whether the console can be part of the page. What it shows is already on the page
+  (the Log tab). What it also is: the place the program lives, and a way to end it. DECIDED for now: keep it,
+  minimised. The launcher is built as a program without a window of its own, and starts Python in a new console
+  that is asked to start minimised and not take the front; started with words on the command line, the console
+  is shown. Because nobody watches a minimised console, the launcher waits four seconds and says so in a box if
+  ModTrap ended by then with an error.
+  LIKELY, not checked: Windows' newer terminal may not honour the request to start minimised; ModTrap then
+  starts as before, with its console in front. Not done: running with no console at all; it would want a log
+  file to turn to when starting fails, and a test on Windows.
+- Checked: tests (a separator added below a mod, read back as one, the load order untouched, names refused,
+  taken out again), and in a browser against a stand-in modlist: titles sort the Mods tab, the Updater list and
+  Installed mods both ways with the arrow; the box asks the separator's name and the list shows it below the
+  mod. The launcher is built and is a program of the windowless kind; it was not run (WHY§116).

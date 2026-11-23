@@ -274,7 +274,7 @@ const SETTING_TEXT = [
   ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updater list). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
-  ["install_on_drop", "Install a dropped mod by itself", "On: a mod's archive dropped on the Installer tool is installed as soon as ModTrap has unpacked and read it, with no further press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing. Off: the dropped mod waits for “Install mod”."],
+  ["install_on_drop", "Install a dropped mod by itself", "Off: a mod's archive dropped on the Installer tool is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it. On: it is installed as soon as it is read, with no press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing."],
   ["manual_placement", "Always place a new mod by hand", "Off: “Install mod” puts a new mod last (before what the modlist's tools made) with one press, and tells what it overwrites there. On: “Install mod” takes you to the Mods tab instead, where you click between two mods to choose its place; ModTrap shows what the mod overwrites at that place and installs it there on your OK. An update always takes the older version's place."],
   ["stay_on_tab", "Stay on ModTrap's tab when a site's page is opened", "A browser always puts a new tab in front, and a page cannot change that. On: ModTrap's program takes the browser straight back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when the window in front is your browser's; the site's page stays open in its tab behind. Off: you stay on the site's page. Windows only."],
   ["downloads_move", "Move a mod's download from the browser's folder into ModTrap's downloads folder", "A file you download for an update in your browser lands in the browser's Downloads folder. On: ModTrap moves it into its own downloads folder (see the Downloads tab), where it is kept with where it came from and found again instead of being downloaded twice. Off: ModTrap copies it there and leaves yours where it is. A file in MO2's own downloads folder is always used from there and never moved."],
@@ -465,6 +465,7 @@ async function modMenu(ev, mod) {
     r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => openTab(page) },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
+    state.tab === "mods" && m && m.kind === "mod" ? { text: "Add separator below…", off: !state.changes, note: state.changes ? "A separator of MO2's list, right below this mod" : "ModTrap changes a modlist only when it is started with its switch for changes", run: () => addSeparator(mod) } : undefined,
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
     state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => focusMod(mod) } : { text: "Show it on the Updater list", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
@@ -855,6 +856,55 @@ const d = state.updates || {};
   return link;
 }
 
+// Column titles that sort (MT55): a click on a title sorts the list by that column, a second click turns the order
+// round; an arrow beside the title says which way, up for ascending, down for descending. By priority is how each
+// list comes.
+function sortHeads(table, keys, sort, onSort) {
+  [...table.tHead.rows[0].cells].forEach((th, i) => {
+    const key = keys[i];
+    if (!key) return;
+    th.classList.add("sortable");
+    th.tabIndex = 0;
+    th.setAttribute("role", "button");
+    const old = th.querySelector(".sortarrow");
+    if (old) old.remove();
+    const on = sort.key === key;
+    th.setAttribute("aria-sort", on ? (sort.desc ? "descending" : "ascending") : "none");
+    if (on) th.append(el("span", { class: "sortarrow", "aria-hidden": "true", text: sort.desc ? " ▼" : " ▲" }));
+    if (th.dataset.sortBound) return;
+    th.dataset.sortBound = "1";
+    const go = () => onSort(key);
+    th.addEventListener("click", go);
+    th.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } });
+  });
+}
+function nextSort(sort, key) { return { key, desc: sort.key === key ? !sort.desc : false }; }
+const naturally = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+
+// The Mods tab's order, as its select names it and as its column titles set it.
+const MOD_ORDERS = { "mo2": ["priority", false], "rev": ["priority", true], "deps": ["deps", true], "deps-asc": ["deps", false],
+  "name": ["name", false], "name-desc": ["name", true], "plugins": ["plugins", false], "plugins-desc": ["plugins", true] };
+function modSort() { const o = MOD_ORDERS[$("mods-order").value] || MOD_ORDERS.mo2; return { key: o[0], desc: o[1] }; }
+function setModSort(key) {
+  if (state.placing) return;                     // while a place is chosen the list stays in MO2's order
+  const next = nextSort(modSort(), key);
+  $("mods-order").value = Object.keys(MOD_ORDERS).find((k) => MOD_ORDERS[k][0] === next.key && MOD_ORDERS[k][1] === next.desc) || "mo2";
+  layoutMods();
+  saveUi();
+}
+
+// A separator of MO2's list, added below a mod or another separator (MT55).
+async function addSeparator(below) {
+  const name = await modalBox("Add a separator below “" + below.replace(/_separator$/i, "") + "”\n\nIts name, as MO2 will show it. ModTrap makes the separator in MO2's own way, so MO2 has it too; MO2 must be closed.", { input: "", yes: "OK", no: "Cancel" });
+  if (name === null || !name.trim()) return;
+  try {
+    const got = await api("/api/separator/add", { name: name.trim(), below });
+    toast("The separator “" + got.name.replace(/_separator$/i, "") + "” is added at priority " + got.priority + ". ModTrap is reading the modlist again.");
+  } catch (e) { toast(e.message); }
+  state.gen = (state.gen || 0) + 1;
+  tick();
+}
+
 // The Downloads tab (MT50): the mod files ModTrap fetched or took over, each with where it came from.
 async function loadDownloads() {
   if (state.status !== "ready") return;
@@ -1109,12 +1159,12 @@ function renderUpdates(listOnly) {
     head.replaceChildren(el("div", { class: "card" }, ...parts));
   }
   // The list, as the modlist itself is laid out (WHY§104): lowest priority first, each separator heading its mods.
-  const sig = JSON.stringify([d.rows.map((r) => r.state.charAt(0) + (r.newest || "") + (r.given ? "g" : "") + (r.fav ? "f" : "") + r.host.charAt(0)).join(""), d.origins, d.given, d.list.named, f, state.loaded, [...(state.upCollapsed || [])],
+  const sig = JSON.stringify([d.rows.map((r) => r.state.charAt(0) + (r.newest || "") + (r.given ? "g" : "") + (r.fav ? "f" : "") + r.host.charAt(0)).join(""), d.origins, d.given, d.list.named, f, state.upSort || "", state.loaded, [...(state.upCollapsed || [])],
     Object.entries((d.watch || {}).waiting || {}).map(([k, v]) => k + (v.saw || "")), Object.entries(d.fetching || {}).map(([k, v]) => k + v.state + (v.pct || ""))]);
   const going = d.scan.state === "going";
   if (state.upSig === sig && box.firstChild) return;
-  if (going && box.firstChild && state.upDrawn && Date.now() - state.upDrawn < 10000 && state.upF === JSON.stringify(f) + [...(state.upCollapsed || [])].join("|")) return;
-  state.upSig = sig; state.upDrawn = Date.now(); state.upF = JSON.stringify(f) + [...(state.upCollapsed || [])].join("|");
+  if (going && box.firstChild && state.upDrawn && Date.now() - state.upDrawn < 10000 && state.upF === JSON.stringify([f, state.upSort || ""]) + [...(state.upCollapsed || [])].join("|")) return;
+  state.upSig = sig; state.upDrawn = Date.now(); state.upF = JSON.stringify([f, state.upSort || ""]) + [...(state.upCollapsed || [])].join("|");
   state.upCollapsed = state.upCollapsed || new Set();
   const pick = (key, value, label, n) => {
     const b = el("button", { type: "button", class: "chip link" + (f[key] === value ? " on" : ""), text: label + (n === undefined ? "" : " " + num(n)) });
@@ -1145,11 +1195,22 @@ function renderUpdates(listOnly) {
     && (!text || r.mod.toLowerCase().includes(text) || (r.comments || "").toLowerCase().includes(text) || (r.notes || "").toLowerCase().includes(text));
   const byName = new Map(d.rows.map((r) => [r.mod, r]));
   // The groups, from the modlist as the Mods tab has it: the same order, the same separators.
-  const groups = [{ sep: null, rows: [] }];
+  let groups = [{ sep: null, rows: [] }];
   for (const m of [...(state.mods || [])].reverse()) {
     if (m.kind === "separator") groups.push({ sep: m, rows: [] });
     else if (byName.has(m.name)) groups[groups.length - 1].rows.push(byName.get(m.name));
   }
+  // Sorted by a column's title (MT55): by priority the groups stay, turned round for descending; by any other
+  // column the mods are one list, without the separators.
+  const sort = state.upSort || { key: "priority", desc: false };
+  if (sort.key !== "priority") {
+    const rank = { update: 0, maybe: 1, replaced: 2, current: 3, "not asked": 4, none: 5, gone: 6 };
+    const by = { mod: (a, b) => naturally(a.mod, b.mod), from: (a, b) => naturally((a.host || "~") + " " + String(a.id || ""), (b.host || "~") + " " + String(b.id || "")),
+      version: (a, b) => naturally(a.version || "", b.version || ""), update: (a, b) => rank[a.state] - rank[b.state] || naturally(a.newest || "", b.newest || "") }[sort.key];
+    const all = groups.flatMap((g) => g.rows);
+    all.sort((a, b) => (sort.desc ? -by(a, b) : by(a, b)) || a.priority - b.priority);
+    groups = [{ sep: null, rows: all }];
+  } else if (sort.desc) groups = groups.reverse().map((g) => ({ sep: g.sep, rows: [...g.rows].reverse() }));
   const link = (r) => {
     if (!r.page) return null;
     const a = el("a", { target: "_blank", rel: "noopener noreferrer", text: "its page" });
@@ -1195,8 +1256,11 @@ function renderUpdates(listOnly) {
     el("th", { title: "What you wrote of the mod in MO2: its Notes column, and a longer note where there is one", text: "Notes" }), el("th", { title: "Whether a newer file of the mod is out, by the last asking", text: "Update" }),
     el("th", { class: "c-get", title: "Get the newer file: opens the mod's page for it", text: "" }), el("th", { text: "What is known" }))), body);
   table.addEventListener("contextmenu", (ev) => { const tr = ev.target.closest("tr[data-mod]"); if (tr) modMenu(ev, tr.dataset.mod); });
+  sortHeads(table, ["priority", "mod", "from", "version", null, "update", null, null], sort, (key) => { state.upSort = nextSort(sort, key); renderUpdates(true); });
+  const how = sort.key === "priority" ? (sort.desc ? "highest priority first, under their separators" : "in the modlist's own order: lowest priority first, under their separators")
+    : "sorted by " + { mod: "name", from: "where they come from", version: "installed version", update: "update state" }[sort.key] + (sort.desc ? ", descending" : ", ascending") + "; click “Priority” for the modlist's own order";
   box.replaceChildren(el("div", { class: "card" }, ...bar,
-    el("p", { class: "dim small", text: num(shown) + " of " + num(d.rows.length) + " mods shown, in the modlist's own order: lowest priority first, under their separators." }),
+    el("p", { class: "dim small", text: num(shown) + " of " + num(d.rows.length) + " mods shown, " + how + "." }),
     shown || seps.length ? table : el("p", { class: "dim", text: "No mod matches." })));
 }
 
@@ -1308,7 +1372,7 @@ function applyUi(ui) {
   ui = ui || {};
   state.applying = true;
   try {
-    $("mods-order").value = ["mo2", "rev", "deps"].includes(ui.order) ? ui.order : "mo2";
+    $("mods-order").value = Object.keys(MOD_ORDERS).includes(ui.order) ? ui.order : "mo2";
     $("mods-search").value = ui.search || "";
     $("f-enabled").checked = !!ui.fEnabled; $("f-plugins").checked = !!ui.fPlugins; $("f-deps").checked = !!ui.fDeps;
     $("plugins-search").value = ui.pSearch || "";
@@ -2112,6 +2176,8 @@ function modRow(m) {
   });
   tr.dataset.name = m.name;
   if (m.kind === "mod") tr.addEventListener("contextmenu", (ev) => modMenu(ev, m.name));
+  else if (m.kind === "foreign") tr.addEventListener("contextmenu", (ev) => { ev.preventDefault(); menuAt(ev.clientX, ev.clientY, m.name, [
+    { text: "Add separator below…", off: !state.changes, note: state.changes ? "" : "ModTrap changes a modlist only when it is started with its switch for changes", run: () => addSeparator(m.name) }]); });
   m.row = tr;
   m.hay = fold(m.name + " " + m.plugins.join(" "));
 }
@@ -2122,6 +2188,8 @@ function groupRow(g) {
   const btn = el("button", { type: "button", class: "gtoggle", "aria-expanded": "true" }, arrow, g.sep.name.replace(/_separator$/i, ""));
   const tr = el("tr", { class: "sep" }, el("td", { colSpan: 5 }, btn, info));
   tr.dataset.sep = g.sep.name;
+  tr.addEventListener("contextmenu", (ev) => { ev.preventDefault(); menuAt(ev.clientX, ev.clientY, g.sep.name.replace(/_separator$/i, ""), [
+    { text: "Add separator below…", off: !state.changes, note: state.changes ? "Right below this separator, above its mods" : "ModTrap changes a modlist only when it is started with its switch for changes", run: () => addSeparator(g.sep.name) }]); });
   btn.addEventListener("click", () => {
     if (state.placing) return;                     // while a place is chosen, a click on the list means the place
     if (state.collapsed.has(g.sep.name)) state.collapsed.delete(g.sep.name); else state.collapsed.add(g.sep.name);
@@ -2141,22 +2209,25 @@ function renderMods() {
 }
 
 function layoutMods() {
-  const order = $("mods-order").value;
+  const sort = modSort();
   const frag = document.createDocumentFragment();
-  state.grouped = order !== "deps";
-  if (order === "deps") {
-    const flat = state.groups.flatMap((g) => g.mods).filter((m) => m.kind === "mod" && m.plugins.length);
-    flat.sort((a, b) => b.dependants - a.dependants || a.priority - b.priority);
+  state.grouped = sort.key === "priority";
+  if (!state.grouped) {
+    // By a column other than priority: one list of the mods, without the separators, which belong to the priority order.
+    const flat = state.groups.flatMap((g) => g.mods).filter((m) => m.kind === "mod" && (sort.key !== "deps" || m.plugins.length));
+    const by = sort.key === "name" ? (a, b) => naturally(a.name, b.name) : sort.key === "plugins" ? (a, b) => a.plugins.length - b.plugins.length : (a, b) => a.dependants - b.dependants;
+    flat.sort((a, b) => (sort.desc ? -by(a, b) : by(a, b)) || a.priority - b.priority);
     flat.forEach((m) => frag.append(m.row));
     state.flat = new Set(flat);
   } else {
-    const groups = order === "rev" ? [...state.groups].reverse() : state.groups;
+    const groups = sort.desc ? [...state.groups].reverse() : state.groups;
     for (const g of groups) {
       if (g.sep) frag.append(g.row);
-      (order === "rev" ? [...g.mods].reverse() : g.mods).forEach((m) => frag.append(m.row));
+      (sort.desc ? [...g.mods].reverse() : g.mods).forEach((m) => frag.append(m.row));
     }
     state.flat = null;
   }
+  sortHeads($("mods-table"), [null, "priority", "name", "plugins", "deps"], sort, setModSort);
   $("mods-table").tBodies[0].replaceChildren(frag);
   $("collapse-all").disabled = $("expand-all").disabled = !state.grouped;
   if (state.focus) paintFocus();
@@ -2271,7 +2342,7 @@ function gotoMod(name) {
   if (!m) return;
   showTab("mods");
   clearModFilters();
-  if ($("mods-order").value === "deps") { $("mods-order").value = "mo2"; layoutMods(); }
+  if (modSort().key !== "priority") { $("mods-order").value = "mo2"; layoutMods(); }
   const g = state.groups.find((x) => x.mods.includes(m));
   if (g && g.sep && state.collapsed.delete(g.sep.name)) filterMods();
   flash(m.row);
@@ -3418,18 +3489,26 @@ async function loadInstalled() {
   count.textContent = String(d.rows.length);
   const up = new Map(((state.updates || {}).rows || []).map((r) => [r.mod, r]));
   $("installed-head").replaceChildren(el("div", { class: "card" }, el("h3", { text: "Installed mods" }),
-    el("p", { class: "dim", text: "The mods ModTrap installed into this modlist that still stand, newest first: new mods, and newer versions put in by the Updater. “Uninstall” puts MO2's lists back as they were before that install and takes ModTrap's copy of the mod out again; for a newer version, the older one is enabled as before." })));
+    el("p", { class: "dim", text: "The mods ModTrap installed into this modlist that still stand, by priority (click a column's title to sort by it): new mods, and newer versions put in by the Updater. “Uninstall” puts MO2's lists back as they were before that install and takes ModTrap's copy of the mod out again; for a newer version, the older one is enabled as before." })));
   if (!d.rows.length) { $("installed-list").replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "ModTrap has installed nothing into this modlist yet. Drop a mod's archive on the Installer tool, or update a mod on the Updater list." }))); return; }
+  const isort = state.instSort || { key: "priority", desc: false };
+  const rank = { update: 0, maybe: 1, replaced: 2, current: 3, "not asked": 4, none: 5, gone: 6 };
+  const of = (x) => up.get(x.mod) || {};
+  const iby = { priority: (a, b) => (a.priority === null ? 1e9 : a.priority) - (b.priority === null ? 1e9 : b.priority), mod: (a, b) => naturally(a.mod, b.mod),
+    from: (a, b) => naturally((of(a).host || "~") + " " + String(of(a).id || ""), (of(b).host || "~") + " " + String(of(b).id || "")),
+    version: (a, b) => naturally(of(a).version || "", of(b).version || ""), when: (a, b) => naturally(a.when, b.when),
+    update: (a, b) => (rank[of(a).state] === undefined ? 9 : rank[of(a).state]) - (rank[of(b).state] === undefined ? 9 : rank[of(b).state]) }[isort.key];
+  const rows = [...d.rows].sort((a, b) => (isort.desc ? -iby(a, b) : iby(a, b)) || naturally(a.mod, b.mod));
   const table = el("table", { class: "grid uptable", id: "installed-table" },
     el("thead", {}, el("tr", {}, ...["Priority", "Mod", "From", "Version", "Installed", "Update", "", "What is known", ""].map((h) => el("th", { text: h })))),
-    el("tbody", {}, ...d.rows.map((x) => {
+    el("tbody", {}, ...rows.map((x) => {
       const r = up.get(x.mod);
       const un = el("button", { type: "button", text: "Uninstall", disabled: !d.changes, title: x.with.length ? "Installed together with " + x.with.join(", ") + ": they are uninstalled together" : "Puts the modlist back as it was before this install" });
       un.addEventListener("click", async () => { if (await uninstallJob(x.job, "“" + x.mod + "”" + (x.with.length ? " and " + x.with.map((n) => "“" + n + "”").join(", ") : ""))) setTimeout(loadInstalled, 1500); });
       const tr = el("tr", {},
         el("td", { class: "num", text: x.priority === null ? "" : String(x.priority) }),
-        el("td", { class: "modname" }, r && r.fav ? el("span", { class: "upfav", title: "A favourite of yours", text: "★ " }) : null, x.there ? modLink(x.mod) : el("span", { text: x.mod }),
-          x.there ? (x.enabled ? null : el("span", { class: "tag", text: "disabled" })) : el("span", { class: "tag warn", text: "no longer in the modlist" }),
+        el("td", { class: "modname" }, r && r.fav ? el("span", { class: "upfav", title: "A favourite of yours", text: "★ " }) : null, /_separator$/i.test(x.mod) ? el("span", { text: x.mod.replace(/_separator$/i, "") }) : x.there ? modLink(x.mod) : el("span", { text: x.mod }),
+          /_separator$/i.test(x.mod) ? el("span", { class: "tag", text: "separator" }) : x.there ? (x.enabled ? null : el("span", { class: "tag", text: "disabled" })) : el("span", { class: "tag warn", text: "no longer in the modlist" }),
           x.updates ? el("div", { class: "dim small", text: "a newer version of “" + x.updates + "”" }) : null,
           x.plugins.length ? el("div", { class: "dim small mono", text: x.plugins.slice(0, 4).join(", ") + (x.plugins.length > 4 ? " …" : "") }) : null),
         el("td", {}, r ? (UP_HOST[r.host] || "not known") + (r.id ? " " + r.id : "") : "", r && r.page ? el("div", {}, el("a", { href: r.page, target: "_blank", rel: "noopener noreferrer", text: "its page" })) : null),
@@ -3443,6 +3522,7 @@ async function loadInstalled() {
       tr.addEventListener("contextmenu", (ev) => modMenu(ev, x.mod));
       return tr;
     })));
+  sortHeads(table, ["priority", "mod", "from", "version", "when", "update", null, null, null], isort, (key) => { state.instSort = nextSort(isort, key); loadInstalled(); });
   $("installed-list").replaceChildren(el("div", { class: "card" }, table));
 }
 
