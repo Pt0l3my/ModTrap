@@ -168,5 +168,76 @@ class PageTests(unittest.TestCase):
         self.assertTrue({"mod_pictures", "console_window"} <= told)
         self.assertEqual(sorted(told - set(api.SETTINGS)), [])
 
+    def test_an_install_is_weighed_asks_about_a_double_and_its_lists_open(self):
+        """MT65: the install box has two tabs; a mod that is in the list already is asked about before anything is
+        installed; a list cut short opens on a press; a mod shown in the list stays in view."""
+        self.assertIn('kids.push(el("div", { class: "minitabs" }, tab("over", "Overwrites"), tab("eval", "Evaluation", mark)));', self.js)
+        self.assertIn('run.eval = await api("/api/mod/evaluate", { mod: name });', self.js)
+        self.assertIn('const answer = await new Promise((resolve) => { run.ask = { rec, resolve }; renderDropBox(); });', self.js)
+        for label in ('"Update “" + a.mod + "” with it", "update"', '"Install it as a second mod", "second"', '"Cancel", "cancel"'):
+            self.assertIn("answer(" + label, self.js)
+        self.assertIn('rec = await sendArchive(file, run.updates);', self.js)
+        self.assertIn('b.addEventListener("click", () => { moreOpen.add(key); all(); });', self.js)
+        self.assertNotIn('text: "and " + (list.length - 14) + " more"', self.js)
+        self.assertRegex(self.css, r"\.modal\.dropbox \.dropdetails \{[^}]*max-height: max\(160px, calc\(100vh - 470px\)\)")
+        self.assertRegex(self.css, r"\.dropdetails \{[^}]*overflow: auto")
+        self.assertIn("function showInList(name) {\n  if (!findMod(name)) return;\n  focusMod(name, true);\n  gotoMod(name);\n}", self.js)
+        self.assertNotIn("gotoMod(n); focusMod(n, true);", self.js)
+        # The menu: evaluate, and uninstall for what ModTrap installed itself.
+        self.assertIn('{ text: "Evaluate it at its place…"', self.js)
+        self.assertIn('run: () => uninstallMod(mod) }] : []),', self.js)
+
+    def test_the_scan_is_in_the_header_and_its_findings_on_the_health_tab(self):
+        self.assertIn('id="scan-list"', self.html)
+        self.assertIn('$("scan-list").addEventListener("click", () => { showTab("health"); listScan(true); });', self.js)
+        self.assertIn('$("health-count").textContent = s.issue_count + sc.found;', self.js)
+        for level in ("bad", "warn", "info", "good"):
+            self.assertRegex(self.js, r"\b%s: \[\"" % level)
+
+    def test_the_page_tells_modtrap_when_it_goes_and_keeps_a_worker_for_when_modtrap_is_gone(self):
+        """MT64."""
+        self.assertIn('window.addEventListener("pagehide", () => lastWord("bye"));', self.js)
+        self.assertIn('document.addEventListener("freeze", () => lastWord("asleep"));', self.js)
+        self.assertIn('navigator.sendBeacon("/bye", new URLSearchParams({ page: PAGE_MARK, token: TOKEN, what }))', self.js)
+        self.assertIn('"X-ModTrap-Page": PAGE_MARK', self.js)
+        self.assertIn('navigator.serviceWorker.register("/sw.js")', self.js)
+        self.assertIn('sessionStorage.setItem("modtrap-quit", "1")', self.js)
+        worker = (PAGE / "sw.js").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r"https?://", worker), [])
+        self.assertEqual(worker.count("respondWith"), 1)                           # one answer of its own: the kept page, for a page asked for
+        offline = (PAGE / "offline.html").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r"https?://|(?:src|href)\s*=|\son[a-z]+\s*=\s*\"", offline), [])
+        self.assertIn('if (tries === 10 && !asked && !quit) begin();', offline)    # never by itself after a Quit, and not at once
+
+    def test_any_mod_is_uninstalled_and_renamed_from_its_menu_and_every_list_change_is_in_the_history(self):
+        """MT66: asked once, and a second time for a mod that came with the modlist; the History lists every change
+        of the mod list with its Revert."""
+        self.assertIn('{ text: "Uninstall…", off: !state.changes || !m.listed,', self.js)
+        self.assertIn('{ text: "Rename…", off: !state.changes || !m.listed,', self.js)
+        self.assertIn('const got = await api("/api/list/uninstall", { mods: [name] });', self.js)
+        self.assertIn('if (got.original.length && !await modalBox("“" + name + "” is an original part of this modlist.', self.js)
+        self.assertIn('Uninstall?", { yes: "Uninstall", no: "Keep it" })) return false;', self.js)
+        self.assertIn('const done = await api("/api/list/uninstall", { mods: [name], sure: true });', self.js)
+        self.assertIn('el("h2", { text: "Changes of the mod list" })', self.js)
+        self.assertIn('const r = await api("/api/list/undo", { job: j.job });', self.js)
+        for kind in ("mod renamed", "mod uninstalled", "mod put back", "mod moved", "separator renamed"):
+            self.assertIn('"%s": "' % kind, self.js)
+
+    def test_a_name_is_asked_at_every_install_and_update_and_a_side_of_the_web_opens_whole(self):
+        """MT67."""
+        self.assertIn('if (!rec || !rec.id || (!always && (state.settings || {}).ask_name === false)) return rec;', self.js)
+        self.assertEqual(self.js.count("askName("), 5)             # itself, the list's drop, the Installer tool's, the manual update, and the pen
+        self.assertIn('const p = await api("/api/add/propose", { updates: mod });', self.js)
+        self.assertIn('await api("/api/add/name", { updates: mod, name: to.trim() });', self.js)
+        self.assertIn("w.open.add(it.side);", self.js)
+        self.assertIn('b.addEventListener("click", () => { w.open.delete(it.side); w.more = null; webRender(); });', self.js)
+        self.assertIn("const WEB_OPEN_CAP = 240;", self.js)
+        self.assertIn('map.style.aspectRatio = g.w + " / " + g.h;', self.js)
+        # MT69: a side whose mods fit the window is shown whole without being asked, and has nothing to fold.
+        self.assertIn("const fit = webFits(sides, w, room);", self.js)
+        self.assertIn("return g.w * WEB_SMALLEST <= room.w && g.h * WEB_SMALLEST <= room.h;", self.js)
+        self.assertIn("else if (whole && all.length > WEB_CAP[side] && !(quiet && quiet.has(side))) items[side].push({ fewer: true, side });", self.js)
+        self.assertIn('window.addEventListener("resize", () => { clearTimeout(state.webResize);', self.js)
+
 if __name__ == "__main__":
     unittest.main()

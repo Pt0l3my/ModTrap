@@ -68,7 +68,19 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   rows, and columns are moved by their headings; a click on a mod's name opens its web: the mod in the middle of
   every mod it has to do with, coloured by kind, with its page as a link and its one picture).
   MT63 (no window but the browser: ModTrap's console is hidden, its lines being on the page).
-- **Open.** MT64 (whether ModTrap ends itself some time after its page was closed, now that it has no window); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  MT64, answered (ModTrap closes when its page is closed, and a page brought back starts it again).
+  MT65 (an install is weighed: an Evaluation tab beside Overwrites, lists that open whole; a mod that is in the
+  modlist already is said so before it is installed, with both versions, and an update offered; doubles are looked
+  for when a modlist is opened, and a Scan in the header looks through every mod; Uninstall in the mod's menu; a
+  mod shown in the list stays in view).
+  MT66, answered (Uninstall works for any mod, by moving it aside; an original part of the modlist is asked about twice;
+  uninstalls, moves and renames are in the History for good, each with its Revert; a mod can be renamed).
+  MT67 (a mod is named by its title and its version, from the source, the file's name or a file inside; the name is
+  asked at every install and update; "+ N more" in a mod's web shows that side's mods as boxes).
+  MT68 (doubles are told by title: obsolete and redundant mods are notes, each one list; patches that replace a mod's
+  plugin are left alone).
+  MT69 (a mod's web shows every mod that fits the window, without being asked).
+- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1609,3 +1621,182 @@ lost either way.
 **Recommendation: A for now**, with B as a setting if the unseen program turns out to be a nuisance. A browser
 gives a page no sure way to say that its tab was closed, so B rests on a wait, and a wait that is wrong ends
 ModTrap under the owner's hands.
+
+**Answer, 2026-11-23.** The owner: "Yes, when closing the browser tab/window, the process needs to close as well.
+If the user reopens the browser as a whole, which then has the ModTrap session open, then restart the executable
+(or whatever it needs to restore session active). Is that safe? how can we make this safe to achieve what I asked
+for?"
+
+**Settled** (DESIGN§26, WHY§131; the owner may overrule any of it):
+
+- **B, made safe by three things.** A page says goodbye as it goes, so a closed tab is known within seconds and
+  not guessed from a wait; ModTrap never closes with anything in hand; and a ModTrap that did close wrongly is one
+  press away, because the page can start it again.
+- **Starting from the page** needs two things a page does not have by itself: something of ModTrap's that still
+  answers in the browser when ModTrap is gone (a worker that keeps one small page), and a way for that page to
+  start a program (a link of ModTrap's own kind, entered for the Windows account).
+- **Is it safe?** Yes, as built: the link carries nothing into ModTrap, starts only this ModTrap.exe, and the
+  browser asks before opening it. It is the one change ModTrap makes to the PC outside its own folders and the
+  modlist, so it has its own setting, on by default because the owner asked for what it does; off takes the
+  entry out.
+- **After a Quit** the page brought back does not start ModTrap by itself: Quit means closed. Its button does.
+
+## MT65
+
+**An install is weighed; the same mod twice is told; a scan of the whole list** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "I installed a mod and it here's the image of that. I would like the user to be able to click
+on "and 11 more" and extend to see full list, if the list is linger then the window space, then make it scrollable
+area. Also, currently the install pop up UI window only states what is overwritten, but there is no evaluation
+done if those overwrites are clean, or they cause any issues (usual issues with mods added/removed in Skyrim
+modding, look them up). So we could add tabs on this window, "Overwrites" would be the current one, and also add
+"Evaluation" which will show what I just asked for.
+
+Also the installed mod was named “[the mod's name] (2)” is it because the mod is already part of the list? if
+that's the case the installer should warn about that, and tell the user this mod is already installed/part of the
+modlist and show the installed mod version, and the to be installed mod's version, then suggest to instead update
+if the added mod is newer version.
+
+Also, can you make ModTrap generally scan for duplicates when opening a modlist or launching ModTrap? Also add a
+scan button to the header, so the user can scan for duplicates, conflicts, etc.
+
+Add uninstall to the right click menu.
+
+I clicked on "Show on the list" button and that actually snapped the modlist to a place where the actual mod isn't
+shown (about 2 scrolls further down, could be an issue due to the mod being almost at the bottom of the list)."
+
+(The mod's own name stood in the owner's message; it is left out here, as every real mod's name is.)
+
+**Settled** (DESIGN§25, WHY§130; the owner may overrule any of it):
+
+- **"and 11 more"** is a press that opens the whole list, in the install box and wherever ModTrap cuts a list of
+  findings short; the tab's body scrolls where it is longer than the window.
+- **Two tabs,** Overwrites and Evaluation. The evaluation is made once the mod is installed, by comparing every
+  shared file and by reading what format the mod's own files are in; DESIGN§25 lists what it looks for. Each
+  finding says how grave it is and why it matters. The same evaluation is in every mod's menu.
+- **Yes, the “(2)” was a second copy:** a mod of that name was in the modlist, and ModTrap named the new one
+  apart without a word. Now it asks first: which mod is there, its version, the file's version, and whether the
+  file is newer; with "Update it" (the default where the file is newer), "Install it as a second mod", "Cancel".
+- **Doubles are looked for when a modlist is opened,** from what is already read, and shown on the Health tab,
+  with their count in the header. **"Scan" in the header** looks through every enabled mod's files: mods that do
+  nothing where they stand, mods mostly inside another, and files this game does not load. Read into "conflicts":
+  conflicts between files across the list. Records that two plugins both change are told mod by mod in the mod's
+  web (MT62); a table of them for the whole list would name thousands of pairs on a large list.
+- **Uninstall in the menu** takes out a mod ModTrap installed, as the install box's Uninstall does. For a mod it
+  did not install the entry is there, greyed, and says why (MT9); MT66 asks whether that should change.
+- **"Show it in the list"** now shows the mod: its card, which opens above the list, pushed the row out of view.
+
+## MT66
+
+**Should "Uninstall" also take out a mod ModTrap did not install?** · *2026-11-23 · **Open***
+
+MT9 says ModTrap never deletes a mod: it only disables. "Uninstall" for a mod ModTrap installed keeps to that,
+because it puts back what was there before the install. For any other mod there is no "before" to put back.
+
+- **A. As built:** Uninstall only for what ModTrap installed; any other mod can be disabled.
+- **B. Uninstall any mod, by moving it:** the mod's line leaves MO2's list and its folder is moved into the job's
+  safe folder, whole, with Undo to put both back. Nothing is deleted, so MT9's reason holds; the mod is gone from
+  MO2 until undone.
+
+**Recommendation: B**, if the owner wants it: it is what "uninstall" means in MO2, and moving is as safe as
+disabling. It is not built, because it widens what MT9 allows and that is the owner's to say.
+
+**Answer, 2026-11-23.** The owner: "Yes, make Uninstall work for any mod, but for those mods that are part of the
+original modlist, point out they are original parts and ask "uninstall?" another time as pop up to confirm. Also
+deleted mods along with jobs, should becomes permanent part of the history and makes them revertable. Can you also
+add mods moved (resulting in priority changes) in history and make them revertable? also add mod and separator
+renames (also revertable)."
+
+**Settled** (DESIGN§27, WHY§132; the owner may overrule any of it):
+
+- **B.** Uninstall works for any mod, from its menu, by moving: nothing is deleted, so MT9's reason holds. MT9 is
+  amended so far: a mod may leave MO2 at the owner's word, into ModTrap's keeping.
+- **An original part of the modlist** is said to be one, and "Uninstall?" is asked a second time in its own box.
+  "Original" is what the list's own file names (MT37). Without that file ModTrap says it cannot tell, and asks
+  once.
+- **Permanent, and revertable.** Every uninstall stays in the History with its Revert; clearing the job list does
+  not touch it; the mod's folder is kept until then.
+- **Moves and renames** are there too, each with its Revert: mods and separators moved (with the priority before
+  and after), separators renamed, and mods renamed. Read into "mod renames": that a mod can be renamed at all,
+  which it could not; "Rename…" is now in a mod's menu, done as MO2 does it.
+- Enabling, disabling and the Plugins tab's changes are in the same table: they were jobs of the same kind
+  already, with only the newest one's Undo in reach.
+
+## MT67
+
+**A mod is named by its title and its version, and the name is asked; "+ N more" opens in the web** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "in the new mod pop up UI, can you also make the "+18 more" to also show the boxes in the
+network, not just list on the side?
+
+Also when installing/adding a mod (or when updating), what I am interested in is two things: Mod title and mod
+Version. so when installing this mod for instance:
+
+[the mod's title] [its number at Nexus] 1.2 [the time of upload] [the site's code].7z (this is how the file gets downloaded from nexus)
+
+Then I want it to be named as: [the mod's title] 1.2
+when installed or updated. I suppose this inforkmation could be fetched from 3 sources: a file that contains
+version, the source stating it, the compressed file name having it."
+
+And, while it was being built: "also, for added/updated mods, can you add manually name setting? so when the user
+install or updates a mod, allow user to enter a name for it every time (show the full file title be default in
+text box that the user can alter)."
+
+(The mod's own title, its number, the time and the code stood in the owner's message; they are left out here, as
+everything that names a real mod is.)
+
+**Settled** (DESIGN§28, WHY§133; the owner may overrule any of it):
+
+- **"Title Version".** A new mod and a newer version are named so. The version from the owner's three sources, in
+  the order of how much each can be trusted: the source's own word for the file, the file's name, a file inside
+  the archive. An update keeps the title of the mod it replaces. This replaces "Title (version)" of MT40.
+- **The name is asked every time**, in a box with the name in a text field. Read into "the full file title by
+  default": the name ModTrap would give, title and version, which is what the owner asked a mod to be named two
+  messages earlier; the file's whole name stands in the box's text above the field. A setting turns the question
+  off; the pen on the Installer tool's list stays.
+- **"+ N more"** shows that side's mods as boxes in the picture as well as in the list beside it, with "Show
+  fewer" to fold it again.
+
+## MT68
+
+**Doubles are told by title, not by shared words: obsolete, redundant, and patches left alone** · *2026-11-23 · The owner's correction*
+
+**Owner's words.** "about duplications, we need to make look up logic better because right now it considers
+duplications by simple same words (but overall different title, e.g. XYZ vs XYZ-AE (both contains XYZ)), a
+disabled mod and an enabled (active) mod both containing same words (even if different versions (in this case the
+note should be about "Obsolete" because there is a newer version active, and if both are active but newer version
+overwrites it completely, then that's about "Redundancy", both cases should be collective notes, so stack them in
+the same note, not as separate since they are not critical or even important)). If you look at these warning and
+the actual modlist, you can see the modlist author created many patches that contain mod name with "patch" or
+something like that added, which only overwrites part of the mod they want, so those should be left alone (no
+note or warning needed)."
+
+**Settled** (DESIGN§25 as amended, WHY§134; the owner may overrule any of it). This replaces MT65's list of what
+is looked for when a modlist is opened:
+
+- **The same mod** is two mods of the same title: the names without a copy's mark and without a version at the
+  end, compared whole. "XYZ" and "XYZ-AE" are two titles; so are a mod and its patch. Two mods installed from the
+  same file of the same page are compared too, whatever their names.
+- **Obsolete** (a note): a disabled mod whose newer version is enabled. One note lists them all.
+- **Redundant** (a note): an enabled mod whose every file is also in its newer version or its copy, which has
+  the higher priority. One note lists them all. The Scan's "wholly overwritten by the mods above it" is a note of
+  the same kind, no longer "worth a look".
+- **Twice in the game** (worth a look, the only one that is): two mods of the same title, both enabled, where the
+  higher one does not replace the lower whole, so that files only the older one has still load.
+- **Left alone, with no word:** a plugin of the same name in two enabled mods (what a patch of the list's author
+  does); the same script extender plugin in two enabled mods; one file installed as two mods of different titles,
+  each with part of it; two mods of one title that are both disabled.
+- **At an install** the evaluation still says when the mod replaces another mod's plugin or script extender
+  plugin, as worth a look and no longer as a likely fault: there it is about the one mod just put in.
+
+## MT69
+
+**A mod's web shows every mod that fits the window** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "if the mods in the network fit into window space just present them all, non need to limit"
+
+**Settled** (WHY§135; the owner may overrule any of it): a side of the picture is shown whole, without "+ N more"
+and without "Show fewer", whenever all its mods fit the window without scrolling at a size at which a box is still
+two readable lines. All sides together where that fits, else one after another, the smallest first. A side that
+does not fit keeps its "+ N more", which opens it with scrolling as MT67 has it. The picture is drawn as large as
+the window allows and is fitted again when the window's size changes.

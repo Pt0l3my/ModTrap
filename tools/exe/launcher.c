@@ -62,6 +62,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
     DWORD result = 1;
+    int plain;
 
     if (n == 0 || n >= LONGEST) return say(L"ModTrap could not tell which folder it is in.");
     slash = wcsrchr(dir, L'\\');
@@ -89,8 +90,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show
         }
     }
     if (wcslen(python) + wcslen(EXTRA_ARGS) + wcslen(rest) + 64 > LONGEST) return say(L"The command line is too long.");
-    /* Started plainly, the console made below is ModTrap's own, and ModTrap is told so: it may then hide it or show it. */
-    _snwprintf(command, LONGEST, L"\"%ls\"%ls -m modtrap%ls%ls%ls%ls", python, first, EXTRA_ARGS, *rest ? L"" : L" --own-console", *rest ? L" " : L"", rest);
+    /* Started plainly, the console made below is ModTrap's own, and ModTrap is told so: it may then hide it or show it.
+       Started by ModTrap's own page through its link (MT64), which hands on this one word and nothing of the link, it
+       is a plain start too, and opens no second tab. */
+    plain = !*rest || wcscmp(rest, L"--from-page") == 0;
+    _snwprintf(command, LONGEST, L"\"%ls\"%ls -m modtrap%ls%ls%ls%ls", python, first, EXTRA_ARGS, plain ? L" --own-console" : L"", *rest ? L" " : L"", rest);
     command[LONGEST] = 0;
 
     (void)instance; (void)previous; (void)line; (void)show;
@@ -104,7 +108,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show
     si.cb = sizeof si;
     si.lpTitle = title;
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = (WORD)(*rest ? SW_SHOWNORMAL : SW_HIDE);
+    si.wShowWindow = (WORD)(plain ? SW_HIDE : SW_SHOWNORMAL);
     ZeroMemory(&pi, sizeof pi);
     if (!CreateProcessW(python, command, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
         return say(L"Python could not be started.");
@@ -112,7 +116,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show
        the console and waits for a key where its start fails; this is for a Python that does not get that far.) */
     if (WaitForSingleObject(pi.hProcess, 4000) == WAIT_OBJECT_0) {
         GetExitCodeProcess(pi.hProcess, &result);
-        if (result != 0 && !*rest)
+        if (result != 0 && plain)
             say(L"ModTrap ended right after it started.\n\nIf it was already running in the middle of a job, its page is open in your browser: let the job end there.\n\nOtherwise start ModTrap.cmd, in the same folder, to read what it says.");
     } else {
         result = 0;

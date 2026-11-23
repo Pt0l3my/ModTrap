@@ -609,3 +609,32 @@ ModTrap is for and one public repository.
 - **Not known.** How many requests an hour either service allows for pictures; whether Nexus gives a mod marked
   adult its plain picture to a visitor who is not signed in, as it did for the one asked about, which is not so
   marked.
+
+## 33. The marks by which a file's format is told, and what the usual faults are (2026-11-23)
+
+What `evaluate` reads. None of these files is to hand here; each line says what it rests on.
+
+- **LIKELY (the formats' public descriptions; not checked against a real file in this session).** An archive
+  begins with the letters BSA, a zero byte and a version number: 104 for the older Skyrim, 105 for Special
+  Edition; Fallout 4's begins `BTDX`.
+- **LIKELY (same).** A plugin's first record header holds its form version in the two bytes at offset 20: 43 as
+  the older game saved it, 44 as Special Edition's Creation Kit saves it. A record's flags carry `0x20` for
+  "deleted".
+- **LIKELY (same).** A compiled animation or behaviour file begins with two fixed numbers (`57 E0 E0 57`,
+  `10 C0 C0 10`); the byte at offset 16 is the size of a pointer in it: 4 in the older game's 32-bit files, 8 in
+  Special Edition's.
+- **LIKELY (same).** A mesh begins with the line `Gamebryo File Format, Version 20.2.0.7`, then its version, a
+  byte, its user version (12 for both Skyrims), its number of blocks and its stream version: 83 as the older
+  game wrote it, 100 as Special Edition does.
+- **LIKELY (the script extender's way of loading plugins, as plugin authors describe it).** A plugin for game
+  version 1.6 names itself through a block of data called `SKSEPlugin_Version`; one for 1.5 only through a
+  function called `SKSEPlugin_Query`; a plugin for both has both names in it.
+- **FACT (Windows' own format).** A program file carries its version in a fixed block that begins `BD 04 EF FE`.
+- **Looked up, 2026-11-23 (public guides and forum threads on converting mods of the older game; none copied):**
+  an older-format archive is the most consistent cause of a game that will not start; an older-form plugin is
+  "very unlikely to crash" and resaving it sets the form right; animations of the older game must be converted;
+  a skeleton overwritten by one with fewer bones crashes the game with a missing-node error, and the skeleton
+  with the most bones should win; scripts are to be loaded in the order their patches' authors say. These set
+  the findings' levels (WHY§130).
+- **Not known.** Whether every older-format mesh shows in this way (the stream version alone); how a plugin for
+  both game versions that names neither mark would be told. Such a file gets no finding.

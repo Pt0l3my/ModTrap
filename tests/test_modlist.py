@@ -8,7 +8,7 @@ import time
 import unittest
 from pathlib import Path
 
-from modtrap import api, changes, history, instance, loadcheck, logbook, model, probe, profile
+from modtrap import api, changes, history, instance, listjob, loadcheck, logbook, model, probe, profile
 from tests import _fixtures as fx
 
 CORE = "Core.esm"
@@ -279,12 +279,96 @@ class TheModlistPage(unittest.TestCase):
         self.assertIn(b"+Arms and Armour_separator\r\n", (other / "modlist.txt").read_bytes())
         self.assertEqual(self.events()[-1][0], "separator renamed")
         for body in ({"name": "Arms and Armour_separator", "to": "Outputs"}, {"name": "Arms and Armour_separator", "to": "a/b"},
-                     {"name": "Quill", "to": "Other"}, {"name": "Arms and Armour_separator", "to": ""}):
+                     {"name": "Arms and Armour_separator", "to": ""}):
             with self.assertRaises(api.Bad):
                 self.post("/api/list/rename", body)
         self.post("/api/list/undo", {})
         self.assertEqual((self.lists(), (other / "modlist.txt").read_bytes()), (before, second))
         self.assertTrue((self.root / "mods" / "Gear_separator").is_dir())
+
+    def test_a_mod_is_renamed_as_mo2_does_and_back_and_a_tools_output_mod_is_not(self):
+        """MT66: the folder, and the line in every profile's list; in the history, and undone by its job."""
+        other = self.root / "profiles" / "Second"
+        fx.write(other / "modlist.txt", (self.pdir / "modlist.txt").read_bytes().replace(b"+Lantern\r\n", b"-Lantern\r\n"))
+        self.api.open(str(self.root), wait=True)
+        before, second = self.lists(), (other / "modlist.txt").read_bytes()
+        at = instance.load(self.root).mod("Lantern").priority
+        got = self.post("/api/list/rename", {"name": "Lantern", "to": " Lantern  of the North "})
+        self.assertEqual((got["name"], got["text"]), ("Lantern of the North", "Renamed the mod “Lantern” to “Lantern of the North”"))
+        inst = instance.load(self.root)
+        self.assertEqual((inst.mod("Lantern of the North").priority, inst.mod("Lantern of the North").enabled, inst.mod("Lantern")), (at, True, None))
+        self.assertTrue((self.root / "mods" / "Lantern of the North" / "Lantern.esp").is_file())
+        self.assertIn(b"-Lantern of the North\r\n", (other / "modlist.txt").read_bytes())
+        self.assertEqual(self.events()[-1][0], "mod renamed")
+        for body in ({"name": "Lantern of the North", "to": "Quill"}, {"name": "Lantern of the North", "to": "x_separator_y/z"}, {"name": "Tool Output", "to": "Made"}):
+            with self.assertRaises(api.Bad) as c:
+                self.post("/api/list/rename", body)
+        self.assertIn("is the mod the tool “Invented Patcher” writes into", str(c.exception))
+        job = self.api.get("/api/history", {})[1]["list_jobs"][0]
+        self.assertEqual((job["op"], job["undone"], job["mods"]), ("rename", "", ["Lantern of the North"]))
+        self.post("/api/list/undo", {"job": job["job"]})
+        self.assertEqual((self.lists(), (other / "modlist.txt").read_bytes()), (before, second))
+        self.assertTrue((self.root / "mods" / "Lantern" / "Lantern.esp").is_file())
+        self.assertNotEqual(self.api.get("/api/history", {})[1]["list_jobs"][0]["undone"], "")
+
+    def test_a_mod_is_uninstalled_by_moving_it_aside_and_put_back_from_the_history(self):
+        """MT66: out of every profile's list and out of the mods folder; nothing deleted; its plugin leaves the load
+        order; asked first; the job stays in the history and its Revert puts everything back."""
+        other = self.root / "profiles" / "Second"
+        fx.write(other / "modlist.txt", (self.pdir / "modlist.txt").read_bytes().replace(b"+Lantern\r\n", b"-Lantern\r\n"))
+        self.api.open(str(self.root), wait=True)
+        before, second = self.lists(), (other / "modlist.txt").read_bytes()
+        asked = self.post("/api/list/uninstall", {"mods": ["Quill"]})
+        self.assertEqual((asked["done"], asked["original"], asked["unknown"]), (False, [], ["Quill"]))
+        self.assertTrue(asked["ask"] and "Lantern.esp" in str(asked["plan"]))               # a plugin that needs it loses its master: said first
+        self.assertEqual(self.lists(), before)
+        got = self.post("/api/list/uninstall", {"mods": ["Lantern"], "sure": True})
+        self.assertEqual(got["text"], "Uninstalled “Lantern”: 1 plugin left the load order")
+        inst = instance.load(self.root)
+        self.assertIsNone(inst.mod("Lantern"))
+        self.assertFalse((self.root / "mods" / "Lantern").exists())
+        kept = self.root / listjob.REMOVED / got["job"] / "Lantern"
+        self.assertTrue((kept / "Lantern.esp").is_file())                                    # moved, whole: nothing deleted
+        self.assertNotIn(b"Lantern", (other / "modlist.txt").read_bytes())
+        self.assertNotIn(b"Lantern.esp", (self.pdir / "plugins.txt").read_bytes() + (self.pdir / "loadorder.txt").read_bytes())
+        self.assertEqual(self.events()[-1][0], "mod uninstalled")
+        job = self.api.get("/api/history", {})[1]["list_jobs"][0]
+        self.assertEqual((job["op"], job["mods"], job["kept"].replace("\\", "/")), ("uninstall", ["Lantern"], listjob.REMOVED + "/" + got["job"]))
+        self.api.post("/api/jobs/clear", {})                                                 # clearing the job list does not touch it
+        self.assertEqual(self.api.get("/api/history", {})[1]["list_jobs"][0]["job"], got["job"])
+        for bad in ({"mods": ["Gear_separator"]}, {"mods": ["Nobody"]}):
+            with self.assertRaises(api.Bad):
+                self.post("/api/list/uninstall", bad)
+        self.post("/api/list/undo", {"job": got["job"]})
+        self.assertEqual((self.lists(), (other / "modlist.txt").read_bytes()), (before, second))
+        self.assertTrue((self.root / "mods" / "Lantern" / "Lantern.esp").is_file())
+        self.assertFalse((self.root / listjob.REMOVED).exists())
+        self.assertEqual([e[0] for e in self.events()[-2:]], ["mod put back", "reverted"])
+
+    def test_a_mod_that_came_with_the_modlist_is_named_as_such_before_it_is_uninstalled(self):
+        rows = [{"mod": "Lantern", "origin": "list"}, {"mod": "Thistle", "origin": "added"}, {"mod": "Beacon", "origin": ""}]
+        self.api._rows = lambda m: rows
+        asked = self.post("/api/list/uninstall", {"mods": ["Lantern", "Thistle", "Beacon"]})
+        self.assertEqual((asked["done"], asked["original"], asked["unknown"]), (False, ["Lantern"], ["Beacon"]))
+        got = self.post("/api/list/uninstall", {"mods": ["Lantern", "Thistle"], "sure": True})
+        self.assertEqual(got["text"], "Uninstalled “Lantern” and 1 more: 1 plugin left the load order")
+        said = [e for e in history.History(self.api.store.dir(self.api.session.id)).all() if e["kind"] == "mod uninstalled"]
+        self.assertEqual([(e["mod"], e["original"], e["was"]) for e in said], [("Lantern", True, "enabled"), ("Thistle", False, "disabled")])
+
+    def test_an_uninstall_is_put_back_by_its_own_lines_when_the_lists_changed_since(self):
+        got = self.post("/api/list/uninstall", {"mods": ["Lantern"], "sure": True})
+        self.settle()
+        self.post("/api/list/set", {"mods": ["Beacon"], "on": True, "sure": True})          # a later change of the same lists
+        self.settle()
+        done = self.post("/api/list/undo", {"job": got["job"]})
+        self.assertEqual(done["how"], "by line")
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        lantern = inst.mod("Lantern")
+        self.assertTrue(lantern.enabled and inst.mod("Beacon").enabled)                      # both stand: the later change was not undone with it
+        self.assertEqual(lantern.priority, inst.mod("Quill").priority - 1)                    # back where it stood: directly below Quill
+        row = m.row("Lantern.esp")
+        self.assertTrue(row.active and row.position is not None and row.position > m.row("Quill.esp").position)
 
     # --- the scanner -----------------------------------------------------------------------------------------------
 

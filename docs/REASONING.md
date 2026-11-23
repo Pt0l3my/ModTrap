@@ -152,6 +152,12 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 127 | 2026-11-23 | Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest | METHOD | #page |
 | 128 | 2026-11-23 | Every column has its own width and the table is their sum; a mod's web is one box for each mod, read in two passes; a conflict is told by masters, not by what is inside a record; the picture goes through the server | METHOD | #page #model #updates #safety |
 | 129 | 2026-11-23 | The console is hidden, not done without; only a console of ModTrap's own is hidden | METHOD | #launcher #safety |
+| 130 | 2026-11-23 | An evaluation compares files and reads formats' marks, and says what it cannot tell; a double is told by its page and its file's name, not by its page alone; the list is scanned in one pass from the top | METHOD | #adding #model #page |
+| 131 | 2026-11-23 | A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing | DECIDED | #page #launcher #safety |
+| 132 | 2026-11-23 | An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it | METHOD | #page #safety #model |
+| 133 | 2026-11-23 | A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes | METHOD | #adding #page #updates |
+| 134 | 2026-11-23 | On the owner's list nearly every "same plugin twice" was a patch; a double is a title, and what is said of it depends on whether it is in the game | FACT | #model #page |
+| 135 | 2026-11-23 | What fits is reckoned on the sheet before it is drawn, at the smallest size a box can be read at | METHOD | #page |
 
 ## Entries
 
@@ -3489,3 +3495,176 @@ them; the addresses were read by a session that can), and the time the second pa
   takes over, WHY§68), and whether it should end itself is the owner's to say: MT64.
 - **Not checked:** any of it on Windows. The launcher is built here and its source read by a test; what a hidden
   console does on the owner's PC is for the owner's first start to show.
+
+### 130. An evaluation compares files and reads formats' marks, and says what it cannot tell; a double is told by its page and its file's name, not by its page alone; the list is scanned in one pass from the top
+
+`2026-11-23` · METHOD · `#adding #model #page` · refs: MT65, MT66, MT9, DESIGN§25, TL01§33, WHY§121, WHY§128
+
+- FACT (the owner's screenshot at 0.3.55): a mod dropped on the list overwrote one file each of 25 mods, and the
+  box could only list them. Whether that matters could not be read from it. LIKELY those 25 files are one paper
+  (a read-me or the like) that many mods carry under one name; the evaluation now says so in one line.
+- FACT (`api._new_staged`): a new mod whose name is taken was named "name (2)" without a word. That is how the
+  owner got a second copy of a mod. The check now comes before anything is installed.
+- What can be told without a tool, and is: whether two files are the same (byte for byte, within a budget of
+  bytes and time); what kind a file is, by its path; what format it is in, by its first bytes (TL01§33); which
+  version of the game is installed, from the game's program file.
+- What cannot, and is said in the box: what two plugins change inside one record; whether a mesh and a texture
+  from two mods fit each other; whether a script that replaces another is the better one. For these the finding
+  says why it matters and where to look.
+- Levels by what the modding community's own guides report (TL01§33): an older-format archive and an older-format
+  animation are faults; an older-form plugin is mostly harmless, so it is a note; an older-format mesh is worth a
+  look.
+- A double is not "the same page at Nexus": FACT (the owner's list, WHY§103) one page gives a main file and its
+  patches, installed as several mods. It is the same page and the same file name without its version, or the
+  name the file would give its mod. Tested: another file of the same page is not a double.
+- The whole-list scan lists every enabled mod's files once, from the highest priority down, keeping for each path
+  only a number for the path and the mod that wins it. A mod is then weighed against all the mods above it in
+  the same pass. Rejected: comparing every pair of mods. Rejected for the scan: reading files' content; only
+  archives' first bytes and script extender plugins are opened.
+- Not built: a whole-list table of records two plugins both change. By the rule of WHY§128 a large list has
+  thousands of such pairs; it would be a list nobody can act on. Said to the owner.
+- "Show it in the list" missed because the mod's card opens above the list after the row was brought into view,
+  which moves the list under it. The card now comes first, and the row is looked for again after the page has
+  settled.
+- Checked in a browser on a stand-in list: an install weighed, the two tabs, a second drop of the same mod asked
+  about, cancelled and taken as an update, the menu's entries, the Scan button and the Health tab. **Not
+  checked:** the time the deep scan takes on the owner's list (bounded at four minutes, and it says when it was
+  cut short); the formats' marks against real files, which are not to hand here (TL01§33 says what each rests on).
+
+### 131. A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing
+
+`2026-11-23` · DECIDED · `#page #launcher #safety` · refs: MT64, MT63, MT22, DESIGN§26, DESIGN§2, WHY§68, WHY§129
+
+- MT64's worry was a wait that is wrong. The page's goodbye (sent as the page is left) removes most of the wait:
+  the last page gone is known in seconds. A reload sends it too and is back at once, hence eight seconds' grace.
+  The four-minute silence is only for a browser that ended without a word.
+- LIKELY (browsers' own behaviour, as their makers describe it): a hidden tab's timers are slowed to about one a
+  minute, so a page that still lives asks at least that often; a tab put to sleep runs nothing, and is told
+  first, so it can say so and is then not counted as gone.
+- A wrong close must cost nothing: ModTrap closes only with nothing in hand, the session is saved as Quit saves
+  it, and the page can start it again.
+- A page cannot start a program. The ways there are: a link of a kind Windows knows a program for; or a helper
+  that keeps running to be asked. A helper is the unseen program MT63 took away. So: a link.
+- The link is entered without "%1": Windows then hands nothing of the link to the program. FACT (tested on the
+  entry's text): the command is the program's path and one fixed word. A link that could carry a folder or a
+  switch would let any web page that the owner allowed once choose what ModTrap opens.
+- A tab brought back with ModTrap gone shows the browser's own error unless something of ModTrap's answers in
+  the browser: a service worker. It answers only a page being asked for, only when ModTrap does not, and only
+  with the one small page it kept. Rejected: keeping ModTrap's own page in the browser. It holds the start's
+  token, and a page from an earlier start is of no use.
+- The content policy gains `worker-src 'self'`, for that one file; nothing else changes.
+- The kept page waits ten seconds before it opens the link by itself: a ModTrap that is starting anyway (after
+  its own update, or by hand) is there within that. After a Quit it does not open it by itself at all.
+- Checked in a browser against a real start of ModTrap here: a reload does not close it; ModTrap ended under the
+  page brings the kept page; ModTrap started again brings its page back by itself; the tab closed ends ModTrap
+  in about eight seconds; a tab opened with ModTrap gone shows the kept page. **Not checked:** the link itself
+  and the registry entry (Windows only), the browser's question, and a tab put to sleep by a real browser.
+
+### 132. An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it
+
+`2026-11-23` · METHOD · `#page #safety #model` · refs: MT66, MT9, MT56, DESIGN§27, DESIGN§11, MO03§6, WHY§121
+
+- The removed mod's folder goes beside MO2's mods folder, not into the session's folder: ModTrap's own folder is
+  on the system drive, a modlist usually is not, and a move across drives is a copy of gigabytes followed by a
+  deletion. Beside the mods folder it is a renaming: instant, and nothing is ever deleted. MO2 does not look into
+  a folder it does not know.
+- The lists of every profile lose the mod's line, since MO2 drops a line whose folder is gone when it next loads
+  that profile; doing it at once keeps what ModTrap reads and what MO2 will show the same. Each profile's line
+  (its sign, and what it stood before) is in the job's record, so that a Revert by line can put it back there.
+- A plugin leaves the load order only if no other enabled mod has a file of that name: where one has, the plugin
+  is that mod's from now on, as it would be in MO2.
+- FACT (`listjob`): moves and separator renames were jobs with history entries already, and `list_undo` took a
+  job's name; only the newest one's Undo was on the page. The History now lists all of them, so nothing new had
+  to be built to make them revertable, only shown.
+- A Revert out of order works by the rule of DESIGN§11 (own lines only, when the lists changed since). FACT
+  (seen in the browser check): an uninstall reverted, then an older rename reverted with a move standing between
+  them. A job whose record names a mod by a name it no longer has says so and leaves that line.
+- A mod is renamed as MO2 renames it (MO03§6), no more: FACT (MO2's source at the commit of MO03,
+  `src/mainwindow.cpp:2495-2497`) MO2 writes the new name into the profiles' lists and nothing else, so its own
+  settings that name a mod (the mod a tool writes into) are left pointing at the old name. ModTrap therefore
+  refuses to rename such a mod and says why.
+- ModTrap's own notes keyed by a mod's name (a source link, a favourite) are carried to the new name, and back on
+  Revert. Not carried: the records of earlier jobs, which name the mod as it was then.
+- The menu's Uninstall is the same for a mod ModTrap installed: one way, always revertable from the History. The
+  install's own "Uninstall" (on the Installer tool and in the install box) still puts the lists back as they were
+  before that install.
+- Checked in a browser on a stand-in list: a mod renamed, moved, another uninstalled after the question, the
+  History's table, the uninstall and the rename reverted out of order. **Not checked:** on Windows, where the move
+  is `os.rename` on one drive; and the second question for an original mod, which needs a list file (tested at
+  the route).
+
+### 133. A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes
+
+`2026-11-23` · METHOD · `#adding #page #updates` · refs: MT67, MT65, MT62, MT40, DESIGN§28, DESIGN§23, TL01§31, WHY§130
+
+- FACT (TL01§31, and the owner's example): a download from Nexus is named title, the mod's number, the version,
+  the time of upload and a code. `from_archive_name` took the title and the version from it already; the name
+  ModTrap gave used the title alone, and "(version)" for an update.
+- The order of the three sources is by what each is: the source's word is about this very file; the file's name
+  was written by the site but can be changed by anyone; a version inside the archive is the author's and often
+  left at an older number. FACT (seen in mods' installer files generally): many carry none.
+- A version at the end of a name from elsewhere is taken only where it is written as one (digits, a dot, digits):
+  "Lantern 2" is a title, "Lantern 2.1" a title and a version. Tested on both forms of Nexus's names and on
+  plain ones.
+- An update keeps the title of the mod it replaces, cut at that mod's own version: the owner's names for mods
+  (and a modlist author's) are theirs, and a download's name is often another.
+- The name is asked when the file is taken in, not when it is unpacked: the question is answered while the
+  archive unpacks, and an install then waits for nothing. The price: a version that only a file inside tells is
+  not in the offered name; it renames the mod afterwards unless the owner gave a name.
+- Changing a name after the mod was read would leave what was read under the old name, so the kept reading is
+  dropped and made anew.
+- For the Updater the name has to be known before there is a file. The page asks, and the server keeps the wish
+  for that mod until the update's file is taken in; it is used once.
+- A double is now also told by the title in a mod's name ("Lantern 2.1" for a file "Lantern … 2.2"), since mods
+  no longer carry the bare title; and a mod's version by its name where nothing else records it.
+- The web: a side shown whole adds rows or columns and makes the sheet larger; the boxes keep their size and the
+  frame scrolls. Rejected: shrinking the boxes to fit, which makes every name unreadable at a few dozen; and
+  laying a long side out in one line, which makes the picture many screens long for a mod that hundreds need.
+  Columns of twelve keep a side of a hundred within about eight columns.
+- Checked in a browser on stand-in lists: the name offered for a download named as Nexus names it, Enter keeping
+  it, a name typed over it, a taken name said and asked again, an update offered "Title newer-version"; a side
+  of the web opened (rows below, a second column to the right), no boxes overlapping, folded again. **Not
+  checked:** the Updater's question against a live update (it needs the sites), and a side of several hundred
+  boxes for how it reads.
+
+### 134. On the owner's list nearly every "same plugin twice" was a patch; a double is a title, and what is said of it depends on whether it is in the game
+
+`2026-11-23` · FACT · `#model #page` · refs: MT68, MT65, DESIGN§25, WHY§130
+
+- FACT (the owner's session file at 0.3.57 and their screenshot): the look at opening gave 132 findings on a list
+  of 3,579 mods: 129 "worth a look", nearly all "a plugin of the same name in two enabled mods", where the winner
+  was a patch, a fix or the list author's own version of the mod. A list of 129 warnings that are all as intended
+  hides the one that is not.
+- FACT (same): the one "likely fault" was one file installed as two mods of different names, each a part of it:
+  intended. And an older version left disabled beside the newer one was told with the same words as a fault.
+- So a double is no longer "the same file" or "the same plugin's name" but the same title, compared whole. What
+  is said depends on what is in the game: nothing of a disabled older version is (obsolete, a note); nothing of
+  an enabled mod wholly inside its newer version is (redundant, a note); files of two enabled versions that do
+  not cover each other are (worth a look).
+- "Wholly inside" is looked at for the pair alone: the lower mod's files are listed and the higher mod is asked
+  for each. That is a few pairs on a list, not a listing of every mod.
+- Two mods from the same file with different titles are compared as well, but only told where the lower is
+  disabled and older, or wholly inside the higher: a part of a file installed on its own is neither.
+- FACT (same log): the look took 32 to 35 seconds at the first opening and ran twice at once, once from the
+  opening and once from the page asking; the second opening took 1.5 seconds. The time went into reading every
+  mod's own record from a cold disk and listing every mod's script extender folder. The folders are no longer
+  listed, the look runs in a thread of its own, once for a modlist as read, and the page is told "looking".
+- FACT (same log): ModTrap's own update from 0.3.54 over 0.3.55 to 0.3.57 worked on the owner's PC, and a mod's
+  picture was fetched from its site there (the first time either ran outside this session's stand-ins).
+
+### 135. What fits is reckoned on the sheet before it is drawn, at the smallest size a box can be read at
+
+`2026-11-23` · METHOD · `#page` · refs: MT69, MT67, MT62, DESIGN§28, WHY§133
+
+- FACT (the owner's screenshot at 0.3.59): a mod with 25 mods on one side showed seven and "+ 18 more" in a
+  window with room for all of them.
+- The picture is a sheet of boxes at fixed places, scaled to its frame. Whether a set of sides fits is therefore
+  a sum: the sheet's width and height for that set, times the smallest scale at which a box holds two lines
+  (0.78 of the sheet's own size), against the room the window leaves the picture. Nothing has to be drawn to
+  know it.
+- The room is the window's height less what stands around the picture (measured once the box is drawn, reckoned
+  before), and the frame's width.
+- A column holds as many boxes as that height takes, so a side that fits in one column is not split in two.
+- A side that fits has no "Show fewer": there is nothing to gain by folding it. A side opened by hand keeps it.
+- Checked in a browser at three window sizes on the stand-in list: at the two larger ones all 32 mods are boxes,
+  nothing scrolls and nothing overlaps; at the small one the sides keep their "+ N more".

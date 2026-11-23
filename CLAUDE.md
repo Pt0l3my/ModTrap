@@ -39,7 +39,8 @@ in [docs/design/](docs/design/).
   text taken from a real mod. ModTrap's output stays on the owner's PC.
 - Test fixtures are invented: tiny plugins written by ModTrap's own code, with invented names.
 - ModTrap never changes a file in the game's folder or in a trapped mod's folder, and never deletes a mod or a
-  plugin: a mod is only ever disabled (MT9). It changes no file before a copy of it is in the job's safe folder
+  plugin: a mod is disabled (MT9), or, at the owner's word, uninstalled by moving its folder aside whole, to be put
+  back by a Revert (MT66). It changes no file before a copy of it is in the job's safe folder
   (MT14), writes only what a confirmed plan named (DESIGN§8), and records every change in its history (MT15).
 
 ## Licences

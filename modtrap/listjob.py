@@ -24,6 +24,7 @@ log = logbook.get("modlist")
 LISTS = ("modlist.txt", "plugins.txt", "loadorder.txt")
 MOVABLE = ("mod", "separator")
 SEP = "_separator"
+REMOVED = "ModTrap - removed mods"      # beside MO2's mods folder, on the same drive: an uninstalled mod's folder is moved here, whole (MT66)
 
 
 class Refused(Exception):
@@ -301,24 +302,32 @@ class ListJob:
     # --- rename a separator -------------------------------------------------------------------------------------------
 
     def rename(self, old: str, new: str) -> dict:
-        """Renames a separator: its folder in MO2's mods folder and its line in every profile's list (MO03§6)."""
+        """Renames a mod or a separator, as MO2 does: its folder in MO2's mods folder and its line in every
+        profile's list (MO03§6)."""
         mod = self.inst.mod(old)
-        if mod is None or mod.kind != "separator" or mod.folder is None:
-            raise Refused("“%s” is not a separator of MO2's list" % _bare(old))
-        if not new.lower().endswith(SEP):
-            raise Refused("that is not a separator's name")
+        if mod is None or mod.kind not in MOVABLE or mod.folder is None:
+            raise Refused("“%s” is not a mod or a separator of MO2's list" % _bare(old))
+        word = "separator" if mod.kind == "separator" else "mod"
+        if (mod.kind == "separator") != new.lower().endswith(SEP):
+            raise Refused("that is not a %s's name" % word)
+        if mod.kind == "mod":
+            tool = next((t for t, n in self.inst.output_mods.items() if fold(n) == fold(mod.name)), "")
+            if tool:
+                raise Refused("“%s” is the mod the tool “%s” writes into, and MO2's settings name it. Neither MO2 nor ModTrap changes those with a mod's name: "
+                              "renamed, the tool's files would land in Overwrite. Name another mod for the tool in MO2 first." % (mod.name, tool))
         src, dst = mod.folder, self.inst.mods_dir / new
         if src.name == new:
             raise Refused("that is its name already")
         same = fold(src.name) == fold(new)                      # only the letters' case changes
         if not same and (dst.exists() or self.inst.mod(new) is not None):
-            raise Refused("MO2 already has a separator called “%s”" % _bare(new))
+            raise Refused("MO2 already has a %s called “%s”" % ("separator" if new.lower().endswith(SEP) else "mod", _bare(new)))
         profiles = [self.inst.profiles_dir / p for p in self.inst.profiles]
-        self._begin("rename", [p / "modlist.txt" for p in profiles], old=src.name, new=new, profiles=list(self.inst.profiles))
+        self._begin("rename", [p / "modlist.txt" for p in profiles], old=src.name, new=new, profiles=list(self.inst.profiles), kind=word,
+                    priority=mod.priority)
         try:
             os.rename(src, dst)
         except OSError as e:
-            self._fail(Refused("the separator's folder could not be renamed: %s" % logbook.why(e)))
+            self._fail(Refused("the %s's folder could not be renamed: %s" % (word, logbook.why(e))))
         back = lambda: os.rename(dst, src)                      # noqa: E731
         try:
             for p in profiles:
@@ -328,8 +337,94 @@ class ListJob:
                 raise Refused("the list does not read back as planned")
         except (Refused, profile.Refused, safe.Refused, OSError) as e:
             self._fail(e, back)
-        self.history.add("separator renamed", mod=_bare(new), was=_bare(src.name), now=_bare(new))
-        return self._done("Renamed the separator “%s” to “%s”" % (_bare(src.name), _bare(new)))
+        self.history.add("%s renamed" % word, mod=_bare(new), was=_bare(src.name), now=_bare(new), priority=mod.priority)
+        return self._done("Renamed the %s “%s” to “%s”" % (word, _bare(src.name), _bare(new)))
+
+    # --- uninstall: out of MO2, kept by ModTrap (MT66) ----------------------------------------------------------------
+
+    def uninstall(self, names: list[str], original: set[str] | None = None) -> dict:
+        """Takes mods out of MO2: each mod's line leaves every profile's mod list, the plugins that only it gave
+        leave the load order, and its folder is moved, whole, out of MO2's mods folder into ModTrap's own folder
+        beside it. Nothing is deleted: undo moves the folders back and puts the lists back."""
+        original = {fold(n) for n in (original or ())}
+        mods = []
+        for n in names:
+            y = self.inst.mod(n)
+            if y is None or y.kind != "mod" or y.folder is None or not y.listed:
+                raise Refused("“%s” is not a mod of MO2's list that can be taken out here" % n)
+            if not y.folder.is_dir():
+                raise Refused("the folder of “%s” is not in MO2's mods folder" % n)
+            if y not in mods:
+                mods.append(y)
+        going = {fold(y.name) for y in mods}
+        keep = self.inst.mods_dir.parent / REMOVED / self.dir.name
+        # The plugins that leave the load order with their mod: those only it gives. One that another enabled mod
+        # has too stays in the lists, and is that mod's from now on.
+        order = self._now()[1]
+        active = self._now()[2]
+        others = {fold(p) for o in self.inst.mods if o.kind == "mod" and o.enabled and fold(o.name) not in going for p in o.plugins}
+        drop = []
+        for y in mods:
+            for r in (self.model.provided_by(y) if self.model is not None else []):
+                if fold(r.name) not in others:
+                    drop.append({"name": r.name, "mod": y.name, "kind": r.kind, "active": fold(r.name) in active, "position": r.position})
+        dropping = {fold(d["name"]) for d in drop}
+        for d in drop:
+            at = next((i for i, n in enumerate(order) if fold(n) == fold(d["name"])), None)
+            d["was_before"] = next((n for n in order[at + 1:] if fold(n) not in dropping), "") if at is not None else ""
+        # Each profile's line of each mod: its sign, and the entry it stood directly before in MO2's list.
+        profiles = [p for p in self.inst.profiles]
+        lines: dict[str, dict[str, dict]] = {}
+        for p in profiles:
+            try:
+                rows = instance.parse_modlist(instance._decode(instance._read_bytes(self.inst.profiles_dir / p / "modlist.txt")))
+            except OSError:
+                continue
+            for i, (sign, name) in enumerate(rows):
+                if fold(name) in going:
+                    above = next((n for _s, n in reversed(rows[:i]) if fold(n) not in going), "")
+                    lines.setdefault(p, {})[name] = {"sign": sign, "before": above}
+        lists = [self.inst.profiles_dir / p / "modlist.txt" for p in lines] + [self.pdir / "plugins.txt", self.pdir / "loadorder.txt"]
+        self._begin("uninstall", list(dict.fromkeys(lists)), kept=str(Path(REMOVED) / self.dir.name), lines=lines, plugins=drop,
+                    mods=[{"name": y.name, "priority": y.priority, "enabled": y.enabled, "original": fold(y.name) in original, "plugins": list(y.plugins)} for y in mods])
+        moved: list[tuple[Path, Path]] = []
+
+        def back() -> None:
+            for src, dst in reversed(moved):
+                os.rename(dst, src)
+        try:
+            keep.mkdir(parents=True, exist_ok=True)
+            for y in mods:
+                dst = keep / y.folder.name
+                os.rename(y.folder, dst)
+                moved.append((y.folder, dst))
+        except OSError as e:
+            self._fail(Refused("the mod's folder could not be moved out of MO2's mods folder: %s" % logbook.why(e)), back)
+        try:
+            for p, named in lines.items():
+                for name in named:
+                    self._write(self.inst.profiles_dir / p / "modlist.txt", lambda p=p, name=name: profile.remove_mod_line(self.inst.profiles_dir / p, name))
+            if drop:
+                for n in ("loadorder.txt", "plugins.txt"):
+                    self.safe.may_change(self.pdir / n)
+                try:
+                    profile.remove_plugin_lines(self.pdir, [d["name"] for d in drop])
+                finally:
+                    for n in ("loadorder.txt", "plugins.txt"):
+                        self.safe.wrote(self.pdir / n)
+            now_mods, now_order, _a = self._now()
+            if any(fold(n) in going for _s, n in now_mods) or any(fold(n) in dropping for n in now_order) or any(src.exists() or not dst.is_dir() for src, dst in moved):
+                raise Refused("the lists do not read back as planned")
+        except (Refused, profile.Refused, safe.Refused, OSError) as e:
+            self._fail(e, back)
+        for y in mods:
+            self.history.add("mod uninstalled", mod=y.name, priority=y.priority, was="enabled" if y.enabled else "disabled",
+                             original=fold(y.name) in original, plugins=[{"name": d["name"], "kind": d["kind"], "position": d["position"]} for d in drop if d["mod"] == y.name],
+                             why="on the Modlist page; its folder is kept by ModTrap, beside MO2's mods folder")
+        text = "Uninstalled “%s”%s" % (mods[0].name, " and %d more" % (len(mods) - 1) if len(mods) > 1 else "")
+        if drop:
+            text += ": %d plugin%s left the load order" % (len(drop), "" if len(drop) == 1 else "s")
+        return self._done(text)
 
     # --- undo ---------------------------------------------------------------------------------------------------------
 
@@ -344,8 +439,23 @@ class ListJob:
             if op == "rename":
                 src, dst = self.inst.mods_dir / rec["new"], self.inst.mods_dir / rec["old"]
                 if not src.is_dir() or (dst.exists() and fold(rec["old"]) != fold(rec["new"])):
-                    raise Refused("the separator is no longer there under the name ModTrap gave it")
+                    raise Refused("the %s is no longer there under the name ModTrap gave it" % rec.get("kind", "separator"))
                 os.rename(src, dst)
+            if op == "uninstall":
+                keep = self.inst.mods_dir.parent / rec["kept"]
+                pairs = [(keep / x["name"], self.inst.mods_dir / x["name"]) for x in rec["mods"]]
+                for src, dst in pairs:
+                    if not src.is_dir():
+                        raise Refused("the folder of “%s” is no longer where ModTrap kept it" % src.name)
+                    if dst.exists():
+                        raise Refused("MO2's mods folder has a “%s” again: rename or remove that one first" % dst.name)
+                for src, dst in pairs:
+                    os.rename(src, dst)
+                try:
+                    keep.rmdir()                                # empty now; a folder that is not stays
+                    keep.parent.rmdir()
+                except OSError:
+                    pass
             plan = self.safe.check()
             if not plan["foreign"]:
                 self.safe.revert(overwrite_foreign=False)
@@ -370,6 +480,15 @@ class ListJob:
             for p in rec["plugins"]:
                 self.history.add("plugin deactivated" if op == "enable" else "plugin activated", plugin=p["name"], plugin_kind=p["kind"], mod=p["mod"],
                                  why="a change on the Modlist page was undone")
+        if op == "uninstall":
+            for x in rec["mods"]:
+                self.history.add("mod put back", mod=x["name"], priority=x["priority"], why="an uninstall was undone: its folder is in MO2's mods folder again")
+        if op == "rename":
+            self.history.add("%s renamed" % rec.get("kind", "separator"), mod=_bare(rec["old"]), was=_bare(rec["new"]), now=_bare(rec["old"]), why="a rename was undone")
+        if op == "move":
+            for x in rec.get("mods", []):
+                self.history.add("separator moved" if x["name"].lower().endswith(SEP) else "mod moved", mod=_bare(x["name"]), priority=x["priority"],
+                                 priority_before=x.get("to"), why="a move was undone")
         self.history.add("reverted", why="the owner undid a change of the mod list: %s" % rec.get("text", op), how=how, notes=notes)
         log.info("undone (%s): %s", how, rec.get("text", op))
         return {"job": self.dir.name, "how": how, "notes": notes, "text": rec.get("text", "")}
@@ -410,6 +529,25 @@ class ListJob:
         elif op == "rename":
             for p in rec["profiles"]:
                 attempt(p, lambda p=p: profile.rename_mod(self.inst.profiles_dir / p, rec["new"], rec["old"]))
+        elif op == "uninstall":
+            for p, named in rec["lines"].items():
+                pd = self.inst.profiles_dir / p
+                try:
+                    there = {fold(n) for _s, n in instance.parse_modlist(instance._decode(instance._read_bytes(pd / "modlist.txt")))}
+                except OSError:
+                    notes.append("the mod list of profile %s could not be read" % p)
+                    continue
+                for name, was in named.items():
+                    before = was["before"] if fold(was["before"]) in there else ""
+                    if was["before"] and not before:
+                        notes.append("%s goes to the top in profile %s: %s, which it stood before, is no longer in the list" % (name, p, _bare(was["before"])))
+                    attempt(name, lambda pd=pd, name=name, before=before, was=was: profile.place_mod(pd, name, before, enabled=was["sign"] == "+"))
+            names = {fold(n) for n in self._now()[1]}
+            for d in sorted(rec["plugins"], key=lambda d: -(d["position"] or 0)):
+                before = d["was_before"] if fold(d["was_before"]) in names else ""
+                attempt(d["name"], lambda d=d, before=before: profile.place_plugins(self.pdir, [(d["name"], before)], activate=False))
+                if d["active"]:
+                    attempt(d["name"], lambda d=d: profile.set_plugins(self.pdir, {d["name"]: True}))
         elif op in ("plugin on", "plugin off"):
             for r in rec["plugins"]:
                 attempt(r["name"], lambda r=r: profile.set_plugins(self.pdir, {r["name"]: op == "plugin off"}))
@@ -434,7 +572,9 @@ class ListJob:
         if not isinstance(rec, dict) or rec.get("state") != "done":
             return None
         return {"job": work.name, "op": rec.get("op", ""), "when": rec.get("when", ""), "text": rec.get("text", ""),
-                "undone": rec.get("undone", ""), "profile": rec.get("profile", "")}
+                "undone": rec.get("undone", ""), "profile": rec.get("profile", ""), "how": rec.get("how", ""),
+                "kept": rec.get("kept", "") if not rec.get("undone") else "",
+                "mods": [x.get("name", "") for x in rec.get("mods", []) if isinstance(x, dict)][:50] or ([rec["new"]] if rec.get("op") == "rename" else [])}
 
 
 __all__ = ["LISTS", "ListJob", "Refused"]

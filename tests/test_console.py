@@ -30,8 +30,8 @@ class TheConsoleWindow(unittest.TestCase):
         with mock.patch.object(console.sys, "platform", "win32"):
             self.assertTrue(console.own(["--allow-changes", "--own-console"]))
         src = (ROOT / "tools" / "exe" / "launcher.c").read_text(encoding="utf-8")
-        self.assertIn('*rest ? L"" : L" --own-console"', src)             # only a plain start: with words, the window is the asker's
-        self.assertIn("si.wShowWindow = (WORD)(*rest ? SW_SHOWNORMAL : SW_HIDE);", src)
+        self.assertIn('plain ? L" --own-console" : L""', src)              # only a plain start: with words, the window is the asker's
+        self.assertIn("si.wShowWindow = (WORD)(plain ? SW_HIDE : SW_SHOWNORMAL);", src)
         self.assertIn("CREATE_NEW_CONSOLE", src)                         # hidden, but there: what ModTrap starts writes to it
         self.assertIn("--own-console", main_mod.main.__code__.co_consts)
 

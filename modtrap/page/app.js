@@ -14,8 +14,16 @@ async function api(path, body) {
   return call(path, body);
 }
 
+// This page's own mark (MT64): ModTrap knows by it which pages are open, and closes when the last one is gone.
+const PAGE_MARK = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+const lastWord = (what) => { try { navigator.sendBeacon("/bye", new URLSearchParams({ page: PAGE_MARK, token: TOKEN, what })); } catch (e) { /* the silence says it instead */ } };
+window.addEventListener("pagehide", () => lastWord("bye"));
+document.addEventListener("freeze", () => lastWord("asleep"));
+// ModTrap's worker in the browser: it keeps one small page, which offers to start ModTrap when it is not running.
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => { /* a browser that keeps none: its own error page shows instead */ });
+
 async function call(path, body) {
-  const opt = { headers: { "X-ModTrap-Token": TOKEN } };
+  const opt = { headers: { "X-ModTrap-Token": TOKEN, "X-ModTrap-Page": PAGE_MARK } };
   if (body !== undefined) {
     opt.method = "POST";
     opt.headers["Content-Type"] = "application/json";
@@ -276,6 +284,9 @@ const SETTING_TEXT = [
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
   ["install_on_drop", "Install a dropped mod by itself", "Off: a mod's archive dropped on the Installer tool is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it. On: it is installed as soon as it is read, with no press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing."],
   ["scan_on_enable", "Scan a mod when it is enabled on the Modlist page", "On: when you tick a mod with plugins on, ModTrap then looks through the load order for what the mod's plugins overwrite and what overwrites them, and tells you in a note at the bottom of the page. It only reads. Off: the scan runs when you ask for it, from the mod's right-click menu or its card."],
+  ["ask_name", "Ask for a mod's name at every install and update", "A mod is named by its title and its version, as in “Example Mod 1.2”: the title from the file's name (for an update, the name of the mod it replaces, without that mod's version), the version from what the mod's site says of the file, else from the file's name, else from a file inside it. On: before a mod is installed or updated, a box shows that name for you to change or keep; Enter keeps it. Off: the name is given without asking; the pen beside a mod on the Installer tool still changes it."],
+  ["quit_with_page", "Close ModTrap when its page is closed", "ModTrap has no window, so its page is all there is of it. On: when the last tab with ModTrap's page is closed (or its browser is), ModTrap saves its session and closes, a few seconds later; a page only loaded anew is back before that. It never closes in the middle of a job, a tool's run or a scan: it waits for that to end. A browser that is ended without a word is noticed after four minutes. Off: ModTrap runs until “Quit”."],
+  ["start_from_page", "Let ModTrap's page start ModTrap", "When ModTrap has closed and your browser brings its tab back, a small page ModTrap left in the browser shows instead and starts ModTrap again; then you are back where you were. For that, ModTrap enters one kind of link (modtrap:) for your Windows account, which starts this ModTrap.exe. Your browser asks before it opens such a link; you can let it remember the answer for this page. The link carries nothing: whatever it says, ModTrap is started the one same way, as a double-click does. Off: the entry is taken out again, and the page only tells you to start ModTrap.exe yourself."],
   ["console_window", "Show ModTrap's console window", "ModTrap's program writes what it does to a console window. Every line of it is on this page too (History, then Log), and nothing ModTrap does needs the window, so it is hidden: the browser is all you see. On: the window is shown, minimised, in the taskbar. Either way “Quit” at the top ends ModTrap, and closing this tab does not: start ModTrap again and its page is back. A start that fails shows the window, with what went wrong. Windows only, and only for a ModTrap started by ModTrap.exe: one started from a command prompt of yours leaves that window alone."],
   ["mod_pictures", "Show a mod's picture in its web", "A click on a mod's name opens its web. On: where the mod's page at Nexus or its GitHub repository is known, ModTrap fetches the one picture that page opens with, from the site, and shows it there; it is kept in ModTrap's own folder for a month, so it is fetched once. Only the picture is asked for, and no key is sent. Off: no picture is fetched."],
   ["manual_placement", "Always place a new mod by hand", "Off: “Install mod” puts a new mod last (before what the modlist's tools made) with one press, and tells what it overwrites there. On: “Install mod” takes you to the Mods tab instead, where you click between two mods to choose its place; ModTrap shows what the mod overwrites at that place and installs it there on your OK. An update always takes the older version's place."],
@@ -458,6 +469,8 @@ async function modMenu(ev, mod) {
   if (!state.updates || state.updatesFor !== state.loaded) { try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { /* the menu still serves */ } }
   const r = state.updates ? state.updates.rows.find((u) => u.mod === mod) : null;
   const m = findMod(mod);
+  if (!state.installed || state.installedFor !== state.loaded) { try { state.installed = await api("/api/installed"); state.installedFor = state.loaded; } catch (e) { /* the menu still serves */ } }
+  const inst = state.installed ? state.installed.rows.find((u) => u.mod === mod && u.there) : null;
   const page = r && r.page;
   const rows = [
     { text: r && r.given ? "Change the source link…" : "Add a source link…", run: () => sourceLink(mod, r ? r.given : "") },
@@ -472,11 +485,16 @@ async function modMenu(ev, mod) {
       { text: m.enabled ? "Disable it" : "Enable it", off: !state.changes || !m.listed, note: state.changes ? "As its tick does: the mod's line in MO2's list, and its plugins by MO2's own rule" : NO_CHANGES, run: () => listSet([mod], !m.enabled) },
       { text: "Move to priority…", off: !state.changes || !m.listed, note: state.changes ? "For a place far away; nearby, drag the row" : NO_CHANGES, run: () => moveToPriority(mod) },
       { text: "Show its web…", note: "The mod in the middle of every mod it has to do with: what it needs, what needs it, patches, what it overwrites and what overwrites it, conflicts. As a click on its name does.", run: () => webOpen(mod) },
+      { text: "Evaluate it at its place…", note: "What its overwrites come to: which change nothing, which are what a patch or a retexture is for, and which are the usual ways a modlist breaks; and whether its own files fit this game. It only reads.", run: () => evaluateMod(mod) },
       { text: "Scan what it overwrites", note: "Whether its plugins stand safely in the load order, the records and files it overwrites, and what overwrites its own. It only reads.", run: () => scanMod(mod, true) },
       { text: "Add separator below…", off: !state.changes, note: state.changes ? "A separator of MO2's list, right below this mod" : NO_CHANGES, run: () => addSeparator(mod) }] : []),
+    ...(m && m.kind === "mod" && onMods() ? [null,
+      { text: "Rename…", off: !state.changes || !m.listed, note: state.changes ? "As MO2 renames a mod: its folder, and its line in every profile's list. In the History, with its Revert" : NO_CHANGES, run: () => renameMod(mod) },
+      { text: "Uninstall…", off: !state.changes || !m.listed, note: state.changes ? "Out of MO2's list and its mods folder; the mod's folder is kept whole by ModTrap, and the History's Revert puts everything back" + (inst ? ". (ModTrap installed this mod: its own “Uninstall” on the Installer tool puts the lists back as they were before that install instead.)" : "") : NO_CHANGES,
+        run: () => uninstallMod(mod) }] : []),
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
-    state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => { gotoMod(mod); focusMod(mod, true); } } : { text: "Show it on the Updater list", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
+    state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => { showInList(mod); } } : { text: "Show it on the Updater list", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
     !onMods() && m && m.row && m.row.classList.contains("tickable") ? { text: state.picked.has(mod) ? "Untick it" : "Tick it, to take it out", run: () => { togglePick(mod, !state.picked.has(mod)); updateTray(); } } : undefined,
   ].filter((v) => v !== undefined);
   menuAt(x, y, mod, rows);
@@ -687,7 +705,21 @@ async function getUpdate(mod, byBrowser) {
     toast("ModTrap updates a mod only when it is started with its switch for changes; the mod's page is opened for you.");
     return;
   }
-  // The tab is opened at once, while the press still counts as the owner's; it is closed again if it is not needed.
+  // The newer version's name (MT67): asked before anything starts; ModTrap's own is offered, Esc stops the update.
+  const going = ((state.updater || {}).runs || []).some((u) => u.mod === mod && u.state === "going");
+  if ((state.settings || {}).ask_name !== false && !going) {
+    try {
+      const p = await api("/api/add/propose", { updates: mod });
+      for (;;) {
+        const to = await modalBox("Update “" + mod + "”" + (p.version ? " to version " + p.version : "") + "\n\nThe newer version's name, as MO2 will show it. The version you have" + (p.was ? " (" + p.was + ")" : "") + " is kept under its own name, disabled.",
+          { input: p.name, yes: "Update", no: "Cancel", wide: true });
+        if (to === null) return;
+        if (!to.trim() || to.trim() === p.name) break;
+        try { await api("/api/add/name", { updates: mod, name: to.trim() }); break; } catch (e) { toast(e.message); }
+      }
+    } catch (e) { /* no name to offer: the update goes on under ModTrap's own */ }
+  }
+  // The tab is opened right after, while the press still counts as the owner's; it is closed again if it is not needed.
   const win = byBrowser || (r && r.fetches) ? null : siteWindow();
   let got;
   try { got = await api("/api/updater/start", { mod }); } catch (e) { if (win) { try { win.close(); } catch (e2) { /* gone */ } } toast(e.message); return; }
@@ -972,7 +1004,7 @@ function manualUpdate(mod) {
     done();
     try {
       toast("Taking in “" + file.name + "” as a newer version of “" + mod + "”…");
-      const rec = await sendArchive(file, mod);
+      const rec = await askName(await sendArchive(file, mod));
       await api("/api/updater/start", { mod, staged: rec.id });
       showTab("updater");
       pollUpdater(true);
@@ -1299,6 +1331,7 @@ function renderState(s) {
   $("groups").hidden = !ready;
   $("steps").hidden = !ready;
   $("rescan").hidden = !ready;
+  $("scan-list").hidden = !ready;
   $("drop").classList.toggle("compact", ready);
   $("folder-label").textContent = ready ? "Modlist" : "or paste its path";
   $("welcome").hidden = ready || s.status === "reading";
@@ -1323,8 +1356,16 @@ function renderState(s) {
   const h = $("s-health");
   h.textContent = s.issue_count ? plural(s.issue_count, "master problem") : "No missing or inactive masters";
   h.className = "chip link " + (s.issue_count ? "bad" : "good");
-  $("health-count").textContent = s.issue_count;
-  $("health-count").classList.toggle("bad", s.issue_count > 0);
+  const sc = s.scan || { found: 0, bad: 0, going: false };
+  $("health-count").textContent = s.issue_count + sc.found;
+  $("health-count").classList.toggle("bad", s.issue_count + sc.bad > 0);
+  const chip = $("s-scan");
+  chip.hidden = !sc.found && !sc.going;
+  chip.textContent = sc.going ? "Scanning the modlist…" : plural(sc.found, "finding") + " of the scan";
+  chip.className = "chip link " + (sc.going ? "" : sc.bad ? "bad" : "warn");
+  $("scan-list").disabled = sc.going;
+  if (state.listScan && state.scanGoing && !sc.going) listScan(false);          // it has ended: its findings are fetched
+  state.scanGoing = sc.going;
   const notes = $("notes");
   notes.replaceChildren(...s.notes.map((n) => el("li", { text: n })));
   notes.hidden = !s.notes.length;
@@ -1338,11 +1379,103 @@ function renderState(s) {
   renderSteps();
 }
 
+// A list that shows its first rows and the rest on a press (MT65). What was opened stays open when the list is
+// drawn anew, by its key.
+const moreOpen = new Set();
+function moreList(rows, first, beyond, key) {
+  const ul = el("ul", { class: "small morelist" });
+  const all = () => { ul.replaceChildren(...rows, ...(beyond ? [el("li", { class: "dim", text: "… and " + beyond.toLocaleString("en-GB") + " more that are not listed here" })] : [])); };
+  if (rows.length <= first && !beyond || moreOpen.has(key)) { all(); return ul; }
+  const b = el("button", { type: "button", class: "linkish morebtn", text: "and " + (rows.length - first + (beyond || 0)).toLocaleString("en-GB") + " more", title: "Show the whole list" });
+  b.addEventListener("click", () => { moreOpen.add(key); all(); });
+  ul.replaceChildren(...rows.slice(0, first), el("li", { class: "dim" }, b));
+  return ul;
+}
+// What a scan or an evaluation found (MT65, DESIGN§25): each finding with how grave it is, why it matters, and what
+// it is about. `onMod`, where given, makes the mods a finding names into links.
+const LEVEL_WORD = { bad: ["likely a fault", "bad"], warn: ["worth a look", "warn"], info: ["note", ""], good: ["fine", "good"] };
+function findingList(findings, key, onMod) {
+  return el("div", { class: "findings" }, ...findings.map((f, i) => {
+    const mods = onMod && (f.mods || []).length ? el("p", { class: "small f-mods" }, "Show: ", ...f.mods.flatMap((n, j) => {
+      const b = el("button", { type: "button", class: "linkish", text: n }); b.addEventListener("click", () => onMod(n)); return j ? [", ", b] : [b]; })) : null;
+    return el("div", { class: "finding f-" + f.level }, el("p", { class: "f-head" }, el("span", { class: "tag " + LEVEL_WORD[f.level][1], text: LEVEL_WORD[f.level][0] }), el("b", { text: f.title })),
+      el("p", { class: "f-text", text: f.text }), (f.items || []).length ? moreList(f.items.map((t) => el("li", { text: t })), 6, f.more, key + ":" + f.key + ":" + i) : null, mods);
+  }));
+}
+// A box of ModTrap's own for something to read: a title, what there is to read, and its buttons.
+function sheetBox(title, nodes, actions) {
+  const close = () => { document.removeEventListener("keydown", key, true); back.remove(); };
+  const acts = (actions || []).concat([["Close", null, "primary"]]).map(([label, run, cls]) => { const b = el("button", { type: "button", text: label, class: cls || "" }); b.addEventListener("click", () => { close(); if (run) run(); }); return b; });
+  const body = el("div", { class: "sheet-body" }, ...nodes);
+  const box = el("div", { class: "modal dropbox sheet", role: "dialog", "aria-modal": "true" }, el("div", { class: "uprun-head" }, el("b", { text: title })), body, el("div", { class: "actions" }, ...acts));
+  const back = el("div", { class: "modal-back" }, box);
+  const key = (ev) => { if (ev.key === "Escape" && back === [...document.querySelectorAll(".modal-back")].pop()) { ev.preventDefault(); ev.stopPropagation(); close(); } };
+  back.addEventListener("mousedown", (ev) => { if (ev.target === back) close(); });
+  document.addEventListener("keydown", key, true);
+  document.body.append(back);
+  acts[acts.length - 1].focus();
+  return { body, close };
+}
+// One mod weighed at the place it has (MT65): asked of the server, which reads the mod's files and the files it shares.
+async function evaluateMod(name) {
+  const sheet = sheetBox("“" + name + "” at its place", [el("p", { class: "dim" }, el("span", { class: "spinner small" }), " Looking at its own files and at every file it shares with another mod…")],
+    [["Show it in the list", () => showInList(name)]]);
+  try { sheet.body.replaceChildren(...evalNodes(await api("/api/mod/evaluate", { mod: name }), "eval:" + name)); }
+  catch (e) { sheet.body.replaceChildren(el("p", { class: "would-needs", text: e.message })); }
+}
+function evalNodes(d, key) {
+  const cls = { problem: "bad", look: "warn", clean: "good" }[d.verdict];
+  return [el("p", { class: "eval-sum" }, el("span", { class: "tag " + cls, text: { problem: "needs your attention", look: "worth a look", clean: "clean" }[d.verdict] }), " " + d.summary),
+    d.cut ? el("p", { class: "small would-needs", text: "The look was cut short, so that it does not hold you up: on a mod this large there may be more." }) : null,
+    d.findings.length ? findingList(d.findings, key, null) : null,
+    el("p", { class: "dim small", text: "ModTrap compares files byte for byte and reads the first bytes that say what format a file is in. What two plugins change inside the same record it does not read: the mod's web shows which records, xEdit what is in them." })].filter(Boolean);
+}
+
+// The scan of the whole modlist (MT65): doubles are looked for when the modlist opens; the header's button lists every
+// enabled mod's files once, for mods that do nothing where they stand and for the older game's formats.
+async function listScan(start) {
+  try { state.listScan = await api(start ? "/api/listscan/start" : "/api/listscan", start ? {} : undefined); }
+  catch (e) { toast(e.message); return; }
+  state.listScanFor = state.loaded;
+  renderHealth(state.last || {});
+  if (state.listScan.state === "going" || state.listScan.state === "looking") { clearTimeout(state.listScanTimer); state.listScanTimer = setTimeout(() => listScan(false), 900); }
+}
+function scanCard() {
+  const d = state.listScan;
+  const go = el("button", { type: "button", class: d && d.deep ? "" : "primary", text: d && d.deep ? "Scan again" : "Scan the modlist", disabled: !!(d && d.state === "going"),
+    title: "Lists every enabled mod's files once and compares them: mods that do nothing where they stand, mods that are mostly inside another, archives and script extender plugins that do not fit this game. It only reads; on a large modlist it takes a while." });
+  go.addEventListener("click", () => listScan(true));
+  const card = el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Obsolete and redundant mods" }), go));
+  if (!d) { card.append(el("p", { class: "dim", text: "Looking…" })); return card; }
+  const onMod = (n) => showInList(n);
+  if (d.state === "going") card.append(el("p", {}, el("span", { class: "spinner small" }), " Looking through the mods' files: " + (d.progress[1] ? d.progress[0].toLocaleString("en-GB") + " of " + d.progress[1].toLocaleString("en-GB") + " mods" : "starting") + "…"));
+  if (d.error) card.append(el("p", { class: "would-needs", text: "The scan stopped: " + d.error }));
+  card.append(el("p", { class: "dim", text: "Looked for when the modlist was opened, among mods of the same title and mods installed from the same file: an older version left disabled beside the newer one (obsolete), an enabled mod wholly inside its newer version (redundant), and two copies of one mod both in the game. A patch or a fix that carries another mod's name is a mod of its own, and is left alone." }));
+  if (d.state === "looking") card.append(el("p", {}, el("span", { class: "spinner small" }), " Looking through the mods' own records…"));
+  else card.append(d.quick.length ? findingList(d.quick, "quick", onMod) : el("p", {}, el("span", { class: "tag good", text: "fine" }), " No mod has an older version beside it, and none is in the game twice."));
+  if (d.deep) {
+    const l = d.looked || {};
+    card.append(el("h3", { text: "The scan of every mod's files" }),
+      el("p", { class: "dim", text: (l.mods || 0).toLocaleString("en-GB") + " enabled mods, " + (l.files || 0).toLocaleString("en-GB") + " files, in " + (l.seconds || 0) + " s" + (l.cut ? ". It was cut short: there may be more." : ".") }),
+      d.deep.length ? findingList(d.deep, "deep", onMod) : el("p", {}, el("span", { class: "tag good", text: "fine" }), " No enabled mod is wholly overwritten, and no archive or script extender plugin is of a kind this game does not load."));
+  } else if (d.state !== "going") card.append(el("p", { class: "dim", text: "“Scan the modlist” looks further: through every enabled mod's files, for mods wholly overwritten by the mods above them and for files this game does not load." }));
+  return card;
+}
+
 function renderHealth(s) {
   const box = $("health");
+  if (s.issue_count !== undefined) state.last = s;
+  const key = JSON.stringify([state.status, s.issue_count, s.issues, state.listScan, state.listScanFor === state.loaded]);
+  if (key === state.healthKey && box.firstChild) return;
+  state.healthKey = key;
+  if (state.status === "ready" && state.listScanFor !== state.loaded && !state.listScanAsking) {
+    state.listScanAsking = true;
+    listScan(false).finally(() => { state.listScanAsking = false; });
+  }
+  const scan = state.status === "ready" ? scanCard() : null;
   if (!s.issue_count) {
     box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "The load order is clean" }),
-      el("p", { class: "dim", text: "No active plugin lists a master that is missing or not active. This is what MO2's own warning checks." })));
+      el("p", { class: "dim", text: "No active plugin lists a master that is missing or not active. This is what MO2's own warning checks." })), scan);
     return;
   }
   const by = new Map();
@@ -1360,7 +1493,7 @@ function renderHealth(s) {
   }
   card.append(ul);
   if (s.issue_count > s.issues.length) card.append(el("p", { class: "dim", text: "Showing the first " + s.issues.length + "." }));
-  box.replaceChildren(card);
+  box.replaceChildren(card, scan);
 }
 
 // --- sessions, and what the page remembers (MT20) -------------------------------------------------------------------
@@ -1988,7 +2121,7 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "mod moved": "Mod moved", "separator moved": "Separator moved", "separator renamed": "Separator renamed", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "mo2 settings changed": "MO2's settings changed", "tool ran": "Tool run", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "mod moved": "Mod moved", "separator moved": "Separator moved", "separator renamed": "Separator renamed", "mod renamed": "Mod renamed", "mod uninstalled": "Mod uninstalled", "mod put back": "Mod put back", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "mo2 settings changed": "MO2's settings changed", "tool ran": "Tool run", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
@@ -2063,6 +2196,31 @@ async function pollHistory() {
         el("p", { class: "dim", text: "Every demaster and every add ModTrap carried out here, newest first. A job in place can be undone from here or from its own tab; one that no longer stands is only kept for looking at." }),
         el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "State" }), el("th", { text: "Mods" }), el("th", { text: "What it did" }), el("th", {}))),
           el("tbody", {}, ...d.jobs.map(row)))));
+    }
+    if ((d.list_jobs || []).length) {
+      const OPS = { enable: "enabled", disable: "disabled", move: "moved", rename: "renamed", uninstall: "uninstalled", "plugin on": "plugin activated", "plugin off": "plugin deactivated", "plugin move": "plugin moved" };
+      const row = (j) => {
+        const cell = el("td", {});
+        if (!j.undone && d.can_change) {
+          const undo = el("button", { type: "button", text: "Revert", title: j.op === "uninstall" ? "Moves the mod's folder back into MO2's mods folder and puts it back in the lists, where it was. MO2 must be closed."
+            : "Puts back what this change changed: the whole lists while nothing else has changed them since, else this change's own lines. MO2 must be closed." });
+          undo.addEventListener("click", async () => {
+            if (!await confirmBox("Revert this change?\n\n" + j.text + (j.op === "uninstall" ? "\n\nThe mod's folder goes back into MO2's mods folder, and its lines back into the lists." : ""), "Revert", "Leave it")) return;
+            try { const r = await api("/api/list/undo", { job: j.job }); toast("Reverted: " + r.text + (r.notes && r.notes.length ? ". Not done: " + r.notes.join("; ") : ".")); } catch (e) { toast(e.message); }
+            state.historyText = ""; state.gen = (state.gen || 0) + 1;
+            await tick(); pollHistory();
+          });
+          cell.append(undo);
+        }
+        return el("tr", {}, el("td", { class: "c-num", text: String(j.when || "").replace("T", " ") }),
+          el("td", {}, el("span", { class: "tag " + (j.undone ? "" : "good"), text: (OPS[j.op] || j.op) + (j.undone ? ", reverted" : ", in place") })),
+          el("td", { text: j.text }),
+          el("td", { class: "dim", text: j.undone ? "reverted " + String(j.undone).replace("T", " ") + (j.how === "by line" ? ", its own lines only" : "") : j.kept ? "its folder is kept in “" + j.kept.replace(/\\/g, "/") + "”, beside MO2's mods folder" : "" }), cell);
+      };
+      jobCards.push(el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Changes of the mod list" })),
+        el("p", { class: "dim", text: "Every change made on the Modlist page in this session, newest first: mods and separators moved, renamed, enabled or disabled, mods uninstalled, plugins switched and moved. Each stays here for good, and each that still stands can be put back with its Revert. An uninstalled mod's folder is kept, whole, until then." }),
+        el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "State" }), el("th", { text: "What" }), el("th", { text: "Kept" }), el("th", {}))),
+          el("tbody", {}, ...d.list_jobs.map(row)))));
     }
     if (!d.events.length) {
       box.replaceChildren(...jobCards, el("div", { class: "card" }, el("h2", { text: "Nothing yet" }),
@@ -2151,6 +2309,7 @@ async function quitModTrap() {
     }
   }
   state.quit = true;
+  try { sessionStorage.setItem("modtrap-quit", "1"); } catch (e) { /* no storage */ }       // a page brought back after a Quit does not start ModTrap by itself
   const name = state.session ? state.session.name : "";
   document.body.replaceChildren(el("div", { class: "farewell" }, el("div", {},
     el("h1", { text: "ModTrap has closed" }),
@@ -2377,7 +2536,7 @@ function paintFocus() {
   if (!f) return;
   const chips = (names) => names.slice(0, 60).map((n) => {
     const b = el("button", { type: "button", class: "linkish", text: n, title: "Show this mod" });
-    b.addEventListener("click", () => { gotoMod(n); focusMod(n, true); });
+    b.addEventListener("click", () => { showInList(n); });
     return b;
   }).reduce((acc, b, i) => acc.concat(i ? [", ", b] : [b]), []);
   const can = f.kind === "mod" && f.plugins.length > 0;
@@ -2420,10 +2579,20 @@ function findMod(name) {
   return null;
 }
 
+// A row brought to the middle of its list. What is drawn right after (the mod's card above the list, a list read
+// anew) moves the list under it, so the row is looked for again once the page has settled, and brought back.
 function flash(row) {
+  const seen = () => { const pane = row.closest(".scroll") || row.parentElement, a = row.getBoundingClientRect(), b = pane.getBoundingClientRect(); return a.top >= b.top + 30 && a.bottom <= b.bottom - 4; };
   row.scrollIntoView({ block: "center" });
   row.classList.add("flash");
   setTimeout(() => row.classList.remove("flash"), 1600);
+  for (const ms of [60, 300, 900]) setTimeout(() => { if (document.contains(row) && row.offsetParent !== null && !seen()) row.scrollIntoView({ block: "center" }); }, ms);
+}
+// The mod's card first, then its row: the card takes room above the list.
+function showInList(name) {
+  if (!findMod(name)) return;
+  focusMod(name, true);
+  gotoMod(name);
 }
 
 function gotoMod(name) {
@@ -2434,7 +2603,7 @@ function gotoMod(name) {
   if (modSort().key !== "priority") { $("mods-order").value = "mo2"; layoutMods(); }
   const g = state.groups.find((x) => x.mods.includes(m));
   if (g && g.sep && state.collapsed.delete(g.sep.name)) filterMods();
-  flash(m.row);
+  flash(findMod(name).row);
 }
 
 function updateTray() {
@@ -2601,6 +2770,40 @@ async function renameSeparator(name) {
   });
 }
 
+// A mod renamed, as MO2 does it (MT66): its folder, and its line in every profile's list.
+async function renameMod(name) {
+  const to = await modalBox("Rename the mod “" + name + "”\n\nIts new name, as MO2 will show it. ModTrap renames it in MO2's own way: the mod's folder, and its line in every profile of the modlist. MO2 must be closed. The History has it, with its Revert.", { input: name, yes: "OK", no: "Cancel" });
+  if (to === null || !to.trim() || to.trim() === name) return;
+  listDo(async () => {
+    try {
+      const got = await api("/api/list/rename", { name, to: to.trim() });
+      if (state.focus === name) state.focus = got.name;
+      listChanged(got.text + ".");
+    } catch (e) { toast(e.message); }
+  });
+}
+// A mod uninstalled (MT66): out of MO2's list and its mods folder, kept whole by ModTrap, and put back by the
+// History's Revert. A mod that came with the modlist is asked about a second time.
+function uninstallMod(name) {
+  if (!state.changes) { toast(NO_CHANGES); return Promise.resolve(false); }
+  return listDo(async () => {
+    try {
+      if (!await mo2Closed()) return false;
+      const got = await api("/api/list/uninstall", { mods: [name] });
+      const text = "Uninstall “" + name + "”?\n\nModTrap takes it out of MO2's mod list, in every profile, and moves its folder, whole, out of MO2's mods folder into a folder of its own beside it (“ModTrap - removed mods”). The plugins only it gives leave the load order. Nothing is deleted: the History's “Revert” puts all of it back."
+        + (got.unknown.length ? "\n\nWhether it came with the modlist ModTrap cannot tell: for that, give the list's own file (.wabbajack) on the Updater list." : "")
+        + (got.ask ? "\n\nNot everything about it is safe:" : "");
+      if (!await modalBox(text, { nodes: got.ask ? [findings(got.plan)].filter(Boolean) : [], wide: true, yes: "Uninstall", no: "Keep it" })) return false;
+      if (got.original.length && !await modalBox("“" + name + "” is an original part of this modlist.\n\nIt came with the list, which was put together and tested with it: other mods, patches and the tools' outputs may count on it, in ways no file shows.\n\nUninstall?", { yes: "Uninstall", no: "Keep it" })) return false;
+      const done = await api("/api/list/uninstall", { mods: [name], sure: true });
+      if (state.focus === name) focusMod(name);
+      state.historyText = "";
+      listChanged(done.text + ". It is in the History, with its Revert.");
+      return true;
+    } catch (e) { toast(e.message); return false; }
+  });
+}
+
 // A separator's menu: on the Modlist page it names, adds and switches; on Pick mods a separator has none.
 function sepMenu(ev, g) {
   if (picking()) return;
@@ -2748,7 +2951,7 @@ function scanNote(name, d, error) {
   if (c.loses) bits.push(plural(c.loses, "file") + " of its own " + (c.loses === 1 ? "is" : "are") + " overwritten by " + plural(c.loseMods, "mod"));
   if (!c.over && !c.under && !c.wins && !c.loses) bits.push("it overwrites nothing, and nothing overwrites it");
   const show = el("button", { type: "button", class: "primary", text: "Show the details" });
-  show.addEventListener("click", () => { box.hidden = true; gotoMod(name); focusMod(name, true); });
+  show.addEventListener("click", () => { box.hidden = true; showInList(name); });
   const close = el("button", { type: "button", text: "Close" });
   close.addEventListener("click", () => { box.hidden = true; });
   box.className = "scannote" + (c.problems ? " bad" : "");
@@ -2856,10 +3059,27 @@ async function dropRun(run) {
   const got = await api("/api/add/resolve", { items: run.files.map((f) => ({ name: f.name })) });
   for (let i = 0; i < run.files.length; i++) {
     const it = got.items[i], file = run.files[i];
-    if (it.mods.length) return dropStop(run, "failed", "MO2 already has “" + it.mods[0] + "”, installed from this file. To give it another place, drag its row in the list.");
     if ((state.staged || []).length + (state.adding || []).length >= 20) return dropStop(run, "failed", "Twenty mods at a time is the most the Installer tool holds. Take some off its list first.");
     step("take", "going", run.files.length > 1 ? file.name : "");
-    const rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
+    let rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
+    if (!(rec.already || []).length && it.mods.length)            // MO2 has a mod installed from this very file
+      rec.already = it.mods.map((n) => { const f = findMod(n) || {}; return { mod: n, version: rec.version || "", enabled: !!f.enabled, priority: f.priority === undefined ? -1 : f.priority, how: "installed from this very file", newer: 0, same: true }; });
+    if ((rec.already || []).length) {
+      // The mod is in the modlist already (MT65): said, with both versions, before anything is installed.
+      const answer = await new Promise((resolve) => { run.ask = { rec, resolve }; renderDropBox(); });
+      run.ask = null;
+      if (answer !== "second") for (let k = 0; k < 120; k++) {          // off the Installer tool's list again, once it is unpacked
+        try { await api("/api/add/forget", { id: rec.id }); break; } catch (e) { if (!/still being unpacked/.test(e.message)) break; await sleep(500); }
+      }
+      if (answer === "cancel") return dropStop(run, "stopped", "Nothing was installed: “" + rec.already[0].mod + "” is in the modlist already, and stays as it is.");
+      if (answer === "update") {
+        run.updates = rec.already[0].mod;
+        run.words = "in the place of “" + run.updates + "”, as its newer version";
+        rec = await sendArchive(file, run.updates);
+      }
+      renderDropBox();
+    }
+    rec = await askName(rec);
     run.ids.push(rec.id);
     run.names.push(rec.name);
     state.staged = (state.staged || []).concat(rec.id);
@@ -2921,6 +3141,20 @@ async function dropRun(run) {
   state.addText = "";
   state.gen = (state.gen || 0) + 1;
   tick();
+  dropEvaluate(run, first ? first.name : run.names[0]);
+}
+// The installed mod, weighed at its place (MT65), once the list has been read anew with it in.
+async function dropEvaluate(run, name) {
+  run.evalGoing = true;
+  renderDropBox();
+  for (let i = 0; i < 240 && state.dropRun === run; i++) {
+    await sleep(500);
+    if (state.status !== "ready") continue;
+    try { run.eval = await api("/api/mod/evaluate", { mod: name }); break; }
+    catch (e) { if (i > 20 && !/still being read|still reading|try again/.test(e.message)) { run.evalError = e.message; break; } }
+  }
+  run.evalGoing = false;
+  if (state.dropRun === run) renderDropBox();
 }
 function dropClose() {
   const run = state.dropRun;
@@ -2942,6 +3176,23 @@ function renderDropBox() {
       el("p", { class: "stage-note", text: run.note[k] || (st === "going" ? "…" : st === "waiting" ? "to come" : "") }));
   })));
   if (run.why) kids.push(el("p", { class: run.state === "failed" ? "would-needs" : "", text: run.why }));
+  if (run.ask) {
+    const rec = run.ask.rec, a = rec.already[0];
+    const said = a.same ? "the very file it was installed from" : a.newer > 0 ? "newer" : a.newer < 0 ? "older" : rec.version && a.version ? "the same version" : "";
+    const answer = (label, what, cls, title) => { const b = el("button", { type: "button", text: label, class: cls || "", title: title || "" }); b.addEventListener("click", () => run.ask.resolve(what)); return b; };
+    kids.push(el("div", { class: "finding f-warn dupask" },
+      el("p", { class: "f-head" }, el("span", { class: "tag warn", text: "already in the modlist" }), el("b", { text: "This mod is installed already" })),
+      el("p", {}, "The modlist has “" + a.mod + "”: " + (a.version ? "version " + a.version : "of a version ModTrap cannot tell") + ", " + (a.enabled ? "enabled" : "disabled") + ", priority " + a.priority + " (" + a.how + ")."
+        + (rec.already.length > 1 ? " And " + plural(rec.already.length - 1, "more copy", "more copies") + ": " + rec.already.slice(1).map((x) => "“" + x.mod + "”" + (x.version ? " " + x.version : "")).join(", ") + "." : "")),
+      el("p", {}, "The file you dropped is " + (rec.version ? "version " + rec.version : "of a version its name does not tell") + (said ? ": " + said + "." : ".")
+        + (a.newer > 0 ? " An update puts it in the place of the one that is there, which is kept, disabled." : a.newer < 0 ? " The modlist's is the newer one: installing this over it would be a step back."
+          : a.same ? " To give the mod another place, drag its row in the list. Installed as a second mod it would be named “" + rec.name + "” and overwrite the first, file for file."
+            : " Installed as a second mod it would be named “" + rec.name + "” and overwrite the first, file for file.")),
+      el("div", { class: "actions" },
+        answer("Update “" + a.mod + "” with it", "update", a.newer > 0 || (a.newer === 0 && !a.same && !(rec.version && a.version)) ? "primary" : "", "The file goes in as the newer version of the mod that is there, at that mod's place; the older one is kept, disabled (as “Manual update…” does)"),
+        answer("Install it as a second mod", "second", "", "Both stand in the modlist; this one is named “" + rec.name + "”"),
+        answer("Cancel", "cancel", a.newer < 0 || a.same || (a.newer === 0 && rec.version && a.version) ? "primary" : "", "Nothing is installed"))));
+  }
   if (run.done) {
     const where = (run.done.mods || []).map((x) => "“" + x.name + "” is enabled at priority " + x.priority).join("; ");
     const plugs = (run.done.plugins || []).map((x) => x.name + " at place " + x.position).join(", ");
@@ -2951,24 +3202,41 @@ function renderDropBox() {
     const tools = (run.d.steps || []).find((x) => x.key === "tools");
     const details = [...placeLines(run.d)];
     if (tools) details.push(el("p", {}, el("b", { text: tools.items && tools.items.length ? "Tools that have to do with it:" : "No tool of the modlist has to run again for it." })),
-      tools.items && tools.items.length ? el("ul", { class: "small" }, ...tools.items.slice(0, 10).map((x) => el("li", { text: x.text }))) : null);
-    kids.push(el("div", { class: "dropdetails" }, ...details.filter(Boolean)));
+      tools.items && tools.items.length ? moreList(tools.items.map((x) => el("li", { text: x.text })), 10, 0, "drop-tools") : null);
+    // Two tabs (MT65): what is overwritten, and what that comes to.
+    const ev = run.eval;
+    const tab = (key, label, tag) => { const b = el("button", { type: "button", class: "minitab" + ((run.tab || "over") === key ? " on" : ""), "aria-pressed": (run.tab || "over") === key ? "true" : "false" }, label, tag); b.addEventListener("click", () => { run.tab = key; renderDropBox(); }); return b; };
+    const mark = ev ? el("span", { class: "tag " + { problem: "bad", look: "warn", clean: "good" }[ev.verdict], text: { problem: "needs your attention", look: "worth a look", clean: "clean" }[ev.verdict] })
+      : run.evalGoing ? el("span", { class: "spinner small" }) : null;
+    kids.push(el("div", { class: "minitabs" }, tab("over", "Overwrites"), tab("eval", "Evaluation", mark)));
+    const pane = (run.tab || "over") === "over" ? details.filter(Boolean)
+      : ev ? evalNodes(ev, "drop-eval")
+        : run.evalError ? [el("p", { class: "would-needs", text: "The evaluation could not be made: " + run.evalError })]
+          : run.done ? [el("p", { class: "dim" }, el("span", { class: "spinner small" }), " Looking at the mod's own files and at every file it shares with another mod…")]
+            : [el("p", { class: "dim", text: "Once the mod is installed, ModTrap weighs what it does at its place: which overwrites change nothing, which are what a patch or a retexture is for, and which are the usual ways a modlist breaks." })];
+    const scrolled = (box.querySelector(".dropdetails") || {}).scrollTop || 0;
+    kids.push(el("div", { class: "dropdetails" }, ...pane));
+    run.scrolled = (run.shownTab === (run.tab || "over")) ? scrolled : 0;
+    run.shownTab = run.tab || "over";
   }
   const acts = [];
   const act = (label, run2, cls, title) => { const b = el("button", { type: "button", text: label, class: cls || "", title: title || "" }); b.addEventListener("click", run2); acts.push(b); };
   const toTool = () => { dropClose(); showTab("add"); state.addText = ""; pollAdd(true); };
-  if (run.state === "going") {
+  if (run.ask) { /* the question's own buttons answer it */ }
+  else if (run.state === "going") {
     if (run.stage.install === "waiting") act("Stop", () => { dropStop(run, "stopped", "Stopped. Nothing of the modlist was changed. The mod is on the Installer tool's list, with its place."); renderDropBox(); }, "", "Nothing of the modlist is changed before the install itself");
   } else {
     if (run.state === "done" && run.job) {
       act("Uninstall", async () => { if (await uninstallJob(run.job, run.names.map((n) => "“" + n + "”").join(", "))) dropClose(); }, "", "Puts MO2's lists back as they were and takes ModTrap's copy of the mod out again");
-      act("Show it in the list", () => { const n = run.names[0]; dropClose(); if (findMod(n)) { gotoMod(n); focusMod(n, true); } }, "");
+      act("Show it in the list", () => { const n = run.names[0]; dropClose(); if (findMod(n)) { showInList(n); } }, "");
     }
     act(run.state === "yours" ? "Go to the Installer tool" : "Open the Installer tool", toTool, run.state === "yours" ? "primary" : "", "The mod is there too, with everything the Installer tool shows");
     act("Close", dropClose, run.state === "yours" ? "" : "primary");
   }
   kids.push(el("div", { class: "actions" }, ...acts));
   box.replaceChildren(...kids.filter(Boolean));
+  const details = box.querySelector(".dropdetails");
+  if (details && run.scrolled) details.scrollTop = run.scrolled;
   const stop = box.querySelector(".actions button.primary") || box.querySelector(".actions button");
   if (stop && run.state !== "going" && !box.contains(document.activeElement)) stop.focus();
 }
@@ -3004,8 +3272,8 @@ const WEB_DEEP = new Set(["overwritten", "overwrites", "conflict", "settled", "l
 const WEB_SIDE = { needs: "left", needed: "right", patch: "right", output: "right", overwritten: "top", loses: "top", overwrites: "bottom", wins: "bottom" };
 const WEB_HEAD = { left: "It needs", right: "Built on it", top: "Win over it", bottom: "It wins over" };
 const WEB_CAP = { left: 9, right: 9, top: 8, bottom: 8 };
+const WEB_OPEN_CAP = 240;                         // the most boxes a side shows when it is shown whole; the rest are listed
 const WEB_W = 1000, WEB_H = 640;
-const WEB_MID = { x: 378, y: 280, w: 244, h: 80 };
 const SVG_NS = new DOMParser().parseFromString("<svg></svg>", "text/html").body.firstChild.namespaceURI;
 const svgEl = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; };
 const webCache = new Map();                       // the modlist as it stands + the mod -> { near, deep }
@@ -3031,7 +3299,7 @@ async function webOpen(name, opts) {
     w = state.web = { back, box, trail: [], hidden: new Set(), before: document.activeElement };
     document.body.append(back);
   } else if (!o.back && w.name && w.name !== name) w.trail.push(w.name);
-  Object.assign(w, { name, sel: null, more: null, error: "", going: false, data: null });
+  Object.assign(w, { name, sel: null, more: null, error: "", going: false, data: null, open: new Set(), frameTop: undefined });
   const key = webKey(name);
   const here = () => state.web === w && w.name === name;
   let kept = webCache.get(key);
@@ -3094,46 +3362,78 @@ function webNodes(d, hidden) {
   return sides;
 }
 
-// Where each box stands, on a sheet of 1000 by 640: a column on either side, two rows above and two below. A side
-// with more mods than it has room for ends in one box that stands for the rest.
-function webPlace(sides) {
+// The second line of a box: its kind and how much of it, in few words. The whole of it is in the box's details.
+function webShort(x) {
+  const n = x.weight;
+  const much = { needs: plural(n, "master"), needed: plural(n, "plugin"), output: plural(n, "plugin"), overwritten: plural(n, "file"), overwrites: plural(n, "file"),
+    conflict: plural(n, "record"), settled: plural(n, "record"), loses: plural(n, "record"), wins: plural(n, "record"),
+    patch: x.between && x.between.length ? "with " + x.between[0] + (x.between.length > 1 ? " and more" : "") : plural(n, "plugin") }[x.kind];
+  return WEB_KINDS[x.kind][0] + " · " + much;
+}
+
+// Where each box stands. The sheet is 1000 by 640 while every side fits its room: a column on either side (nine
+// boxes), two rows above and two below (four boxes each). A side with more mods ends in a box that stands for the
+// rest; pressed, that side is shown whole (MT67): rows are added above or below, columns to the left or the
+// right, and the sheet grows with them, scrolled in its frame.
+function webPlace(sides, open, quiet, unitsH) {
+  const items = {};
+  for (const side of ["left", "right", "top", "bottom"]) {
+    const all = sides[side], whole = open.has(side), cap = whole ? WEB_OPEN_CAP : WEB_CAP[side];
+    items[side] = (all.length > cap ? all.slice(0, cap - 1) : all).map((n) => ({ n, side }));
+    if (all.length > cap) items[side].push({ more: all.slice(cap - 1), side });
+    else if (whole && all.length > WEB_CAP[side] && !(quiet && quiet.has(side))) items[side].push({ fewer: true, side });      // a side that simply fits has nothing to fold
+  }
+  const lines = (side) => Math.max(2, Math.ceil(items[side].length / 4));
+  // Boxes in one column: nine, or as many as the window's height takes where a column side is shown whole, so that
+  // a side that fits in one column is not split into two.
+  const tall = unitsH ? Math.floor((unitsH - (lines("top") + lines("bottom")) * 46 - 72) / 46) : 12;
+  const wide = open.has("left") || open.has("right");
+  const rows = wide ? Math.max(9, Math.min(Math.max(12, tall), Math.max(items.left.length, items.right.length))) : 9;
+  const cols = (side) => Math.max(1, Math.ceil(items[side].length / rows));
+  const g = { rows, left: cols("left"), right: cols("right"), top: lines("top"), bottom: lines("bottom") };
+  g.off = (g.left - 1) * 240;                                  // what the left columns push the middle to the right
+  g.w = WEB_W + g.off + (g.right - 1) * 240;
+  g.topH = g.top * 46 - 2;
+  g.midH = rows * 46 + (rows > 9 ? 76 : 46);       // a long column keeps clear of the rows above and below it
+  g.cx = g.off + WEB_W / 2;
+  g.cy = g.topH + g.midH / 2;
+  g.h = g.topH + g.midH + g.bottom * 46 - 2;
+  g.mid = { x: g.cx - 122, y: g.cy - 40, w: 244, h: 80 };
   const placed = [];
   for (const side of ["left", "right", "top", "bottom"]) {
-    const all = sides[side], cap = WEB_CAP[side];
-    const items = (all.length > cap ? all.slice(0, cap - 1) : all).map((n) => ({ n }));
-    if (all.length > cap) items.push({ more: all.slice(cap - 1) });
-    items.forEach((it, i) => {
-      it.side = side;
+    const list = items[side];
+    list.forEach((it, i) => {
       it.h = 40;
       if (side === "left" || side === "right") {
+        const col = Math.floor(i / rows), inCol = Math.min(rows, list.length - col * rows), k = i % rows;
         it.w = 232;
-        it.x = side === "left" ? 8 : WEB_W - 8 - it.w;
-        it.y = WEB_H / 2 + (i - (items.length - 1) / 2) * 46 - it.h / 2;
+        it.x = side === "left" ? g.off + 8 - col * 240 : g.off + WEB_W - 240 + col * 240;
+        it.y = g.cy + (k - (inCol - 1) / 2) * 46 - it.h / 2;
       } else {
-        const row = Math.floor(i / 4), inRow = Math.min(4, items.length - row * 4);
+        const row = Math.floor(i / 4), inRow = Math.min(4, list.length - row * 4);
         it.w = 238;
-        it.x = WEB_W / 2 - (inRow * 248 - 10) / 2 + (i % 4) * 248;
-        it.y = side === "top" ? (row ? 4 : 50) : (row ? WEB_H - 44 : WEB_H - 90);
+        it.x = g.cx - (inRow * 248 - 10) / 2 + (i % 4) * 248;
+        it.y = side === "top" ? g.topH - 40 - row * 46 : g.topH + g.midH + row * 46;
       }
       placed.push(it);
     });
   }
-  return placed;
+  return { placed, g };
 }
 
 // The line from a box to the middle, bent, and which way its arrow points: at the one that is needed, or the one
 // whose files or changes are overwritten. Both ways where each wins somewhere.
-function webEdge(it) {
-  const m = WEB_MID, cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+function webEdge(it, g) {
+  const m = g.mid, cx = it.x + it.w / 2, cy = it.y + it.h / 2;
   let a, b, bend;
   if (it.side === "left" || it.side === "right") {
     a = [it.side === "left" ? it.x + it.w : it.x, cy];
-    b = [it.side === "left" ? m.x : m.x + m.w, WEB_H / 2 + (cy - WEB_H / 2) * 0.13];
+    b = [it.side === "left" ? m.x : m.x + m.w, g.cy + Math.max(-34, Math.min(34, (cy - g.cy) * 0.13))];
     const mx = (a[0] + b[0]) / 2;
     bend = [[mx, a[1]], [mx, b[1]]];
   } else {
     a = [cx, it.side === "top" ? it.y + it.h : it.y];
-    b = [WEB_W / 2 + (cx - WEB_W / 2) * 0.24, it.side === "top" ? m.y : m.y + m.h];
+    b = [g.cx + (cx - g.cx) * 0.24, it.side === "top" ? m.y : m.y + m.h];
     const my = (a[1] + b[1]) / 2;
     bend = [[a[0], my], [b[0], my]];
   }
@@ -3144,15 +3444,6 @@ function webEdge(it) {
   const pts = toMid ? [a, bend[0], bend[1], b] : [b, bend[1], bend[0], a];
   const f = (q) => q[0].toFixed(1) + " " + q[1].toFixed(1);
   return { d: "M" + f(pts[0]) + " C" + f(pts[1]) + ", " + f(pts[2]) + ", " + f(pts[3]), both };
-}
-
-// The second line of a box: its kind and how much of it, in few words. The whole of it is in the box's details.
-function webShort(x) {
-  const n = x.weight;
-  const much = { needs: plural(n, "master"), needed: plural(n, "plugin"), output: plural(n, "plugin"), overwritten: plural(n, "file"), overwrites: plural(n, "file"),
-    conflict: plural(n, "record"), settled: plural(n, "record"), loses: plural(n, "record"), wins: plural(n, "record"),
-    patch: x.between && x.between.length ? "with " + x.between[0] + (x.between.length > 1 ? " and more" : "") : plural(n, "plugin") }[x.kind];
-  return WEB_KINDS[x.kind][0] + " · " + much;
 }
 
 function webSelect(w, mod, more) {
@@ -3166,10 +3457,46 @@ function webSelect(w, mod, more) {
   w.side.replaceChildren(...webSide(w));
 }
 
+// The room the picture has in the window: the box's own width and the window's height, less what stands around the
+// picture. Measured where the box is drawn already, reckoned where it is not yet.
+function webRoom(w) {
+  const narrow = window.innerWidth <= 1050;
+  const frame = w.box.querySelector(".webmap-wrap"), head = w.box.querySelector(".web-head"), foot = w.box.querySelector(".web-foot");
+  const width = frame && frame.clientWidth ? frame.clientWidth : Math.min(1320, window.innerWidth - 32) - 34 - (narrow ? 0 : 342) - 8;
+  const around = (head ? head.offsetHeight + 8 : 138) + (foot ? foot.offsetHeight + 10 : 46) + 30;
+  return { w: width, h: Math.max(260, window.innerHeight - 28 - around - 4) };
+}
+// Which sides are shown whole (MT69): the ones the owner opened, and every side whose mods all fit the window
+// without scrolling, at a size at which a box can still be read. All of them together where that fits, else one
+// after another, the smallest first.
+const WEB_SMALLEST = 0.78;                        // the sheet is never drawn smaller than this: a box stays two lines high
+function webFits(sides, w, room) {
+  const unitsH = room.h / WEB_SMALLEST;
+  const fits = (set, quiet) => { const g = webPlace(sides, set, quiet, unitsH).g; return g.w * WEB_SMALLEST <= room.w && g.h * WEB_SMALLEST <= room.h; };
+  const over = ["top", "bottom", "left", "right"].filter((side) => sides[side].length > WEB_CAP[side] && sides[side].length <= WEB_OPEN_CAP && !w.open.has(side));
+  const quiet = new Set(over);
+  if (over.length && fits(new Set([...w.open, ...over]), quiet)) return { open: new Set([...w.open, ...over]), quiet, unitsH };
+  const open = new Set(w.open), taken = new Set();
+  for (const side of over.sort((a, b) => sides[a].length - sides[b].length)) {
+    if (fits(new Set([...open, side]), new Set([...taken, side]))) { open.add(side); taken.add(side); }
+  }
+  return { open, quiet: taken, unitsH };
+}
+
 function webMap(w) {
   const d = w.data;
   const map = el("div", { class: "webmap" });
-  const svg = svgEl("svg", { viewBox: "0 0 " + WEB_W + " " + WEB_H, "aria-hidden": "true" });
+  const sides = webNodes(d, w.hidden);
+  w.open = w.open || new Set();
+  const room = webRoom(w);
+  const fit = webFits(sides, w, room);
+  const { placed, g } = webPlace(sides, fit.open, fit.quiet, fit.unitsH);
+  // As large as the room allows, never smaller than a box can be read at; a sheet larger than the room scrolls.
+  const scale = Math.max(WEB_SMALLEST, Math.min(room.w / g.w, room.h / g.h));
+  map.style.aspectRatio = g.w + " / " + g.h;
+  map.style.width = Math.floor(scale * g.w) + "px";
+  map.style.minWidth = "0";
+  const svg = svgEl("svg", { viewBox: "0 0 " + g.w + " " + g.h, "aria-hidden": "true" });
   const defs = svgEl("defs");
   for (const k of WEB_LEGEND) {
     const mk = svgEl("marker", { id: "web-arrow-" + k, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
@@ -3178,25 +3505,40 @@ function webMap(w) {
   }
   svg.append(defs);
   const put = (node, x, y, wd, h) => {
-    node.style.left = (x / WEB_W * 100) + "%"; node.style.top = (y / WEB_H * 100) + "%";
-    node.style.width = (wd / WEB_W * 100) + "%"; if (h) node.style.height = (h / WEB_H * 100) + "%";
+    node.style.left = (x / g.w * 100) + "%"; node.style.top = (y / g.h * 100) + "%";
+    node.style.width = (wd / g.w * 100) + "%"; if (h) node.style.height = (h / g.h * 100) + "%";
     return node;
   };
-  const sides = webNodes(d, w.hidden);
-  const placed = webPlace(sides);
   w.nodes = new Map();
   w.moreEls = new Map();
   const kids = [svg];
   const hot = (path, on) => { path.classList.toggle("hot", on); map.classList.toggle("hover", on); };
   for (const it of placed) {
-    const edge = webEdge(it);
+    const edge = webEdge(it, g);
+    if (it.fewer) {
+      const b = put(el("button", { type: "button", class: "webnode more", title: "Back to the boxes that fit the picture at one look" },
+        el("span", { class: "wn-name", text: "Show fewer" }), el("span", { class: "wn-what", text: "the weightiest only" })), it.x, it.y, it.w, it.h);
+      b.dataset.k = "fewer:" + it.side;
+      b.addEventListener("click", () => { w.open.delete(it.side); w.more = null; webRender(); });
+      kids.push(b);
+      continue;
+    }
     if (it.more) {
       const path = svgEl("path", { d: edge.d, class: "webline more" });
       svg.append(path);
-      const b = put(el("button", { type: "button", class: "webnode more" + (w.more && w.more.side === it.side ? " sel" : ""), title: "The mods of this side that have no room here: listed on the right" },
-        el("span", { class: "wn-name", text: "+ " + it.more.length.toLocaleString("en-GB") + " more" }), el("span", { class: "wn-what", text: "show them as a list" })), it.x, it.y, it.w, it.h);
+      const whole = fit.open.has(it.side);
+      const b = put(el("button", { type: "button", class: "webnode more" + (w.more && w.more.side === it.side ? " sel" : ""),
+        title: whole ? "More mods than the picture takes even shown whole: they are listed on the right" : "Shows every mod of this side as a box in the picture, and lists them on the right" },
+        el("span", { class: "wn-name", text: "+ " + it.more.length.toLocaleString("en-GB") + " more" }), el("span", { class: "wn-what", text: whole ? "listed on the right" : "show them all" })), it.x, it.y, it.w, it.h);
       b.dataset.k = "more:" + it.side;
-      b.addEventListener("click", () => webSelect(w, null, { side: it.side, mods: it.more }));
+      b.addEventListener("click", () => {
+        if (whole) { webSelect(w, null, { side: it.side, mods: it.more }); return; }
+        w.open.add(it.side);                        // the side is shown whole, and its mods listed beside the picture too
+        w.sel = null;
+        w.more = { side: it.side, mods: sides[it.side] };
+        w.scrollTo = it.side;
+        webRender();
+      });
       w.moreEls.set(it.side, b);
       kids.push(b);
       continue;
@@ -3226,18 +3568,20 @@ function webMap(w) {
     if (!mine.length) continue;
     const total = sides[side].length;
     const lab = el("span", { class: "weblabel " + side, text: WEB_HEAD[side] + " · " + total.toLocaleString("en-GB") });
-    if (side === "left" || side === "right") put(lab, mine[0].x, mine[0].y - 22, mine[0].w);
-    else put(lab, WEB_MID.x, side === "top" ? 98 : WEB_H - 98 - 18, WEB_MID.w);
+    if (side === "left" || side === "right") put(lab, mine[0].x, Math.min(...mine.map((it) => it.y)) - 22, mine[0].w);
+    else put(lab, g.mid.x, side === "top" ? g.topH + 8 : g.topH + g.midH - 26, g.mid.w);
     kids.push(lab);
   }
   const me = d.mod;
   const mid = put(el("div", { class: "webmid" + (me.enabled ? "" : " off") },
     el("span", { class: "wn-name", text: me.shown, title: me.shown }),
-    el("span", { class: "wn-what", text: (me.priority >= 0 ? "priority " + me.priority + " · " : "") + (me.enabled ? "enabled" : "disabled") + " · " + plural(me.plugins.length, "plugin") })), WEB_MID.x, WEB_MID.y, WEB_MID.w, WEB_MID.h);
+    el("span", { class: "wn-what", text: (me.priority >= 0 ? "priority " + me.priority + " · " : "") + (me.enabled ? "enabled" : "disabled") + " · " + plural(me.plugins.length, "plugin") })), g.mid.x, g.mid.y, g.mid.w, g.mid.h);
   kids.push(mid);
   if (!placed.length) kids.push(put(el("span", { class: "weblabel none", text: w.going ? "Nothing in the plugins' headers ties it to another mod. Its files and records are being looked through…"
     : w.hidden.size ? "Nothing of the kinds that are switched on. Switch a kind on again in the list on the right." : "No other mod has to do with it: it needs none, none needs it, and nothing is overwritten either way." }), 250, 150, 500));
   map.append(...kids);
+  w.midEl = mid;
+  w.shown = fit.open;
   return map;
 }
 
@@ -3277,11 +3621,12 @@ function webSide(w) {
       el("p", { class: "dim small", text: "Between it and “" + d.mod.shown + "”:" }),
       ...links.map(webLinkBlock),
       el("div", { class: "actions" }, inList && first.mod !== "<game>" ? go("Put it in the middle", () => webOpen(w.sel), "Shows this mod's own web; “Back” brings this one again") : null,
-        inList ? go("Show it in the list", () => { const n = w.sel; webClose(); gotoMod(n); focusMod(n, true); }) : null,
+        inList ? go("Show it in the list", () => { const n = w.sel; webClose(); showInList(n); }) : null,
         go("Back to the overview", () => webSelect(w, null)))));
   } else if (w.more) {
-    kids.push(el("div", { class: "webdetail" }, el("h3", { text: WEB_HEAD[w.more.side] + ": " + plural(w.more.mods.length, "more mod") }),
-      el("p", { class: "dim small", text: "The mods that have no room in the picture. Press one for what lies between the two." }),
+    const whole = ((w.shown || w.open || new Set()).has(w.more.side)) && w.more.mods.length <= WEB_OPEN_CAP;
+    kids.push(el("div", { class: "webdetail" }, el("h3", { text: WEB_HEAD[w.more.side] + ": " + plural(w.more.mods.length, whole ? "mod" : "more mod") }),
+      el("p", { class: "dim small", text: whole ? "Every mod of this side, each a box in the picture too. Press one for what lies between the two." : "The mods that have no room in the picture. Press one for what lies between the two." }),
       el("div", { class: "webrows" }, ...w.more.mods.slice(0, 400).map(pick)), w.more.mods.length > 400 ? el("p", { class: "dim small", text: "… and " + plural(w.more.mods.length - 400, "more mod") }) : null,
       el("div", { class: "actions" }, go("Back to the overview", () => webSelect(w, null)))));
   } else {
@@ -3306,6 +3651,8 @@ function webRender() {
   const d = w.data;
   const had = w.box.contains(document.activeElement) ? document.activeElement.dataset.k : null;
   const scrolled = w.side ? w.side.scrollTop : 0;
+  const frameWas = w.box.querySelector(".webmap-wrap");
+  if (frameWas) { w.frameTop = frameWas.scrollTop; w.frameLeft = frameWas.scrollLeft; }
   const close = el("button", { type: "button", class: "webclose", text: "✕", title: "Close (Esc)", "aria-label": "Close" });
   close.dataset.k = "close";
   close.addEventListener("click", webClose);
@@ -3349,16 +3696,23 @@ function webRender() {
   const body = el("div", { class: "web-body" }, el("div", { class: "webmap-wrap" }, webMap(w)), w.side);
   const acts = [];
   const act = (label, run, cls) => { const b = el("button", { type: "button", text: label, class: cls || "" }); b.addEventListener("click", run); b.dataset.k = "act:" + label; acts.push(b); };
-  if (findMod(me.name)) act("Show it in the list", () => { webClose(); gotoMod(me.name); focusMod(me.name, true); });
+  if (findMod(me.name)) act("Show it in the list", () => { webClose(); showInList(me.name); });
   act("Close", webClose, "primary");
   const status = w.error ? el("span", { class: "would-needs", text: w.error })
     : w.going ? el("span", { class: "webstatus going" }, el("span", { class: "spinner small" }), "Looking through its files and its records…")
       : el("span", { class: "webstatus dim", text: d.deep ? "Read from the modlist as it stands now. Nothing is changed." : "" });
   w.box.replaceChildren(head, body, el("div", { class: "web-foot" }, status, el("div", { class: "actions" }, ...acts)));
   w.side.scrollTop = scrolled;
+  if (w.scrollTo) {                                 // a side shown whole: the frame goes to where its boxes begin
+    const frame = w.box.querySelector(".webmap-wrap"), first = w.moreEls.get(w.scrollTo) || w.midEl;
+    const target = w.scrollTo === "top" ? 0 : w.scrollTo === "bottom" ? frame.scrollHeight : null;
+    if (target !== null) frame.scrollTop = target; else if (first) first.scrollIntoView({ block: "nearest", inline: "nearest" });
+    w.scrollTo = null;
+  } else if (w.frameTop !== undefined) { const frame = w.box.querySelector(".webmap-wrap"); frame.scrollTop = w.frameTop; frame.scrollLeft = w.frameLeft; }
   const again = had ? [...w.box.querySelectorAll("[data-k]")].find((e) => e.dataset.k === had) : null;
   (again || (w.box.contains(document.activeElement) ? null : close) || { focus() {} }).focus();
 }
+window.addEventListener("resize", () => { clearTimeout(state.webResize); state.webResize = setTimeout(() => { if (state.web && state.web.data) webRender(); }, 150); });
 document.addEventListener("keydown", (ev) => {
   const w = state.web;
   if (!w || document.querySelectorAll(".modal-back").length > 1 || state.menu) return;
@@ -4582,7 +4936,9 @@ function renderAddPicked() {
       state.staged = state.staged.filter((y) => y !== id);
       renderAddPicked(); saveUi(); pollAdd(true);
     });
-    return el("span", { class: "pick", title: info.archive ? "From " + info.archive : "" }, el("span", { text: info.name }), el("span", { class: "tag " + cls, text: word }), x);
+    const pen = el("button", { type: "button", class: "linkish", text: "✎", title: "Give it another name", "aria-label": "Rename " + info.name });
+    pen.addEventListener("click", async () => { if (info.id) { await askName(info, true); renderAddPicked(); state.addText = ""; pollAdd(true); } });
+    return el("span", { class: "pick", title: info.archive ? "From " + info.archive : "" }, el("span", { text: info.name }), info.id ? pen : null, el("span", { class: "tag " + cls, text: word }), x);
   }), ...ups.map((u) => el("span", { class: "pick" }, el("span", { text: u.name }),
     el("span", { class: "tag warn", text: u.pct == null ? "copying…" : "copying " + u.pct + "%" }))));
 }
@@ -4609,6 +4965,19 @@ function addMatches() {
 // Dropped files and folders (DESIGN§16.1). What MO2 has installed is found by name; an archive MO2 does not have
 // is taken in: read in MO2's Downloads if it lies there, or else sent to ModTrap, which unpacks it in its own folder.
 const ARCHIVE_NAME = /\.(7z|zip|rar)$/i;
+
+// The mod's name, asked at every install and update (MT67): ModTrap's own (the mod's title and its version) is what
+// the box offers, and what is typed over it is the name. Esc, or the name left as it is, keeps ModTrap's.
+async function askName(rec, always) {
+  if (!rec || !rec.id || (!always && (state.settings || {}).ask_name === false)) return rec;
+  for (;;) {
+    const to = await modalBox("The mod's name" + (rec.updates ? ", as the newer version of “" + rec.updates + "”" : "") + "\n\nFrom “" + rec.archive + "”" + (rec.version ? ", version " + rec.version : "; its version is not known") + ". This is the name MO2 will show it under.",
+      { input: rec.name, yes: "Use this name", no: "Keep “" + (rec.name.length > 40 ? rec.name.slice(0, 38) + "…" : rec.name) + "”", wide: true });
+    if (to === null || !to.trim() || to.trim() === rec.name) return rec;
+    try { const got = await api("/api/add/name", { id: rec.id, name: to.trim() }); state.stagedInfo = Object.assign({}, state.stagedInfo, { [got.id]: got }); return got; }
+    catch (e) { toast(e.message); }               // a name that will not do: said, and asked again
+  }
+}
 
 function sendArchive(file, updates) {
   const up = { name: file.name, pct: 0 };
@@ -4655,7 +5024,7 @@ async function dropMods(drops) {
       }
       if ((state.staged || []).length + (state.adding || []).length >= 20) { notes.push({ name: it.name, bad: true, text: "Twenty mods at a time is the most ModTrap analyses." }); continue; }
       try {
-        const rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
+        const rec = await askName(it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file));
         state.staged = (state.staged || []).concat(rec.id);
         state.stagedInfo = Object.assign({}, state.stagedInfo, { [rec.id]: rec });
         // A dropped mod is installed by itself as soon as it is unpacked and read (MT54; a setting, on).
@@ -4955,8 +5324,8 @@ function placeLines(d) {
       const n = list.reduce((a, c) => a + c.files, 0);
       lines.push(el("p", {}, el("b", { text: lead + (wins ? (n ? "There it overwrites " + plural(n, "file") + " of " + plural(list.length, "mod") + ":" : "There it overwrites nothing.")
         : (n ? "There " + plural(n, "file") + " of its own " + (n === 1 ? "is" : "are") + " overwritten, by " + plural(list.length, "mod") + ":" : "There nothing overwrites it.")) })));
-      if (n) lines.push(el("ul", { class: "small" }, ...list.slice(0, 14).map((c) => el("li", {}, c.mod + ": " + plural(c.files, "file") + " (" + Object.entries(c.kinds).map(([k, v]) => v + " " + k).join(", ") + ")",
-        c.notable.length ? el("span", { class: "tag warn", text: c.notable.join(", ") }) : null)), list.length > 14 ? el("li", { class: "dim", text: "and " + (list.length - 14) + " more" }) : null));
+      if (n) lines.push(moreList(list.map((c) => el("li", { title: (c.examples || []).join("\n") }, c.mod + ": " + plural(c.files, "file") + " (" + Object.entries(c.kinds).map(([k, v]) => v + " " + k).join(", ") + ")",
+        c.notable.length ? el("span", { class: "tag warn", text: c.notable.join(", ") }) : null)), 14, 0, "place:" + x.name + ":" + (wins ? "w" : "l")));
     };
     say(true, x.wins);
     say(false, x.loses);
@@ -5386,7 +5755,13 @@ async function loadLists(key, s) {
 async function tick() {
   if (state.quit || state.selfRestart) return;
   let s;
-  try { s = await api("/api/state"); } catch (e) { showMessage("ModTrap is not answering: " + e.message, true); return; }
+  try { s = await api("/api/state"); state.unanswered = 0; } catch (e) {
+    showMessage("ModTrap is not answering: " + e.message, true);
+    // ModTrap has closed (with a page it took for gone, MT64): asked for anew, the page ModTrap's worker kept shows, and starts it.
+    state.unanswered = e instanceof TypeError ? (state.unanswered || 0) + 1 : 0;
+    if (state.unanswered >= 4 && navigator.serviceWorker && navigator.serviceWorker.controller) location.replace("/");
+    return;
+  }
   const was = state.status;
   state.status = s.status;
   state.changes = !!s.changes;
@@ -5629,6 +6004,8 @@ $("job-stop").addEventListener("click", async () => {
 });
 $("quit").addEventListener("click", quitModTrap);
 $("steps-rescan").addEventListener("click", () => $("rescan").click());
+$("scan-list").addEventListener("click", () => { showTab("health"); listScan(true); });
+$("s-scan").addEventListener("click", () => showTab("health"));
 $("add-rescan").addEventListener("click", () => $("rescan").click());
 $("add-go").addEventListener("click", () => { if (chosenPlace()) installNow(chosenPlace().before); else if ((state.settings || {}).manual_placement && !((state.addData || {}).update)) startPlacement(); else installNow(""); });
 $("updater-clear").addEventListener("click", async () => { try { await api("/api/updater/clear", {}); } catch (e) { toast(e.message); } pollUpdater(true); });

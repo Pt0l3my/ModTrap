@@ -74,9 +74,9 @@ class TheUpdater(unittest.TestCase):
         saved = fx.write(self.browser / "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip", self.data)
         run = self.ended(got["run"])
         self.assertEqual((run["state"], self.stages(run)), ("done", [(k, "done") for k, _t in __import__("modtrap.updater", fromlist=["STAGES"]).STAGES]))
-        self.assertEqual(run["summary"], "“Quill” is updated to 1.4: “Quill (1.4)” is enabled right after it, and the older version is disabled, not deleted.")
+        self.assertEqual(run["summary"], "“Quill” is updated to 1.4: “Quill 1.4” is enabled right after it, and the older version is disabled, not deleted.")
         inst = instance.load(self.root)
-        old, new = inst.mod("Quill"), inst.mod("Quill (1.4)")
+        old, new = inst.mod("Quill"), inst.mod("Quill 1.4")
         self.assertEqual((old.enabled, new.enabled, new.priority), (False, True, old.priority + 1))
         self.assertTrue((self.root / "mods" / "Quill" / "Quill.esp").is_file())                    # the older version is only disabled
         # The download is in ModTrap's own folder now, moved there, with where it came from.
@@ -85,16 +85,16 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         r = rows[0]
         self.assertEqual((r["file"], r["size"], r["there"], r["where"]), ("Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip", len(self.data), True, "ModTrap's downloads folder"))
-        self.assertEqual((r["host"], r["mod_id"], r["file_id"], r["version"], r["for_mod"], r["installed_as"]), ("nexus", 4321, 113, "1.4", "Quill", "Quill (1.4)"))
+        self.assertEqual((r["host"], r["mod_id"], r["file_id"], r["version"], r["for_mod"], r["installed_as"]), ("nexus", 4321, 113, "1.4", "Quill", "Quill 1.4"))
         self.assertEqual(r["page"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
         self.assertTrue((downloads.folder() / r["file"]).is_file())
         # Installed mods: the newer version, with the install it came by.
         inst_rows = self.api.get("/api/installed", {})[1]["rows"]
         self.assertEqual([(x["mod"], x["updates"], x["job"], x["enabled"], x["archive"]) for x in inst_rows],
-                         [("Quill (1.4)", "Quill", run["job"], True, "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip")])
+                         [("Quill 1.4", "Quill", run["job"], True, "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip")])
         # The Updates list: the older version as such, the newer one up to date.
         st = self.api.get("/api/updates", {})[1]
-        self.assertEqual({x["mod"]: x["state"] for x in st["rows"] if x["mod"].startswith("Quill")}, {"Quill": "replaced", "Quill (1.4)": "current"})
+        self.assertEqual({x["mod"]: x["state"] for x in st["rows"] if x["mod"].startswith("Quill")}, {"Quill": "replaced", "Quill 1.4": "current"})
         # Taken out again and pressed once more: the file is here, no page is opened, nothing is downloaded.
         self.api.post("/api/add/revert", {"job": run["job"]})
         for _ in range(400):
@@ -108,7 +108,7 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual((run2["state"], self.stages(run2)[:2]), ("done", [("find", "done"), ("download", "skipped")]))
         self.assertIn("it is on this PC already, in ModTrap's downloads folder: it is not downloaded again", [t["text"] for t in run2["stages"][0]["tasks"]])
         self.assertEqual(len(self.api.get("/api/downloads", {})[1]["rows"]), 1)                     # kept once
-        self.assertTrue(instance.load(self.root).mod("Quill (1.4)").enabled)
+        self.assertTrue(instance.load(self.root).mod("Quill 1.4").enabled)
         del asked
 
     def test_a_file_downloaded_before_is_used_and_no_page_is_opened(self):
@@ -154,7 +154,7 @@ class TheUpdater(unittest.TestCase):
         run = self.ended(got["run"])
         self.assertEqual((run["state"], self.stages(run)[1]), ("done", ("download", "done")), run["summary"])
         r = self.api.get("/api/downloads", {})[1]["rows"][0]
-        self.assertEqual((r["how"], r["where"], r["installed_as"]), ("fetched by ModTrap from Nexus, with your key", "ModTrap's downloads folder", "Quill (1.4)"))
+        self.assertEqual((r["how"], r["where"], r["installed_as"]), ("fetched by ModTrap from Nexus, with your key", "ModTrap's downloads folder", "Quill 1.4"))
 
     def test_a_second_press_while_the_first_is_being_begun_starts_nothing_more(self):
         """WHY§118: the owner pressed twice while the first press was still looking for the file, and got two updates."""
