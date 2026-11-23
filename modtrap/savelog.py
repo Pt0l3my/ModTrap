@@ -235,6 +235,19 @@ def collect(session_dir: Path | None, profile_dir: Path | None, home_dir: Path, 
         for name in ("modlist.txt", "plugins.txt", "loadorder.txt"):
             if (profile_dir / name).is_file():
                 items.append(("profile/" + name, profile_dir / name))
+        # Which files the profile's folder holds, by name and size: MO2 and its plugins keep more there than the
+        # three lists (how the plugins' list is grouped, for one), and a name tells where to look. A small file whose
+        # name speaks of groups goes in whole.
+        try:
+            listing = []
+            for e in sorted(profile_dir.iterdir(), key=lambda e: e.name.lower()):
+                size = e.stat().st_size if e.is_file() else -1
+                listing.append("%s\t%s" % (e.name, "folder" if size < 0 else size))
+                if 0 <= size <= 256 * 1024 and re.search(r"group|separator|categor", e.name, re.IGNORECASE) and e.suffix.lower() in (".txt", ".json", ".ini", ".dat", ".csv", ".xml"):
+                    items.append(("profile/" + e.name, e))
+            items.append(("profile/files.txt", "\n".join(listing) + "\n"))
+        except OSError:
+            pass
     if (home_dir / "settings.json").is_file():
         items.append(("modtrap/settings.json", home_dir / "settings.json"))
     about = dict(about, left_out=notes)

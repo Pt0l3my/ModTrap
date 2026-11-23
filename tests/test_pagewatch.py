@@ -84,6 +84,36 @@ class IsThePageStillOpen(unittest.TestCase):
         self.assertFalse(self.w.said("page-one-mark", "anything"))
 
 
+class AFileSwappedIn(unittest.TestCase):
+    """A file ModTrap writes whole (WHY§137): two writers at once, and a file Windows will not let go of yet."""
+
+    def test_two_threads_writing_one_file_each_have_a_name_of_their_own_and_a_held_file_is_tried_again(self):
+        from modtrap import paths
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / "log.json"
+            threads = [threading.Thread(target=lambda i=i: [paths.write_atomic(target, (b"%d" % i) * 2000) for _ in range(40)]) for i in range(6)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertIn(target.read_bytes(), [(b"%d" % i) * 2000 for i in range(6)])
+            self.assertEqual([p.name for p in Path(d).iterdir()], ["log.json"])               # no half-written file left behind
+            real, calls = os.replace, []
+
+            def held(src, dst):
+                calls.append(1)
+                if len(calls) < 4:
+                    raise PermissionError(13, "Permission denied")
+                return real(src, dst)
+            with mock.patch.object(paths.os, "replace", held), mock.patch.object(paths.time, "sleep", lambda s: None):
+                paths.write_atomic(target, b"after the hold")
+            self.assertEqual((target.read_bytes(), len(calls)), (b"after the hold", 4))
+            with mock.patch.object(paths.os, "replace", side_effect=PermissionError(13, "Permission denied")), mock.patch.object(paths.time, "sleep", lambda s: None):
+                with self.assertRaises(PermissionError):
+                    paths.write_atomic(target, b"never")
+            self.assertEqual([p.name for p in Path(d).iterdir()], ["log.json"])
+
+
 class FakeRegistry:
     """The few calls of winreg that are used, over a dict."""
     HKEY_CURRENT_USER, REG_SZ = "HKCU", 1

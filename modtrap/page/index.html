@@ -7,6 +7,7 @@
 <style nonce="__NONCE__">/*__CSS__*/</style>
 </head>
 <body data-token="__TOKEN__">
+  <div id="refresh-bar" role="status" aria-live="polite" hidden><span class="bar"></span><span class="pill"><span class="spinner small" aria-hidden="true"></span> <b id="refresh-text"></b></span></div>
 <header>
   <div class="top">
     <div class="brand"><span class="mark">ModTrap</span><button id="version" type="button" class="verbtn" title="This ModTrap's version. Press to update ModTrap from a release file."></button></div>
@@ -48,6 +49,7 @@
   </div>
   <p id="updated" class="message bad" role="alert" hidden></p>
   <p id="locked" class="locked" hidden></p>
+  <p id="mo2-note" class="mo2note" hidden>MO2 is open on this modlist. ModTrap shows everything and reads everything, but changes nothing in MO2's lists until MO2 is closed: ticks, moves, renames, installs, uninstalls and undos are greyed. The chip “MO2 is open” above closes it.</p>
   <p id="message" class="message" role="status" hidden></p>
   <ul id="notes" class="notes" hidden></ul>
 </header>

@@ -82,6 +82,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT69 (a mod's web shows every mod that fits the window, without being asked).
   MT70 (MO2's Conflicts, Installation and Notes columns, by MO2's own rules; the plugins' list in groups; how a new
   plugin is placed, answered).
+  MT71 (with MO2 open nothing that changes its lists can be begun; the page stays while the modlist is read anew;
+  each separator heads the plugins' list once).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1833,3 +1835,42 @@ tools then run again. What it overwrites is told after, in the evaluation and in
 - **The plugins' list in groups**, by the separators of the mods' list, as MO2 groups them; foldable.
 - Read into "what MO2 says": the same states for the same mods. Not the same pictures: MO2's icons are MO2's own,
   and ModTrap writes a mark and its words instead.
+
+## MT71
+
+**With MO2 open nothing that changes its lists can be begun; the page stays while the modlist is read anew; each plugin group once** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "think about what features/functions should be disabled/greyed when MO2 of the modpack is
+running. we need to ensure nothing can be committed by ModTrap that would cause issues.
+
+also, instead of refreshing the whole UI each time something like installing a new mod on the modlist is done, can
+we just have an overlay bar or circular loading symbol showing the progress of modlist (or other UI element)
+refresh."
+
+And of the plugins' groups of MT70: "something isn't right with plugin groups that you added. there are duplicates
+now."
+
+**Settled** (DESIGN§30, WHY§137; the owner may overrule any of it):
+
+- **What an open MO2 forbids.** MO2 keeps its lists in memory and writes its own back; so everything that changes
+  its lists or its mods folder at once is greyed and, pressed all the same, stopped with a word: the mods' ticks,
+  the plugins' ticks, dragging a mod or a plugin, "Move to priority", "Rename", "Add separator", "Uninstall",
+  "Enable"/"Disable", "Install mod" and placing by hand, a file dropped on the list, every "Undo" and "Revert".
+  A line under the header says so while MO2 is open. ModTrap no longer closes MO2 for these by itself: the chip
+  "MO2 is open" does it.
+- **What stays possible:** everything that only reads (the lists, a mod's web, the scans, the evaluation, the
+  update check, a download), a dry run and the tools, which go through MO2 either way, and the one-go demaster,
+  whose plan says where it closes MO2 itself (MT25, the setting "Close this modlist's MO2 without asking").
+- **The server refuses the same,** whatever a page does: every job that changes the lists begins by seeing MO2
+  closed (MT14, DESIGN§8). The greying is for the owner, the refusal is the safety.
+- **The page stays.** When the same modlist is read again (after a change, a Rescan, another profile) nothing is
+  hidden and nothing jumps: a thin bar runs across the top with "Reading the modlist anew…", the lists dim a
+  little, and they are drawn anew in place when the reading has ended. Only a modlist opened for the first time
+  shows the full "Reading your modlist" page.
+- **Each separator's name heads the plugins' list once.** Its plugins are one group, in the load order's order;
+  the groups stand in the order of their first plugins. This replaces MT70's runs, which named a separator again
+  wherever the load order came back to it.
+
+**Open.** The groups in the owner's MO2 are not the mods' separators: they have names of their own and are runs of
+the load order with a plugin outside them. MO2's own source has no such groups, so they come from somewhere
+ModTrap has not read. A session's pack now lists the files of the profile's folder, to find where.

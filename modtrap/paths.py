@@ -4,7 +4,10 @@ inside an instance, the game's folder or ModTrap's own program folder."""
 from __future__ import annotations
 
 import json
+import itertools
 import os
+import threading
+import time
 from pathlib import Path
 
 
@@ -19,15 +22,32 @@ def home() -> Path:
     return Path(os.path.expanduser("~")) / ".local" / "share" / "ModTrap"
 
 
+_writes = itertools.count()
+
+
 def write_atomic(path: Path, data: bytes) -> None:
     """Written beside the file, flushed, then swapped in: a reader never sees half a file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".%d.tmp" % os.getpid())
+    # A name of its own for every write: two threads saving the same file at once must not share one.
+    tmp = path.with_name(path.name + ".%d.%d.%d.tmp" % (os.getpid(), threading.get_ident(), next(_writes)))
     with open(tmp, "wb") as f:
         f.write(data)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # Windows refuses to swap a file in while anything has the old one open (another thread reading it, a virus
+    # scanner looking at it): that passes in a moment, so it is tried again before it is given up.
+    for attempt in range(12):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 11:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def load_settings() -> dict:

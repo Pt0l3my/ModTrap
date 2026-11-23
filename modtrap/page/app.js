@@ -6,11 +6,29 @@ const $ = (id) => document.getElementById(id);
 const state = { status: "none", mods: [], plugins: [], picked: new Set(), logAfter: 0, loaded: "", details: new Map() };
 
 // What changes MO2's lists must find MO2 closed: an open MO2 holds them in memory and writes its own back.
-const NEEDS_MO2_CLOSED = new Set(["/api/separator/add", "/api/list/move", "/api/list/rename", "/api/list/undo", "/api/add/run", "/api/add/revert", "/api/updater/revert", "/api/demaster/install", "/api/demaster/revert",
+const NEEDS_MO2_CLOSED = new Set(["/api/updater/revert", "/api/demaster/install", "/api/demaster/revert",
   "/api/probe/start", "/api/probe/cleanup"]);
 
+// A change made at once to MO2's lists or its mods folder (a tick, a move, a rename, an install, an uninstall, an
+// undo) is not begun while this modlist's MO2 is open (MT71): MO2 holds its lists in memory and writes its own back.
+// ModTrap does not close MO2 for these; the chip at the top does. (The server refuses them too, whatever the page does.)
+const NEEDS_MO2_FREE = new Set(["/api/separator/add", "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/uninstall", "/api/list/undo",
+  "/api/list/plugins/set", "/api/list/plugins/move", "/api/add/run", "/api/add/revert"]);
+const MO2_OPEN = "MO2 is open on this modlist. It keeps its lists in memory and writes its own back over a change, so ModTrap changes nothing in them now. Close MO2 first: the chip “MO2 is open” at the top does it.";
+const mo2Open = () => !!(state.mo2 && state.mo2.state === "open" && !state.mo2.ours);
+const canChange = () => !!state.changes && !mo2Open();
+const whyNot = () => (!state.changes ? NO_CHANGES : MO2_OPEN);
+// True, with a word to the owner, when a change may not be begun because MO2 is open.
+function mo2Blocks() {
+  if (!mo2Open()) return false;
+  toast(MO2_OPEN);
+  return true;
+}
 async function api(path, body) {
-  if (NEEDS_MO2_CLOSED.has(path) && !(await mo2Closed())) throw new Error("MO2 is still open; nothing was changed");
+  if (NEEDS_MO2_FREE.has(path) && !(body && body.look)) {
+    try { state.mo2 = (await call("/api/state")).mo2 || state.mo2; renderMo2(); } catch (e) { /* what is known stands */ }
+    if (mo2Open()) throw new Error("MO2 is open on this modlist: close it first. Nothing was changed.");
+  } else if (NEEDS_MO2_CLOSED.has(path) && !(await mo2Closed())) throw new Error("MO2 is still open; nothing was changed");
   return call(path, body);
 }
 
@@ -66,10 +84,12 @@ async function mo2Closed() {
 function renderMo2() {
   const b = $("s-mo2"), m = state.mo2;
   b.hidden = !m;
+  document.body.classList.toggle("mo2-open", mo2Open());
+  $("mo2-note").hidden = !mo2Open() || state.status !== "ready";
   if (!m) return;
   b.className = "chip link " + (m.state === "open" || m.other ? "warn" : m.state === "closed" ? "good" : "");
   b.textContent = m.other ? "Another modlist's MO2 is open" : m.state === "open" ? "MO2 is open · close it…" : m.state === "closed" ? "MO2 is closed · open it" : "MO2: cannot tell if it is open";
-  b.title = m.state === "open" ? "ModTrap changes MO2's lists only while MO2 is closed. Reading and dry runs work either way."
+  b.title = m.state === "open" ? "ModTrap changes MO2's lists only while MO2 is closed: ticks, moves, renames, installs, uninstalls and undos are greyed until then. Reading, scanning, the mods' webs, dry runs and tools work either way. Press to close MO2."
     : m.other ? "A Mod Organizer for another modlist is open. MO2 hands every command to the one that is already open, so ModTrap starts nothing through MO2 until that one is closed."
     : m.state === "closed" ? "Starts this modlist's MO2, to look at the result."
     : "ModTrap could not find out whether MO2 is running; it will not change MO2's lists until it can.";
@@ -152,6 +172,7 @@ function el(tag, attrs, ...kids) {
   }
   for (const k of kids) if (k != null) e.append(k);
   if (tag === "button" && attrs && typeof attrs.text === "string" && GATED.test(attrs.text)) e.classList.add("gated");
+  if (tag === "button" && attrs && typeof attrs.text === "string" && MO2_GATED.test(attrs.text)) e.classList.add("mo2gate");
   return e;
 }
 
@@ -175,8 +196,16 @@ function showWork() {
   chip.replaceChildren(...(busy ? [el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + atWork() + "…"] : ["ModTrap is ready"]));
   chip.title = busy ? "Until this has finished, the buttons that change the modlist or start a program are greyed." : "ModTrap has finished reading and scanning: everything can be started.";
 }
+// The buttons that change MO2's lists at once: stopped, with a word, while this modlist's MO2 is open (MT71).
+const MO2_GATED = /^(Install mod$|Uninstall|Undo\b|Revert$|Enable$|Disable$|OK, install it there|Manual placement|Take it out again)/;
+document.addEventListener("click", (ev) => {
+  const b = ev.target && ev.target.closest ? ev.target.closest("button.mo2gate, #list-undo, #plugins-undo, #mods-table input.onbox, #plugins-table td.c-tick input") : null;
+  if (!b || !mo2Open()) return;
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  toast(MO2_OPEN);
+}, true);
 // The page's fixed buttons are gated by the same words as the ones made here, so that none is forgotten (WHY§100).
-document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); });
+document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); if (MO2_GATED.test(b.textContent.trim())) b.classList.add("mo2gate"); });
 document.addEventListener("click", (ev) => {
   const b = ev.target && ev.target.closest ? ev.target.closest("button.gated") : null;
   if (!b || !document.body.classList.contains("unsettled")) return;
@@ -476,21 +505,21 @@ async function modMenu(ev, mod) {
     { text: r && r.given ? "Change the source link…" : "Add a source link…", run: () => sourceLink(mod, r ? r.given : "") },
     r && r.given ? { text: "Forget my source link", run: async () => { try { await api("/api/updates/link", { mod, url: "" }); toast("The source link is forgotten."); await loadUpdates(); } catch (e) { toast(e.message); } } } : undefined,
     r && r.get ? { text: r.state === "update" ? "Update it" + (r.newest ? " to " + r.newest : "") : "Look at its files for a newer one…", note: "The Updater carries the update through; where the site gives the file only to your browser, its page is opened for your press on its download button", run: () => getUpdate(mod) } : undefined,
-    m && m.kind === "mod" ? { text: "Manual update…", note: "For a file you downloaded yourself, from any site: it goes to Install mods as a newer version of this mod", off: !state.changes, run: () => manualUpdate(mod) } : undefined,
+    m && m.kind === "mod" ? { text: "Manual update…", note: "For a file you downloaded yourself, from any site: it goes to Install mods as a newer version of this mod", off: !canChange(), run: () => manualUpdate(mod) } : undefined,
     r ? { text: r.fav ? "Remove from favourites" : "Mark as favourite", run: () => setFavourite(mod, !r.fav) } : undefined,
     r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => openTab(page) },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
     ...(onMods() && m && m.kind === "mod" ? [null,
-      { text: m.enabled ? "Disable it" : "Enable it", off: !state.changes || !m.listed, note: state.changes ? "As its tick does: the mod's line in MO2's list, and its plugins by MO2's own rule" : NO_CHANGES, run: () => listSet([mod], !m.enabled) },
-      { text: "Move to priority…", off: !state.changes || !m.listed, note: state.changes ? "For a place far away; nearby, drag the row" : NO_CHANGES, run: () => moveToPriority(mod) },
+      { text: m.enabled ? "Disable it" : "Enable it", off: !canChange() || !m.listed, note: canChange() ? "As its tick does: the mod's line in MO2's list, and its plugins by MO2's own rule" : whyNot(), run: () => listSet([mod], !m.enabled) },
+      { text: "Move to priority…", off: !canChange() || !m.listed, note: canChange() ? "For a place far away; nearby, drag the row" : whyNot(), run: () => moveToPriority(mod) },
       { text: "Show its web…", note: "The mod in the middle of every mod it has to do with: what it needs, what needs it, patches, what it overwrites and what overwrites it, conflicts. As a click on its name does.", run: () => webOpen(mod) },
       { text: "Evaluate it at its place…", note: "What its overwrites come to: which change nothing, which are what a patch or a retexture is for, and which are the usual ways a modlist breaks; and whether its own files fit this game. It only reads.", run: () => evaluateMod(mod) },
       { text: "Scan what it overwrites", note: "Whether its plugins stand safely in the load order, the records and files it overwrites, and what overwrites its own. It only reads.", run: () => scanMod(mod, true) },
-      { text: "Add separator below…", off: !state.changes, note: state.changes ? "A separator of MO2's list, right below this mod" : NO_CHANGES, run: () => addSeparator(mod) }] : []),
+      { text: "Add separator below…", off: !canChange(), note: canChange() ? "A separator of MO2's list, right below this mod" : whyNot(), run: () => addSeparator(mod) }] : []),
     ...(m && m.kind === "mod" && onMods() ? [null,
-      { text: "Rename…", off: !state.changes || !m.listed, note: state.changes ? "As MO2 renames a mod: its folder, and its line in every profile's list. In the History, with its Revert" : NO_CHANGES, run: () => renameMod(mod) },
-      { text: "Uninstall…", off: !state.changes || !m.listed, note: state.changes ? "Out of MO2's list and its mods folder; the mod's folder is kept whole by ModTrap, and the History's Revert puts everything back" + (inst ? ". (ModTrap installed this mod: its own “Uninstall” on the Installer tool puts the lists back as they were before that install instead.)" : "") : NO_CHANGES,
+      { text: "Rename…", off: !canChange() || !m.listed, note: canChange() ? "As MO2 renames a mod: its folder, and its line in every profile's list. In the History, with its Revert" : whyNot(), run: () => renameMod(mod) },
+      { text: "Uninstall…", off: !canChange() || !m.listed, note: canChange() ? "Out of MO2's list and its mods folder; the mod's folder is kept whole by ModTrap, and the History's Revert puts everything back" + (inst ? ". (ModTrap installed this mod: its own “Uninstall” on the Installer tool puts the lists back as they were before that install instead.)" : "") : whyNot(),
         run: () => uninstallMod(mod) }] : []),
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
@@ -1326,7 +1355,15 @@ function renderState(s) {
   state.version = s.version || "";
   $("version").title = "Press to update ModTrap from a release file. " + (s.version_differs ? "The files in ModTrap's folder are not exactly those of this version: an update unpacked over an older folder, a copy cut short, or files changed by hand. Best unpack an update into an empty folder." : "");
   if (document.activeElement !== $("folder") && s.folder && (!$("folder").value || s.status === "ready")) $("folder").value = s.folder;
+  // The same modlist being read again (after a change, a Rescan, another profile): everything stays on the page as
+  // it is, with a bar across the top; the lists are drawn anew when the reading has ended.
+  const refreshing = s.status === "reading" && !!state.everReady && state.everReady === s.folder;
+  document.body.classList.toggle("refreshing", refreshing);
+  $("refresh-bar").hidden = !refreshing;
+  if (refreshing) { $("refresh-text").textContent = "Reading the modlist anew…"; return; }
   const ready = s.status === "ready";
+  if (ready) state.everReady = s.folder;
+  else if (s.status !== "reading") state.everReady = "";
   $("summary").hidden = !ready;
   $("tabs").hidden = !ready;
   $("groups").hidden = !ready;
@@ -2378,7 +2415,7 @@ function modRow(m) {
   tr.dataset.name = m.name;
   if (m.kind === "mod") tr.addEventListener("contextmenu", (ev) => modMenu(ev, m.name));
   else if (m.kind === "foreign") tr.addEventListener("contextmenu", (ev) => { if (picking()) return; ev.preventDefault(); menuAt(ev.clientX, ev.clientY, m.name, [
-    { text: "Add separator below…", off: !state.changes, note: state.changes ? "" : NO_CHANGES, run: () => addSeparator(m.name) }]); });
+    { text: "Add separator below…", off: !canChange(), note: canChange() ? "" : whyNot(), run: () => addSeparator(m.name) }]); });
   m.row = tr;
   m.hay = fold(m.name + " " + m.plugins.join(" "));
 }
@@ -2775,7 +2812,7 @@ function listSet(names, on, box) {
   return listDo(async () => {
     let got;
     try {
-      if (!await mo2Closed()) { put(!on); return false; }
+      if (mo2Blocks()) { put(!on); return false; }
       got = await api("/api/list/set", { mods: names, on });
       if (!got.done && got.ask) {
         const ok = await modalBox((on ? "Enable " : "Disable ") + label + "?\n\nNot everything about it is safe:", { nodes: [findings(got.plan)].filter(Boolean), wide: true, yes: on ? "Enable anyway" : "Disable anyway", no: "Cancel" });
@@ -2846,7 +2883,7 @@ function uninstallMod(name) {
   if (!state.changes) { toast(NO_CHANGES); return Promise.resolve(false); }
   return listDo(async () => {
     try {
-      if (!await mo2Closed()) return false;
+      if (mo2Blocks()) return false;
       const got = await api("/api/list/uninstall", { mods: [name] });
       const text = "Uninstall “" + name + "”?\n\nModTrap takes it out of MO2's mod list, in every profile, and moves its folder, whole, out of MO2's mods folder into a folder of its own beside it (“ModTrap - removed mods”). The plugins only it gives leave the load order. Nothing is deleted: the History's “Revert” puts all of it back."
         + (got.unknown.length ? "\n\nWhether it came with the modlist ModTrap cannot tell: for that, give the list's own file (.wabbajack) on the Updater list." : "")
@@ -2916,7 +2953,7 @@ function dragEnd() {
   drag = null;
 }
 $("mods-table").addEventListener("mousedown", (ev) => {
-  if (ev.button !== 0 || picking() || state.placing || !state.changes || ev.target.closest("input")) return;
+  if (ev.button !== 0 || picking() || state.placing || !canChange() || ev.target.closest("input")) return;
   const tr = ev.target.closest("#mods-table tbody tr");
   const what = tr ? dragWhat(tr) : null;
   if (what) drag = { tr, x: ev.clientX, y: ev.clientY, going: false, at: null, names: what.names, label: what.label, listed: listedNames() };
@@ -3095,6 +3132,7 @@ function fileOver(ev) {
 
 const DROP_STAGES = [["take", "Taken in"], ["unpack", "Unpacked"], ["read", "Read"], ["install", "Installed"], ["check", "Checked"]];
 function dropAtPlace(ev, at) {
+  if (mo2Blocks()) return;                       // nothing is taken in for an install that could not be made
   const files = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []).filter((f) => ARCHIVE_NAME.test(f.name)).slice(0, 10);
   if (!files.length) { toast("Dropped on the list, a mod's archive (.zip, .7z or .rar) is installed at that place. This is none: nothing was done."); return; }
   const run = state.dropRun = { files, label: files.map((f) => f.name).join(", "), before: at.before, words: at.words, ids: [], names: [],
@@ -4171,9 +4209,9 @@ function pluginMarks(p) {
   }
   cell.replaceChildren(...kids);
 }
-// The plugins' list in groups (MT70), as MO2 shows it: each run of plugins whose mods stand under the same separator
-// of the mods' list is a group under that separator's name, and can be folded. The order is the load order's, so a
-// separator's name heads a group again wherever the load order comes back to its mods.
+// The plugins' list in groups (MT70, MT71): the plugins whose mods stand under the same separator of the mods' list
+// are one group under that separator's name, and can be folded. Each separator's name stands once; the groups come
+// in the order of their first plugins in the load order, and inside a group the plugins are in the load order's.
 function pluginGroupOf() {
   const of = new Map();
   let sep = "";
@@ -4204,22 +4242,25 @@ function renderPlugins() {
   const body = $("plugins-table").tBodies[0];
   const frag = document.createDocumentFragment();
   const groupOf = pluginGroupOf();
-  const seen = new Map();
+  const byName = new Map();
   state.pgroups = [];
   state.pcollapsed = state.pcollapsed || new Set();
-  let group = null;
-  for (const p of state.plugins) {
-    const gname = groupOf(p) || (group ? group.name : "Before the first separator");
-    if (!group || group.name !== gname) {
-      const n = (seen.get(gname) || 0) + 1;
-      seen.set(gname, n);
-      group = { name: gname, key: gname + (n > 1 ? " #" + n : ""), plugins: [] };
+  let last = null;
+  for (const p of state.plugins) {             // each plugin to its separator's one group; one whose mod is disabled stays with the plugin before it
+    const gname = groupOf(p) || (last ? last.name : "Before the first separator");
+    let group = byName.get(gname);
+    if (!group) {
+      group = { name: gname, key: gname, plugins: [] };
       pluginGroupRow(group);
+      byName.set(gname, group);
       state.pgroups.push(group);
-      frag.append(group.row);
     }
     group.plugins.push(p);
-    p.group = group;
+    p.group = last = group;
+  }
+  for (const p of state.plugins) {
+    const group = p.group;
+    if (group.plugins[0] === p) frag.append(group.row);
     const name = el("td", {}, p.name);
     if (!p.active) name.append(el("span", { class: "tag", text: "not active" }));
     if (p.primary) name.append(el("span", { class: "tag", text: "game" }));
@@ -4242,8 +4283,10 @@ function renderPlugins() {
     p.row = tr;
     p.hay = fold(p.name + " " + p.mod);
     pluginMarks(p);
-    frag.append(tr);
+    group.rows = (group.rows || []).concat(tr);
   }
+  frag.replaceChildren();
+  for (const g of state.pgroups) frag.append(g.row, ...(g.rows || []));
   body.replaceChildren(frag);
   colSetup($("plugins-table"));
   filterPlugins();
@@ -4255,7 +4298,7 @@ function pluginSet(names, on, box) {
   if (!state.changes) { put(!on); toast(NO_CHANGES); return; }
   listDo(async () => {
     try {
-      if (!await mo2Closed()) { put(!on); return; }
+      if (mo2Blocks()) { put(!on); return; }
       const got = await api("/api/list/plugins/set", { plugins: names, on });
       if (got.nothing) return;
       listChanged(got.text + "." + (got.lacking ? " " + plural(got.lacking, "active plugin") + " now lack" + (got.lacking === 1 ? "s" : "") + " a master (" + got.lack.slice(0, 3).join(", ") + (got.lacking > 3 ? ", …" : "") + "): see ⚠ on their rows." : ""));
@@ -4296,7 +4339,7 @@ function pdragEnd() {
   pdrag = null;
 }
 $("plugins-table").addEventListener("mousedown", (ev) => {
-  if (ev.button !== 0 || !state.changes || ev.target.closest("input, button")) return;
+  if (ev.button !== 0 || !canChange() || ev.target.closest("input, button")) return;
   const tr = ev.target.closest("#plugins-table tbody tr[data-plugin]");
   const p = tr ? state.plugins.find((x) => x.name === tr.dataset.plugin) : null;
   if (p && p.position != null && !p.primary) pdrag = { tr, name: p.name, x: ev.clientX, y: ev.clientY, going: false, at: null,
@@ -4382,7 +4425,10 @@ function filterPlugins() {
     g.row.hidden = filtering && !g.match;
     g.arrow.textContent = shut ? "▸" : "▾";
     g.btn.setAttribute("aria-expanded", shut ? "false" : "true");
-    g.info.textContent = filtering ? g.match + " of " + g.plugins.length + " shown" : plural(g.plugins.length, "plugin") + (g.plugins.length ? " · positions " + g.plugins[0].position + " to " + g.plugins[g.plugins.length - 1].position : "");
+    const first = g.plugins[0], end = g.plugins[g.plugins.length - 1];
+    const run = first && end && end.position - first.position === g.plugins.length - 1;         // its plugins stand together in the load order
+    g.info.textContent = filtering ? g.match + " of " + g.plugins.length + " shown" : plural(g.plugins.length, "plugin") + (first && first.position != null
+      ? (run ? " · positions " + first.position + " to " + end.position : " · positions " + first.position + " to " + end.position + ", with other groups' plugins between them") : "");
   }
   $("plugins-shown").textContent = (q || pr || dp) ? shown + " of " + state.plugins.length + " shown" : state.plugins.length + " plugins";
   $("plugins-empty").hidden = shown > 0;

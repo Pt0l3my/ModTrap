@@ -1089,3 +1089,23 @@ is a group under that separator's name, with its count and its positions; a grou
 and "Unfold all" stand beside the search box, and what is folded is kept with the session. The order stays the
 load order's, so a separator's name heads a group again wherever the load order comes back to its mods. A search
 or a filter opens every group; a plugin gone to is unfolded. The game's own plugins are a group of their own.
+
+## 30. An open MO2, and a modlist read anew (MT71)
+
+**While this modlist's MO2 is open** nothing that changes MO2's lists or its mods folder at once can be begun on
+the page: the controls are greyed, a press on one says why, and the menus' entries are off with the reason. The
+list of them is MT71's. Reading, scanning, a mod's web, the update check, a dry run and the tools are not touched
+by it. The page does not close MO2 for a tick or a move; the chip in the header does, at the owner's press. The
+server's own guard is unchanged and does not rest on the page: a job that changes the lists refuses to begin
+unless it sees MO2 closed (§8).
+
+**A modlist read anew** (after any change, a Rescan, another profile of the same modlist) leaves the page as it
+is: tabs, lists and their places stay, a bar across the top says that it is being read, and the lists are drawn
+anew when it has ended. The buttons that change the modlist are greyed for as long, as before (§18).
+
+**The plugins' groups** (§29, amended): one group for each separator of the mods' list, named once, its plugins
+in the load order's order, the groups in the order of their first plugins. Where a group's plugins do not stand
+together in the load order, its line says so.
+
+**A file swapped in** (`paths.write_atomic`): every write has a temporary name of its own, and a swap Windows
+refuses because the file is held open for a moment is tried again for about four seconds before it is given up.
