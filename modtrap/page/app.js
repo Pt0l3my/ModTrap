@@ -487,10 +487,10 @@ async function modMenu(ev, mod) {
       { text: "Evaluate it at its place…", note: "What its overwrites come to: which change nothing, which are what a patch or a retexture is for, and which are the usual ways a modlist breaks; and whether its own files fit this game. It only reads.", run: () => evaluateMod(mod) },
       { text: "Scan what it overwrites", note: "Whether its plugins stand safely in the load order, the records and files it overwrites, and what overwrites its own. It only reads.", run: () => scanMod(mod, true) },
       { text: "Add separator below…", off: !state.changes, note: state.changes ? "A separator of MO2's list, right below this mod" : NO_CHANGES, run: () => addSeparator(mod) }] : []),
-    ...(m && m.kind === "mod" ? [null, inst
-      ? { text: "Uninstall…", off: !state.changes, note: state.changes ? "ModTrap installed this mod" + (inst.with.length ? ", together with " + inst.with.map((n) => "“" + n + "”").join(", ") : "") + ": MO2's lists are put back as they were before that install, and ModTrap's copy of the mod is taken out again" : NO_CHANGES,
-        run: () => uninstallJob(inst.job, [mod].concat(inst.with).map((n) => "“" + n + "”").join(", ")) }
-      : { text: "Uninstall…", off: true, note: "ModTrap takes out only what it installed itself, and this mod it did not. It can disable it: the mod's files stay where they are (ModTrap never deletes a mod)." }] : []),
+    ...(m && m.kind === "mod" && onMods() ? [null,
+      { text: "Rename…", off: !state.changes || !m.listed, note: state.changes ? "As MO2 renames a mod: its folder, and its line in every profile's list. In the History, with its Revert" : NO_CHANGES, run: () => renameMod(mod) },
+      { text: "Uninstall…", off: !state.changes || !m.listed, note: state.changes ? "Out of MO2's list and its mods folder; the mod's folder is kept whole by ModTrap, and the History's Revert puts everything back" + (inst ? ". (ModTrap installed this mod: its own “Uninstall” on the Installer tool puts the lists back as they were before that install instead.)" : "") : NO_CHANGES,
+        run: () => uninstallMod(mod) }] : []),
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
     state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => { showInList(mod); } } : { text: "Show it on the Updater list", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
@@ -2105,7 +2105,7 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "mod moved": "Mod moved", "separator moved": "Separator moved", "separator renamed": "Separator renamed", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "mo2 settings changed": "MO2's settings changed", "tool ran": "Tool run", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "mod moved": "Mod moved", "separator moved": "Separator moved", "separator renamed": "Separator renamed", "mod renamed": "Mod renamed", "mod uninstalled": "Mod uninstalled", "mod put back": "Mod put back", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "mo2 settings changed": "MO2's settings changed", "tool ran": "Tool run", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
@@ -2180,6 +2180,31 @@ async function pollHistory() {
         el("p", { class: "dim", text: "Every demaster and every add ModTrap carried out here, newest first. A job in place can be undone from here or from its own tab; one that no longer stands is only kept for looking at." }),
         el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "State" }), el("th", { text: "Mods" }), el("th", { text: "What it did" }), el("th", {}))),
           el("tbody", {}, ...d.jobs.map(row)))));
+    }
+    if ((d.list_jobs || []).length) {
+      const OPS = { enable: "enabled", disable: "disabled", move: "moved", rename: "renamed", uninstall: "uninstalled", "plugin on": "plugin activated", "plugin off": "plugin deactivated", "plugin move": "plugin moved" };
+      const row = (j) => {
+        const cell = el("td", {});
+        if (!j.undone && d.can_change) {
+          const undo = el("button", { type: "button", text: "Revert", title: j.op === "uninstall" ? "Moves the mod's folder back into MO2's mods folder and puts it back in the lists, where it was. MO2 must be closed."
+            : "Puts back what this change changed: the whole lists while nothing else has changed them since, else this change's own lines. MO2 must be closed." });
+          undo.addEventListener("click", async () => {
+            if (!await confirmBox("Revert this change?\n\n" + j.text + (j.op === "uninstall" ? "\n\nThe mod's folder goes back into MO2's mods folder, and its lines back into the lists." : ""), "Revert", "Leave it")) return;
+            try { const r = await api("/api/list/undo", { job: j.job }); toast("Reverted: " + r.text + (r.notes && r.notes.length ? ". Not done: " + r.notes.join("; ") : ".")); } catch (e) { toast(e.message); }
+            state.historyText = ""; state.gen = (state.gen || 0) + 1;
+            await tick(); pollHistory();
+          });
+          cell.append(undo);
+        }
+        return el("tr", {}, el("td", { class: "c-num", text: String(j.when || "").replace("T", " ") }),
+          el("td", {}, el("span", { class: "tag " + (j.undone ? "" : "good"), text: (OPS[j.op] || j.op) + (j.undone ? ", reverted" : ", in place") })),
+          el("td", { text: j.text }),
+          el("td", { class: "dim", text: j.undone ? "reverted " + String(j.undone).replace("T", " ") + (j.how === "by line" ? ", its own lines only" : "") : j.kept ? "its folder is kept in “" + j.kept.replace(/\\/g, "/") + "”, beside MO2's mods folder" : "" }), cell);
+      };
+      jobCards.push(el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Changes of the mod list" })),
+        el("p", { class: "dim", text: "Every change made on the Modlist page in this session, newest first: mods and separators moved, renamed, enabled or disabled, mods uninstalled, plugins switched and moved. Each stays here for good, and each that still stands can be put back with its Revert. An uninstalled mod's folder is kept, whole, until then." }),
+        el("table", { class: "plain" }, el("thead", {}, el("tr", {}, el("th", { text: "When" }), el("th", { text: "State" }), el("th", { text: "What" }), el("th", { text: "Kept" }), el("th", {}))),
+          el("tbody", {}, ...d.list_jobs.map(row)))));
     }
     if (!d.events.length) {
       box.replaceChildren(...jobCards, el("div", { class: "card" }, el("h2", { text: "Nothing yet" }),
@@ -2726,6 +2751,40 @@ async function renameSeparator(name) {
       if (state.collapsed.delete(name)) state.collapsed.add(got.name);
       listChanged(got.text + ".");
     } catch (e) { toast(e.message); }
+  });
+}
+
+// A mod renamed, as MO2 does it (MT66): its folder, and its line in every profile's list.
+async function renameMod(name) {
+  const to = await modalBox("Rename the mod “" + name + "”\n\nIts new name, as MO2 will show it. ModTrap renames it in MO2's own way: the mod's folder, and its line in every profile of the modlist. MO2 must be closed. The History has it, with its Revert.", { input: name, yes: "OK", no: "Cancel" });
+  if (to === null || !to.trim() || to.trim() === name) return;
+  listDo(async () => {
+    try {
+      const got = await api("/api/list/rename", { name, to: to.trim() });
+      if (state.focus === name) state.focus = got.name;
+      listChanged(got.text + ".");
+    } catch (e) { toast(e.message); }
+  });
+}
+// A mod uninstalled (MT66): out of MO2's list and its mods folder, kept whole by ModTrap, and put back by the
+// History's Revert. A mod that came with the modlist is asked about a second time.
+function uninstallMod(name) {
+  if (!state.changes) { toast(NO_CHANGES); return Promise.resolve(false); }
+  return listDo(async () => {
+    try {
+      if (!await mo2Closed()) return false;
+      const got = await api("/api/list/uninstall", { mods: [name] });
+      const text = "Uninstall “" + name + "”?\n\nModTrap takes it out of MO2's mod list, in every profile, and moves its folder, whole, out of MO2's mods folder into a folder of its own beside it (“ModTrap - removed mods”). The plugins only it gives leave the load order. Nothing is deleted: the History's “Revert” puts all of it back."
+        + (got.unknown.length ? "\n\nWhether it came with the modlist ModTrap cannot tell: for that, give the list's own file (.wabbajack) on the Updater list." : "")
+        + (got.ask ? "\n\nNot everything about it is safe:" : "");
+      if (!await modalBox(text, { nodes: got.ask ? [findings(got.plan)].filter(Boolean) : [], wide: true, yes: "Uninstall", no: "Keep it" })) return false;
+      if (got.original.length && !await modalBox("“" + name + "” is an original part of this modlist.\n\nIt came with the list, which was put together and tested with it: other mods, patches and the tools' outputs may count on it, in ways no file shows.\n\nUninstall?", { yes: "Uninstall", no: "Keep it" })) return false;
+      const done = await api("/api/list/uninstall", { mods: [name], sure: true });
+      if (state.focus === name) focusMod(name);
+      state.historyText = "";
+      listChanged(done.text + ". It is in the History, with its Revert.");
+      return true;
+    } catch (e) { toast(e.message); return false; }
   });
 }
 

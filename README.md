@@ -52,6 +52,9 @@ retexture is for, and which are the usual ways a modlist breaks; and whether its
 that is in the modlist already is said so before it is installed, with both versions. Doubles are looked for when
 a modlist is opened, and "Scan" in the header looks through every mod's files; what is found is on the Health tab.
 
+Any mod can be uninstalled or renamed from its menu. An uninstalled mod is moved aside, whole, never deleted; the
+History lists every change of the mod list (moves, renames, uninstalls) for good, each with its Revert.
+
 ModTrap shows no window but its page in the browser: its program's console is hidden, and what it writes is on the
 page's Log. It closes when its page is closed, never in the middle of a job, and a tab the browser brings back
 starts it again.

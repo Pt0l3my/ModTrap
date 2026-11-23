@@ -1368,6 +1368,7 @@ class Api:
             out["jobs"] = ([dict(j, what="demaster") for j in self.changes.demaster_jobs()] +
                            [dict(j, what="add") for j in self.changes.jobs()])
             out["jobs"].sort(key=lambda j: j.get("when", ""), reverse=True)
+            out["list_jobs"] = self.changes.list_jobs()      # every change made on the Modlist page, each with its Revert (MT66)
         return out
 
     def tool_stop(self) -> dict:

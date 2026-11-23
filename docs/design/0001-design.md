@@ -960,6 +960,8 @@ the header:
 **Uninstall** in a mod's menu is §16's "take it out again", for a mod ModTrap installed. A mod it did not install
 it can only disable (MT9); whether that should change is MT66.
 
+*Later, 2026-11-23:* MT66 is answered; §27 has Uninstall for any mod.
+
 ## 26. ModTrap closes with its page, and starts from it (MT64)
 
 **Closing.** ModTrap has no window (§24), so it closes when its page does (`pagewatch`). Every request carries the
@@ -994,3 +996,26 @@ then answers only its own page, by this start's token, as always (§2). The entr
 of the registry, is written only for a ModTrap run from its package, and the setting "Let ModTrap's page start
 ModTrap" takes it out again. A ModTrap started this way that finds no page asking within 25 seconds opens its
 page itself.
+
+## 27. Uninstall, rename, and every list change in the History (MT66)
+
+**Uninstall** (`listjob.uninstall`) takes any mod out of MO2 without deleting anything: the mod's line leaves
+every profile's mod list, the plugins that only it gives leave the load order, and its folder is moved, whole, out
+of MO2's mods folder into `ModTrap - removed mods/<the job>` beside it (the same drive, so the move is a renaming
+and takes no time). It is a job like §21's: MO2 closed, the lists copied first, read back, in the history.
+
+**Asked first.** What follows from it is told as for disabling (plugins that would lose a master). A mod that came
+with the modlist (it is in the list's own file, §20) is named as an original part of the modlist and asked about
+a second time, in a box of its own. Where no list file was given, ModTrap says that it cannot tell.
+
+**Rename** (`listjob.rename`) serves mods as it serves separators, as MO2 does it (MO03§6): the folder, and the
+line in every profile's list. What ModTrap keeps under the mod's name in its own folder (a source link, a
+favourite's mark) goes with it. The mod a tool writes into is not renamed: MO2's settings name it, and neither MO2
+nor ModTrap changes those with a mod's name.
+
+**The History** has a table of its own for every change made on the Modlist page (`Changes.list_jobs`): mods and
+separators moved, renamed, enabled, disabled, mods uninstalled, plugins switched and moved; newest first, each
+with its Revert while it stands. It is never cleared: "Clear job history" leaves it alone, and an uninstalled
+mod's folder stays where ModTrap moved it until its Revert moves it back. A Revert puts the whole lists back
+while nothing else has changed them since, and else only that change's own lines (§11), so changes can be
+reverted in any order.

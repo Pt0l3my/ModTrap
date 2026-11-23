@@ -19,7 +19,7 @@ import json
 
 import shutil
 
-from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, probejob, profile, safe
+from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, probejob, profile, safe, sources
 from . import process
 from .instance import fold
 from .instance import fold as instance_fold
@@ -30,7 +30,7 @@ TOOL_KEEP_FILES = 5000                 # a tool's output is kept for Revert up t
 TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is to be made again after a Revert
 
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert", "/api/separator/add",
-         "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo", "/api/list/plugins/set", "/api/list/plugins/move",
+         "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/uninstall", "/api/list/undo", "/api/list/plugins/set", "/api/list/plugins/move",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
          "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
@@ -365,25 +365,84 @@ class Changes:
         return {"done": True, **done}
 
     def list_rename(self, body: dict) -> dict:
-        """Renames a separator (MT56), in MO2's own way: its folder, and its line in every profile's list."""
+        """Renames a mod or a separator (MT56, MT66), in MO2's own way: its folder, and its line in every profile's
+        list. What ModTrap keeps for the mod under its name (a source link, a favourite's mark) goes with it."""
         self.api.wait_mo2_gone()
         api = self.api
         old, new = body.get("name"), body.get("to")
         if not isinstance(old, str) or not isinstance(new, str) or len(old) > 300:
-            raise Bad("the separator's name did not arrive")
+            raise Bad("the name did not arrive")
         new = re.sub(r"\s+", " ", new).strip()
-        if new.lower().endswith("_separator"):
-            new = new[:-len("_separator")].strip()
-        if not new or len(new) > 100 or re.search(r'[<>:"/\\|?*\x00-\x1f]', new) or new[0] in "+-*#" or new.endswith("."):
-            raise Bad("give the separator a name of up to 100 characters, without any of  < > : \" / \\ | ? *  and not beginning with + - * or #")
         with self._lock:
-            _m, job = self._list_job()
+            m, job = self._list_job()
+            mod = m.instance.mod(old)
+            sep = mod is not None and mod.kind == "separator"
+            if new.lower().endswith("_separator"):
+                new = new[:-len("_separator")].strip()
+            if not new or len(new) > (100 if sep else 200) or re.search(r'[<>:"/\\|?*\x00-\x1f]', new) or new[0] in "+-*#" or new.endswith("."):
+                raise Bad("give it a name of up to %d characters, without any of  < > : \" / \\ | ? *  and not beginning with + - * or #" % (100 if sep else 200))
+            to = new + "_separator" if sep else new
             try:
-                done = job.rename(old, new + "_separator")
+                done = job.rename(old, to)
             except listjob.Refused as e:
                 raise Bad(str(e)) from None
+            if not sep:
+                self._given_renamed(old, to)
         api.open(api.folder, api.profile or None, session=api.session)
-        return {"done": True, "name": new + "_separator", **done}
+        return {"done": True, "name": to, **done}
+
+    def _given_renamed(self, old: str, new: str) -> None:
+        """What ModTrap keeps for a mod by its name, in its own folder: carried over to the new name."""
+        try:
+            key = self.api._updates_for()[0]
+            given = sources.given_load()
+            a, b = sources.fold(old), sources.fold(new)
+            changed = False
+            for part in ("links", "mods"):
+                d = given.get(part, {}).get(key)
+                if isinstance(d, dict) and a in d:
+                    d[b] = d.pop(a)
+                    changed = True
+            favs = given.get("favourites", {}).get(key)
+            if isinstance(favs, list) and a in favs:
+                given["favourites"][key] = sorted(set(favs) - {a} | {b})
+                changed = True
+            if changed:
+                sources.given_save(given)
+        except Exception as e:                      # the rename itself stands; only ModTrap's own notes did not follow
+            log.warn("what ModTrap keeps for “%s” could not be carried to its new name: %s", old, logbook.why(e))
+
+    def list_uninstall(self, body: dict) -> dict:
+        """Takes mods out of MO2 (MT66): out of every profile's list and out of MO2's mods folder, into ModTrap's
+        own folder beside it, whole. Without `sure` it only says what follows from it and which of the mods came
+        with the modlist, for the owner to say yes."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        names = self._names(body)
+        with self._lock:
+            m, job = self._list_job()
+            for n in names:
+                x = m.instance.mod(n)
+                if x is None or x.kind != "mod":
+                    raise Bad("“%s” is not a mod of this modlist that can be uninstalled" % n)
+            rows = {r["mod"]: r for r in api._rows(m)}
+            original = [n for n in names if (rows.get(n) or {}).get("origin") == "list"]
+            unknown = [n for n in names if (rows.get(n) or {}).get("origin", "") == ""]
+            live = [n for n in names if m.instance.mod(n).enabled]
+            try:
+                plan = loadcheck.plan_set(m, live, False, read=api._cache.read) if live else {"mods": [], "plugins": [], "ask": False, "warnings": []}
+            except loadcheck.Refused as e:
+                raise Bad(str(e)) from None
+            if body.get("sure") is not True:
+                return {"done": False, "ask": plan["ask"], "plan": plan, "original": original, "unknown": unknown}
+            log.info("uninstalling %d mod(s): %s%s", len(names), ", ".join(names[:5]), " (part of the modlist as it came: %s)" % ", ".join(original[:5]) if original else "")
+            try:
+                done = job.uninstall(names, set(original))
+            except listjob.Refused as e:
+                log.error("%s", e)
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, "plan": plan, **done}
 
     def plugins_set(self, body: dict) -> dict:
         """Activates or deactivates plugins on the Plugins tab (MT58), as their tick in MO2 does. Nothing is asked:
@@ -501,6 +560,8 @@ class Changes:
                 done = job.undo()
             except listjob.Refused as e:
                 raise Bad(str(e)) from None
+            if job.record.get("op") == "rename" and job.record.get("kind") == "mod":
+                self._given_renamed(job.record["new"], job.record["old"])
         api.open(api.folder, api.profile or None, session=api.session)
         return {"done": True, **done}
 
@@ -1242,6 +1303,8 @@ class Changes:
             return self.list_set(body)
         if path == "/api/list/move":
             return self.list_move(body)
+        if path == "/api/list/uninstall":
+            return self.list_uninstall(body)
         if path == "/api/list/rename":
             return self.list_rename(body)
         if path == "/api/list/undo":

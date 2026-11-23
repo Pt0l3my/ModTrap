@@ -185,7 +185,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("gotoMod(n); focusMod(n, true);", self.js)
         # The menu: evaluate, and uninstall for what ModTrap installed itself.
         self.assertIn('{ text: "Evaluate it at its place…"', self.js)
-        self.assertIn('run: () => uninstallJob(inst.job,', self.js)
+        self.assertIn('run: () => uninstallMod(mod) }] : []),', self.js)
 
     def test_the_scan_is_in_the_header_and_its_findings_on_the_health_tab(self):
         self.assertIn('id="scan-list"', self.html)
@@ -208,6 +208,20 @@ class PageTests(unittest.TestCase):
         offline = (PAGE / "offline.html").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"https?://|(?:src|href)\s*=|\son[a-z]+\s*=\s*\"", offline), [])
         self.assertIn('if (tries === 10 && !asked && !quit) begin();', offline)    # never by itself after a Quit, and not at once
+
+    def test_any_mod_is_uninstalled_and_renamed_from_its_menu_and_every_list_change_is_in_the_history(self):
+        """MT66: asked once, and a second time for a mod that came with the modlist; the History lists every change
+        of the mod list with its Revert."""
+        self.assertIn('{ text: "Uninstall…", off: !state.changes || !m.listed,', self.js)
+        self.assertIn('{ text: "Rename…", off: !state.changes || !m.listed,', self.js)
+        self.assertIn('const got = await api("/api/list/uninstall", { mods: [name] });', self.js)
+        self.assertIn('if (got.original.length && !await modalBox("“" + name + "” is an original part of this modlist.', self.js)
+        self.assertIn('Uninstall?", { yes: "Uninstall", no: "Keep it" })) return false;', self.js)
+        self.assertIn('const done = await api("/api/list/uninstall", { mods: [name], sure: true });', self.js)
+        self.assertIn('el("h2", { text: "Changes of the mod list" })', self.js)
+        self.assertIn('const r = await api("/api/list/undo", { job: j.job });', self.js)
+        for kind in ("mod renamed", "mod uninstalled", "mod put back", "mod moved", "separator renamed"):
+            self.assertIn('"%s": "' % kind, self.js)
 
 if __name__ == "__main__":
     unittest.main()

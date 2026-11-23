@@ -154,6 +154,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 129 | 2026-11-23 | The console is hidden, not done without; only a console of ModTrap's own is hidden | METHOD | #launcher #safety |
 | 130 | 2026-11-23 | An evaluation compares files and reads formats' marks, and says what it cannot tell; a double is told by its page and its file's name, not by its page alone; the list is scanned in one pass from the top | METHOD | #adding #model #page |
 | 131 | 2026-11-23 | A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing | DECIDED | #page #launcher #safety |
+| 132 | 2026-11-23 | An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it | METHOD | #page #safety #model |
 
 ## Entries
 
@@ -3555,3 +3556,36 @@ them; the addresses were read by a session that can), and the time the second pa
   page brings the kept page; ModTrap started again brings its page back by itself; the tab closed ends ModTrap
   in about eight seconds; a tab opened with ModTrap gone shows the kept page. **Not checked:** the link itself
   and the registry entry (Windows only), the browser's question, and a tab put to sleep by a real browser.
+
+### 132. An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it
+
+`2026-11-23` · METHOD · `#page #safety #model` · refs: MT66, MT9, MT56, DESIGN§27, DESIGN§11, MO03§6, WHY§121
+
+- The removed mod's folder goes beside MO2's mods folder, not into the session's folder: ModTrap's own folder is
+  on the system drive, a modlist usually is not, and a move across drives is a copy of gigabytes followed by a
+  deletion. Beside the mods folder it is a renaming: instant, and nothing is ever deleted. MO2 does not look into
+  a folder it does not know.
+- The lists of every profile lose the mod's line, since MO2 drops a line whose folder is gone when it next loads
+  that profile; doing it at once keeps what ModTrap reads and what MO2 will show the same. Each profile's line
+  (its sign, and what it stood before) is in the job's record, so that a Revert by line can put it back there.
+- A plugin leaves the load order only if no other enabled mod has a file of that name: where one has, the plugin
+  is that mod's from now on, as it would be in MO2.
+- FACT (`listjob`): moves and separator renames were jobs with history entries already, and `list_undo` took a
+  job's name; only the newest one's Undo was on the page. The History now lists all of them, so nothing new had
+  to be built to make them revertable, only shown.
+- A Revert out of order works by the rule of DESIGN§11 (own lines only, when the lists changed since). FACT
+  (seen in the browser check): an uninstall reverted, then an older rename reverted with a move standing between
+  them. A job whose record names a mod by a name it no longer has says so and leaves that line.
+- A mod is renamed as MO2 renames it (MO03§6), no more: FACT (MO2's source at the commit of MO03,
+  `src/mainwindow.cpp:2495-2497`) MO2 writes the new name into the profiles' lists and nothing else, so its own
+  settings that name a mod (the mod a tool writes into) are left pointing at the old name. ModTrap therefore
+  refuses to rename such a mod and says why.
+- ModTrap's own notes keyed by a mod's name (a source link, a favourite) are carried to the new name, and back on
+  Revert. Not carried: the records of earlier jobs, which name the mod as it was then.
+- The menu's Uninstall is the same for a mod ModTrap installed: one way, always revertable from the History. The
+  install's own "Uninstall" (on the Installer tool and in the install box) still puts the lists back as they were
+  before that install.
+- Checked in a browser on a stand-in list: a mod renamed, moved, another uninstalled after the question, the
+  History's table, the uninstall and the rename reverted out of order. **Not checked:** on Windows, where the move
+  is `os.rename` on one drive; and the second question for an original mod, which needs a list file (tested at
+  the route).

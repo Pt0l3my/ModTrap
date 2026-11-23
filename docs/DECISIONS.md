@@ -73,7 +73,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   modlist already is said so before it is installed, with both versions, and an update offered; doubles are looked
   for when a modlist is opened, and a Scan in the header looks through every mod; Uninstall in the mod's menu; a
   mod shown in the list stays in view).
-- **Open.** MT66 (whether "Uninstall" should also take out a mod ModTrap did not install); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  MT66, answered (Uninstall works for any mod, by moving it aside; an original part of the modlist is asked about twice;
+  uninstalls, moves and renames are in the History for good, each with its Revert; a mod can be renamed).
+- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1693,3 +1695,24 @@ because it puts back what was there before the install. For any other mod there 
 
 **Recommendation: B**, if the owner wants it: it is what "uninstall" means in MO2, and moving is as safe as
 disabling. It is not built, because it widens what MT9 allows and that is the owner's to say.
+
+**Answer, 2026-11-23.** The owner: "Yes, make Uninstall work for any mod, but for those mods that are part of the
+original modlist, point out they are original parts and ask "uninstall?" another time as pop up to confirm. Also
+deleted mods along with jobs, should becomes permanent part of the history and makes them revertable. Can you also
+add mods moved (resulting in priority changes) in history and make them revertable? also add mod and separator
+renames (also revertable)."
+
+**Settled** (DESIGN§27, WHY§132; the owner may overrule any of it):
+
+- **B.** Uninstall works for any mod, from its menu, by moving: nothing is deleted, so MT9's reason holds. MT9 is
+  amended so far: a mod may leave MO2 at the owner's word, into ModTrap's keeping.
+- **An original part of the modlist** is said to be one, and "Uninstall?" is asked a second time in its own box.
+  "Original" is what the list's own file names (MT37). Without that file ModTrap says it cannot tell, and asks
+  once.
+- **Permanent, and revertable.** Every uninstall stays in the History with its Revert; clearing the job list does
+  not touch it; the mod's folder is kept until then.
+- **Moves and renames** are there too, each with its Revert: mods and separators moved (with the priority before
+  and after), separators renamed, and mods renamed. Read into "mod renames": that a mod can be renamed at all,
+  which it could not; "Rename…" is now in a mod's menu, done as MO2 does it.
+- Enabling, disabling and the Plugins tab's changes are in the same table: they were jobs of the same kind
+  already, with only the newest one's Undo in reach.
