@@ -141,6 +141,40 @@ class AModWeighed(unittest.TestCase):
         self.assertEqual((got["mods"], got["cut"], seen[-1]), (7, False, (7, 7)))
 
 
+class AModsName(unittest.TestCase):
+    """MT67: a mod is named by its title and its version."""
+
+    def test_the_title_and_the_version_come_out_of_the_files_name(self):
+        from modtrap import adding
+        for archive, title, version in (
+                ("Example Terrain Skse 4321 1.2 2026-01-02T03-04Z abcDEF123.7z", "Example Terrain Skse", "1.2"),      # as Nexus names a download now
+                ("Example Terrain Skse 4321 1.2 2026-01-02T03-04Z abcDEF123 (1).7z", "Example Terrain Skse", "1.2"),
+                ("Lantern-4321-2-1-1700000000.zip", "Lantern", "2.1"),                                                # as it did before
+                ("Lantern v2.10.3.zip", "Lantern", "2.10.3"), ("Lantern_1_4.rar", "Lantern", "1.4"), ("Lantern (3.0b).7z", "Lantern", "3.0b"),
+                ("Lantern.zip", "Lantern", ""), ("Lantern 2.zip", "Lantern 2", ""), ("4.5.zip", "4.5", "")):
+            said = adding.from_archive_name(archive)
+            self.assertEqual((said["stem"], said["version"]), (title, version), archive)
+
+    def test_the_name_is_the_title_and_the_version_and_an_update_keeps_the_title(self):
+        from modtrap import adding
+        self.assertEqual(adding.mod_name("Example Terrain Skse", "1.2"), "Example Terrain Skse 1.2")
+        self.assertEqual(adding.mod_name("Lantern", "v2.1"), "Lantern 2.1")
+        self.assertEqual(adding.mod_name("Lantern 2.1", "2.1"), "Lantern 2.1")                 # not said twice
+        self.assertEqual(adding.mod_name("Lantern", ""), "Lantern")
+        self.assertEqual(adding.mod_name('Lan<te>rn: "x"', "1/2"), "Lan te rn   x 1 2")
+        for name, was, title in (("Lantern 2.1", "2.1", "Lantern"), ("Lantern (2.1)", "2.1", "Lantern"), ("Lantern - v2.1", "", "Lantern"),
+                                 ("Lantern (new)", "", "Lantern"), ("Lantern", "2.1", "Lantern"), ("Lantern 2", "", "Lantern 2"), ("Lantern SE", "1.0", "Lantern SE")):
+            self.assertEqual(adding.title_of(name, was), title, name)
+        self.assertEqual((adding.version_in("Lantern 2.1"), adding.version_in("Lantern")), ("2.1", ""))
+
+    def test_a_file_inside_the_archive_can_say_the_version(self):
+        from modtrap import adding
+        with tempfile.TemporaryDirectory() as d:
+            fx.write(Path(d) / "Fomod" / "Info.xml", "<fomod><Name>Lantern</Name><Version MachineVersion=\"3.1\"> 3.1 </Version></fomod>".encode("utf-16"))
+            self.assertEqual(adding.info_version(Path(d)), "3.1")
+            self.assertEqual(adding.info_version(Path(d) / "Fomod"), "")
+
+
 class TheScansRoutes(unittest.TestCase):
     def setUp(self):
         logbook.set_console(False)
@@ -189,8 +223,29 @@ class TheScansRoutes(unittest.TestCase):
         rec = self.api._new_staged("Newcomer-777-3-0-1800000000.7z", "upload")
         pub = self.api._staged_public(rec)
         self.assertEqual((pub["name"], pub["version"], [(e["mod"], e["version"], e["newer"]) for e in pub["already"]]),
-                         ("Newcomer (3)", "3.0", [("Newcomer", "2.0", 1), ("Newcomer (2)", "1.0", 1)]))
+                         ("Newcomer 3.0", "3.0", [("Newcomer", "2.0", 1), ("Newcomer (2)", "1.0", 1)]))
         self.assertEqual(self.api._staged_public(self.api._new_staged("Lantern-900-1-0-1800000000.7z", "upload"))["already"], [])
+
+    def test_a_mod_is_named_by_title_and_version_and_the_owners_own_name_is_taken(self):
+        rec = self.api._new_staged("Lantern 900 1.0 2026-10-11T12-11Z abcdefgh.7z", "upload")
+        self.assertEqual((rec["name"], rec["version"], rec["title"]), ("Lantern 1.0", "1.0", "Lantern"))
+        up = self.api._new_staged("anything.zip", "fetched", updates="Newcomer", version="v2.5")          # the source's word comes first
+        self.assertEqual(up["name"], "Newcomer 2.5")
+        late = self.api._new_staged("Beacon.zip", "upload")
+        self.api._version_found(late, "4.0", "a file inside it")
+        self.assertEqual((late["name"], late["version"]), ("Beacon 4.0", "4.0"))
+        got = self.api.post("/api/add/name", {"id": rec["id"], "name": "  My   Lantern "})[1]
+        self.assertEqual(got["name"], "My Lantern")
+        self.api._version_found(rec, "9.9", "a file inside it")                                         # a name the owner gave stays
+        self.assertEqual(rec["name"], "My Lantern")
+        for bad in ({"id": rec["id"], "name": "Quill"}, {"id": rec["id"], "name": "a/b"}, {"id": rec["id"], "name": "x_separator"}, {"id": "none", "name": "Fine"},
+                    {"updates": "Quill", "name": "Newcomer"}):
+            with self.assertRaises(api.Bad):
+                self.api.post("/api/add/name", bad)
+        self.assertEqual(self.api.post("/api/add/propose", {"updates": "Newcomer"})[1]["name"], "Newcomer (new)")       # no newer version is known of it here
+        self.api.post("/api/add/name", {"updates": "Quill", "name": "Quill, the newer one"})
+        self.assertEqual(self.api._new_staged("q.zip", "fetched", updates="Quill", version="2.0")["name"], "Quill, the newer one")
+        self.assertEqual(self.api._new_staged("q2.zip", "fetched", updates="Quill", version="2.0")["name"], "Quill 2.0")  # asked for once, used once
 
 
 if __name__ == "__main__":

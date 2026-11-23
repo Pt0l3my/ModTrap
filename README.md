@@ -55,6 +55,9 @@ a modlist is opened, and "Scan" in the header looks through every mod's files; w
 Any mod can be uninstalled or renamed from its menu. An uninstalled mod is moved aside, whole, never deleted; the
 History lists every change of the mod list (moves, renames, uninstalls) for good, each with its Revert.
 
+A mod that is installed or updated is named by its title and its version ("Example Mod 1.2"), and the name is
+offered in a box to change or keep.
+
 ModTrap shows no window but its page in the browser: its program's console is hidden, and what it writes is on the
 page's Log. It closes when its page is closed, never in the middle of a job, and a tab the browser brings back
 starts it again.

@@ -112,6 +112,7 @@ SETTINGS = {
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
     "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
     "install_on_drop": False,  # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55)
+    "ask_name": True,          # a mod's name is asked at every install and update, with ModTrap's own as what is offered (MT67)
     "quit_with_page": True,    # ModTrap closes when its page is closed, with nothing in hand (MT64)
     "start_from_page": True,   # a link of ModTrap's own kind starts ModTrap.exe, so that a page brought back can start it (MT64)
     "console_window": False,   # ModTrap's own console window is shown, minimised; off: it is hidden, its lines being on the page (MT63)
@@ -155,6 +156,7 @@ class Api:
         self.argv: list[str] = []                     # what this ModTrap was started with, for starting itself again (MT58)
         self.port = 0                                 # the port its page is on
         self.own_console = False                      # the console it writes to is its own, and may be hidden (MT63)
+        self._wanted_names: dict[str, str] = {}       # the mod being updated, folded -> the name the owner gave its newer version (MT67)
         self._listscan: dict = {"for": None, "quick": None, "deep": None, "state": "idle", "progress": (0, 0), "error": ""}      # MT65
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
@@ -1596,19 +1598,26 @@ class Api:
         if updates and m is not None and m.instance.mod(updates) is None:
             updates = ""
         said = adding.from_archive_name(archive)          # what a site wrote into the file's name (TL01§31)
-        stem = said["stem"] or "New mod"
-        stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", stem).strip(" .")[:120] or "New mod"
-        name, n = stem, 2
+        # A mod is named by its title and its version (MT67). The version: what the source said of the file where
+        # it is known (the Updater, a download's own record), else what the file's name says; a file inside the
+        # archive can still say it once it is unpacked. The title: the file's name without what the site added, or,
+        # for a newer version, the name of the mod it replaces without that mod's version.
+        version = adding.clean_version(version) or adding.clean_version(said.get("version", ""))
+        title = said["stem"] or "New mod"
         if updates:
-            version = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", version or said.get("version", "")).strip(" .")[:30]      # the file's own name says it, where nothing else does
-            stem = updates[:120]
-            name = "%s (%s)" % (stem, version) if version else "%s (new)" % stem
-        while instance.fold(name) in taken:
-            name, n = "%s (%d)" % (stem, n), n + 1
+            old = m.instance.mod(updates)
+            from . import sources
+            was = sources.mod_meta(old.folder).get("version", "") if old is not None and old.folder is not None else ""
+            title = adding.title_of(updates, was)
+        name = adding.mod_name(title, version)
+        if updates and not version:
+            name = "%s (new)" % name
+        wanted = self._wanted_names.pop(instance.fold(updates), "") if updates else ""      # the name the owner gave for this update (MT67)
+        name = self._free_name(wanted or name, taken)
         rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
                "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {},
                "updates": updates, "meta": self._source_for(updates, name) if updates else self._source_said(said),
-               "version": said.get("version", ""), "already": []}
+               "version": version, "title": title, "named": bool(wanted), "already": []}
         if m is not None and not updates:                 # is this mod in the modlist already? (MT65)
             try:
                 rec["already"] = dupes.same_as(m, self.updating.rows(m, *self._updates_for())[0], archive)
@@ -1621,6 +1630,85 @@ class Api:
         self._save_staged(rec)
         return rec
 
+    @staticmethod
+    def _name_given(name: object) -> str:
+        """A mod's name as the owner typed it, or Bad with what a name may not be."""
+        new = re.sub(r"\s+", " ", name).strip() if isinstance(name, str) else ""
+        if not new or len(new) > 200 or re.search(r'[<>:"/\\|?*\x00-\x1f]', new) or new[0] in "+-*#" or new.endswith(".") or new.lower().endswith("_separator"):
+            raise Bad("give the mod a name of up to 200 characters, without any of  < > : \" / \\ | ? *  and not beginning with + - * or #")
+        return new
+
+    def add_name(self, body: dict) -> dict:
+        """The owner's own name for a mod about to be installed (MT67): for an archive on the Installer tool's list
+        (`id`), or for the update of a mod that is still to be fetched (`updates`)."""
+        m = self._need()
+        new = self._name_given(body.get("name"))
+        taken = {instance.fold(x.name) for x in m.instance.mods}
+        mod = body.get("updates")
+        if isinstance(mod, str) and mod:
+            if m.instance.mod(mod) is None:
+                raise Bad("that is not a mod of this modlist")
+            if instance.fold(new) in taken:
+                raise Bad("MO2 already has a mod called “%s”: the newer version needs a name of its own, since the older one is kept" % new)
+            self._wanted_names[instance.fold(mod)] = new
+            return {"name": new, "updates": mod}
+        rec = self._staged.get(body.get("id")) if isinstance(body.get("id"), str) else None
+        if rec is None:
+            raise Bad("that is not on the list")
+        taken |= {instance.fold(r["name"]) for r in self._staged.values() if r is not rec}
+        if instance.fold(new) in taken:
+            raise Bad("MO2 already has a mod called “%s”, or one is about to be installed under that name" % new)
+        if new != rec["name"]:
+            log.info("“%s” will be installed as “%s” (the owner's name for it; ModTrap's was “%s”)", rec["archive"], new, rec["name"])
+            rec["name"], rec["named"] = new, True
+            self._save_staged(rec)
+            with self._lock:
+                self._adding = {}                         # what was read of it was read under its other name
+        return self._staged_public(rec)
+
+    def add_propose(self, body: dict) -> dict:
+        """The name ModTrap would give the newer version of a mod: its title, and the version the source names."""
+        m = self._need()
+        mod = m.instance.mod(body.get("updates")) if isinstance(body.get("updates"), str) else None
+        if mod is None:
+            raise Bad("that is not a mod of this modlist")
+        row = next((r for r in self.updating.rows(m, *self._updates_for())[0] if r["mod"] == mod.name), None) or {}
+        try:
+            verdict = next((r for r in self.updates_state()["rows"] if r["mod"] == mod.name), {})
+        except Exception:
+            verdict = {}
+        version = adding.clean_version(verdict.get("newest") or "")
+        name = adding.mod_name(adding.title_of(mod.name, row.get("version") or ""), version)
+        taken = {instance.fold(x.name) for x in m.instance.mods}
+        return {"name": self._free_name(name if version else "%s (new)" % name, taken), "version": version, "was": row.get("version") or ""}
+
+    @staticmethod
+    def _free_name(name: str, taken: set[str]) -> str:
+        out, n = name, 2
+        while instance.fold(out) in taken:
+            out, n = "%s (%d)" % (name, n), n + 1
+        return out
+
+    def _version_found(self, rec: dict, version: str, where: str) -> None:
+        """A version that came to light after the archive was taken in (its download's own record, a file inside
+        it): the mod is named with it, unless it has one already."""
+        version = adding.clean_version(version)
+        if not version or rec.get("version"):
+            return
+        m = self.model
+        taken = {instance.fold(x.name) for x in m.instance.mods} if m is not None else set()
+        taken |= {instance.fold(r["name"]) for r in self._staged.values() if r is not rec}
+        was = rec["name"]
+        rec["version"] = version
+        if not rec.get("named"):                          # a name the owner gave stays as given
+            rec["name"] = self._free_name(adding.mod_name(rec.get("title") or adding.title_of(was), version), taken)
+        if rec.get("meta") and not rec["meta"].get("version"):
+            rec["meta"]["version"] = version
+        for e in rec.get("already") or []:
+            e["mine"], e["newer"] = version, dupes.newer(version, e.get("version", ""))
+        log.info("“%s” is version %s by %s: the mod is named “%s”", rec["archive"], version, where, rec["name"])
+        self._save_staged(rec)
+
     def _unpack(self, rec: dict, src: Path) -> None:
         """Off the request: unpack, then find the mod inside (DESIGN§16.1)."""
         d = Path(rec["dir"])
@@ -1628,6 +1716,7 @@ class Api:
             got = unpack.unpack(src, d / "files", self.seven_zip)
             lay = unpack.layout(d / "files")
             rec.update(kind=got["kind"], files=got["files"], root=str(lay["root"]))
+            self._version_found(rec, adding.info_version(Path(lay["root"])), "the mod's own installer file")
             if lay["installer"]:
                 # An installer that asks which parts to install (DESIGN§16.1): the questions are asked on the
                 # page; the answers build the mod's folder. One ModTrap cannot read is handed to MO2.
@@ -2415,6 +2504,10 @@ class Api:
             return 200, self.add_take(body), None
         if path == "/api/add/forget":
             return 200, self.add_forget(body), None
+        if path == "/api/add/name":
+            return 200, self.add_name(body), None
+        if path == "/api/add/propose":
+            return 200, self.add_propose(body), None
         if path == "/api/add/installer":
             return 200, self.add_installer(body), None
         if path == "/api/add/choose":

@@ -43,7 +43,70 @@ def from_archive_name(archive: str) -> dict:
     m = NEXUS_OLD.search(stem)
     if m:
         return {"stem": stem[:m.start()].strip(" ."), "mod_id": int(m.group(1)), "version": m.group(2).replace("-", "."), "code": ""}
-    return {"stem": NEXUS_TAIL.sub("", re.sub(r" ?\(\d+\)$", "", stem)).strip(" ."), "mod_id": 0, "version": "", "code": ""}
+    stem = NEXUS_TAIL.sub("", re.sub(r" ?\(\d+\)$", "", stem)).strip(" .")
+    m = VERSION_TAIL.search(stem)                         # a file from elsewhere: a version at the end of its name
+    if m and stem[:m.start()].strip(" ._-"):
+        return {"stem": stem[:m.start()].strip(" ._-"), "mod_id": 0, "version": clean_version(m.group(1)), "code": ""}
+    return {"stem": stem, "mod_id": 0, "version": "", "code": ""}
+
+
+# A mod is named by its title and its version (MT67): "Title 1.2".
+VERSION_TAIL = re.compile(r"(?:[ _-]+|\()v?(\d+(?:[._]\d+){1,4}[a-z]?)\)?$", re.IGNORECASE)
+_NOT_IN_A_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def clean_version(version: str) -> str:
+    """A version as it goes into a mod's name: without a leading "v", with dots, and with nothing a folder's name
+    cannot hold. "" where it says nothing."""
+    v = _NOT_IN_A_NAME.sub(" ", str(version or "")).strip(" .")
+    v = re.sub(r"^[vV](?=\d)", "", v)
+    if re.fullmatch(r"\d+(_\d+)+[a-z]?", v):
+        v = v.replace("_", ".")
+    return v[:30] if re.search(r"\d", v) else ""
+
+
+def title_of(name: str, version: str = "") -> str:
+    """A mod's name without the version at its end: the mod's own recorded version where the name ends with it,
+    else anything there that is written as a version, and the mark "(new)"."""
+    out = re.sub(r"\s*\(new\)$", "", name.strip(), flags=re.IGNORECASE)
+    v = clean_version(version)
+    if v:
+        cut = re.sub(r"[\s_-]*\(?v?%s\)?$" % re.escape(v), "", out, flags=re.IGNORECASE)
+        if cut and cut != out:
+            return cut.strip(" ._-")
+    m = VERSION_TAIL.search(out)
+    return out[:m.start()].strip(" ._-") if m and out[:m.start()].strip(" ._-") else out
+
+
+def version_in(name: str) -> str:
+    """The version a mod's name ends with, or "": for a mod of which nothing else says its version."""
+    m = VERSION_TAIL.search(name.strip())
+    return clean_version(m.group(1)) if m else ""
+
+
+def mod_name(title: str, version: str = "") -> str:
+    """The name a mod gets when it is installed or updated: its title and its version."""
+    title = _NOT_IN_A_NAME.sub(" ", title).strip(" .")[:120] or "New mod"
+    v = clean_version(version)
+    if not v or re.search(r"(^|[\s_(-])v?%s\)?$" % re.escape(v), title, flags=re.IGNORECASE):
+        return title
+    return "%s %s" % (title, v)
+
+
+def info_version(folder: Path) -> str:
+    """The version a mod's own installer file states (fomod/info.xml), or ""."""
+    try:
+        fomod_dir = next((e for e in folder.iterdir() if e.is_dir() and e.name.lower() == "fomod"), None)
+        info = next((e for e in fomod_dir.iterdir() if e.is_file() and e.name.lower() == "info.xml"), None) if fomod_dir is not None else None
+        if info is None:
+            return ""
+        with open(info, "rb") as f:
+            raw = f.read(64 * 1024)
+    except OSError:
+        return ""
+    text = raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8-sig", "replace")
+    m = re.search(r"<Version[^>]*>\s*([^<]{1,40}?)\s*</Version>", text, flags=re.IGNORECASE)
+    return clean_version(m.group(1)) if m else ""
 OUTPUT_NAME = re.compile(r"\boutputs?\b", re.IGNORECASE)
 _INSTALLED = re.compile(rb"^installationFile=(.*)$", re.MULTILINE)
 # Kinds of shared file worth a look before the mod goes in, and why.

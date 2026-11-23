@@ -223,5 +223,16 @@ class PageTests(unittest.TestCase):
         for kind in ("mod renamed", "mod uninstalled", "mod put back", "mod moved", "separator renamed"):
             self.assertIn('"%s": "' % kind, self.js)
 
+    def test_a_name_is_asked_at_every_install_and_update_and_a_side_of_the_web_opens_whole(self):
+        """MT67."""
+        self.assertIn('if (!rec || !rec.id || (!always && (state.settings || {}).ask_name === false)) return rec;', self.js)
+        self.assertEqual(self.js.count("askName("), 5)             # itself, the list's drop, the Installer tool's, the manual update, and the pen
+        self.assertIn('const p = await api("/api/add/propose", { updates: mod });', self.js)
+        self.assertIn('await api("/api/add/name", { updates: mod, name: to.trim() });', self.js)
+        self.assertIn("w.open.add(it.side);", self.js)
+        self.assertIn('b.addEventListener("click", () => { w.open.delete(it.side); w.more = null; webRender(); });', self.js)
+        self.assertIn("const WEB_OPEN_CAP = 240;", self.js)
+        self.assertIn('map.style.aspectRatio = g.w + " / " + g.h;', self.js)
+
 if __name__ == "__main__":
     unittest.main()

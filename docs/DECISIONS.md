@@ -75,6 +75,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   mod shown in the list stays in view).
   MT66, answered (Uninstall works for any mod, by moving it aside; an original part of the modlist is asked about twice;
   uninstalls, moves and renames are in the History for good, each with its Revert; a mod can be renamed).
+  MT67 (a mod is named by its title and its version, from the source, the file's name or a file inside; the name is
+  asked at every install and update; "+ N more" in a mod's web shows that side's mods as boxes).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1716,3 +1718,38 @@ renames (also revertable)."
   which it could not; "Rename…" is now in a mod's menu, done as MO2 does it.
 - Enabling, disabling and the Plugins tab's changes are in the same table: they were jobs of the same kind
   already, with only the newest one's Undo in reach.
+
+## MT67
+
+**A mod is named by its title and its version, and the name is asked; "+ N more" opens in the web** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "in the new mod pop up UI, can you also make the "+18 more" to also show the boxes in the
+network, not just list on the side?
+
+Also when installing/adding a mod (or when updating), what I am interested in is two things: Mod title and mod
+Version. so when installing this mod for instance:
+
+[the mod's title] [its number at Nexus] 1.2 [the time of upload] [the site's code].7z (this is how the file gets downloaded from nexus)
+
+Then I want it to be named as: [the mod's title] 1.2
+when installed or updated. I suppose this inforkmation could be fetched from 3 sources: a file that contains
+version, the source stating it, the compressed file name having it."
+
+And, while it was being built: "also, for added/updated mods, can you add manually name setting? so when the user
+install or updates a mod, allow user to enter a name for it every time (show the full file title be default in
+text box that the user can alter)."
+
+(The mod's own title, its number, the time and the code stood in the owner's message; they are left out here, as
+everything that names a real mod is.)
+
+**Settled** (DESIGN§28, WHY§133; the owner may overrule any of it):
+
+- **"Title Version".** A new mod and a newer version are named so. The version from the owner's three sources, in
+  the order of how much each can be trusted: the source's own word for the file, the file's name, a file inside
+  the archive. An update keeps the title of the mod it replaces. This replaces "Title (version)" of MT40.
+- **The name is asked every time**, in a box with the name in a text field. Read into "the full file title by
+  default": the name ModTrap would give, title and version, which is what the owner asked a mod to be named two
+  messages earlier; the file's whole name stands in the box's text above the field. A setting turns the question
+  off; the pen on the Installer tool's list stays.
+- **"+ N more"** shows that side's mods as boxes in the picture as well as in the list beside it, with "Show
+  fewer" to fold it again.

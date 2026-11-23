@@ -284,6 +284,7 @@ const SETTING_TEXT = [
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
   ["install_on_drop", "Install a dropped mod by itself", "Off: a mod's archive dropped on the Installer tool is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it. On: it is installed as soon as it is read, with no press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing."],
   ["scan_on_enable", "Scan a mod when it is enabled on the Modlist page", "On: when you tick a mod with plugins on, ModTrap then looks through the load order for what the mod's plugins overwrite and what overwrites them, and tells you in a note at the bottom of the page. It only reads. Off: the scan runs when you ask for it, from the mod's right-click menu or its card."],
+  ["ask_name", "Ask for a mod's name at every install and update", "A mod is named by its title and its version, as in “Example Mod 1.2”: the title from the file's name (for an update, the name of the mod it replaces, without that mod's version), the version from what the mod's site says of the file, else from the file's name, else from a file inside it. On: before a mod is installed or updated, a box shows that name for you to change or keep; Enter keeps it. Off: the name is given without asking; the pen beside a mod on the Installer tool still changes it."],
   ["quit_with_page", "Close ModTrap when its page is closed", "ModTrap has no window, so its page is all there is of it. On: when the last tab with ModTrap's page is closed (or its browser is), ModTrap saves its session and closes, a few seconds later; a page only loaded anew is back before that. It never closes in the middle of a job, a tool's run or a scan: it waits for that to end. A browser that is ended without a word is noticed after four minutes. Off: ModTrap runs until “Quit”."],
   ["start_from_page", "Let ModTrap's page start ModTrap", "When ModTrap has closed and your browser brings its tab back, a small page ModTrap left in the browser shows instead and starts ModTrap again; then you are back where you were. For that, ModTrap enters one kind of link (modtrap:) for your Windows account, which starts this ModTrap.exe. Your browser asks before it opens such a link; you can let it remember the answer for this page. The link carries nothing: whatever it says, ModTrap is started the one same way, as a double-click does. Off: the entry is taken out again, and the page only tells you to start ModTrap.exe yourself."],
   ["console_window", "Show ModTrap's console window", "ModTrap's program writes what it does to a console window. Every line of it is on this page too (History, then Log), and nothing ModTrap does needs the window, so it is hidden: the browser is all you see. On: the window is shown, minimised, in the taskbar. Either way “Quit” at the top ends ModTrap, and closing this tab does not: start ModTrap again and its page is back. A start that fails shows the window, with what went wrong. Windows only, and only for a ModTrap started by ModTrap.exe: one started from a command prompt of yours leaves that window alone."],
@@ -704,7 +705,21 @@ async function getUpdate(mod, byBrowser) {
     toast("ModTrap updates a mod only when it is started with its switch for changes; the mod's page is opened for you.");
     return;
   }
-  // The tab is opened at once, while the press still counts as the owner's; it is closed again if it is not needed.
+  // The newer version's name (MT67): asked before anything starts; ModTrap's own is offered, Esc stops the update.
+  const going = ((state.updater || {}).runs || []).some((u) => u.mod === mod && u.state === "going");
+  if ((state.settings || {}).ask_name !== false && !going) {
+    try {
+      const p = await api("/api/add/propose", { updates: mod });
+      for (;;) {
+        const to = await modalBox("Update “" + mod + "”" + (p.version ? " to version " + p.version : "") + "\n\nThe newer version's name, as MO2 will show it. The version you have" + (p.was ? " (" + p.was + ")" : "") + " is kept under its own name, disabled.",
+          { input: p.name, yes: "Update", no: "Cancel", wide: true });
+        if (to === null) return;
+        if (!to.trim() || to.trim() === p.name) break;
+        try { await api("/api/add/name", { updates: mod, name: to.trim() }); break; } catch (e) { toast(e.message); }
+      }
+    } catch (e) { /* no name to offer: the update goes on under ModTrap's own */ }
+  }
+  // The tab is opened right after, while the press still counts as the owner's; it is closed again if it is not needed.
   const win = byBrowser || (r && r.fetches) ? null : siteWindow();
   let got;
   try { got = await api("/api/updater/start", { mod }); } catch (e) { if (win) { try { win.close(); } catch (e2) { /* gone */ } } toast(e.message); return; }
@@ -989,7 +1004,7 @@ function manualUpdate(mod) {
     done();
     try {
       toast("Taking in “" + file.name + "” as a newer version of “" + mod + "”…");
-      const rec = await sendArchive(file, mod);
+      const rec = await askName(await sendArchive(file, mod));
       await api("/api/updater/start", { mod, staged: rec.id });
       showTab("updater");
       pollUpdater(true);
@@ -3063,6 +3078,7 @@ async function dropRun(run) {
       }
       renderDropBox();
     }
+    rec = await askName(rec);
     run.ids.push(rec.id);
     run.names.push(rec.name);
     state.staged = (state.staged || []).concat(rec.id);
@@ -3255,8 +3271,8 @@ const WEB_DEEP = new Set(["overwritten", "overwrites", "conflict", "settled", "l
 const WEB_SIDE = { needs: "left", needed: "right", patch: "right", output: "right", overwritten: "top", loses: "top", overwrites: "bottom", wins: "bottom" };
 const WEB_HEAD = { left: "It needs", right: "Built on it", top: "Win over it", bottom: "It wins over" };
 const WEB_CAP = { left: 9, right: 9, top: 8, bottom: 8 };
+const WEB_OPEN_CAP = 240;                         // the most boxes a side shows when it is shown whole; the rest are listed
 const WEB_W = 1000, WEB_H = 640;
-const WEB_MID = { x: 378, y: 280, w: 244, h: 80 };
 const SVG_NS = new DOMParser().parseFromString("<svg></svg>", "text/html").body.firstChild.namespaceURI;
 const svgEl = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; };
 const webCache = new Map();                       // the modlist as it stands + the mod -> { near, deep }
@@ -3282,7 +3298,7 @@ async function webOpen(name, opts) {
     w = state.web = { back, box, trail: [], hidden: new Set(), before: document.activeElement };
     document.body.append(back);
   } else if (!o.back && w.name && w.name !== name) w.trail.push(w.name);
-  Object.assign(w, { name, sel: null, more: null, error: "", going: false, data: null });
+  Object.assign(w, { name, sel: null, more: null, error: "", going: false, data: null, open: new Set(), frameTop: undefined });
   const key = webKey(name);
   const here = () => state.web === w && w.name === name;
   let kept = webCache.get(key);
@@ -3345,46 +3361,74 @@ function webNodes(d, hidden) {
   return sides;
 }
 
-// Where each box stands, on a sheet of 1000 by 640: a column on either side, two rows above and two below. A side
-// with more mods than it has room for ends in one box that stands for the rest.
-function webPlace(sides) {
+// The second line of a box: its kind and how much of it, in few words. The whole of it is in the box's details.
+function webShort(x) {
+  const n = x.weight;
+  const much = { needs: plural(n, "master"), needed: plural(n, "plugin"), output: plural(n, "plugin"), overwritten: plural(n, "file"), overwrites: plural(n, "file"),
+    conflict: plural(n, "record"), settled: plural(n, "record"), loses: plural(n, "record"), wins: plural(n, "record"),
+    patch: x.between && x.between.length ? "with " + x.between[0] + (x.between.length > 1 ? " and more" : "") : plural(n, "plugin") }[x.kind];
+  return WEB_KINDS[x.kind][0] + " · " + much;
+}
+
+// Where each box stands. The sheet is 1000 by 640 while every side fits its room: a column on either side (nine
+// boxes), two rows above and two below (four boxes each). A side with more mods ends in a box that stands for the
+// rest; pressed, that side is shown whole (MT67): rows are added above or below, columns to the left or the
+// right, and the sheet grows with them, scrolled in its frame.
+function webPlace(sides, open) {
+  const items = {};
+  for (const side of ["left", "right", "top", "bottom"]) {
+    const all = sides[side], whole = open.has(side), cap = whole ? WEB_OPEN_CAP : WEB_CAP[side];
+    items[side] = (all.length > cap ? all.slice(0, cap - 1) : all).map((n) => ({ n, side }));
+    if (all.length > cap) items[side].push({ more: all.slice(cap - 1), side });
+    else if (whole && all.length > WEB_CAP[side]) items[side].push({ fewer: true, side });
+  }
+  const rows = Math.max(9, open.has("left") || open.has("right") ? 12 : 9);          // boxes in one column
+  const cols = (side) => Math.max(1, Math.ceil(items[side].length / rows));
+  const lines = (side) => Math.max(2, Math.ceil(items[side].length / 4));
+  const g = { rows, left: cols("left"), right: cols("right"), top: lines("top"), bottom: lines("bottom") };
+  g.off = (g.left - 1) * 240;                                  // what the left columns push the middle to the right
+  g.w = WEB_W + g.off + (g.right - 1) * 240;
+  g.topH = g.top * 46 - 2;
+  g.midH = rows * 46 + 46;
+  g.cx = g.off + WEB_W / 2;
+  g.cy = g.topH + g.midH / 2;
+  g.h = g.topH + g.midH + g.bottom * 46 - 2;
+  g.mid = { x: g.cx - 122, y: g.cy - 40, w: 244, h: 80 };
   const placed = [];
   for (const side of ["left", "right", "top", "bottom"]) {
-    const all = sides[side], cap = WEB_CAP[side];
-    const items = (all.length > cap ? all.slice(0, cap - 1) : all).map((n) => ({ n }));
-    if (all.length > cap) items.push({ more: all.slice(cap - 1) });
-    items.forEach((it, i) => {
-      it.side = side;
+    const list = items[side];
+    list.forEach((it, i) => {
       it.h = 40;
       if (side === "left" || side === "right") {
+        const col = Math.floor(i / rows), inCol = Math.min(rows, list.length - col * rows), k = i % rows;
         it.w = 232;
-        it.x = side === "left" ? 8 : WEB_W - 8 - it.w;
-        it.y = WEB_H / 2 + (i - (items.length - 1) / 2) * 46 - it.h / 2;
+        it.x = side === "left" ? g.off + 8 - col * 240 : g.off + WEB_W - 240 + col * 240;
+        it.y = g.cy + (k - (inCol - 1) / 2) * 46 - it.h / 2;
       } else {
-        const row = Math.floor(i / 4), inRow = Math.min(4, items.length - row * 4);
+        const row = Math.floor(i / 4), inRow = Math.min(4, list.length - row * 4);
         it.w = 238;
-        it.x = WEB_W / 2 - (inRow * 248 - 10) / 2 + (i % 4) * 248;
-        it.y = side === "top" ? (row ? 4 : 50) : (row ? WEB_H - 44 : WEB_H - 90);
+        it.x = g.cx - (inRow * 248 - 10) / 2 + (i % 4) * 248;
+        it.y = side === "top" ? g.topH - 40 - row * 46 : g.topH + g.midH + row * 46;
       }
       placed.push(it);
     });
   }
-  return placed;
+  return { placed, g };
 }
 
 // The line from a box to the middle, bent, and which way its arrow points: at the one that is needed, or the one
 // whose files or changes are overwritten. Both ways where each wins somewhere.
-function webEdge(it) {
-  const m = WEB_MID, cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+function webEdge(it, g) {
+  const m = g.mid, cx = it.x + it.w / 2, cy = it.y + it.h / 2;
   let a, b, bend;
   if (it.side === "left" || it.side === "right") {
     a = [it.side === "left" ? it.x + it.w : it.x, cy];
-    b = [it.side === "left" ? m.x : m.x + m.w, WEB_H / 2 + (cy - WEB_H / 2) * 0.13];
+    b = [it.side === "left" ? m.x : m.x + m.w, g.cy + Math.max(-34, Math.min(34, (cy - g.cy) * 0.13))];
     const mx = (a[0] + b[0]) / 2;
     bend = [[mx, a[1]], [mx, b[1]]];
   } else {
     a = [cx, it.side === "top" ? it.y + it.h : it.y];
-    b = [WEB_W / 2 + (cx - WEB_W / 2) * 0.24, it.side === "top" ? m.y : m.y + m.h];
+    b = [g.cx + (cx - g.cx) * 0.24, it.side === "top" ? m.y : m.y + m.h];
     const my = (a[1] + b[1]) / 2;
     bend = [[a[0], my], [b[0], my]];
   }
@@ -3395,15 +3439,6 @@ function webEdge(it) {
   const pts = toMid ? [a, bend[0], bend[1], b] : [b, bend[1], bend[0], a];
   const f = (q) => q[0].toFixed(1) + " " + q[1].toFixed(1);
   return { d: "M" + f(pts[0]) + " C" + f(pts[1]) + ", " + f(pts[2]) + ", " + f(pts[3]), both };
-}
-
-// The second line of a box: its kind and how much of it, in few words. The whole of it is in the box's details.
-function webShort(x) {
-  const n = x.weight;
-  const much = { needs: plural(n, "master"), needed: plural(n, "plugin"), output: plural(n, "plugin"), overwritten: plural(n, "file"), overwrites: plural(n, "file"),
-    conflict: plural(n, "record"), settled: plural(n, "record"), loses: plural(n, "record"), wins: plural(n, "record"),
-    patch: x.between && x.between.length ? "with " + x.between[0] + (x.between.length > 1 ? " and more" : "") : plural(n, "plugin") }[x.kind];
-  return WEB_KINDS[x.kind][0] + " · " + much;
 }
 
 function webSelect(w, mod, more) {
@@ -3420,7 +3455,12 @@ function webSelect(w, mod, more) {
 function webMap(w) {
   const d = w.data;
   const map = el("div", { class: "webmap" });
-  const svg = svgEl("svg", { viewBox: "0 0 " + WEB_W + " " + WEB_H, "aria-hidden": "true" });
+  const sides = webNodes(d, w.hidden);
+  w.open = w.open || new Set();
+  const { placed, g } = webPlace(sides, w.open);
+  map.style.aspectRatio = g.w + " / " + g.h;
+  map.style.minWidth = Math.round(780 * g.w / WEB_W) + "px";
+  const svg = svgEl("svg", { viewBox: "0 0 " + g.w + " " + g.h, "aria-hidden": "true" });
   const defs = svgEl("defs");
   for (const k of WEB_LEGEND) {
     const mk = svgEl("marker", { id: "web-arrow-" + k, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
@@ -3429,25 +3469,40 @@ function webMap(w) {
   }
   svg.append(defs);
   const put = (node, x, y, wd, h) => {
-    node.style.left = (x / WEB_W * 100) + "%"; node.style.top = (y / WEB_H * 100) + "%";
-    node.style.width = (wd / WEB_W * 100) + "%"; if (h) node.style.height = (h / WEB_H * 100) + "%";
+    node.style.left = (x / g.w * 100) + "%"; node.style.top = (y / g.h * 100) + "%";
+    node.style.width = (wd / g.w * 100) + "%"; if (h) node.style.height = (h / g.h * 100) + "%";
     return node;
   };
-  const sides = webNodes(d, w.hidden);
-  const placed = webPlace(sides);
   w.nodes = new Map();
   w.moreEls = new Map();
   const kids = [svg];
   const hot = (path, on) => { path.classList.toggle("hot", on); map.classList.toggle("hover", on); };
   for (const it of placed) {
-    const edge = webEdge(it);
+    const edge = webEdge(it, g);
+    if (it.fewer) {
+      const b = put(el("button", { type: "button", class: "webnode more", title: "Back to the boxes that fit the picture at one look" },
+        el("span", { class: "wn-name", text: "Show fewer" }), el("span", { class: "wn-what", text: "the weightiest only" })), it.x, it.y, it.w, it.h);
+      b.dataset.k = "fewer:" + it.side;
+      b.addEventListener("click", () => { w.open.delete(it.side); w.more = null; webRender(); });
+      kids.push(b);
+      continue;
+    }
     if (it.more) {
       const path = svgEl("path", { d: edge.d, class: "webline more" });
       svg.append(path);
-      const b = put(el("button", { type: "button", class: "webnode more" + (w.more && w.more.side === it.side ? " sel" : ""), title: "The mods of this side that have no room here: listed on the right" },
-        el("span", { class: "wn-name", text: "+ " + it.more.length.toLocaleString("en-GB") + " more" }), el("span", { class: "wn-what", text: "show them as a list" })), it.x, it.y, it.w, it.h);
+      const whole = w.open.has(it.side);
+      const b = put(el("button", { type: "button", class: "webnode more" + (w.more && w.more.side === it.side ? " sel" : ""),
+        title: whole ? "More mods than the picture takes even shown whole: they are listed on the right" : "Shows every mod of this side as a box in the picture, and lists them on the right" },
+        el("span", { class: "wn-name", text: "+ " + it.more.length.toLocaleString("en-GB") + " more" }), el("span", { class: "wn-what", text: whole ? "listed on the right" : "show them all" })), it.x, it.y, it.w, it.h);
       b.dataset.k = "more:" + it.side;
-      b.addEventListener("click", () => webSelect(w, null, { side: it.side, mods: it.more }));
+      b.addEventListener("click", () => {
+        if (whole) { webSelect(w, null, { side: it.side, mods: it.more }); return; }
+        w.open.add(it.side);                        // the side is shown whole, and its mods listed beside the picture too
+        w.sel = null;
+        w.more = { side: it.side, mods: sides[it.side] };
+        w.scrollTo = it.side;
+        webRender();
+      });
       w.moreEls.set(it.side, b);
       kids.push(b);
       continue;
@@ -3477,18 +3532,19 @@ function webMap(w) {
     if (!mine.length) continue;
     const total = sides[side].length;
     const lab = el("span", { class: "weblabel " + side, text: WEB_HEAD[side] + " · " + total.toLocaleString("en-GB") });
-    if (side === "left" || side === "right") put(lab, mine[0].x, mine[0].y - 22, mine[0].w);
-    else put(lab, WEB_MID.x, side === "top" ? 98 : WEB_H - 98 - 18, WEB_MID.w);
+    if (side === "left" || side === "right") put(lab, mine[0].x, Math.min(...mine.map((it) => it.y)) - 22, mine[0].w);
+    else put(lab, g.mid.x, side === "top" ? g.topH + 8 : g.topH + g.midH - 26, g.mid.w);
     kids.push(lab);
   }
   const me = d.mod;
   const mid = put(el("div", { class: "webmid" + (me.enabled ? "" : " off") },
     el("span", { class: "wn-name", text: me.shown, title: me.shown }),
-    el("span", { class: "wn-what", text: (me.priority >= 0 ? "priority " + me.priority + " · " : "") + (me.enabled ? "enabled" : "disabled") + " · " + plural(me.plugins.length, "plugin") })), WEB_MID.x, WEB_MID.y, WEB_MID.w, WEB_MID.h);
+    el("span", { class: "wn-what", text: (me.priority >= 0 ? "priority " + me.priority + " · " : "") + (me.enabled ? "enabled" : "disabled") + " · " + plural(me.plugins.length, "plugin") })), g.mid.x, g.mid.y, g.mid.w, g.mid.h);
   kids.push(mid);
   if (!placed.length) kids.push(put(el("span", { class: "weblabel none", text: w.going ? "Nothing in the plugins' headers ties it to another mod. Its files and records are being looked through…"
     : w.hidden.size ? "Nothing of the kinds that are switched on. Switch a kind on again in the list on the right." : "No other mod has to do with it: it needs none, none needs it, and nothing is overwritten either way." }), 250, 150, 500));
   map.append(...kids);
+  w.midEl = mid;
   return map;
 }
 
@@ -3531,8 +3587,9 @@ function webSide(w) {
         inList ? go("Show it in the list", () => { const n = w.sel; webClose(); showInList(n); }) : null,
         go("Back to the overview", () => webSelect(w, null)))));
   } else if (w.more) {
-    kids.push(el("div", { class: "webdetail" }, el("h3", { text: WEB_HEAD[w.more.side] + ": " + plural(w.more.mods.length, "more mod") }),
-      el("p", { class: "dim small", text: "The mods that have no room in the picture. Press one for what lies between the two." }),
+    const whole = (w.open || new Set()).has(w.more.side) && w.more.mods.length <= WEB_OPEN_CAP;
+    kids.push(el("div", { class: "webdetail" }, el("h3", { text: WEB_HEAD[w.more.side] + ": " + plural(w.more.mods.length, whole ? "mod" : "more mod") }),
+      el("p", { class: "dim small", text: whole ? "Every mod of this side, each a box in the picture too. Press one for what lies between the two." : "The mods that have no room in the picture. Press one for what lies between the two." }),
       el("div", { class: "webrows" }, ...w.more.mods.slice(0, 400).map(pick)), w.more.mods.length > 400 ? el("p", { class: "dim small", text: "… and " + plural(w.more.mods.length - 400, "more mod") }) : null,
       el("div", { class: "actions" }, go("Back to the overview", () => webSelect(w, null)))));
   } else {
@@ -3557,6 +3614,8 @@ function webRender() {
   const d = w.data;
   const had = w.box.contains(document.activeElement) ? document.activeElement.dataset.k : null;
   const scrolled = w.side ? w.side.scrollTop : 0;
+  const frameWas = w.box.querySelector(".webmap-wrap");
+  if (frameWas) { w.frameTop = frameWas.scrollTop; w.frameLeft = frameWas.scrollLeft; }
   const close = el("button", { type: "button", class: "webclose", text: "✕", title: "Close (Esc)", "aria-label": "Close" });
   close.dataset.k = "close";
   close.addEventListener("click", webClose);
@@ -3607,6 +3666,12 @@ function webRender() {
       : el("span", { class: "webstatus dim", text: d.deep ? "Read from the modlist as it stands now. Nothing is changed." : "" });
   w.box.replaceChildren(head, body, el("div", { class: "web-foot" }, status, el("div", { class: "actions" }, ...acts)));
   w.side.scrollTop = scrolled;
+  if (w.scrollTo) {                                 // a side shown whole: the frame goes to where its boxes begin
+    const frame = w.box.querySelector(".webmap-wrap"), first = w.moreEls.get(w.scrollTo) || w.midEl;
+    const target = w.scrollTo === "top" ? 0 : w.scrollTo === "bottom" ? frame.scrollHeight : null;
+    if (target !== null) frame.scrollTop = target; else if (first) first.scrollIntoView({ block: "nearest", inline: "nearest" });
+    w.scrollTo = null;
+  } else if (w.frameTop !== undefined) { const frame = w.box.querySelector(".webmap-wrap"); frame.scrollTop = w.frameTop; frame.scrollLeft = w.frameLeft; }
   const again = had ? [...w.box.querySelectorAll("[data-k]")].find((e) => e.dataset.k === had) : null;
   (again || (w.box.contains(document.activeElement) ? null : close) || { focus() {} }).focus();
 }
@@ -4833,7 +4898,9 @@ function renderAddPicked() {
       state.staged = state.staged.filter((y) => y !== id);
       renderAddPicked(); saveUi(); pollAdd(true);
     });
-    return el("span", { class: "pick", title: info.archive ? "From " + info.archive : "" }, el("span", { text: info.name }), el("span", { class: "tag " + cls, text: word }), x);
+    const pen = el("button", { type: "button", class: "linkish", text: "✎", title: "Give it another name", "aria-label": "Rename " + info.name });
+    pen.addEventListener("click", async () => { if (info.id) { await askName(info, true); renderAddPicked(); state.addText = ""; pollAdd(true); } });
+    return el("span", { class: "pick", title: info.archive ? "From " + info.archive : "" }, el("span", { text: info.name }), info.id ? pen : null, el("span", { class: "tag " + cls, text: word }), x);
   }), ...ups.map((u) => el("span", { class: "pick" }, el("span", { text: u.name }),
     el("span", { class: "tag warn", text: u.pct == null ? "copying…" : "copying " + u.pct + "%" }))));
 }
@@ -4860,6 +4927,19 @@ function addMatches() {
 // Dropped files and folders (DESIGN§16.1). What MO2 has installed is found by name; an archive MO2 does not have
 // is taken in: read in MO2's Downloads if it lies there, or else sent to ModTrap, which unpacks it in its own folder.
 const ARCHIVE_NAME = /\.(7z|zip|rar)$/i;
+
+// The mod's name, asked at every install and update (MT67): ModTrap's own (the mod's title and its version) is what
+// the box offers, and what is typed over it is the name. Esc, or the name left as it is, keeps ModTrap's.
+async function askName(rec, always) {
+  if (!rec || !rec.id || (!always && (state.settings || {}).ask_name === false)) return rec;
+  for (;;) {
+    const to = await modalBox("The mod's name" + (rec.updates ? ", as the newer version of “" + rec.updates + "”" : "") + "\n\nFrom “" + rec.archive + "”" + (rec.version ? ", version " + rec.version : "; its version is not known") + ". This is the name MO2 will show it under.",
+      { input: rec.name, yes: "Use this name", no: "Keep “" + (rec.name.length > 40 ? rec.name.slice(0, 38) + "…" : rec.name) + "”", wide: true });
+    if (to === null || !to.trim() || to.trim() === rec.name) return rec;
+    try { const got = await api("/api/add/name", { id: rec.id, name: to.trim() }); state.stagedInfo = Object.assign({}, state.stagedInfo, { [got.id]: got }); return got; }
+    catch (e) { toast(e.message); }               // a name that will not do: said, and asked again
+  }
+}
 
 function sendArchive(file, updates) {
   const up = { name: file.name, pct: 0 };
@@ -4906,7 +4986,7 @@ async function dropMods(drops) {
       }
       if ((state.staged || []).length + (state.adding || []).length >= 20) { notes.push({ name: it.name, bad: true, text: "Twenty mods at a time is the most ModTrap analyses." }); continue; }
       try {
-        const rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
+        const rec = await askName(it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file));
         state.staged = (state.staged || []).concat(rec.id);
         state.stagedInfo = Object.assign({}, state.stagedInfo, { [rec.id]: rec });
         // A dropped mod is installed by itself as soon as it is unpacked and read (MT54; a setting, on).

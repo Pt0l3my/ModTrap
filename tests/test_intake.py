@@ -74,9 +74,9 @@ class Intake(unittest.TestCase):
 
     def test_a_dropped_archive_is_unpacked_and_analysed_where_it_lies(self) -> None:
         rec = self.drop("Heather-4711-2-1-1700000000.zip", zipped(NEW_MOD))
-        self.assertEqual((rec["name"], rec["state"]), ("Heather", "unpacking"))
+        self.assertEqual((rec["name"], rec["state"]), ("Heather 2.1", "unpacking"))
         got = self.settled([], [rec["id"]])
-        self.assertEqual([(s["name"], s["state"], s["files"]) for s in got["staged"]], [("Heather", "ready", 3)])
+        self.assertEqual([(s["name"], s["state"], s["files"]) for s in got["staged"]], [("Heather 2.1", "ready", 3)])
         x = got["mods"][0]
         self.assertTrue(x["staged"])
         self.assertEqual([p["name"] for p in x["plugins"]], ["Heather.esp"])

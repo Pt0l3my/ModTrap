@@ -472,7 +472,7 @@ class FetchingANewerFile(unittest.TestCase):
         self.assertEqual(self.api.post("/api/updates/get", {"mod": "Quill"})[1], {"going": True})
         st = self.wait(lambda st: st["fetching"].get("Quill", {}).get("state") in ("done", "failed", "open"))
         f = st["fetching"]["Quill"]
-        self.assertEqual((f["state"], f["name"]), ("done", "Quill (1.4)"))
+        self.assertEqual((f["state"], f["name"]), ("done", "Quill 1.4"))
         # The key went to Nexus's own service only; the file's host got none.
         for url, headers in self.net.asked:
             self.assertEqual("APIKEY" in headers, url.startswith("https://api.nexusmods.com/v1/"), url)
@@ -484,7 +484,7 @@ class FetchingANewerFile(unittest.TestCase):
                 break
             time.sleep(0.02)
         x = got["mods"][0]
-        self.assertEqual((x["name"], x["updates"], x["updates_enabled"]), ("Quill (1.4)", "Quill", True))
+        self.assertEqual((x["name"], x["updates"], x["updates_enabled"]), ("Quill 1.4", "Quill", True))
         self.assertEqual(next(r for r in got["staged"] if r["id"] == staged)["updates"], "Quill")
         # What the new mod's own record will say: the same mod at Nexus, the file that was fetched, its version.
         self.assertEqual(self.api._staged[staged]["meta"], {"game": "SkyrimSE", "mod_id": 4321, "file_id": 113, "version": "1.4"})
@@ -493,7 +493,7 @@ class FetchingANewerFile(unittest.TestCase):
         # A GitHub release: the file named as the installed archive but for its version.
         self.assertEqual(self.api.post("/api/updates/get", {"mod": "Lantern"})[1], {"going": True})
         st = self.wait(lambda st: st["fetching"].get("Lantern", {}).get("state") in ("done", "failed", "open"))
-        self.assertEqual((st["fetching"]["Lantern"]["state"], st["fetching"]["Lantern"]["name"]), ("done", "Lantern (v2.1)"))
+        self.assertEqual((st["fetching"]["Lantern"]["state"], st["fetching"]["Lantern"]["name"]), ("done", "Lantern 2.1"))
 
     def test_a_download_started_in_the_browser_is_taken_from_the_watched_folders(self):
         """MT42: the page is opened, the owner presses download there, and ModTrap takes the archive from MO2's
@@ -524,7 +524,7 @@ class FetchingANewerFile(unittest.TestCase):
         for _ in range(3):
             self.api.updating._looked = 0
             st = self.api.get("/api/updates", {})[1]
-        self.assertEqual((st["fetching"]["Quill"]["state"], st["fetching"]["Quill"]["name"]), ("done", "Quill (1.4)"))
+        self.assertEqual((st["fetching"]["Quill"]["state"], st["fetching"]["Quill"]["name"]), ("done", "Quill 1.4"))
         self.assertEqual(st["watch"]["waiting"], {})
         self.assertTrue((browser / "Quill-4321-1-4 (1).zip").is_file())            # the owner's file stays where it is
         # MO2's own downloads folder, by the numbers in the file MO2 keeps beside the archive.
@@ -584,7 +584,7 @@ class FetchingANewerFile(unittest.TestCase):
         finally:
             updating.LOOK_EVERY = kept
         f = self.api.updating.fetching["Quill"]
-        self.assertEqual((f["state"], f["name"]), ("done", "Quill (1.4)"))
+        self.assertEqual((f["state"], f["name"]), ("done", "Quill 1.4"))
         self.assertEqual(self.api.updating.waiting, {})
         self.assertEqual(sorted(p.name for p in browser.iterdir()), ["0123456789abcdef", "0123456789abcdef.part", "another archive.zip", "notes.txt"])     # all of the owner's files stay
 
@@ -602,7 +602,7 @@ class FetchingANewerFile(unittest.TestCase):
         for _ in range(3):
             self.api.updating._looked = 0
             st = self.api.get("/api/updates", {})[1]
-        self.assertEqual((st["fetching"]["Old Lantern"]["state"], st["fetching"]["Old Lantern"]["name"]), ("done", "Old Lantern (new)"))
+        self.assertEqual((st["fetching"]["Old Lantern"]["state"], st["fetching"]["Old Lantern"]["name"]), ("done", "Old Lantern 3.7z"))
 
     def test_an_archive_the_owner_downloaded_is_taken_as_a_newer_version_of_the_mod_named(self):
         data = a_zip({"Lantern.esp": (self.root / "mods" / "Lantern" / "Lantern.esp").read_bytes()})
@@ -1060,25 +1060,25 @@ class AnOlderVersionReplaced(unittest.TestCase):
         self.assertEqual((row["state"], st["counts"]["update"], st["counts"]["replaced"]), ("update", 1, 0))
         # The newer file is installed as a mod of its own, enabled; the older one is disabled.
         from modtrap import profile
-        new = self.root / "mods" / "Quill (1.4)"
+        new = self.root / "mods" / "Quill 1.4"
         fx.write(new / "Quill.esp", (self.root / "mods" / "Quill" / "Quill.esp").read_bytes())
         fx.write(new / "meta.ini", sources.own_record("0123456789abcdef.zip", {"game": "SkyrimSE", "mod_id": 4321, "file_id": 113, "version": "1.4"}))
         ml = self.root / "profiles" / "Default" / "modlist.txt"
-        ml.write_bytes(ml.read_bytes().replace(b"+Quill\r\n", b"+Quill (1.4)\r\n-Quill\r\n", 1))
+        ml.write_bytes(ml.read_bytes().replace(b"+Quill\r\n", b"+Quill 1.4\r\n-Quill\r\n", 1))
         self.assertIn(b"-Quill\r\n", ml.read_bytes())
         self.api.open(str(self.root), wait=True)
         st = self.state()
         rows = {r["mod"]: r for r in st["rows"]}
         self.assertEqual((rows["Quill"]["state"], rows["Quill"]["get"], rows["Quill"]["enabled"]), ("replaced", "", False))
-        self.assertEqual(rows["Quill"]["text"], "Its newer file (1.4) is installed as “Quill (1.4)”, which is enabled. This older version is disabled and kept")
-        self.assertEqual((rows["Quill (1.4)"]["state"], rows["Quill (1.4)"]["version"]), ("current", "1.4"))
+        self.assertEqual(rows["Quill"]["text"], "Its newer file (1.4) is installed as “Quill 1.4”, which is enabled. This older version is disabled and kept")
+        self.assertEqual((rows["Quill 1.4"]["state"], rows["Quill 1.4"]["version"]), ("current", "1.4"))
         self.assertEqual((st["counts"]["update"], st["counts"]["replaced"]), (0, 1))
         # A favourite's mark goes on to the newer version (MT53): where both carry it, only the newer one shows it.
         self.api.post("/api/updates/favourite", {"mod": "Quill", "on": True})
-        self.api.post("/api/updates/favourite", {"mod": "Quill (1.4)", "on": True})
+        self.api.post("/api/updates/favourite", {"mod": "Quill 1.4", "on": True})
         st = self.api.get("/api/updates", {})[1]
-        self.assertEqual(({r["mod"]: r["fav"] for r in st["rows"] if r["mod"].startswith("Quill")}, st["counts"]["fav"]), ({"Quill": False, "Quill (1.4)": True}, 1))
-        self.api.post("/api/updates/favourite", {"mod": "Quill (1.4)", "on": False})
+        self.assertEqual(({r["mod"]: r["fav"] for r in st["rows"] if r["mod"].startswith("Quill")}, st["counts"]["fav"]), ({"Quill": False, "Quill 1.4": True}, 1))
+        self.api.post("/api/updates/favourite", {"mod": "Quill 1.4", "on": False})
         self.assertTrue(next(r for r in self.api.get("/api/updates", {})[1]["rows"] if r["mod"] == "Quill")["fav"])      # the older one alone keeps its own
 
     def test_the_time_of_upload_in_a_newer_file_name(self):

@@ -1019,3 +1019,33 @@ with its Revert while it stands. It is never cleared: "Clear job history" leaves
 mod's folder stays where ModTrap moved it until its Revert moves it back. A Revert puts the whole lists back
 while nothing else has changed them since, and else only that change's own lines (§11), so changes can be
 reverted in any order.
+
+## 28. A mod's name, and a side of the web shown whole (MT67)
+
+**A mod is named by its title and its version**, as in "Example Mod 1.2", when it is installed and when it is
+updated (`adding.mod_name`).
+
+- *The title* is the download's name without what the site added to it (the mod's number, the version, the time
+  of upload, the site's code, a browser's "(1)"). For a newer version of a mod of the modlist it is that mod's
+  name without the version at its end (`adding.title_of`), so the owner's own name for a mod carries on.
+- *The version* comes from three places, in this order: what the source says of the file (the update check's
+  answer for an update the Updater carries out; the record MO2 keeps beside a download); the file's name (as Nexus
+  writes it, in both of its forms, or a version at the end of any other name); a file inside the archive (the
+  version in the mod's own installer file), which is known only once it is unpacked and renames the mod then.
+- A name that is taken gets "(2)", after §25's question about a mod that is there already. An update whose
+  version nothing tells is named "Title (new)".
+- A version is written with dots, without a leading "v", and without anything a folder's name cannot hold. It is
+  not added to a title that ends with it already.
+
+**The name is asked** at every install and update (a setting, on): a box shows ModTrap's name in a text field;
+Enter keeps it, anything typed over it is the name. For a file given to ModTrap the box comes when the file is
+taken in, while it is still being unpacked, so nothing waits on it; for an update through the Updater it comes
+before the update starts (`/api/add/propose` gives the name to offer, `/api/add/name` takes the owner's). A name
+that is taken or cannot be a folder's name is said and asked again. A name the owner gave is not changed by a
+version found later. On the Installer tool a pen beside each mod on its list changes the name at any time before
+the install.
+
+**A side of the web shown whole.** In §23's picture, the box "+ N more" of a side now shows every mod of that
+side as a box: rows are added above or below, columns to the left or the right (twelve boxes each), and the
+sheet grows with them inside its frame, which scrolls. The mods are still listed beside the picture. "Show fewer"
+folds the side again. A side shows up to 240 boxes; beyond that the rest stay listed.

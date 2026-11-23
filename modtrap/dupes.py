@@ -54,7 +54,7 @@ def _stem(archive: str) -> str:
 
 def _entry(m: model.Model, row: dict) -> dict:
     mod = m.instance.mod(row["mod"])
-    return {"mod": row["mod"], "version": row.get("version") or "", "enabled": bool(row.get("enabled")), "priority": mod.priority if mod is not None else -1}
+    return {"mod": row["mod"], "version": row.get("version") or adding.version_in(row["mod"]), "enabled": bool(row.get("enabled")), "priority": mod.priority if mod is not None else -1}
 
 
 def same_as(m: model.Model, rows: list[dict], archive: str, name: str = "") -> list[dict]:
@@ -67,7 +67,7 @@ def same_as(m: model.Model, rows: list[dict], archive: str, name: str = "") -> l
         how = ""
         if said["mod_id"] and r.get("host") == "nexus" and r.get("mod_id") == said["mod_id"] and stem and stem in (_stem(r.get("archive") or ""), letters(r["mod"])):
             how = "the same file of the same page at Nexus"
-        elif stem and len(stem) >= 4 and stem in (letters(r["mod"]), letters(COPY_MARK.sub("", r["mod"]))) and (not said["mod_id"] or not r.get("mod_id") or r.get("mod_id") == said["mod_id"]):
+        elif stem and len(stem) >= 4 and stem in (letters(r["mod"]), letters(COPY_MARK.sub("", r["mod"])), letters(adding.title_of(r["mod"], r.get("version") or ""))) and (not said["mod_id"] or not r.get("mod_id") or r.get("mod_id") == said["mod_id"]):
             how = "it has the name this file gives its mod"
         elif stem and len(stem) >= 6 and stem == _stem(r.get("archive") or "") and not (said["mod_id"] and r.get("mod_id") and said["mod_id"] != r.get("mod_id")):
             how = "it was installed from a file of the same name"

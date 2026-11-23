@@ -155,6 +155,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 130 | 2026-11-23 | An evaluation compares files and reads formats' marks, and says what it cannot tell; a double is told by its page and its file's name, not by its page alone; the list is scanned in one pass from the top | METHOD | #adding #model #page |
 | 131 | 2026-11-23 | A closed tab is told by the page's goodbye, not guessed; a worker in the browser and a link of ModTrap's own kind bring it back; the link carries nothing | DECIDED | #page #launcher #safety |
 | 132 | 2026-11-23 | An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it | METHOD | #page #safety #model |
+| 133 | 2026-11-23 | A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes | METHOD | #adding #page #updates |
 
 ## Entries
 
@@ -3589,3 +3590,37 @@ them; the addresses were read by a session that can), and the time the second pa
   History's table, the uninstall and the rename reverted out of order. **Not checked:** on Windows, where the move
   is `os.rename` on one drive; and the second question for an original mod, which needs a list file (tested at
   the route).
+
+### 133. A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes
+
+`2026-11-23` · METHOD · `#adding #page #updates` · refs: MT67, MT65, MT62, MT40, DESIGN§28, DESIGN§23, TL01§31, WHY§130
+
+- FACT (TL01§31, and the owner's example): a download from Nexus is named title, the mod's number, the version,
+  the time of upload and a code. `from_archive_name` took the title and the version from it already; the name
+  ModTrap gave used the title alone, and "(version)" for an update.
+- The order of the three sources is by what each is: the source's word is about this very file; the file's name
+  was written by the site but can be changed by anyone; a version inside the archive is the author's and often
+  left at an older number. FACT (seen in mods' installer files generally): many carry none.
+- A version at the end of a name from elsewhere is taken only where it is written as one (digits, a dot, digits):
+  "Lantern 2" is a title, "Lantern 2.1" a title and a version. Tested on both forms of Nexus's names and on
+  plain ones.
+- An update keeps the title of the mod it replaces, cut at that mod's own version: the owner's names for mods
+  (and a modlist author's) are theirs, and a download's name is often another.
+- The name is asked when the file is taken in, not when it is unpacked: the question is answered while the
+  archive unpacks, and an install then waits for nothing. The price: a version that only a file inside tells is
+  not in the offered name; it renames the mod afterwards unless the owner gave a name.
+- Changing a name after the mod was read would leave what was read under the old name, so the kept reading is
+  dropped and made anew.
+- For the Updater the name has to be known before there is a file. The page asks, and the server keeps the wish
+  for that mod until the update's file is taken in; it is used once.
+- A double is now also told by the title in a mod's name ("Lantern 2.1" for a file "Lantern … 2.2"), since mods
+  no longer carry the bare title; and a mod's version by its name where nothing else records it.
+- The web: a side shown whole adds rows or columns and makes the sheet larger; the boxes keep their size and the
+  frame scrolls. Rejected: shrinking the boxes to fit, which makes every name unreadable at a few dozen; and
+  laying a long side out in one line, which makes the picture many screens long for a mod that hundreds need.
+  Columns of twelve keep a side of a hundred within about eight columns.
+- Checked in a browser on stand-in lists: the name offered for a download named as Nexus names it, Enter keeping
+  it, a name typed over it, a taken name said and asked again, an update offered "Title newer-version"; a side
+  of the web opened (rows below, a second column to the right), no boxes overlapping, folded again. **Not
+  checked:** the Updater's question against a live update (it needs the sites), and a side of several hundred
+  boxes for how it reads.
