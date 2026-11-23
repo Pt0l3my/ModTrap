@@ -233,6 +233,11 @@ class PageTests(unittest.TestCase):
         self.assertIn('b.addEventListener("click", () => { w.open.delete(it.side); w.more = null; webRender(); });', self.js)
         self.assertIn("const WEB_OPEN_CAP = 240;", self.js)
         self.assertIn('map.style.aspectRatio = g.w + " / " + g.h;', self.js)
+        # MT69: a side whose mods fit the window is shown whole without being asked, and has nothing to fold.
+        self.assertIn("const fit = webFits(sides, w, room);", self.js)
+        self.assertIn("return g.w * WEB_SMALLEST <= room.w && g.h * WEB_SMALLEST <= room.h;", self.js)
+        self.assertIn("else if (whole && all.length > WEB_CAP[side] && !(quiet && quiet.has(side))) items[side].push({ fewer: true, side });", self.js)
+        self.assertIn('window.addEventListener("resize", () => { clearTimeout(state.webResize);', self.js)
 
 if __name__ == "__main__":
     unittest.main()

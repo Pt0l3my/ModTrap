@@ -1054,3 +1054,6 @@ the install.
 side as a box: rows are added above or below, columns to the left or the right (twelve boxes each), and the
 sheet grows with them inside its frame, which scrolls. The mods are still listed beside the picture. "Show fewer"
 folds the side again. A side shows up to 240 boxes; beyond that the rest stay listed.
+
+*Later, 2026-11-23 (MT69):* a side whose mods all fit the window without scrolling is shown whole from the start,
+with no "+ N more" and no "Show fewer"; the picture is drawn as large as the window allows.

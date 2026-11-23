@@ -79,6 +79,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   asked at every install and update; "+ N more" in a mod's web shows that side's mods as boxes).
   MT68 (doubles are told by title: obsolete and redundant mods are notes, each one list; patches that replace a mod's
   plugin are left alone).
+  MT69 (a mod's web shows every mod that fits the window, without being asked).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1787,3 +1788,15 @@ is looked for when a modlist is opened:
   each with part of it; two mods of one title that are both disabled.
 - **At an install** the evaluation still says when the mod replaces another mod's plugin or script extender
   plugin, as worth a look and no longer as a likely fault: there it is about the one mod just put in.
+
+## MT69
+
+**A mod's web shows every mod that fits the window** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "if the mods in the network fit into window space just present them all, non need to limit"
+
+**Settled** (WHY§135; the owner may overrule any of it): a side of the picture is shown whole, without "+ N more"
+and without "Show fewer", whenever all its mods fit the window without scrolling at a size at which a box is still
+two readable lines. All sides together where that fits, else one after another, the smallest first. A side that
+does not fit keeps its "+ N more", which opens it with scrolling as MT67 has it. The picture is drawn as large as
+the window allows and is fitted again when the window's size changes.

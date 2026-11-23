@@ -3375,22 +3375,26 @@ function webShort(x) {
 // boxes), two rows above and two below (four boxes each). A side with more mods ends in a box that stands for the
 // rest; pressed, that side is shown whole (MT67): rows are added above or below, columns to the left or the
 // right, and the sheet grows with them, scrolled in its frame.
-function webPlace(sides, open) {
+function webPlace(sides, open, quiet, unitsH) {
   const items = {};
   for (const side of ["left", "right", "top", "bottom"]) {
     const all = sides[side], whole = open.has(side), cap = whole ? WEB_OPEN_CAP : WEB_CAP[side];
     items[side] = (all.length > cap ? all.slice(0, cap - 1) : all).map((n) => ({ n, side }));
     if (all.length > cap) items[side].push({ more: all.slice(cap - 1), side });
-    else if (whole && all.length > WEB_CAP[side]) items[side].push({ fewer: true, side });
+    else if (whole && all.length > WEB_CAP[side] && !(quiet && quiet.has(side))) items[side].push({ fewer: true, side });      // a side that simply fits has nothing to fold
   }
-  const rows = Math.max(9, open.has("left") || open.has("right") ? 12 : 9);          // boxes in one column
-  const cols = (side) => Math.max(1, Math.ceil(items[side].length / rows));
   const lines = (side) => Math.max(2, Math.ceil(items[side].length / 4));
+  // Boxes in one column: nine, or as many as the window's height takes where a column side is shown whole, so that
+  // a side that fits in one column is not split into two.
+  const tall = unitsH ? Math.floor((unitsH - (lines("top") + lines("bottom")) * 46 - 72) / 46) : 12;
+  const wide = open.has("left") || open.has("right");
+  const rows = wide ? Math.max(9, Math.min(Math.max(12, tall), Math.max(items.left.length, items.right.length))) : 9;
+  const cols = (side) => Math.max(1, Math.ceil(items[side].length / rows));
   const g = { rows, left: cols("left"), right: cols("right"), top: lines("top"), bottom: lines("bottom") };
   g.off = (g.left - 1) * 240;                                  // what the left columns push the middle to the right
   g.w = WEB_W + g.off + (g.right - 1) * 240;
   g.topH = g.top * 46 - 2;
-  g.midH = rows * 46 + 46;
+  g.midH = rows * 46 + (rows > 9 ? 76 : 46);       // a long column keeps clear of the rows above and below it
   g.cx = g.off + WEB_W / 2;
   g.cy = g.topH + g.midH / 2;
   g.h = g.topH + g.midH + g.bottom * 46 - 2;
@@ -3453,14 +3457,45 @@ function webSelect(w, mod, more) {
   w.side.replaceChildren(...webSide(w));
 }
 
+// The room the picture has in the window: the box's own width and the window's height, less what stands around the
+// picture. Measured where the box is drawn already, reckoned where it is not yet.
+function webRoom(w) {
+  const narrow = window.innerWidth <= 1050;
+  const frame = w.box.querySelector(".webmap-wrap"), head = w.box.querySelector(".web-head"), foot = w.box.querySelector(".web-foot");
+  const width = frame && frame.clientWidth ? frame.clientWidth : Math.min(1320, window.innerWidth - 32) - 34 - (narrow ? 0 : 342) - 8;
+  const around = (head ? head.offsetHeight + 8 : 138) + (foot ? foot.offsetHeight + 10 : 46) + 30;
+  return { w: width, h: Math.max(260, window.innerHeight - 28 - around - 4) };
+}
+// Which sides are shown whole (MT69): the ones the owner opened, and every side whose mods all fit the window
+// without scrolling, at a size at which a box can still be read. All of them together where that fits, else one
+// after another, the smallest first.
+const WEB_SMALLEST = 0.78;                        // the sheet is never drawn smaller than this: a box stays two lines high
+function webFits(sides, w, room) {
+  const unitsH = room.h / WEB_SMALLEST;
+  const fits = (set, quiet) => { const g = webPlace(sides, set, quiet, unitsH).g; return g.w * WEB_SMALLEST <= room.w && g.h * WEB_SMALLEST <= room.h; };
+  const over = ["top", "bottom", "left", "right"].filter((side) => sides[side].length > WEB_CAP[side] && sides[side].length <= WEB_OPEN_CAP && !w.open.has(side));
+  const quiet = new Set(over);
+  if (over.length && fits(new Set([...w.open, ...over]), quiet)) return { open: new Set([...w.open, ...over]), quiet, unitsH };
+  const open = new Set(w.open), taken = new Set();
+  for (const side of over.sort((a, b) => sides[a].length - sides[b].length)) {
+    if (fits(new Set([...open, side]), new Set([...taken, side]))) { open.add(side); taken.add(side); }
+  }
+  return { open, quiet: taken, unitsH };
+}
+
 function webMap(w) {
   const d = w.data;
   const map = el("div", { class: "webmap" });
   const sides = webNodes(d, w.hidden);
   w.open = w.open || new Set();
-  const { placed, g } = webPlace(sides, w.open);
+  const room = webRoom(w);
+  const fit = webFits(sides, w, room);
+  const { placed, g } = webPlace(sides, fit.open, fit.quiet, fit.unitsH);
+  // As large as the room allows, never smaller than a box can be read at; a sheet larger than the room scrolls.
+  const scale = Math.max(WEB_SMALLEST, Math.min(room.w / g.w, room.h / g.h));
   map.style.aspectRatio = g.w + " / " + g.h;
-  map.style.minWidth = Math.round(780 * g.w / WEB_W) + "px";
+  map.style.width = Math.floor(scale * g.w) + "px";
+  map.style.minWidth = "0";
   const svg = svgEl("svg", { viewBox: "0 0 " + g.w + " " + g.h, "aria-hidden": "true" });
   const defs = svgEl("defs");
   for (const k of WEB_LEGEND) {
@@ -3491,7 +3526,7 @@ function webMap(w) {
     if (it.more) {
       const path = svgEl("path", { d: edge.d, class: "webline more" });
       svg.append(path);
-      const whole = w.open.has(it.side);
+      const whole = fit.open.has(it.side);
       const b = put(el("button", { type: "button", class: "webnode more" + (w.more && w.more.side === it.side ? " sel" : ""),
         title: whole ? "More mods than the picture takes even shown whole: they are listed on the right" : "Shows every mod of this side as a box in the picture, and lists them on the right" },
         el("span", { class: "wn-name", text: "+ " + it.more.length.toLocaleString("en-GB") + " more" }), el("span", { class: "wn-what", text: whole ? "listed on the right" : "show them all" })), it.x, it.y, it.w, it.h);
@@ -3546,6 +3581,7 @@ function webMap(w) {
     : w.hidden.size ? "Nothing of the kinds that are switched on. Switch a kind on again in the list on the right." : "No other mod has to do with it: it needs none, none needs it, and nothing is overwritten either way." }), 250, 150, 500));
   map.append(...kids);
   w.midEl = mid;
+  w.shown = fit.open;
   return map;
 }
 
@@ -3588,7 +3624,7 @@ function webSide(w) {
         inList ? go("Show it in the list", () => { const n = w.sel; webClose(); showInList(n); }) : null,
         go("Back to the overview", () => webSelect(w, null)))));
   } else if (w.more) {
-    const whole = (w.open || new Set()).has(w.more.side) && w.more.mods.length <= WEB_OPEN_CAP;
+    const whole = ((w.shown || w.open || new Set()).has(w.more.side)) && w.more.mods.length <= WEB_OPEN_CAP;
     kids.push(el("div", { class: "webdetail" }, el("h3", { text: WEB_HEAD[w.more.side] + ": " + plural(w.more.mods.length, whole ? "mod" : "more mod") }),
       el("p", { class: "dim small", text: whole ? "Every mod of this side, each a box in the picture too. Press one for what lies between the two." : "The mods that have no room in the picture. Press one for what lies between the two." }),
       el("div", { class: "webrows" }, ...w.more.mods.slice(0, 400).map(pick)), w.more.mods.length > 400 ? el("p", { class: "dim small", text: "… and " + plural(w.more.mods.length - 400, "more mod") }) : null,
@@ -3676,6 +3712,7 @@ function webRender() {
   const again = had ? [...w.box.querySelectorAll("[data-k]")].find((e) => e.dataset.k === had) : null;
   (again || (w.box.contains(document.activeElement) ? null : close) || { focus() {} }).focus();
 }
+window.addEventListener("resize", () => { clearTimeout(state.webResize); state.webResize = setTimeout(() => { if (state.web && state.web.data) webRender(); }, 150); });
 document.addEventListener("keydown", (ev) => {
   const w = state.web;
   if (!w || document.querySelectorAll(".modal-back").length > 1 || state.menu) return;

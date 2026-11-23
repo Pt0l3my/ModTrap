@@ -157,6 +157,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 132 | 2026-11-23 | An uninstall is a move on the same drive; every list change is a job with its own Revert, shown for good; a mod is renamed as MO2 renames it | METHOD | #page #safety #model |
 | 133 | 2026-11-23 | A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes | METHOD | #adding #page #updates |
 | 134 | 2026-11-23 | On the owner's list nearly every "same plugin twice" was a patch; a double is a title, and what is said of it depends on whether it is in the game | FACT | #model #page |
+| 135 | 2026-11-23 | What fits is reckoned on the sheet before it is drawn, at the smallest size a box can be read at | METHOD | #page |
 
 ## Entries
 
@@ -3650,3 +3651,20 @@ them; the addresses were read by a session that can), and the time the second pa
   listed, the look runs in a thread of its own, once for a modlist as read, and the page is told "looking".
 - FACT (same log): ModTrap's own update from 0.3.54 over 0.3.55 to 0.3.57 worked on the owner's PC, and a mod's
   picture was fetched from its site there (the first time either ran outside this session's stand-ins).
+
+### 135. What fits is reckoned on the sheet before it is drawn, at the smallest size a box can be read at
+
+`2026-11-23` · METHOD · `#page` · refs: MT69, MT67, MT62, DESIGN§28, WHY§133
+
+- FACT (the owner's screenshot at 0.3.59): a mod with 25 mods on one side showed seven and "+ 18 more" in a
+  window with room for all of them.
+- The picture is a sheet of boxes at fixed places, scaled to its frame. Whether a set of sides fits is therefore
+  a sum: the sheet's width and height for that set, times the smallest scale at which a box holds two lines
+  (0.78 of the sheet's own size), against the room the window leaves the picture. Nothing has to be drawn to
+  know it.
+- The room is the window's height less what stands around the picture (measured once the box is drawn, reckoned
+  before), and the frame's width.
+- A column holds as many boxes as that height takes, so a side that fits in one column is not split in two.
+- A side that fits has no "Show fewer": there is nothing to gain by folding it. A side opened by hand keeps it.
+- Checked in a browser at three window sizes on the stand-in list: at the two larger ones all 32 mods are boxes,
+  nothing scrolls and nothing overlaps; at the small one the sides keep their "+ N more".
