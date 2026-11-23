@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import history as history_mod
-from . import instance, logbook, model, paths, profile, safe
+from . import instance, logbook, model, paths, plugingroups, profile, safe
 from .instance import fold
 
 log = logbook.get("modlist")
@@ -112,6 +112,31 @@ class ListJob:
         except OSError as e:
             raise Refused("the lists could not be read back: %s" % logbook.why(e)) from None
 
+    def _lists(self, *names: str) -> list[Path]:
+        """The lists a change may write: those named, and MO2's plugin groups where this MO2 keeps them (MT73)."""
+        return [self.pdir / n for n in names] + ([self.pdir / plugingroups.NAME] if plugingroups.present(self.pdir) else [])
+
+    def _group(self, wanted: dict[str, str]) -> None:
+        if wanted:
+            self._write(self.pdir / plugingroups.NAME, lambda: plugingroups.set_groups(self.pdir, wanted))
+
+    def _group_new(self, placed: list[tuple[str, str]]) -> dict[str, str]:
+        """Gives the plugins just placed in the load order, each (name, its mod), their groups by MT73's rule.
+        Returns the groups given, by plugin name; nothing where this MO2 keeps none."""
+        groups = plugingroups.read(self.pdir)
+        if groups is None or not placed:
+            return {}
+        mods, order, _active = self._now()
+        given: dict[str, str] = {}
+        for name, mod in placed:
+            if groups.get(fold(name)):
+                continue                                    # it has one already: it was in this list before
+            g = plugingroups.for_new(order, groups, name, plugingroups.separator_of(mods, mod))
+            if g:
+                given[name], groups[fold(name)] = g, g
+        self._group(given)
+        return given
+
     def _done(self, text: str) -> dict:
         self.record["state"], self.record["text"] = "done", text
         self._save()
@@ -125,7 +150,7 @@ class ListJob:
         on, mods, plugs = bool(plan["on"]), plan["mods"], plan["plugins"]
         if not mods:
             raise Refused("there is nothing to change: the mod is already %s" % ("enabled" if on else "disabled"))
-        self._begin("enable" if on else "disable", [self.pdir / n for n in LISTS], mods=mods, plugins=plugs,
+        self._begin("enable" if on else "disable", self._lists(*LISTS), mods=mods, plugins=plugs,
                     warnings=[w["text"] for w in plan.get("warnings", [])])
         was = self._now()[0]
         try:
@@ -145,6 +170,12 @@ class ListJob:
             problems, order = self._check_set(on, mods, plugs, was)
             if problems:
                 raise Refused("the lists do not read back as planned: " + "; ".join(problems[:4]))
+            if on:
+                given = self._group_new([(p["name"], p["mod"]) for p in plugs if p["how"] == "placed"])
+                for p in plugs:
+                    if p["name"] in given:
+                        p["group"] = given[p["name"]]
+                self._save()
         except (Refused, profile.Refused, safe.Refused, OSError) as e:
             self._fail(e)
         where = {fold(n): i for i, n in enumerate(order)}
@@ -247,7 +278,7 @@ class ListJob:
         the caller). Only the star changes for the rest."""
         if not rows:
             raise Refused("there is nothing to change: the plugin is already %s" % ("active" if on else "not active"))
-        self._begin("plugin on" if on else "plugin off", [self.pdir / n for n in ("plugins.txt", "loadorder.txt")], plugins=rows)
+        self._begin("plugin on" if on else "plugin off", self._lists("plugins.txt", "loadorder.txt"), plugins=rows)
         try:
             for n in ("loadorder.txt", "plugins.txt"):
                 self.safe.may_change(self.pdir / n)
@@ -265,6 +296,12 @@ class ListJob:
             wrong = [r["name"] for r in rows if (fold(r["name"]) in active) != on or (on and fold(r["name"]) not in {fold(n) for n in order})]
             if wrong:
                 raise Refused("the lists do not read back as planned: %s" % ", ".join(wrong[:4]))
+            if on:
+                given = self._group_new([(r["name"], r["mod"]) for r in rows if not r["listed"]])
+                for r in rows:
+                    if r["name"] in given:
+                        r["group"] = given[r["name"]]
+                self._save()
         except (Refused, profile.Refused, safe.Refused, OSError) as e:
             self._fail(e)
         where = {fold(n): i for i, n in enumerate(order)}
@@ -276,7 +313,7 @@ class ListJob:
 
     def plugin_move(self, name: str, before: str, was_before: str, kind: str = "", mod: str = "") -> dict:
         """Moves one plugin to directly before `before` in the load order ("" for the end). Its state stays."""
-        self._begin("plugin move", [self.pdir / n for n in ("plugins.txt", "loadorder.txt")], plugin=name, before=before, was_before=was_before,
+        self._begin("plugin move", self._lists("plugins.txt", "loadorder.txt"), plugin=name, before=before, was_before=was_before,
                     kind=kind, mod=mod)
         was = self._now()
         try:
@@ -293,11 +330,51 @@ class ListJob:
             i = next((k for k, n in enumerate(order) if fold(n) == f), None)
             if rest_was != rest_now or i is None or fold(order[i + 1] if i + 1 < len(order) else "") != fold(before) or active != was[2]:
                 raise Refused("the lists do not read back as planned")
+            groups, moved = plugingroups.read(self.pdir), {}
+            if groups is not None:
+                g_was, g_now = groups.get(f, ""), plugingroups.after_move(was[1], order, groups, name)
+                if g_now != g_was:
+                    self._group({name: g_now})
+                    if plugingroups.read(self.pdir).get(f, "") != g_now:
+                        raise Refused("the plugin's group does not read back as planned")
+                    moved = {"group": g_now, "group_was": g_was}
+                    self.record.update(moved)
+                    self._save()
         except (Refused, profile.Refused, safe.Refused, OSError) as e:
             self._fail(e)
         old = next((k for k, n in enumerate(was[1]) if fold(n) == f), None)
-        self.history.add("plugin moved", plugin=name, position=i, position_before=old, plugin_kind=kind, mod=mod, **({"before": before} if before else {}))
-        return dict(self._done("Moved %s to place %d of the load order" % (name, i)), position=i, was=old)
+        self.history.add("plugin moved", plugin=name, position=i, position_before=old, plugin_kind=kind, mod=mod, **({"before": before} if before else {}), **moved)
+        text = "Moved %s to place %d of the load order" % (name, i)
+        if moved:
+            text += ", into the group “%s”" % moved["group"] if moved["group"] else ", out of the group “%s”" % moved["group_was"]
+        return dict(self._done(text), position=i, was=old, **moved)
+
+    def plugin_group(self, rows: list[dict]) -> dict:
+        """Gives plugins their groups in MO2's plugin list (MT73), each {"name", "group", "was", "kind", "mod"};
+        "" takes a plugin out of its group. Only the profile's groups file changes."""
+        rows = [r for r in rows if r["group"] != r["was"]]
+        if not rows:
+            raise Refused("there is nothing to change: the group is the one the plugin has")
+        if not plugingroups.present(self.pdir):
+            raise Refused("this MO2 keeps no plugin groups: there is no %s in the profile" % plugingroups.NAME)
+        self._begin("plugin group", [self.pdir / plugingroups.NAME], plugins=rows)
+        try:
+            self._group({r["name"]: r["group"] for r in rows})
+            now = plugingroups.read(self.pdir) or {}
+            wrong = [r["name"] for r in rows if now.get(fold(r["name"]), "") != r["group"]]
+            if wrong:
+                raise Refused("the groups do not read back as planned: %s" % ", ".join(wrong[:4]))
+        except (Refused, profile.Refused, safe.Refused, OSError) as e:
+            self._fail(e)
+        for r in rows:
+            self.history.add("plugin grouped", plugin=r["name"], group=r["group"], group_was=r["was"], plugin_kind=r["kind"], mod=r["mod"],
+                             why="on the Plugins tab")
+        more = " and %d more" % (len(rows) - 1) if len(rows) > 1 else ""
+        same = len({r["group"] for r in rows}) == 1
+        text = ("Put %s%s in the group “%s”" % (rows[0]["name"], more, rows[0]["group"]) if same and rows[0]["group"]
+                else "Took %s%s out of %s" % (rows[0]["name"], more, "its group" if not more else "their groups") if same
+                else "Gave %s%s their groups" % (rows[0]["name"], more))
+        return self._done(text)
 
     # --- rename a separator -------------------------------------------------------------------------------------------
 
@@ -369,7 +446,10 @@ class ListJob:
                 if fold(r.name) not in others:
                     drop.append({"name": r.name, "mod": y.name, "kind": r.kind, "active": fold(r.name) in active, "position": r.position})
         dropping = {fold(d["name"]) for d in drop}
+        grouped = plugingroups.read(self.pdir) or {}
         for d in drop:
+            if grouped.get(fold(d["name"])):
+                d["group"] = grouped[fold(d["name"])]           # its line stays in MO2's groups file; MO2 drops it at its next start (MO05§1)
             at = next((i for i, n in enumerate(order) if fold(n) == fold(d["name"])), None)
             d["was_before"] = next((n for n in order[at + 1:] if fold(n) not in dropping), "") if at is not None else ""
         # Each profile's line of each mod: its sign, and the entry it stood directly before in MO2's list.
@@ -384,7 +464,7 @@ class ListJob:
                 if fold(name) in going:
                     above = next((n for _s, n in reversed(rows[:i]) if fold(n) not in going), "")
                     lines.setdefault(p, {})[name] = {"sign": sign, "before": above}
-        lists = [self.inst.profiles_dir / p / "modlist.txt" for p in lines] + [self.pdir / "plugins.txt", self.pdir / "loadorder.txt"]
+        lists = [self.inst.profiles_dir / p / "modlist.txt" for p in lines] + self._lists("plugins.txt", "loadorder.txt")
         self._begin("uninstall", list(dict.fromkeys(lists)), kept=str(Path(REMOVED) / self.dir.name), lines=lines, plugins=drop,
                     mods=[{"name": y.name, "priority": y.priority, "enabled": y.enabled, "original": fold(y.name) in original, "plugins": list(y.plugins)} for y in mods])
         moved: list[tuple[Path, Path]] = []
@@ -474,6 +554,10 @@ class ListJob:
             for r in rec["plugins"]:
                 self.history.add("plugin deactivated" if op == "plugin on" else "plugin activated", plugin=r["name"], plugin_kind=r["kind"], mod=r["mod"],
                                  why="a change on the Plugins tab was undone")
+        if op == "plugin group":
+            for r in rec["plugins"]:
+                self.history.add("plugin grouped", plugin=r["name"], group=r["was"], group_was=r["group"], plugin_kind=r["kind"], mod=r["mod"],
+                                 why="a change of groups was undone")
         if op in ("enable", "disable"):
             for x in rec["mods"]:
                 self.history.add("mod disabled" if op == "enable" else "mod enabled", mod=x["name"], priority=x["priority"], why="a change on the Modlist page was undone")
@@ -502,6 +586,18 @@ class ListJob:
             except profile.Refused as e:
                 notes.append("%s: %s" % (what, e))
 
+        def ungroup(given: dict[str, str], back: dict[str, str]) -> None:
+            """Turns back the groups this change gave: only a line that still says what it wrote."""
+            now = plugingroups.read(self.pdir)
+            if now is None:
+                return
+            todo = {n: back.get(n, "") for n, g in given.items() if now.get(fold(n), "") == g and back.get(n, "") != g}
+            if todo:
+                attempt("the plugins' groups", lambda: plugingroups.set_groups(self.pdir, todo))
+            for n, g in given.items():
+                if now.get(fold(n), "") != g:
+                    notes.append("%s keeps the group it has now: it was changed again since" % n)
+
         if op in ("enable", "disable"):
             on = op == "enable"
             for x in rec["mods"]:
@@ -510,6 +606,7 @@ class ListJob:
                 placed = [p["name"] for p in rec["plugins"] if p["how"] == "placed"]
                 if placed:
                     attempt("plugins", lambda: profile.remove_plugin_lines(self.pdir, placed))
+                ungroup({p["name"]: p["group"] for p in rec["plugins"] if p.get("group")}, {})
                 for p in rec["plugins"]:
                     if p["how"] != "placed":
                         attempt(p["name"], lambda p=p: profile.set_plugins(self.pdir, {p["name"]: False}))
@@ -548,6 +645,10 @@ class ListJob:
                 attempt(d["name"], lambda d=d, before=before: profile.place_plugins(self.pdir, [(d["name"], before)], activate=False))
                 if d["active"]:
                     attempt(d["name"], lambda d=d: profile.set_plugins(self.pdir, {d["name"]: True}))
+            now = plugingroups.read(self.pdir)
+            lost = {d["name"]: d["group"] for d in rec["plugins"] if d.get("group") and now is not None and not now.get(fold(d["name"]))}
+            if lost:                                        # MO2 ran since and dropped their lines: they are in their groups again
+                attempt("the plugins' groups", lambda: plugingroups.set_groups(self.pdir, lost))
         elif op in ("plugin on", "plugin off"):
             for r in rec["plugins"]:
                 attempt(r["name"], lambda r=r: profile.set_plugins(self.pdir, {r["name"]: op == "plugin off"}))
@@ -557,6 +658,10 @@ class ListJob:
                 notes.append("%s stays: %s, which it stood before, is no longer in the load order" % (rec["plugin"], rec["was_before"]))
             else:
                 attempt(rec["plugin"], lambda: profile.place_plugins(self.pdir, [(rec["plugin"], rec["was_before"])], activate=False))
+                if "group_was" in rec:
+                    ungroup({rec["plugin"]: rec["group"]}, {rec["plugin"]: rec["group_was"]})
+        elif op == "plugin group":
+            ungroup({r["name"]: r["group"] for r in rec["plugins"]}, {r["name"]: r["was"] for r in rec["plugins"]})
         self.safe.mark_reverted()
         return notes
 

@@ -85,6 +85,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT71 (with MO2 open nothing that changes its lists can be begun; the page stays while the modlist is read anew;
   each separator heads the plugins' list once).
   MT72 (the loading symbols move on every PC).
+  MT73 (MO2's own plugin groups are shown, and kept when ModTrap places or moves a plugin; Notes and Installation
+  side by side; a tool's last word is no conflict; "It needs" is no fault).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1876,6 +1878,9 @@ now."
 the load order with a plugin outside them. MO2's own source has no such groups, so they come from somewhere
 ModTrap has not read. A session's pack now lists the files of the profile's folder, to find where.
 
+*2026-11-23, later.* Found: an extension of MO2 keeps them in the profile's `plugingroups.txt` (MO05). MT73 shows
+and keeps them.
+
 ## MT72
 
 **The loading symbols move** · *2026-11-23 · The owner's report*
@@ -1887,3 +1892,53 @@ animate, you have this symbol at many places, find them all and make them animat
 PC: the turning circle wherever it stands, the mark of a step that is going, the dot of a live run, and the bar of
 a modlist read anew. They stood still where Windows is set to show no animations, because the page switched them
 off there. What is only for show (a row that flashes when it is gone to) still stands still on such a PC.
+
+## MT73
+
+**MO2's own plugin groups, read and kept; Notes and Installation side by side; a tool's last word is no conflict; what "It needs" says** · *2026-11-23 · The owner's report*
+
+**Owner's words.** "looking at current plugin list in ModTrap it's not being saved to MO2, if you compare [a mod]
+is in [a] group at the bottom, but not in MO2.
+
+also you didn't add MO2 notes column to modlist.
+
+Also when I look at the demastered files at the bottom of the modlist, the UI shows massive number of conflicts, I
+believe these files have been made to simply overwrite some of the original output files with two demastered mods,
+so these should not be confilcts? Also what is "it needs" about? those mods are turned on and active, so what is
+the issue with the demastered patch files needing 329 masters? or is that just a note that those are required
+anyway?"
+
+(The mod's and the group's names stand as placeholders.)
+
+**Settled** (DESIGN§31, WHY§139, MO05; the owner may overrule any of it):
+
+- **The plugins' groups are MO2's own.** The owner's MO2 keeps plugin groups in its profile's `plugingroups.txt`
+  (MO05), and the Plugins tab now shows those: a group wherever neighbours in the load order carry the same name,
+  as MO2 shows them, and a plugin without one under "No group". This answers MT71's open note. Where a MO2 keeps
+  no such file, the groups by the mods' separators of MT71 stay, and the tab says which of the two it shows.
+- **ModTrap keeps them.** What MT70 and MT71 showed was worked out for the page and written nowhere, which is why
+  MO2 did not have it. Now:
+  - *A plugin new to the load order* (a mod installed, a mod enabled, a plugin activated for the first time) gets
+    its group in MO2's file as part of the same job: placed between two plugins of one group, it is in that group;
+    otherwise it takes the name of its mod's separator, joining a neighbour that has it or beginning a new group.
+    Where that name is in use elsewhere in the load order and no neighbour has it, the plugin is left without a
+    group rather than under a second group of the same name; where its mod stands under no separator, likewise.
+  - *A plugin ModTrap moves* joins the group it lands in; it keeps its own at the edge of its group, or where it
+    stood alone in it; taken out of the middle of its group, it has none.
+  - *At the owner's word:* "Give a group…" on a "No group" line, and "Change its group…" or "Take it out of its
+    group" in a plugin's right-click menu, with the name asked for (the mod's separator proposed, the groups there
+    are to choose from); "Rename the group…" in a group's.
+  - All of it as every change of MO2's lists: MO2 closed, a safe copy first, read back, in the History with its
+    Revert (whole, or by its own lines once MO2 has written since). ModTrap never makes the file: without it there
+    are no groups to keep.
+- **Notes and Installation show side by side too.** They were there on the Mods tab and hidden in the split view,
+  for room; only the count of a mod's plugins is hidden there now, and the table scrolls sideways.
+- **A tool's last word is no conflict.** A plugin a tool made from the load order as a whole (a tool's output, or
+  ModTrap's demastered copy of one, which stands in its place) is meant to have the last word on the records it
+  holds, whether or not it names the earlier plugin as a master. What it changes after a plugin it does not name
+  is told as its change winning, with the reason, and no longer as a conflict. The other way round stays one: a
+  plugin that loads after a tool's output and does not know it undoes the tool's work unseen.
+- **"It needs" is no fault.** It names the mods whose plugins this mod's plugins are built on (their masters): what
+  must stay enabled for it to load. With all of them there and active there is nothing to do, and the web's
+  overview now says so in words. A master that is missing or not active is the fault, and is told apart, as a
+  warning.

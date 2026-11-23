@@ -13,7 +13,7 @@ const NEEDS_MO2_CLOSED = new Set(["/api/updater/revert", "/api/demaster/install"
 // undo) is not begun while this modlist's MO2 is open (MT71): MO2 holds its lists in memory and writes its own back.
 // ModTrap does not close MO2 for these; the chip at the top does. (The server refuses them too, whatever the page does.)
 const NEEDS_MO2_FREE = new Set(["/api/separator/add", "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/uninstall", "/api/list/undo",
-  "/api/list/plugins/set", "/api/list/plugins/move", "/api/add/run", "/api/add/revert"]);
+  "/api/list/plugins/set", "/api/list/plugins/move", "/api/list/plugins/group", "/api/add/run", "/api/add/revert"]);
 const MO2_OPEN = "MO2 is open on this modlist. It keeps its lists in memory and writes its own back over a change, so ModTrap changes nothing in them now. Close MO2 first: the chip “MO2 is open” at the top does it.";
 const mo2Open = () => !!(state.mo2 && state.mo2.state === "open" && !state.mo2.ours);
 const canChange = () => !!state.changes && !mo2Open();
@@ -128,9 +128,11 @@ function modalBox(text, opts) {
     const o = opts || {};
     const paras = String(text).split(/\n\s*\n/).map((t) => el("p", { text: t }));
     const input = o.input !== undefined ? el("input", { type: "text", value: o.input, spellcheck: "false" }) : null;
+    const choices = input && Array.isArray(o.list) && o.list.length ? el("datalist", { id: "modal-list" }, ...o.list.map((v) => el("option", { value: v }))) : null;
+    if (choices) input.setAttribute("list", "modal-list");
     const yes = el("button", { type: "button", class: "primary", text: o.yes || "Yes" });
     const no = el("button", { type: "button", text: o.no || "No" });
-    const box = el("div", { class: "modal" + (o.wide ? " wide" : ""), role: "dialog", "aria-modal": "true" }, ...paras, ...(o.nodes || []), input, el("div", { class: "actions" }, yes, no));
+    const box = el("div", { class: "modal" + (o.wide ? " wide" : ""), role: "dialog", "aria-modal": "true" }, ...paras, ...(o.nodes || []), input, choices, el("div", { class: "actions" }, yes, no));
     const back = el("div", { class: "modal-back" }, box);
     const before = document.activeElement;
     const done = (answer) => {
@@ -197,7 +199,7 @@ function showWork() {
   chip.title = busy ? "Until this has finished, the buttons that change the modlist or start a program are greyed." : "ModTrap has finished reading and scanning: everything can be started.";
 }
 // The buttons that change MO2's lists at once: stopped, with a word, while this modlist's MO2 is open (MT71).
-const MO2_GATED = /^(Install mod$|Uninstall|Undo\b|Revert$|Enable$|Disable$|OK, install it there|Manual placement|Take it out again)/;
+const MO2_GATED = /^(Install mod$|Give a group…|Uninstall|Undo\b|Revert$|Enable$|Disable$|OK, install it there|Manual placement|Take it out again)/;
 document.addEventListener("click", (ev) => {
   const b = ev.target && ev.target.closest ? ev.target.closest("button.mo2gate, #list-undo, #plugins-undo, #mods-table input.onbox, #plugins-table td.c-tick input") : null;
   if (!b || !mo2Open()) return;
@@ -2160,12 +2162,13 @@ function renderSave() {
 // --- the History tab (MT15, DESIGN§12) ------------------------------------------------------------------------------
 
 const HISTORY_WORDS = { "mod disabled": "Mod disabled", "mod enabled": "Mod enabled", "mod added": "Mod added", "plugin deactivated": "Plugin deactivated",
-  "plugin activated": "Plugin activated", "mod moved": "Mod moved", "separator moved": "Separator moved", "separator renamed": "Separator renamed", "mod renamed": "Mod renamed", "mod uninstalled": "Mod uninstalled", "mod put back": "Mod put back", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "mo2 settings changed": "MO2's settings changed", "tool ran": "Tool run", "verified": "Checked" };
+  "plugin activated": "Plugin activated", "plugin moved": "Plugin moved", "plugin grouped": "Plugin's group", "mod moved": "Mod moved", "separator moved": "Separator moved", "separator renamed": "Separator renamed", "mod renamed": "Mod renamed", "mod uninstalled": "Mod uninstalled", "mod put back": "Mod put back", "plugin demastered": "Plugin demastered", "reverted": "Reverted", "revert finished": "Revert finished", "tool settings changed": "A tool's settings changed", "mo2 settings changed": "MO2's settings changed", "tool ran": "Tool run", "verified": "Checked" };
 
 function historyLine(e) {
   const bits = [];
   if (e.mod) bits.push("“" + e.mod + "”" + (e.priority != null ? ", priority " + e.priority : "") + (e.priority_before != null ? " (was " + e.priority_before + ")" : ""));
   if (e.plugin) bits.push(e.plugin + (e.position != null ? ", position " + e.position : "") + (e.plugin_kind ? " [" + e.plugin_kind + "]" : "") + (e.mod && !bits.length ? "" : ""));
+  if (e.group !== undefined && e.group_was !== undefined) bits.push(e.group ? "in the group “" + e.group + "”" + (e.group_was ? " (was in “" + e.group_was + "”)" : "") : "out of the group “" + e.group_was + "”");
   if (e.now_in) bits.push("new copy in “" + e.now_in + "”");
   if (e.masters_before) bits.push("masters " + e.masters_before.join(", ") + " → " + (e.masters_after || []).join(", "));
   if (e.before) bits.push("placed directly before " + e.before);
@@ -2237,7 +2240,7 @@ async function pollHistory() {
           el("tbody", {}, ...d.jobs.map(row)))));
     }
     if ((d.list_jobs || []).length) {
-      const OPS = { enable: "enabled", disable: "disabled", move: "moved", rename: "renamed", uninstall: "uninstalled", "plugin on": "plugin activated", "plugin off": "plugin deactivated", "plugin move": "plugin moved" };
+      const OPS = { enable: "enabled", disable: "disabled", move: "moved", rename: "renamed", uninstall: "uninstalled", "plugin on": "plugin activated", "plugin off": "plugin deactivated", "plugin move": "plugin moved", "plugin group": "plugin's group" };
       const row = (j) => {
         const cell = el("td", {});
         if (!j.undone && d.can_change) {
@@ -3351,16 +3354,16 @@ document.addEventListener("keydown", (ev) => {
 // is needed or overwritten. The server reads all of it and changes nothing: first what the plugins' headers say,
 // which is there at once, then the files and the records, which takes seconds on a large modlist.
 const WEB_KINDS = {
-  needs: ["It needs", "A plugin of this mod names one of its plugins as a master: without it, this mod's plugin cannot load"],
+  needs: ["It needs", "A plugin of this mod names one of its plugins as a master: this mod's plugin is built on it and cannot load without it. That is how plugins work, and nothing to mend while the mod is there and active; one that is missing or switched off is told apart, in words, as a fault"],
   needed: ["Needs it", "One of its plugins names a plugin of this mod as a master"],
   patch: ["A patch for it", "Every plugin in it needs this mod, and it is named a patch (or a fix, a tweak, an add-on): made for this mod, often to make it work with another"],
   output: ["A tool's output", "What a tool of the modlist made, with a plugin of this mod among its masters: made anew when the tool runs again"],
   overwritten: ["Overwrites its files", "It has files of the same name and a higher priority: the game loads its files in place of this mod's"],
   overwrites: ["Files it overwrites", "This mod has files of the same name and the higher priority: the game loads this mod's files in place of its"],
-  conflict: ["Conflict", "Plugins of both change the same records and neither knows the other (neither is the other's master): the later one's change wins whole, the other's is lost unseen"],
+  conflict: ["Conflict", "Plugins of both change the same records and neither knows the other (neither is the other's master), and the later one is no tool's output: its change wins whole, the other's is lost unseen"],
   settled: ["Conflict, settled", "Plugins of both change the same records without knowing each other, and an active third plugin has both as masters: a patch that can carry both changes"],
-  loses: ["Changes its records", "A plugin made with this mod in view (one is the other's master) changes records this mod changes too, and loads later: its change is the one the game takes, as a patch means it to be"],
-  wins: ["Records it changes", "A plugin of this mod changes records that a mod it knows changes too (one is the other's master), and loads later: this mod's change is the one the game takes"],
+  loses: ["Changes its records", "A plugin made with this mod in view (one is the other's master) changes records this mod changes too, and loads later: its change is the one the game takes, as a patch means it to be. Or a tool made the later plugin from the load order as a whole (a tool's output, or ModTrap's demastered copy of one): it is meant to have the last word"],
+  wins: ["Records it changes", "A plugin of this mod changes records that a mod it knows changes too (one is the other's master), and loads later: this mod's change is the one the game takes. Or a tool made this mod's plugin from the load order as a whole (a tool's output, or ModTrap's demastered copy of one): it is meant to have the last word on what it holds"],
 };
 const WEB_LEGEND = ["needs", "needed", "patch", "output", "overwritten", "overwrites", "conflict", "settled", "loses", "wins"];
 const WEB_FIRST = ["conflict", "patch", "output", "needs", "needed", "settled", "overwritten", "overwrites", "loses", "wins"];    // which kind names a box that has several
@@ -3688,6 +3691,7 @@ function webLinkBlock(x) {
     x.lines && x.lines.length ? el("ul", { class: "small" }, ...x.lines.map((t) => el("li", { text: t })), x.more ? el("li", { class: "dim", text: "… and " + plural(x.more, "more line") }) : null) : null,
     x.settled_by && x.settled_by.length && x.kind === "settled" ? el("p", { class: "small dim", text: "Has both as masters: " + x.settled_by.join(", ") }) : null,
     x.between && x.between.length ? el("p", { class: "small dim", text: "It also needs: " + x.between.join(", ") }) : null,
+    x.made ? el("p", { class: "small dim", text: "No conflict: " + x.made + ". Such a plugin gathers what the plugins before it change and is meant to have the last word on the records it holds, whether or not it names them as masters." }) : null,
     x.kind === "conflict" ? el("p", { class: "small dim", text: "The game takes a record whole from the plugin that loads last, so what the earlier plugin changed in these records is not in the game, unless the later one happens to hold the same. ModTrap reads which records each plugin changes, not what is changed inside them: look at these in xEdit to see what is lost, and whether a patch is called for." }) : null,
     x.kind === "settled" ? el("p", { class: "small dim", text: "Whether that plugin does carry both changes, for these very records, is for xEdit to show: ModTrap reads which records each plugin changes, not what is changed inside them." }) : null);
 }
@@ -3731,6 +3735,8 @@ function webSide(w) {
     const said = [];
     said.push(el("p", { text: mods ? plural(mods, "mod has", "mods have") + " to do with it" + (d.deep ? "." : " by the plugins' headers; its files and records are being looked through.") : d.deep ? "No other mod has to do with it." : "Nothing ties it to another mod by the plugins' headers; its files and records are being looked through." }));
     for (const t of d.lacks || []) said.push(el("p", { class: "would-needs", text: t }));
+    if (d.needs) said.push(el("p", {}, el("b", { class: "wkw wk-needs", text: "It needs " + plural(d.needs, "mod") + ": " }), (d.lacking ? "its plugins are built on plugins of theirs (their masters). What is missing or not active of them is told above; the rest is there."
+      : "its plugins are built on plugins of theirs (their masters), and every one of them is there and active. Nothing to do: this only says what the mod stands on, and what must stay enabled for it to load.")));
     const worst = d.links.filter((x) => x.kind === "conflict").sort((a, b) => b.weight - a.weight).slice(0, 6);
     if (worst.length) said.push(el("p", {}, el("b", { class: "wkw wk-conflict", text: "Conflicts: " }), "records that two plugins change without knowing each other. The later plugin's change is the one in the game."),
       el("div", { class: "webrows" }, ...worst.map((x) => { const b = el("button", { type: "button", class: "webrow wk-conflict" }, el("i", {}), el("span", { class: "wn-name", text: x.shown }), el("span", { class: "dim", text: plural(x.weight, "record") })); b.addEventListener("click", () => webSelect(w, x.mod)); return b; })));
@@ -4209,10 +4215,12 @@ function pluginMarks(p) {
   }
   cell.replaceChildren(...kids);
 }
-// The plugins' list in groups (MT70, MT71): the plugins whose mods stand under the same separator of the mods' list
-// are one group under that separator's name, and can be folded. Each separator's name stands once; the groups come
-// in the order of their first plugins in the load order, and inside a group the plugins are in the load order's.
-function pluginGroupOf() {
+// The plugins' list in groups. Where this MO2 keeps plugin groups of its own (MT73, MO05: the profile's
+// plugingroups.txt), they are shown as MO2 shows them: a group is the run of neighbours in the load order that
+// carry the same name, and a plugin without one stands under “No group”. Where it keeps none (MT70, MT71), the
+// plugins whose mods stand under the same separator of the mods' list are one group under that separator's name:
+// each name stands once, and the groups come in the order of their first plugins in the load order.
+function pluginGroupOf(real) {
   const of = new Map();
   let sep = "";
   for (const m of [...state.mods].reverse()) {             // by priority, lowest first, as MO2 lists them
@@ -4220,6 +4228,7 @@ function pluginGroupOf() {
     else of.set(m.name, sep);
   }
   // A plugin whose file no enabled mod has (its mod is disabled) says nothing of its own: it stays in the group it stands in.
+  if (real) return (p) => of.get(p.mod) || "";             // only a separator there is: the name MT73 gives a new plugin's group
   return (p) => p.mod === "<game>" || p.primary ? "The game" : p.mod === "<overwrite>" ? "Overwrite" : !p.mod ? "" : of.get(p.mod) || "Before the first separator";
 }
 function pluginGroupRow(g) {
@@ -4231,7 +4240,39 @@ function pluginGroupRow(g) {
     if (state.pcollapsed.has(g.key)) state.pcollapsed.delete(g.key); else state.pcollapsed.add(g.key);
     filterPlugins();
   });
-  g.row = el("tr", { class: "sep pgroup" }, el("td", { colSpan: 9 }, g.btn, g.info));
+  g.row = el("tr", { class: "sep pgroup" + (g.loose ? " loose" : "") }, el("td", { colSpan: 9 }, g.btn, g.info));
+  if (g.mo2 === undefined) return;
+  const names = () => g.plugins.map((p) => p.name);
+  if (g.loose) {
+    const give = el("button", { type: "button", class: "ggive", text: "Give a group…", title: "Puts " + (g.plugins.length === 1 ? "this plugin" : "these plugins") + " in a group of MO2's plugin list. MO2 must be closed." });
+    give.addEventListener("click", () => groupPlugins(names(), ""));
+    g.row.firstChild.append(give);
+  } else g.row.addEventListener("contextmenu", (ev) => {
+    ev.preventDefault();
+    menuAt(ev.clientX, ev.clientY, g.name, [{ text: "Rename the group…", off: !canChange(), note: canChange() ? "Gives every plugin of this group the new name" : whyNot(), run: () => groupPlugins(names(), g.name, true) }]);
+  });
+}
+// A plugin's group in MO2's plugin list (MT73): asked for by name, with the groups there are to choose from, and
+// written to MO2's own file as a change of its own, with its Revert in the History. Empty is no group.
+async function groupPlugins(names, now, renaming) {
+  if (!state.changes) { toast(NO_CHANGES); return; }
+  if (mo2Blocks()) return;
+  const one = names.length === 1 ? names[0] : plural(names.length, "plugin");
+  const sepOf = pluginGroupOf(true);
+  const wanted = [...new Set(names.map((n) => sepOf(state.plugins.find((p) => p.name === n) || {})))];
+  const have = [...new Set(state.plugins.map((p) => p.mo2_group).filter(Boolean))];
+  const text = renaming ? "Rename the group “" + now + "”\n\nIts new name, for the " + plural(names.length, "plugin") + " standing in it. MO2 must be closed. The History has it, with its Revert."
+    : "The group of " + one + " in MO2's plugin list\n\nThe name of its group: one there is already, or a new one. Empty is no group. MO2 shows as one group the plugins that stand together in the load order under the same name, so a plugin belongs in the group of a neighbour, or in a new one. MO2 must be closed. The History has it, with its Revert.";
+  const to = await modalBox(text, { input: now || (wanted.length === 1 ? wanted[0] : ""), list: have, yes: "OK", no: "Cancel" });
+  if (to === null || to.trim() === (now || "")) return;
+  listDo(async () => {
+    try {
+      const got = await api("/api/list/plugins/group", { plugins: names, group: to.trim() });
+      if (got.nothing) { toast("The group is the one it has."); return; }
+      state.historyText = "";
+      listChanged(got.text + ".");
+    } catch (e) { toast(e.message); }
+  });
 }
 function pluginsFold(all) {
   state.pcollapsed = new Set(all ? (state.pgroups || []).map((g) => g.key) : []);
@@ -4241,23 +4282,39 @@ function pluginsFold(all) {
 function renderPlugins() {
   const body = $("plugins-table").tBodies[0];
   const frag = document.createDocumentFragment();
+  const mo2 = state.pluginGroups === "mo2";
   const groupOf = pluginGroupOf();
-  const byName = new Map();
+  const byName = new Map(), times = new Map();
   state.pgroups = [];
   state.pcollapsed = state.pcollapsed || new Set();
   let last = null;
-  for (const p of state.plugins) {             // each plugin to its separator's one group; one whose mod is disabled stays with the plugin before it
-    const gname = groupOf(p) || (last ? last.name : "Before the first separator");
-    let group = byName.get(gname);
-    if (!group) {
-      group = { name: gname, key: gname, plugins: [] };
-      pluginGroupRow(group);
-      byName.set(gname, group);
-      state.pgroups.push(group);
+  for (const p of state.plugins) {
+    let group;
+    if (mo2) {                                 // MO2's own groups: a new one wherever the name changes from one plugin to the next
+      const gname = p.mo2_group || "";
+      group = last && last.mo2 === gname ? last : null;
+      if (!group) {
+        const n = (times.get(gname) || 0) + 1;
+        times.set(gname, n);
+        group = { name: gname || "No group", key: (gname ? "mo2:" + gname : "mo2-none") + (n > 1 ? "#" + n : ""), plugins: [], mo2: gname, loose: !gname };
+        state.pgroups.push(group);
+      }
+    } else {                                   // each plugin to its separator's one group; one whose mod is disabled stays with the plugin before it
+      const gname = groupOf(p) || (last ? last.name : "Before the first separator");
+      group = byName.get(gname);
+      if (!group) {
+        group = { name: gname, key: gname, plugins: [] };
+        byName.set(gname, group);
+        state.pgroups.push(group);
+      }
     }
     group.plugins.push(p);
     p.group = last = group;
   }
+  for (const g of state.pgroups) pluginGroupRow(g);
+  $("plugins-groups").textContent = mo2 ? "Groups: MO2's own" : "Groups: by the mods' separators";
+  $("plugins-groups").title = mo2 ? "The groups of MO2's plugin list, as this profile's plugingroups.txt has them. A plugin's right-click menu gives it another; ModTrap gives a plugin it installs the group it stands in, or one named after its mod's separator."
+    : "This MO2 keeps no plugin groups of its own (its profile has no plugingroups.txt), so the plugins are shown under the separators of their mods. Nothing of this is written anywhere.";
   for (const p of state.plugins) {
     const group = p.group;
     if (group.plugins[0] === p) frag.append(group.row);
@@ -4279,6 +4336,14 @@ function renderPlugins() {
       el("td", { text: mod }), el("td", { class: "c-num", text: p.mod_priority == null || p.mod_priority < 0 ? "" : p.mod_priority }),
       el("td", { class: "c-num", text: p.masters }), el("td", { class: "c-num" + (p.dependants ? " badnum" : ""), text: p.dependants }));
     tr.addEventListener("click", () => { showPlugin(p.name, tr); linkMod(p.name, true); });
+    if (mo2) tr.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      menuAt(ev.clientX, ev.clientY, p.name, [
+        { text: p.mo2_group ? "Change its group…" : "Give it a group…", off: !canChange(), note: canChange() ? "Its group in MO2's plugin list" : whyNot(), run: () => groupPlugins([p.name], p.mo2_group || "") },
+        p.mo2_group ? { text: "Take it out of its group", off: !canChange(), note: canChange() ? "" : whyNot(), run: () => listDo(async () => {
+          try { const got = await api("/api/list/plugins/group", { plugins: [p.name], group: "" }); state.historyText = ""; listChanged(got.text + "."); } catch (e) { toast(e.message); }
+        }) } : null].filter(Boolean));
+    });
     tr.dataset.plugin = p.name;
     p.row = tr;
     p.hay = fold(p.name + " " + p.mod);
@@ -5901,6 +5966,7 @@ async function loadLists(key, s) {
   const [m, p] = await Promise.all([api("/api/mods"), api("/api/plugins")]);
   state.mods = m.mods;
   state.plugins = p.plugins;
+  state.pluginGroups = p.groups || "separators";
   state.details.clear();
   state.loaded = key;
   const keep = currentUi();                       // a rescan of the same session keeps the page as it is

@@ -142,6 +142,8 @@ tbody tr.sep td { padding: 0; }
 .gtoggle { background: none; border: 0; color: var(--accent); font: inherit; font-weight: 600; padding: 6px 10px; cursor: pointer; border-radius: 0; }
 .gtoggle .arrow { display: inline-block; width: 18px; color: var(--dim); }
 .ginfo { font-weight: 400; font-size: 13px; }
+tr.pgroup.loose .gtoggle { color: var(--dim); font-style: italic; }
+.ggive { margin-left: 12px; padding: 1px 10px; font-size: 13px; }
 .empty { padding: 28px 16px; color: var(--dim); text-align: center; }
 .spacer { flex: 1; }
 .tools select { padding: 4px 6px; margin-left: 4px; }
@@ -477,7 +479,7 @@ main.sidebyside .tools { padding: 8px 10px; gap: 8px 10px; }
 main.sidebyside .tools input[type=search] { flex: 1 1 150px; }
 main.sidebyside #tab-plugins .split { flex-direction: column; }
 main.sidebyside #tab-plugins .detail { flex: 0 0 auto; min-width: 0; max-width: none; max-height: 34%; border-left: 0; border-top: 1px solid var(--line); }
-main.sidebyside #mods-table .k3, main.sidebyside #mods-table .k5, main.sidebyside #mods-table .k6, main.sidebyside #plugins-table .k6, main.sidebyside #plugins-table .k7, main.sidebyside #plugins-table .k8 { display: none; }
+main.sidebyside #mods-table .k3, main.sidebyside #plugins-table .k6, main.sidebyside #plugins-table .k7, main.sidebyside #plugins-table .k8 { display: none; }
 tbody tr.linked td { background: rgba(185, 163, 255, .16); }
 main.sidebyside .modinfo { max-height: 34%; overflow: auto; }
 #tabs .tabtool { margin: 4px 4px 4px auto; padding: 2px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); font-size: 13px; }

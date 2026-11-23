@@ -161,6 +161,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 136 | 2026-11-23 | MO2's Conflicts column is a property of the whole list, so the whole list is listed once and kept; a new plugin goes before the tools' outputs whatever it changes | METHOD | #model #page #adding |
 | 137 | 2026-11-23 | The page greys what the server already refuses; a re-read keeps the page; a run of the load order is not a separator's group; two saves at once shared one temporary file | METHOD | #page #safety #sessions |
 | 138 | 2026-11-23 | A progress symbol is not decoration: it moves even where the PC asks for less motion | FACT | #page |
+| 139 | 2026-11-23 | MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands | FACT | #model #page #safety |
 
 ## Entries
 
@@ -3751,3 +3752,44 @@ them; the addresses were read by a session that can), and the time the second pa
   turning in its place is the message itself. So those four keep moving; the flash of a row gone to stays off.
 - Checked in a browser set to ask for less motion: the circle's animation is in force and its angle changes
   between two looks; the dot and the bar likewise.
+
+### 139. MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands
+
+`2026-11-23` · FACT · `#model #page #safety` · refs: MT73, MT71, MT70, MO05, DESIGN§31, WHY§137
+
+- FACT (MO05§1, §2): the groups of the owner's plugin list are not MO2's own. An extension that replaces MO2's
+  plugin list keeps them in the profile's `plugingroups.txt`, one `name|group` line for each grouped plugin,
+  rewritten whole whenever MO2 writes its plugin lists. Found by the listing of the profile's folder that the
+  session's pack has carried since 0.3.62 (MT71's open note).
+- FACT (MO05§3): a group is not stored as a thing. It is the run of neighbours in the load order with the same
+  name. A plugin with a name its neighbours lack is a group of one; a name carried by plugins apart is two groups.
+  This is the very thing the owner called duplicates in MT71, there by ModTrap's own doing; in MO2's own data it
+  can only be shown as it is.
+- METHOD: so a new plugin's group cannot be chosen apart from its place. The place is settled first (MT70: before
+  the tools' outputs), then the group follows: inside a group, that group; between groups, the name of the mod's
+  separator, which is what the page showed before and what the owner expected to find in MO2. Rejected: always
+  the separator's name (it would cut a group in two where the plugin lands inside one, and begin a second group of
+  a name already in use elsewhere); always the group of the plugin before (a new plugin would silently join the
+  last ordinary group, whatever it is). Left without a group where neither rule gives a clean answer: the owner
+  sees it under "No group" and says.
+- METHOD: the writer changes single lines and keeps every other byte, at the line's place by name, so that a
+  Revert by lines is possible once MO2 has written the file anew, and a stale line is never a harm (MO05§2).
+  ModTrap never makes the file: where it is absent, that MO2 has no groups, and a file made by ModTrap would be
+  read by nothing.
+- FACT (the module loaded at start): reading the groups must not load the writer of MO2's lists, which is loaded
+  only where changes are switched on (MT8, a test holds it); the reader uses the instance's own file reading, and
+  the writer is brought in inside the one function that writes.
+- METHOD (the web's conflicts): "neither is the other's master" is the mark of a conflict between two plugins
+  made by hand. A tool's output is made from the whole load order and holds the winning record of each, with
+  masters only where a record points at another plugin: by that mark alone it conflicts with hundreds of mods,
+  which is what the owner saw on ModTrap's demastered copies of the outputs. The later plugin being tool-made
+  decides it; the earlier one being tool-made does not, because a hand-made plugin after the outputs does undo
+  them. A patch told only by its name is not counted as tool-made: its name says what it was made for, not that
+  it saw the plugin it overrides.
+- Checked: on a copy of the owner's file the rule gives the one plugin without a group the name of its mod's
+  separator, the writer adds one line at its place and keeps the other 3,742 lines as they were, and taking the
+  group away again gives the file back byte for byte. Not checked on the owner's PC: that MO2 shows the new group
+  after the next start, and the web of the demastered mod with the new rule.
+- Not done: a demaster's Revert that puts back plugin lines MO2 had dropped (DESIGN§11) does not put back their
+  groups, which MO2 dropped with them. The groups file is not among that job's safe copies, and nothing is written
+  without one (MT14). Such a plugin shows under "No group", for the owner to give it one.

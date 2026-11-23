@@ -82,13 +82,56 @@ class TheWebOfAMod(unittest.TestCase):
         self.assertEqual((settled["weight"], settled["settled_by"], settled["loses"]), (1, ["Bridge.esp"], 1))
         self.assertIn("Bridge.esp has both as masters", settled["text"])
         self.assertEqual(thistle[("settled", "Quill")]["wins"], 1)
-        # Thistle and the tool's output: nobody has both. A conflict, told from each side.
-        clash = thistle[("conflict", "Tool Output")]
-        self.assertEqual((clash["weight"], clash["lines"]), (1, ["Thistle.esp loses to Generated.esp in 1 record (GLOB 1)"]))
-        self.assertIn(("conflict", "Quill - Lantern Patch"), thistle)
+        # Thistle and the patch for Quill and Lantern: nobody has both. A conflict.
+        clash = thistle[("conflict", "Quill - Lantern Patch")]
+        self.assertEqual((clash["weight"], clash["lines"], clash["made"]), (1, ["Thistle.esp loses to QuillLanternPatch.esp in 1 record (GLOB 1)"], ""))
+        # Thistle and the tool's output, which does not name it: a tool made that plugin from the load order as a
+        # whole, to have the last word. Its work, and no conflict (MT73).
+        self.assertNotIn(("conflict", "Tool Output"), thistle)
+        last = thistle[("loses", "Tool Output")]
+        self.assertEqual((last["weight"], last["lines"]), (1, ["Thistle.esp loses to Generated.esp in 1 record (GLOB 1)"]))
+        self.assertEqual(last["text"], "its change wins over this mod's in 1 record: made by a tool to have the last word")
+        self.assertEqual(last["made"], "a tool made Generated.esp from the load order as a whole")
+        out = self.links("Tool Output")
+        self.assertEqual((out[("wins", "Thistle")]["made"], [k for k in out if k[0] == "conflict"]), (last["made"], []))
         # The patch changes what Quill changes and has Quill as a master: how a patch works, and no conflict.
         self.assertEqual(quill[("loses", "Quill - Lantern Patch")]["text"], "its change wins over this mod's in 1 record")
         self.assertNotIn(("conflict", "Quill - Lantern Patch"), quill)
+
+    def test_a_plugin_after_a_tools_output_that_does_not_know_it_is_a_conflict_still(self):
+        fx.write(self.root / "mods" / "Late" / "Late.esp", pf((CORE,), (B, 9.0)))
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Bridge\r\n", b"+Late\r\n+Bridge\r\n"))        # an ordinary mod, below the outputs' heading
+        for n in ("plugins.txt", "loadorder.txt"):
+            f = self.root / "profiles" / "Default" / n
+            f.write_bytes(f.read_bytes() + (b"*" if n == "plugins.txt" else b"") + b"Late.esp\r\n")
+        self.m = model.build(instance.load(self.root))
+        late = self.links("Late")
+        self.assertEqual(late[("conflict", "Tool Output")]["lines"], ["Late.esp wins over Generated.esp in 1 record (GLOB 1)"])      # it undoes the tool's work, unseen
+        self.assertEqual(self.links("Tool Output")[("conflict", "Late")]["made"], "")
+
+    def test_modtraps_demastered_copy_of_a_tools_output_has_the_last_word_as_the_output_has(self):
+        # ModTrap's own mod holds the plugin again, with a master taken out; the tool's own is under “Outputs”.
+        fx.write(self.root / "mods" / "ModTrap - Lantern" / "Generated.esp", pf((CORE,), (B, 4.0)))
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Tool Output\r\n", b"+ModTrap - Lantern\r\n+Demaster_separator\r\n+Tool Output\r\n"))
+        self.m = model.build(instance.load(self.root))
+        self.assertEqual(self.m.row("Generated.esp").source, "ModTrap - Lantern")
+        got = self.links("ModTrap - Lantern")
+        self.assertEqual([k for k in got if k[0] == "conflict"], [])
+        self.assertEqual(got[("wins", "Thistle")]["made"], "Generated.esp is ModTrap's demastered copy of a tool's output (Tool Output has the one the tool made)")
+        self.assertEqual(got[("wins", "Thistle")]["text"], "this mod's change wins in 1 record: made by a tool to have the last word")
+        self.assertIn(("overwrites", "Tool Output"), got)                       # the file it stands in for
+
+    def test_what_it_needs_is_counted_and_only_a_master_that_is_absent_or_off_is_a_fault(self):
+        got = modweb.web(self.m, self.m.instance.mod("Bridge"), False)
+        self.assertEqual((got["needs"], got["lacking"], got["lacks"]), (3, 0, []))
+        profile_dir = self.root / "profiles" / "Default"
+        f = profile_dir / "plugins.txt"
+        f.write_bytes(f.read_bytes().replace(b"*Thistle.esp", b"Thistle.esp"))
+        self.m = model.build(instance.load(self.root))
+        got = modweb.web(self.m, self.m.instance.mod("Bridge"), False)
+        self.assertEqual((got["needs"], got["lacking"], got["lacks"]), (3, 1, ["Bridge.esp needs Thistle.esp, which is not active"]))
 
     def test_the_links_come_in_the_order_of_their_kinds_and_are_counted(self):
         got = modweb.web(self.m, self.m.instance.mod("Quill"), True)

@@ -19,7 +19,7 @@ import json
 
 import shutil
 
-from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, probejob, profile, safe, sources
+from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, plugingroups, probejob, profile, safe, sources
 from . import process
 from .instance import fold
 from .instance import fold as instance_fold
@@ -31,7 +31,7 @@ TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is t
 
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert", "/api/separator/add",
          "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/uninstall", "/api/list/undo", "/api/list/plugins/set", "/api/list/plugins/move",
-         "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
+         "/api/list/plugins/group", "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
          "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
 
@@ -526,6 +526,47 @@ class Changes:
                 raise Bad(str(e)) from None
         api.open(api.folder, api.profile or None, session=api.session)
         return {"done": True, "before": final, "why": why, **done}
+
+    def plugins_group(self, body: dict) -> dict:
+        """Gives plugins their group in MO2's plugin list (MT73): the one named for them all, "" for none, or, with
+        `suggest`, each the group MT73's rule for a new plugin gives it. Only where this MO2 keeps groups."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        names, group, suggest = self._names(body, "plugins"), body.get("group", ""), body.get("suggest") is True
+        if not isinstance(group, str) or len(group) > 300:
+            raise Bad("which group was not said")
+        if not suggest and group.strip() != plugingroups.clean(group):
+            raise Bad("a group's name cannot have a | in it, and is at most %d letters long" % plugingroups.NAME_CAP)
+        group = plugingroups.clean(group)
+        with self._lock:
+            m, job = self._list_job()
+            pdir = m.instance.profiles_dir / m.instance.profile
+            groups = plugingroups.read(pdir)
+            if groups is None:
+                raise Bad("this MO2 keeps no plugin groups: there is no %s in the profile" % plugingroups.NAME)
+            order = [x["name"] for x in loadcheck.load_order(m)]
+            mods = [("+" if x.enabled else "-", x.name) for x in reversed(m.instance.mods) if x.kind in ("mod", "separator", "foreign")]
+            rows = []
+            for name in names:
+                r = m.row(name)
+                if r is None or r.position is None:
+                    raise Bad("%s is not in this profile's load order" % name)
+                if any(x["name"] == r.name for x in rows):
+                    continue
+                was = groups.get(instance_fold(r.name), "")
+                want = plugingroups.for_new(order, groups, r.name, plugingroups.separator_of(mods, r.source or "")) if suggest else group
+                if suggest:
+                    groups[instance_fold(r.name)] = want
+                rows.append({"name": r.name, "group": want, "was": was, "kind": r.kind, "mod": r.source or ""})
+            if all(x["group"] == x["was"] for x in rows):
+                return {"done": False, "nothing": True}
+            try:
+                done = job.plugin_group(rows)
+            except listjob.Refused as e:
+                log.error("%s", e)
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, **done}
 
     def list_jobs(self) -> list[dict]:
         """The changes made on the Modlist page in this session, newest first."""
@@ -1313,6 +1354,8 @@ class Changes:
             return self.plugins_set(body)
         if path == "/api/list/plugins/move":
             return self.plugins_move(body)
+        if path == "/api/list/plugins/group":
+            return self.plugins_group(body)
         if path == "/api/add/run":
             return self.run(body)
         return self.revert(body)

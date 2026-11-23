@@ -20,7 +20,7 @@ import urllib.parse
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import console, downloads, dupes, evaluate, loadcheck, modcols, modweb, process, selfupdate, startlink, tabback, updater, updating, version
+from . import console, downloads, dupes, evaluate, loadcheck, modcols, modweb, plugingroups, process, selfupdate, startlink, tabback, updater, updating, version
 from . import updates as updates_mod
 from .server import Bad
 
@@ -2404,6 +2404,8 @@ class Api:
     def plugins(self) -> dict:
         m = self._need()
         rows = []
+        # MO2's own plugin groups, where this MO2 keeps them (MT73, MO05): each plugin's group as its file says it.
+        groups = plugingroups.read(m.instance.profiles_dir / m.instance.profile)
         for f in m.order:
             r = m.plugins[f]
             # Masters this plugin loads before: the game would not find them in time (shown on its row, MT58).
@@ -2413,8 +2415,9 @@ class Api:
                          "mod": r.source or "", "mod_priority": r.source_priority, "primary": r.primary,
                          "masters": len(r.masters), "dependants": len(r.dependants),
                          "missing": r.missing_masters, "inactive": r.inactive_masters, "early": early,
-                         "unreadable": r.unreadable, "also_in": list(r.also_in)})
-        return {"plugins": rows}
+                         "unreadable": r.unreadable, "also_in": list(r.also_in),
+                         "mo2_group": (groups or {}).get(f, "")})
+        return {"plugins": rows, "groups": "mo2" if groups is not None else "separators"}
 
     def plugin(self, name: str) -> dict:
         r = self._need().row(name)

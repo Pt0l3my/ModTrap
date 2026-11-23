@@ -131,9 +131,37 @@ class PageTests(unittest.TestCase):
         self.assertIn('const COL_FIXED = { "mods-table": 3, "plugins-table": 4 };', self.js)
         self.assertIn("const key = keys[th.dataset.c !== undefined ? Number(th.dataset.c) : i];", self.js)
         self.assertIn("main.sidebyside #mods-table .k3,", self.css)
+        # MT73: side by side, the mods keep MO2's Installation and Notes columns; only their plugins' count goes.
+        self.assertNotRegex(self.css, r"sidebyside #mods-table \.k[4567]")
         self.assertNotIn("nth-child(n+7)", self.css)
         self.assertIn("table.colfixed { table-layout: fixed; }", self.css)
 
+
+    def test_the_plugins_list_shows_mo2s_own_groups_where_mo2_keeps_them(self):
+        """MT73."""
+        # MO2's groups as its file has them: a new one wherever the name changes from a plugin to the next; a plugin
+        # without one under “No group”, with a button to give it one. Without the file, the mods' separators.
+        self.assertIn('state.pluginGroups = p.groups || "separators";', self.js)
+        self.assertIn('const mo2 = state.pluginGroups === "mo2";', self.js)
+        self.assertIn('group = last && last.mo2 === gname ? last : null;', self.js)
+        self.assertIn('name: gname || "No group"', self.js)
+        self.assertIn('give.addEventListener("click", () => groupPlugins(names(), ""));', self.js)
+        self.assertIn('id="plugins-groups"', self.html)
+        self.assertIn('"Groups: MO2\'s own" : "Groups: by the mods\' separators"', self.js)
+        # A group is given by name, with the groups there are to choose from, as a change of its own; never with MO2 open.
+        self.assertIn('const got = await api("/api/list/plugins/group", { plugins: names, group: to.trim() });', self.js)
+        self.assertIn('if (choices) input.setAttribute("list", "modal-list");', self.js)
+        self.assertRegex(self.js, r'const NEEDS_MO2_FREE = new Set\(\[[^\]]*"/api/list/plugins/group"')
+        self.assertRegex(self.js, r"const MO2_GATED = /\^\([^/]*Give a group…")
+        self.assertIn('"plugin grouped": "Plugin\'s group"', self.js)
+        self.assertIn('"plugin group": "plugin\'s group"', self.js)
+
+    def test_the_web_says_what_it_needs_means_and_a_tools_last_word_is_no_conflict(self):
+        """MT73."""
+        self.assertIn('if (d.needs) said.push(', self.js)
+        self.assertIn("every one of them is there and active. Nothing to do:", self.js)
+        self.assertIn('x.made ? el("p", { class: "small dim", text: "No conflict: " + x.made + ". Such a plugin', self.js)
+        self.assertIn("and the later one is no tool's output", self.js)
 
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
@@ -253,7 +281,7 @@ class PageTests(unittest.TestCase):
         for option in ("conflict", "conflict-asc", "made", "made-asc", "notes", "notes-desc"):
             self.assertIn('<option value="%s">' % option, self.html)
         # The plugins' list: groups by the mods' separators, folded and unfolded, and open while a search narrows it.
-        self.assertIn('g.row = el("tr", { class: "sep pgroup" }, el("td", { colSpan: 9 }, g.btn, g.info));', self.js)
+        self.assertIn('g.row = el("tr", { class: "sep pgroup" + (g.loose ? " loose" : "") }, el("td", { colSpan: 9 }, g.btn, g.info));', self.js)
         self.assertIn('const shut = !filtering && p.group && folded.has(p.group.key);', self.js)
         self.assertIn('ev.target.closest("#plugins-table tbody tr[data-plugin]")', self.js)
         self.assertIn('id="plugins-fold"', self.html)
@@ -277,7 +305,7 @@ class PageTests(unittest.TestCase):
         self.assertIn('if (refreshing) { $("refresh-text").textContent = "Reading the modlist anew…"; return; }', self.js)
         self.assertIn('id="refresh-bar"', self.html)
         # MT71: each separator's name heads the plugins' list once.
-        self.assertIn("let group = byName.get(gname);", self.js)
+        self.assertIn("group = byName.get(gname);", self.js)
         self.assertNotIn('" #" + n', self.js)
 
     def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):

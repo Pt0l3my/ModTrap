@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import history as history_mod, instance, logbook, model, paths, profile, safe, sources
+from . import history as history_mod, instance, logbook, model, paths, plugingroups, profile, safe, sources
 from .instance import fold
 
 log = logbook.get("add")
@@ -155,7 +155,7 @@ class AddJob:
         for n in LISTS:
             if profile.checksum(self.pdir / n) != self.plan.lists.get(n):
                 raise Refused("%s changed since this was planned; read the modlist again" % n)
-        done: dict = {"mods": [], "plugins": []}
+        done: dict = {"mods": [], "plugins": [], "groups": {}}
         self.dir.mkdir(parents=True, exist_ok=True)
         paths.write_atomic(self.dir / "plan.json", (json.dumps(
             {"mods": self.plan.mods, "plugins": self.plan.plugins, "lists": self.plan.lists,
@@ -163,6 +163,8 @@ class AddJob:
         try:
             for n in LISTS:
                 self.safe.take(self.pdir / n)
+            if self.plan.plugins and plugingroups.present(self.pdir):
+                self.safe.take(self.pdir / plugingroups.NAME)       # MO2's plugin groups, where this MO2 keeps them (MT73)
             for x in self.plan.mods:
                 if x["staged"]:
                     self._copy_in(x)
@@ -197,6 +199,7 @@ class AddJob:
                     done["plugins"].append({"name": p["name"], "position": where[p["name"]]})
                     self.history.add("plugin activated", plugin=p["name"], position=where[p["name"]],
                                      plugin_kind=p["kind"], mod=p["mod"], before=p["before"])
+                done["groups"] = self._group_new()
             problems = self.check()
             if problems:
                 raise Refused("the modlist does not read back as planned: " + "; ".join(problems[:4]))
@@ -215,6 +218,38 @@ class AddJob:
         self.history.add("verified", what="mods added", mods=[x["name"] for x in self.plan.mods])
         paths.write_atomic(self.dir / "added.json", (json.dumps(done, indent=1) + "\n").encode("utf-8"))
         return done
+
+    def _group_new(self) -> dict[str, str]:
+        """Gives the plugins just placed their groups in MO2's plugin list, by MT73's rule: one placed inside a
+        group is in it; one placed between groups takes the name of its mod's separator. Returns the groups
+        given, by plugin name; nothing where this MO2 keeps none."""
+        groups = plugingroups.read(self.pdir)
+        if groups is None:
+            return {}
+
+        def text(n: str) -> str:
+            return instance._decode(instance._read_bytes(self.pdir / n))
+        mods, order = instance.parse_modlist(text("modlist.txt")), instance.parse_loadorder(text("loadorder.txt"))
+        given: dict[str, str] = {}
+        for p in self.plan.plugins:
+            if groups.get(fold(p["name"])):
+                continue                                    # it has one: it was in this list before
+            g = plugingroups.for_new(order, groups, p["name"], plugingroups.separator_of(mods, p["mod"]))
+            if g:
+                given[p["name"]], groups[fold(p["name"])] = g, g
+        if given:
+            path = self.pdir / plugingroups.NAME
+            self.safe.may_change(path)
+            try:
+                plugingroups.set_groups(self.pdir, given)
+            finally:
+                self.safe.wrote(path)
+            for name, g in given.items():
+                self.history.add("plugin grouped", plugin=name, group=g, group_was="", why="it is new in the load order: %s" % (
+                    "it stands inside this group" if any(v == g for k, v in groups.items() if k != fold(name) and k not in {fold(n) for n in given})
+                    else "the group is named after its mod's separator"))
+                log.info("%s is in the group “%s” of MO2's plugin list", name, g)
+        return given
 
     # --- check -------------------------------------------------------------------------------------------------------
 
@@ -298,6 +333,15 @@ class AddJob:
             profile.remove_plugin_lines(self.pdir, [p["name"] for p in self.plan.plugins if p["mod"] in mine])
         except profile.Refused as e:
             log.warn("undoing by line: %s", e)
+        try:                                                         # the groups this job gave its own plugins, where they still stand
+            with open(self.dir / "added.json", "rb") as f:
+                given = json.loads(f.read(16 * 1024 * 1024).decode("utf-8")).get("groups", {})
+            now = plugingroups.read(self.pdir) or {}
+            gone = {p["name"]: "" for p in self.plan.plugins if p["mod"] in mine and given.get(p["name"]) and now.get(fold(p["name"])) == given[p["name"]]}
+            if gone:
+                plugingroups.set_groups(self.pdir, gone)
+        except (OSError, ValueError, AttributeError, profile.Refused) as e:
+            log.warn("undoing by line: the plugins' groups stay (%s)", e if isinstance(e, profile.Refused) else type(e).__name__)
         back = {p["name"]: False for p in self.plan.plugins if p["mod"] not in mine}
         for name, on in back.items():                                # plugins of mods MO2 had: inactive again
             try:
