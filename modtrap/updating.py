@@ -24,6 +24,7 @@ PREFS = "update-prefs.json"          # the folder the owner's browser saves down
 WAIT_SECONDS = 45 * 60               # how long ModTrap waits for a download the owner started in the browser
 LOOK_EVERY = 2.0                     # seconds between two looks into the watched folders
 NEXUS_NAME = re.compile(r"-(\d+)-.*-(\d{9,11})\.(?:zip|7z|rar)$", re.IGNORECASE)   # a Nexus download's name: mod's number … time of upload
+MAGIC = ((b"PK\x03\x04", ".zip"), (b"PK\x05\x06", ".zip"), (b"7z\xbc\xaf\x27\x1c", ".7z"), (b"Rar!\x1a\x07", ".rar"))    # an archive's first bytes
 PARTIAL = (".crdownload", ".part", ".partial", ".tmp", ".download", ".unfinished", ".opdownload")
 LIST_MAX = 2 * 1024 * 1024 * 1024    # the bytes of a dropped list, at most
 DROP_FILES = 20_000                  # meta files taken in one drop, at most
@@ -51,6 +52,11 @@ class Updating:
         self.premium: bool | None = None           # whether the key's account is a paying one, once Nexus has said
         self.fetching: dict[str, dict] = {}        # a mod's name -> how the fetching of its newer file stands
         self.mark_reader = None                    # reads a download's mark of the browser; a test's stand-in
+        self._ctx: tuple | None = None             # (the model, the way into Add mods): what a look by itself needs
+        self._watching = False
+        self.by_itself = True                      # the watch looks by itself; off in tests that count the looks
+        self._look_lock = threading.Lock()
+        self._told: set[tuple[str, str]] = set()   # what the log has been told of a file already
 
     # --- the Wabbajack file of a modlist ---------------------------------------------------------------------------
     def _places(self) -> dict:
@@ -271,7 +277,10 @@ class Updating:
     def account(self, model, modlist_key: str, added: set[str], stage=None) -> dict:
         """Everything the Updates tab shows. `stage` takes an archive that lies in a watched folder to Add mods."""
         rows, wj = self.rows(model, modlist_key, added)
+        if stage is not None:
+            self._ctx = (model, stage)
         if stage is not None and self.waiting:
+            self._watch()
             try:
                 self.look(model, stage)
             except Exception as e:
@@ -305,7 +314,7 @@ class Updating:
                 "scan": dict(self.work), "last": self.store.get("last") or None,
                 "premium": self.premium, "fetching": {k: dict(v) for k, v in self.fetching.items()}, "key_page": updates.KEY_PAGE,
                 "watch": {"folder": str(self.downloads_folder()), "there": self.downloads_folder().is_dir(),
-                          "waiting": {m: {"minutes": max(0, int((WAIT_SECONDS - (time.time() - w["since"])) // 60)), "name": w["name"]}
+                          "waiting": {m: {"minutes": max(0, int((WAIT_SECONDS - (time.time() - w["since"])) // 60)), "name": w["name"], "saw": w.get("saw") or ""}
                                       for m, w in self.waiting.items()}}}
 
     # --- waiting for a download the owner starts in the browser (MT42) ---------------------------------------------------
@@ -353,15 +362,57 @@ class Updating:
 
     def _expect(self, row: dict, v: dict) -> None:
         self.waiting[row["mod"]] = {"since": time.time(), "host": row["host"], "mod_id": row.get("mod_id") or 0, "file_id": v.get("file_id") or 0,
-                                    "name": v.get("file_name") or "", "label": v.get("file") or "", "time": v.get("time") or 0,
+                                    "name": v.get("file_name") or "", "label": v.get("file") or "", "time": v.get("time") or 0, "size": v.get("size") or 0,
                                     "game": row.get("game") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
-                                    "installed": list(row.get("files") or []), "url": row.get("url") or ""}
+                                    "installed": list(row.get("files") or []), "url": row.get("url") or "", "saw": ""}
+        w = self.waiting[row["mod"]]
+        browser = self.downloads_folder()
+        # Said without the folder's own path, which holds the owner's name on the PC.
+        log.info("waiting for the download of “%s”: known by %s; your browser's folder for downloads is %s, MO2's own is watched too",
+                 row["mod"], ", ".join(x for x in ("the mod's number %d" % w["mod_id"] if w["mod_id"] else "", "its size, %s bytes" % format(w["size"], ",") if w["size"] else "",
+                                                  "its name" if w["name"] else "", "the time of its upload" if w["time"] else "") if x) or "nothing but its coming",
+                 "there" if browser.is_dir() else "NOT FOUND: name it on the Updates tab")
+        self._watch()
+
+    def _watch(self) -> None:
+        """Looks by itself while a download is waited for (WHY§112): the page asks only while its tab is in front, and
+        it is not, while the owner is on the site's page."""
+        with self._lock:
+            if self._watching or self._ctx is None or not self.by_itself:
+                return
+            self._watching = True
+
+        def run():
+            try:
+                while self.waiting and self._ctx is not None:
+                    model, stage = self._ctx
+                    if stage is not None:
+                        try:
+                            self.look(model, stage)
+                        except Exception as e:                  # the watch must not end by one bad look
+                            log.warn("a look into the watched folders failed: %s", logbook.why(e))
+                    time.sleep(LOOK_EVERY)
+            finally:
+                self._watching = False
+
+        threading.Thread(target=run, name="downloads-watch", daemon=True).start()
+
+    def _tell(self, path: str, what: str, text: str, *args) -> None:
+        """One line in the log for each thing seen of a file, once."""
+        if (path, what) not in self._told:
+            self._told.add((path, what))
+            log.info(text, *args)
 
     def look(self, model, stage) -> None:
         """Looks into MO2's downloads folder and the browser's for an archive a waiting mod's download has brought, and
         hands it to Add mods through `stage(path, name, mod, version)`, read where it lies. A file counts once it is
         whole: not under a name browsers and MO2 give an unfinished download, and of the same size at two looks.
-        It never deletes or moves a file of the owner's."""
+        An archive is known by its first bytes, whatever its name. It never deletes or moves a file of the owner's.
+        Every file that came after the press is told in the log once, with what was made of it."""
+        with self._look_lock:
+            self._look(model, stage)
+
+    def _look(self, model, stage) -> None:
         now = time.time()
         if not self.waiting or now - self._looked < LOOK_EVERY:
             return
@@ -369,83 +420,118 @@ class Updating:
         for mod in [m for m, w in self.waiting.items() if now - w["since"] > WAIT_SECONDS]:
             self.waiting.pop(mod, None)
             self.fetching[mod] = {"state": "failed", "error": "no download for it showed up in %d minutes; ModTrap has stopped waiting" % (WAIT_SECONDS // 60), "open": ""}
+            log.warn("no download for “%s” showed up in %d minutes: ModTrap has stopped waiting", mod, WAIT_SECONDS // 60)
         if not self.waiting:
             return
         first = min(w["since"] for w in self.waiting.values())
         shape = lambda name: re.sub(r"[\d._\- ()]+", "", name.lower())
         plain = lambda name: re.sub(r" \(\d+\)(?=\.\w+$)", "", name).lower()        # a browser's "name (1).zip"
+        letters = lambda t: re.sub(r"[^a-z]+", "", t.lower())
+        mb = lambda n: "%.1f MB" % (n / (1024 * 1024))
         sizes: dict[str, int] = {}
-        found: list[tuple[str, Path, str]] = []                                      # (mod, file, where)
+        found: list[tuple[str, Path, str, str]] = []                                 # (mod, file, where, the name to unpack it by)
+        writing = ""                                                                 # what is being written now, for the page
         for where, folder in (("MO2's downloads folder", model.instance.downloads_dir), ("your browser's Downloads folder", self.downloads_folder())):
             if folder is None:
                 continue
+            mo2 = where.startswith("MO2")
             try:
                 with os.scandir(folder) as it:
-                    entries = [e for e in it if e.is_file() and updates.ARCHIVE.search(e.name) and not e.name.lower().endswith(PARTIAL)]
-            except OSError:
+                    entries = [e for e in it if e.is_file()]
+            except OSError as e:
+                self._tell(where, "unreadable", "%s could not be listed: %s", where, logbook.why(e))
                 continue
             for e in entries:
+                low = e.name.lower()
+                if low.endswith((".meta", ".ini", ".lnk")) or mo2 and not updates.ARCHIVE.search(e.name) and not low.endswith(PARTIAL):
+                    continue
                 try:
                     st = e.stat()
                 except OSError:
                     continue
-                if st.st_mtime < first - 5 or st.st_size <= 0:
+                if st.st_mtime < first - 5:
+                    continue                                    # there before the press
+                if low.endswith(PARTIAL):
+                    if st.st_size > 0:
+                        writing = "a download is being written in %s (%s so far)" % (where, mb(st.st_size))
+                        self._tell(e.path, "partial", "in %s a download is being written: “%s”", where, e.name)
                     continue
+                if st.st_size <= 0:
+                    continue                                    # the empty file a browser puts down first
                 sizes[e.path] = st.st_size
                 if self._sizes.get(e.path) != st.st_size:
+                    writing = writing or "a new file is being written in %s (%s so far)" % (where, mb(st.st_size))
                     continue                                    # seen first now, or still growing: next look
                 try:
                     with open(e.path, "rb") as f:
-                        f.read(1)
+                        head = f.read(8)
                 except OSError:
                     continue                                    # still held by what is writing it
-                mine = None
-                meta = sources.download_meta(Path(folder), e.name) if where.startswith("MO2") else {}
-                mark = sources.web_mark(Path(e.path), self.mark_reader) if not where.startswith("MO2") else {}
+                kind = next((ext for sig, ext in MAGIC if head.startswith(sig)), "")
+                if not kind and not updates.ARCHIVE.search(e.name):
+                    self._tell(e.path, "other", "in %s a new file is no archive by its first bytes and is passed by: “%s”, %s bytes", where, e.name, format(st.st_size, ","))
+                    continue
+                # The name it is unpacked by: its own, with the ending its first bytes call for where it has none.
+                as_name = e.name if updates.ARCHIVE.search(e.name) else e.name + kind
+                mine, how = None, ""
+                meta = sources.download_meta(Path(folder), e.name) if mo2 else {}
+                mark = sources.web_mark(Path(e.path), self.mark_reader) if not mo2 else {}
                 marked = [sources.NEXUS_PAGE.match(u) for u in (mark.get("page", ""), mark.get("url", "")) if u]
                 marked = next((m for m in marked if m), None)
-                named = NEXUS_NAME.search(plain(e.name))             # "…-<mod's number>-<version>-<time of upload>.7z"
+                named = NEXUS_NAME.search(plain(as_name))            # "…-<mod's number>-<version>-<time of upload>.7z"
                 for mod, w in self.waiting.items():
                     if st.st_mtime < w["since"] - 5:
                         continue
                     if meta.get("mod_id") and w["mod_id"]:
                         # MO2's own record beside the archive: the mod's and the file's number.
                         if meta["mod_id"] == w["mod_id"] and (meta.get("file_id") == w["file_id"] if w["file_id"] else meta.get("file_id") not in w["installed"]):
-                            mine = mod
+                            mine, how = mod, "the numbers MO2 wrote beside it"
                             break
                         continue
                     if marked is not None and w["mod_id"]:
                         # The browser's mark on the file: the page it was downloaded from is this mod's (WHY§110).
                         if int(marked.group(2)) == w["mod_id"] and marked.group(1).lower() == w["game"]:
-                            mine = mod
+                            mine, how = mod, "the browser's mark on it, which names the mod's page"
                             break
                         continue
                     if w["name"] and plain(e.name) == w["name"].lower():
-                        mine = mod
+                        mine, how = mod, "its name"
                         break
                     if named is not None and w["mod_id"] and int(named.group(1)) == w["mod_id"] and \
                             (int(named.group(2)) == w["time"] if w["time"] else int(named.group(2)) != updates.archive_time(w["archive"])):
-                        mine = mod                                   # the mod's number and the upload's time, in the name
+                        mine, how = mod, "the mod's number and the upload's time in its name"
+                        break
+                    if w["size"] and st.st_size == w["size"]:
+                        mine, how = mod, "its size, to the byte"         # the size the site gives for the file (WHY§112)
                         break
                 if mine is None and named is None and marked is None:
                     # Nothing certain to go by (a name that carries a mod's number and a time, or a mark of a mod's
                     # page, has said whose file it is, and it is not a waited one's). A new archive is taken for the
-                    # one mod waited for where its name begins as the file's name on its page does, or as the
-                    # installed archive's, or where the site gives no name at all; never while several are waited for.
-                    letters = lambda t: re.sub(r"[^a-z]+", "", t.lower())
-                    alike = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and w["archive"] and shape(w["archive"]) == shape(plain(e.name))]
+                    # one mod waited for where its size is not known to differ and its name begins as the file's
+                    # name on its page does, or as the installed archive's, or tells nothing at all (a storage
+                    # code, a site that gives no name); never while several are waited for.
+                    alike = [mod for mod, w in self.waiting.items() if st.st_mtime >= w["since"] - 5 and w["archive"] and not w["size"]
+                             and shape(w["archive"]) == shape(plain(as_name))]
                     if len(alike) == 1:
-                        mine = alike[0]
+                        mine, how = alike[0], "its name, shaped as the installed archive's"
                     elif len(self.waiting) == 1:
                         mod, w = next(iter(self.waiting.items()))
-                        lead = letters(e.name)
+                        lead = letters(as_name[:-len(kind)] if kind and as_name.endswith(kind) else as_name)
                         starts = [letters(x)[:12] for x in (w.get("label") or "", re.sub(r"-\d+.*$", "", w["archive"])) if len(letters(x)) >= 4]
-                        if st.st_mtime >= w["since"] - 5 and (not w["name"] and not w["mod_id"] or any(lead.startswith(x) for x in starts)):
-                            mine = mod
-                if mine is not None and mine not in [m for m, _p, _w in found]:
-                    found.append((mine, Path(e.path), where))
+                        nameless = not w["name"] and (not w["mod_id"] or not re.search(r"[g-z]", re.sub(r"\.\w+$", "", low)))    # a code of hex digits says nothing
+                        if st.st_mtime >= w["since"] - 5 and not w["size"] and (nameless or any(lead.startswith(x) for x in starts)):
+                            mine, how = mod, "being the one archive that came while only this mod was waited for"
+                if mine is None:
+                    self._tell(e.path, "nobody", "in %s a new archive fits no download waited for and is left alone: “%s”, %s bytes%s", where, e.name, format(st.st_size, ","),
+                               "; waited for: " + "; ".join("“%s” (%s)" % (m, ", ".join(x for x in ("%s bytes" % format(w["size"], ",") if w["size"] else "", "mod %d" % w["mod_id"] if w["mod_id"] else "") if x) or "any archive")
+                                                               for m, w in self.waiting.items()))
+                elif mine not in [m for m, _p, _w, _n in found]:
+                    found.append((mine, Path(e.path), where, as_name))
+                    log.info("in %s the download for “%s” is whole: “%s”, %s bytes, known by %s", where, mine, e.name, format(st.st_size, ","), how)
         self._sizes = sizes
-        for mod, path, where in found:
+        for w in self.waiting.values():
+            w["saw"] = writing
+        for mod, path, where, as_name in found:
             w = self.waiting.pop(mod)
             try:
                 # The new mod's own record gets what is known of the file: its numbers at Nexus, or the address the
@@ -454,9 +540,9 @@ class Updating:
                 meta = {"mod_id": w["mod_id"], "file_id": w["file_id"] or (dl.get("file_id", 0) if dl.get("mod_id") == w["mod_id"] else 0),
                         "version": w["version"] or dl.get("version", "")} if w["mod_id"] else \
                        {"version": w["version"], "url": sources.source_of_mark(sources.web_mark(path, self.mark_reader)) or w.get("url") or ""}
-                rec = stage(path, path.name, mod, w["version"], meta)
+                rec = stage(path, as_name, mod, w["version"], meta)
                 self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
-                log.info("the download for “%s” is in %s: taken to Add mods as its newer version", mod, where)
+                log.info("the download for “%s” is taken to Add mods as its newer version", mod)
             except Exception as e:
                 why = str(e) if e.__class__.__name__ == "Bad" else logbook.why(e)
                 self.fetching[mod] = {"state": "failed", "error": why, "open": ""}
@@ -472,22 +558,33 @@ class Updating:
         if got["ok"]:
             self.premium = got["premium"]
             log.info("Nexus says the key's account is %s", "a Premium one: ModTrap can fetch files itself" if got["premium"]
-                     else "not a Premium one: a download goes through Nexus's page and MO2")
+                     else "not a Premium one: a download goes through Nexus's page, in your browser")
         else:
             log.warn("the kind of the key's account could not be asked: %s", got["why"])
 
-    def get(self, model, modlist_key: str, added: set[str], mod: str, folder: Path, stage, only_open: bool = False) -> dict:
+    def get(self, model, modlist_key: str, added: set[str], mod: str, folder: Path, stage, only_open: bool = False, in_place=None) -> dict:
         """The update button for one mod. Where ModTrap can fetch the newer file itself (a Nexus key of a paying
         account; a GitHub release), it does, beside everything else, and hands the file to Add mods through `stage`;
-        the answer is {"going": True}. Otherwise the answer names the page to open and why: {"open", "why"}."""
+        the answer is {"going": True}. Otherwise the answer names the page to open and why: {"open", "why"}.
+        `in_place` takes an archive of the owner's to Add mods where it lies: what the watch for a download uses."""
         rows, _wj = self.rows(model, modlist_key, added)
         row = next((r for r in rows if r["mod"] == mod), None)
         if row is None:
             raise Bad("that is not a mod of this modlist")
-        v = updates.verdict(row, self.store)
         key = secret.read(KEY)
         if row["host"] == "nexus" and key and self.premium is None:
             self._account()
+        if in_place is not None and not only_open:
+            # What the watch takes a download in by: read where it lies. Never `stage`, which is for a file ModTrap
+            # fetched into its own folder and moves it; a file of the owner's is never moved (WHY§112).
+            self._ctx = (model, in_place)
+        if row["host"] == "nexus" and not only_open and not (key and self.premium):
+            # The file is asked about afresh at the press (one question to the public service): what ModTrap then
+            # waits for, its number, name and size, is what the page offers at this moment (WHY§112).
+            why = updates.ask_files(row, self.net, self.store)
+            if why:
+                log.info("the files of “%s” could not be asked afresh at the press (%s); what the last scan kept is used", mod, why)
+        v = updates.verdict(row, self.store)
         how = updates.how_to_get(row, v, self.store, bool(key), self.premium)
         if "open" in how or only_open:
             page = how.get("open") or how.get("page") or ""

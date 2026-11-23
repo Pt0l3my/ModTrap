@@ -134,6 +134,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 109 | 2026-11-22 | A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about | DECIDED | #updates #add |
 | 110 | 2026-11-22 | A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name | FACT | #updates #network |
 | 111 | 2026-11-22 | A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting | DECIDED | #updates #page #safety |
+| 112 | 2026-11-23 | The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again | DECIDED | #updates #page #network |
 
 ## Entries
 
@@ -2858,3 +2859,50 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked in a browser against a stand-in page: cut loose, the page sees no opener and stays open after "stop
   waiting"; tied, the page sees its opener, is closed on "stop waiting" and when the file arrives. The page test
   that forbids outside addresses and inline code still holds.
+- Later (2026-11-23, MT47, WHY§112): the owner had asked for a tab, not a window. The window is now a setting
+  that is off; the page opens as a tab, and the setting that keeps the tie holds for a tab as for the window.
+
+### 112. The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again
+
+`2026-11-23` · DECIDED · `#updates #page #network` · refs: MT47, MT46, MT42, TL01§30, WHY§105, WHY§106, WHY§110, WHY§111
+
+- The owner's session file at 0.3.39: the page was opened for the mod twice (23:57 and 23:59) and the log says
+  nothing more of it until the file was packed three minutes later. FACT: the log could not tell what the watch
+  saw, because the watch wrote nothing; that is itself a fault, mended here.
+- FACT (the owner's pictures): the page ModTrap opened carried `nmm=1`, the way of Nexus's "mod manager
+  download". LIKELY the cause that nothing was saved: on that page the press hands the download to a program
+  registered for such links (MO2's handler), and the browser saves no file; with MO2 closed, as it is while
+  ModTrap adds mods, nothing visible follows. Not proved from here. The page is now opened without it, the way
+  of "manual download", where the browser itself saves the file into its Downloads folder, which ModTrap watches.
+- FACT (found by reading the code): the watch looked only when ModTrap's page asked for the Updates tab's
+  state, and a browser slows or stops the asking of a tab that is not in front, as ModTrap's is not while the
+  owner is on the site's page. The watch now runs by itself for as long as a download is waited for.
+- FACT (TL01§30): for every file uploaded since the summer of 2026 the public service gives a storage code, not
+  the name; no field gives the name the download is saved under; `sizeInBytes` gives the size to the byte. So a
+  download is now also known by its size, which holds whatever the name, and tells two waited mods apart. The
+  files of the one mod are asked afresh at the press (one question), so that the number, the name on the page
+  and the size waited for are the page's at that moment; what an older scan kept had neither name nor size.
+- A file with no archive's ending to its name is now looked at too: an archive is known by its first bytes (zip,
+  7z, rar), and unpacked under its name with the ending those bytes call for. A new file that is no archive is
+  passed by and said so in the log.
+- The one-mod fallback of WHY§110 now holds only where no size is known: a size that is known and differs says
+  the file is another.
+- Found by the new test, before any release: the first wiring gave the watch the function that takes in a file
+  ModTrap fetched itself, which moves the file; a download of the owner's would have been moved out of their
+  Downloads folder. The watch now gets only the function that reads a file where it lies, and the test asserts
+  that every file in the watched folder is still there afterwards.
+- The log now says, without the folder's path (it holds the owner's name on the PC): at the press, what the
+  download is known by and whether the browser's folder was found; for each file that came after the press,
+  once, that it is being written, is no archive, fits no waited mod (with what is waited for), or is whole and
+  by what it was known; and the end of the waiting.
+- The tab: DECIDED as in MT47. A page cannot open a tab behind itself (WHY§111); a real link pressed with Ctrl
+  or the middle button is opened by the browser itself, behind ModTrap's tab, so the update button is now such a
+  link, and ModTrap then only starts watching. LIKELY, not checked: Firefox's own setting
+  `browser.tabs.loadDivertedInBackground` makes every tab a page opens load behind the one in front; that is
+  the owner's to set in their browser, not ModTrap's.
+- Checked: tests (the watch by itself takes a download with a name that says nothing and no ending, by its
+  size, passes by a text file, an unfinished download and an archive of another size, and leaves all four files
+  where they are; the address has no `nmm=1`), and in a browser against a stand-in service: a plain press opens
+  a tab that sees no opener; the nameless file is taken to Add mods as the mod's newer version; a middle click
+  is left to the browser and starts the watch; with the tie kept, ModTrap closes the tab when the file arrives.
+  Not checked: a real download from Nexus on the owner's PC, and under which name the browser saves it.

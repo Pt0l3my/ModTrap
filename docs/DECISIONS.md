@@ -39,6 +39,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   a mod ModTrap adds keeps its source).
   MT46 (a "Manual update" box and favourites in a mod's menu, a Favourites filter; a site's page for a download in a
   small window of its own, so that ModTrap's tab stays).
+  MT47 (the owner's correction: a site's page opens as a tab, not a window; the download is taken whatever its name).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1000,3 +1001,30 @@ opened, stay on ModTrap browser tab (could be a setting). The nexus page was ope
 - **The file that was not taken.** Nexus's public service gave a storage code where the file's name was expected, so
   ModTrap waited for a name no download carries. A download is now known by the browser's mark on it, or by the mod's
   number and the upload's time in its name; the storage code is never shown or waited for.
+
+## MT47
+
+**A tab, not a window; and the download taken whatever its name** · *2026-11-23 · The owner's correction of MT46*
+
+**Owner's words.** "when pressing the mod update button, it now opens a new window instead of a tab (did I ask for
+this?), and still nothing gets downloaded. The mod won't be updated. I asked, if you have to open a nexus page, then
+add a setting to open as new tab, but stay on ModTrap tab, don't switch to Nexus browser tab."
+
+**Settled** (WHY§112; this amends MT46, whose small window the owner had not asked for):
+
+- **A tab again.** A site's page opens as a new tab, as before 0.3.39. The small window stays as a setting, now off.
+- **Staying on ModTrap's tab.** A page cannot open a tab behind itself; only the browser can, at the owner's own
+  doing. So the update button is a real link: pressed with Ctrl held, or with the middle mouse button, the browser
+  itself opens the page in a tab behind ModTrap's, and ModTrap only starts watching for the file. A setting of
+  ModTrap's cannot do this for a plain press, and the page says so.
+- **Coming back by itself.** The setting of MT46 that lets ModTrap close the site's page now holds for a tab too:
+  when the file is here, ModTrap closes the tab it opened and the browser returns to ModTrap. Off as it comes, for
+  the reason given in MT46.
+- **The press on the site stays the owner's.** Without the key of a paying account, Nexus starts a download only
+  at a press on its own page, in the signed-in browser.
+- **The download.** The page is opened the way Nexus's "manual download" opens it, so that the browser itself
+  saves the file; before, it was opened the way of "mod manager download", which hands the file to a program set
+  up for such links and saves nothing in the browser. The file is known by its size to the byte, asked of Nexus at
+  the press, whatever its name, and an archive is known by its first bytes, with or without an ending to its name.
+- **The watch runs by itself**, not only while ModTrap's tab is looked at, and writes to the log every file that
+  came after the press and what it made of it.

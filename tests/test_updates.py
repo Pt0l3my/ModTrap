@@ -330,7 +330,7 @@ class TheListAsTheModlist(Sources):
         files = [(111, "a.7z", "1.2", 4, 100), (113, "b.7z", "1.4", 1, 300)]
         v = updates.nexus_verdict(row, {"asked": 1, "files": [list(f) for f in files], "chain": [[111, 113, "a.7z", "b.7z"]]})
         self.assertEqual(v["file_id"], 113)
-        self.assertEqual(updates.get_of(row, v), "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113&nmm=1")
+        self.assertEqual(updates.get_of(row, v), "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
         unsure = updates.nexus_verdict(dict(row, files=[], archive="renamed.7z"), {"asked": 1, "files": [list(files[1])], "chain": []})
         self.assertEqual((unsure["state"], updates.get_of(row, unsure)), ("maybe", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
         self.assertEqual(updates.get_of(row, {"state": "current"}), "")
@@ -407,6 +407,7 @@ class FetchingANewerFile(unittest.TestCase):
                           "https://github.com/invented-owner/lantern/releases/download/v2.1/Lantern.Release.2.1.zip": a_zip({"Lantern.esp": (mods / "Lantern" / "Lantern.esp").read_bytes()})}
         self.api = api.Api()
         self.api.updating.net = self.net
+        self.api.updating.by_itself = False                    # these tests count the looks themselves
         self.api.running = lambda image: False
         self.api.open(str(self.root), wait=True)
 
@@ -438,7 +439,7 @@ class FetchingANewerFile(unittest.TestCase):
     def test_without_the_switch_for_changes_nothing_is_fetched(self):
         self.scanned()
         got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
-        self.assertEqual(got["open"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113&nmm=1")
+        self.assertEqual(got["open"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
         self.assertEqual([u for u, _h in self.net.asked if "download_link" in u or "nexus-cdn" in u], [])
 
     def test_what_the_button_does_by_key_account_and_host(self):
@@ -456,7 +457,7 @@ class FetchingANewerFile(unittest.TestCase):
         st = self.scanned()
         self.assertFalse(next(r for r in st["rows"] if r["mod"] == "Quill")["fetches"])
         got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
-        self.assertIn("&nmm=1", got["open"])
+        self.assertNotIn("nmm=1", got["open"])                    # the browser's own download, not a mod manager's (WHY§112)
         self.assertIn("Premium", got["why"])
         self.assertEqual([u for u, _h in self.net.asked if "download_link" in u], [])
         with self.assertRaises(api.Bad):
@@ -550,6 +551,42 @@ class FetchingANewerFile(unittest.TestCase):
         self.assertIn("stopped waiting", st["fetching"]["Quill"]["error"])
         with self.assertRaises(api.Bad):
             self.api.post("/api/updates/folder", {"path": str(browser / "no such folder")})
+
+    def test_the_watch_looks_by_itself_and_knows_an_archive_by_its_first_bytes_and_its_size(self):
+        """WHY§112: nobody asks while the owner is on the site's page, so ModTrap looks by itself; the download may
+        come under a name that tells nothing and has no ending, and is known by its size, to the byte."""
+        from modtrap import changes
+        self.api.changes = changes.Changes(self.api, require_probe=False)
+        self.net.answers["users/validate"] = (200, {}, {"user_id": 1, "is_premium": False})
+        data = self.net.files[self.cdn]
+        self.net.public = public_service({4321: {"updated": "2026-11-21T00:00:00Z", "files": [
+            (111, "Quill-4321-1-2.7z", "1.2", 4, 1700000000, 42, "Quill", 1000),
+            (113, "ab/cd/ef/0123456789abcdef", "1.4", 1, 1795219200, 42, "Quill", len(data))]}})
+        browser = Path(self.tmp.name) / "Browser Downloads"
+        browser.mkdir()
+        self.api.post("/api/updates/folder", {"path": str(browser)})
+        self.scanned()
+        self.api.updating.by_itself = True
+        self.api.updating.net.answers.pop("/mods/4321/files", None)
+        updating.LOOK_EVERY, kept = 0.05, updating.LOOK_EVERY
+        try:
+            got = self.api.post("/api/updates/get", {"mod": "Quill"})[1]
+            self.assertEqual(got["open"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
+            w = self.api.updating.waiting["Quill"]
+            self.assertEqual((w["size"], w["name"], w["label"], w["file_id"]), (len(data), "", "Quill", 113))     # asked afresh at the press
+            fx.write(browser / "notes.txt", b"not an archive at all")
+            fx.write(browser / "0123456789abcdef.part", data[:10])
+            fx.write(browser / "another archive.zip", a_zip({"readme.txt": b"of another size"}))
+            fx.write(browser / "0123456789abcdef", data)                                 # no ending, a name that says nothing
+            end = time.time() + 10
+            while time.time() < end and self.api.updating.fetching.get("Quill", {}).get("state") != "done":
+                time.sleep(0.05)                                                          # nobody asks: the watch looks by itself
+        finally:
+            updating.LOOK_EVERY = kept
+        f = self.api.updating.fetching["Quill"]
+        self.assertEqual((f["state"], f["name"]), ("done", "Quill (1.4)"))
+        self.assertEqual(self.api.updating.waiting, {})
+        self.assertEqual(sorted(p.name for p in browser.iterdir()), ["0123456789abcdef", "0123456789abcdef.part", "another archive.zip", "notes.txt"])     # all of the owner's files stay
 
     def test_a_site_without_a_name_to_go_by_takes_the_one_archive_that_comes(self):
         from modtrap import changes
@@ -752,7 +789,7 @@ def public_service(mods: dict, game_id: int = 1704, asked: list | None = None):
         if "modFiles" in query:
             out = {}
             for alias, mod_id in _re.findall(r'(m\d+): modFiles\(modId: "(\d+)"', query):
-                out[alias] = [{"fileId": f[0], "name": f[6] if len(f) > 6 else f[1], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5]}
+                out[alias] = [{"fileId": f[0], "name": f[6] if len(f) > 6 else f[1], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5], "sizeInBytes": str(f[7]) if len(f) > 7 else None}
                               for f in mods[int(mod_id)]["files"]]
             return 200, {}, {"data": out}
         return 200, {}, {"errors": [{"message": "not a question this stand-in knows"}], "data": None}

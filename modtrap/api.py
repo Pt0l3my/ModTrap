@@ -104,8 +104,8 @@ SETTINGS = {
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
-    "site_window": True,       # a site's page for a download opens in a small window of its own (MT46)
-    "site_window_closes": False,   # that window stays tied to ModTrap's tab, so that ModTrap can close it (MT46, WHY§111)
+    "site_window": False,      # a site's page for a download opens in a small window of its own, not a tab (MT46, MT47)
+    "site_window_closes": False,   # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT46, WHY§111)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -497,7 +497,8 @@ class Api:
                     only_open = True                    # without the switch nothing is added, so nothing is fetched to add
                 else:
                     only_open = False
-                return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open)
+                return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open,
+                                         in_place=self.stage_where_it_lies if self.session is not None else None)
             if what == "folder":
                 path = body.get("path", "")
                 if not isinstance(path, str) or len(path) > 1000:
