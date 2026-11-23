@@ -99,6 +99,11 @@ class PageTests(unittest.TestCase):
         self.assertIn('const panes = split ? ["tab-mods", "tab-plugins"] : ["tab-" + pane];', self.js)
         self.assertIn("split: state.splitAt || 50", self.js)
         self.assertIn(".splitbar { flex: 0 0 9px; position: relative; cursor: col-resize;", self.css)
+        # "Swap sides" (MT59, note): a button of the tab row, shown on the split view alone; it is no tab.
+        self.assertRegex(self.html, r'<button id="split-swap" type="button" class="tabtool"[^>]*hidden>')
+        self.assertIn("main.sidebyside.swapped { flex-direction: row-reverse; }", self.css)
+        self.assertIn('document.querySelectorAll("#tabs button[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));', self.js)
+        self.assertIn("swap: !!state.splitSwap", self.js)
 
 
 if __name__ == "__main__":

@@ -1454,3 +1454,8 @@ area shown"
 - **To fit.** In the split view the mods' list leaves its Plugins column out (the plugins are beside it), the
   plugins' list its three last columns, and the plugin's pane stands below its list, not beside it.
 
+**Note (2026-11-23, the owner's request).** "can you also add button to header on this sub tab, to swap side
+arrangement of plugin and modlist split, this will swap sides." Settled: "⇄ Swap sides" stands at the right end of
+the tab row, on the split view only. It puts the plugins on the left and the mods on the right, or back; each list
+keeps the room it had, so the line moves to the mirrored place. Kept with the session.
+

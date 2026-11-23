@@ -480,3 +480,7 @@ main.sidebyside #mods-table th:nth-child(4), main.sidebyside #mods-table tr:not(
 main.sidebyside #plugins-table th:nth-child(n+7), main.sidebyside #plugins-table td:nth-child(n+7) { display: none; }
 tbody tr.linked td { background: rgba(185, 163, 255, .16); }
 main.sidebyside .modinfo { max-height: 34%; overflow: auto; }
+#tabs .tabtool { margin: 4px 4px 4px auto; padding: 2px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); font-size: 13px; }
+#tabs .tabtool:hover, #tabs .tabtool:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+#tabs .tabtool[aria-pressed=true] { border-color: var(--accent); }
+main.sidebyside.swapped { flex-direction: row-reverse; }

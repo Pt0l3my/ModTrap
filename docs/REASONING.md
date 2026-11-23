@@ -3355,4 +3355,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked in a browser on a stand-in modlist: the line dragged and its place kept across a re-reading and a change
   of tab, the double-click, a tick on the left and a drag on the right, Ctrl+Z, the marks across the sides, and the
   plain tabs whole again afterwards.
+- **Later (2026-11-23).** "Swap sides" turns the row of the two sections round and nothing else; the share that is
+  kept is the mods' side's, so that dragging the line and the arrow keys mean the same on either arrangement. The
+  button first stayed hidden: it was set before the tab's name was, and the browser check showed it.
 

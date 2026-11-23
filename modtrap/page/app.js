@@ -1352,7 +1352,7 @@ const STATUS_WORDS = { active: "holds the modlist", waiting: "waiting, locked", 
 
 function currentUi() {
   return {
-    tab: state.tab || "mods", split: state.splitAt || 50, picked: [...state.picked], order: $("mods-order").value,
+    tab: state.tab || "mods", split: state.splitAt || 50, swap: !!state.splitSwap, picked: [...state.picked], order: $("mods-order").value,
     search: $("mods-search").value, fEnabled: $("f-enabled").checked, fPlugins: $("f-plugins").checked, fDeps: $("f-deps").checked,
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
@@ -1379,6 +1379,7 @@ function applyUi(ui) {
   state.applying = true;
   try {
     state.splitAt = Number.isFinite(ui.split) ? Math.max(15, Math.min(85, ui.split)) : 50;
+    state.splitSwap = !!ui.swap;
     $("mods-order").value = Object.keys(MOD_ORDERS).includes(ui.order) ? ui.order : "mo2";
     $("mods-search").value = ui.search || "";
     $("f-enabled").checked = !!ui.fEnabled; $("f-plugins").checked = !!ui.fPlugins; $("f-deps").checked = !!ui.fDeps;
@@ -1417,7 +1418,7 @@ function applyUi(ui) {
     $("group-count").classList.toggle("on", state.picked.size > 0);
     $("plan").hidden = true;
     renderSelection();
-    const tabs = [...document.querySelectorAll("#tabs button")].map((b) => b.dataset.tab);
+    const tabs = [...document.querySelectorAll("#tabs button[data-tab]")].map((b) => b.dataset.tab);
     showTab(tabs.includes(ui.tab) ? ui.tab : "mods");
     state.plugin = "";
     if (ui.plugin) {
@@ -3044,7 +3045,7 @@ $("split-bar").addEventListener("mousedown", (ev) => {
 document.addEventListener("mousemove", (ev) => {
   if (!state.splitting) return;
   const r = $("split-bar").parentNode.getBoundingClientRect();
-  if (r.width > 0) splitSet(100 * (ev.clientX - r.left) / r.width);
+  if (r.width > 0) { const fromLeft = 100 * (ev.clientX - r.left) / r.width; splitSet(state.splitSwap ? 100 - fromLeft : fromLeft); }      // the share kept is the mods' side's
 });
 document.addEventListener("mouseup", () => {
   if (!state.splitting) return;
@@ -3053,10 +3054,21 @@ document.addEventListener("mouseup", () => {
   saveUi();
 });
 $("split-bar").addEventListener("dblclick", () => { splitSet(50); saveUi(); });
+// "Swap sides": the plugins to the left and the mods to the right, or back. Each list keeps the room it had, so the
+// line moves to the mirrored place. Kept with the session, as the line's place is.
+function swapSet(on) {
+  state.splitSwap = !!on;
+  const b = $("split-swap"), split = state.tab === "split";
+  b.hidden = !split;
+  b.setAttribute("aria-pressed", state.splitSwap ? "true" : "false");
+  b.title = "Swaps the two sides of the split view. Now: " + (state.splitSwap ? "plugins on the left, mods on the right" : "mods on the left, plugins on the right") + ".";
+  $("split-bar").parentNode.classList.toggle("swapped", split && state.splitSwap);
+}
+$("split-swap").addEventListener("click", () => { swapSet(!state.splitSwap); saveUi(); });
 $("split-bar").addEventListener("keydown", (ev) => {
   if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
   ev.preventDefault();
-  splitSet((state.splitAt || 50) + (ev.key === "ArrowLeft" ? -2 : 2));
+  splitSet((state.splitAt || 50) + ((ev.key === "ArrowLeft") !== !!state.splitSwap ? -2 : 2));        // the line goes where the arrow points
   saveUi();
 });
 
@@ -4609,7 +4621,7 @@ function showTab(name) {
   state.groupTab = state.groupTab || {};
   state.groupTab[group] = name;
   let shown = 0;
-  document.querySelectorAll("#tabs button").forEach((b) => {
+  document.querySelectorAll("#tabs button[data-tab]").forEach((b) => {
     b.classList.toggle("on", b.dataset.tab === name);
     b.hidden = b.dataset.group !== group;
     if (!b.hidden) shown++;
@@ -4623,6 +4635,7 @@ function showTab(name) {
   $("split-bar").hidden = !split;
   $("split-bar").parentNode.classList.toggle("sidebyside", split);
   state.tab = name;
+  swapSet(!!state.splitSwap);
   splitSet(state.splitAt || 50);
   if (!split) for (const r of document.querySelectorAll("tr.linked")) r.classList.remove("linked");
   else { linkPlugins(state.focus || "", false); linkMod(state.plugin || "", false); }
@@ -4936,7 +4949,7 @@ $("rescan").addEventListener("click", async () => {
   try { state.gen = (state.gen || 0) + 1; await api("/api/rescan", {}); state.status = "reading"; } catch (e) { problem(e.message); }
   tick();
 });
-document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+document.querySelectorAll("#tabs button[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 const GROUP_FIRST = { modlist: "mods", demaster: "pick", add: "add", update: "updates", downloads: "downloads", record: "history", settings: "settings" };
 document.querySelectorAll("#groups button[data-group]").forEach((b) => b.addEventListener("click", () =>
   showTab((state.groupTab || {})[b.dataset.group] || GROUP_FIRST[b.dataset.group])));
