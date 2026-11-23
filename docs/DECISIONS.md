@@ -84,6 +84,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   plugin is placed, answered).
   MT71 (with MO2 open nothing that changes its lists can be begun; the page stays while the modlist is read anew;
   each separator heads the plugins' list once).
+  MT72 (the loading symbols move on every PC).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1874,3 +1875,15 @@ now."
 **Open.** The groups in the owner's MO2 are not the mods' separators: they have names of their own and are runs of
 the load order with a plugin outside them. MO2's own source has no such groups, so they come from somewhere
 ModTrap has not read. A session's pack now lists the files of the profile's folder, to find where.
+
+## MT72
+
+**The loading symbols move** · *2026-11-23 · The owner's report*
+
+**Owner's words.** "by the way, these loading symbols with circle and purple colored section are static and never
+animate, you have this symbol at many places, find them all and make them animate properly"
+
+**Settled** (WHY§138; the owner may overrule any of it): every symbol that says ModTrap is at work moves on every
+PC: the turning circle wherever it stands, the mark of a step that is going, the dot of a live run, and the bar of
+a modlist read anew. They stood still where Windows is set to show no animations, because the page switched them
+off there. What is only for show (a row that flashes when it is gone to) still stands still on such a PC.

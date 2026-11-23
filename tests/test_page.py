@@ -280,5 +280,14 @@ class PageTests(unittest.TestCase):
         self.assertIn("let group = byName.get(gname);", self.js)
         self.assertNotIn('" #" + n', self.js)
 
+    def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):
+        """MT72: a spinner that stands still reads as stuck. Only what is for show stands still."""
+        still = " ".join(re.findall(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\}\s*\}", self.css, re.S))
+        for moving in (".spinner", ".live-dot", ".t-going", "#refresh-bar"):
+            self.assertNotIn(moving, still)
+        self.assertIn("tbody tr.flash td", still)
+        self.assertRegex(self.css, r"\.spinner \{[^}]*animation: spin \.9s linear infinite")
+        self.assertIn("@keyframes spin { to { transform: rotate(360deg); } }", self.css)
+
 if __name__ == "__main__":
     unittest.main()
