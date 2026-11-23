@@ -587,3 +587,25 @@ files, one with 55), by a session that can reach it.
   what §30 left not known.
 - **FACT (compared with §30's answers).** The short code is the file's `sqid`, which the public service gives.
 - **FACT (same session file).** The saved file's size was the service's `sizeInBytes`, to the byte.
+
+## 32. The picture a mod's page opens with (2026-11-23)
+
+Asked of the live services on 2026-11-23, without a key, by a session that can reach them, for one mod of the game
+ModTrap is for and one public repository.
+
+- **FACT (asked).** Nexus's public service (§29) answers `mod(modId: "<number>", gameId: "<number>")`, both
+  numbers given as texts, with these picture fields among others: `pictureUrl`, `thumbnailUrl`,
+  `thumbnailLargeUrl`, `thumbnailBlurredUrl`, `thumbnailLargeBlurredUrl`. The game's number comes from
+  `game(domainName: "<the game's name in addresses>") { id }`.
+- **FACT (asked).** `pictureUrl` and `thumbnailUrl` are addresses at `staticdelivery.nexusmods.com`; the other
+  three at `images.nexusmods.com`.
+- **FACT (fetched).** Those addresses answer a plain request without a key or a sign-in. The bytes are a WebP
+  picture although the address ends in `.png`: the kind has to be told from the first bytes, not from the name.
+- **FACT (fetched).** `thumbnailLargeUrl` gave a picture 622 pixels wide, of a few kilobytes: enough for a box
+  some 200 pixels wide on a dense screen, and far smaller than `pictureUrl`.
+- **FACT (fetched).** `opengraph.githubassets.com/1/<owner>/<repository>` answers, without a key, with a PNG of
+  1200 by 600 pixels: the preview picture GitHub draws for a repository. A second request a second later was
+  answered 429 (too many requests): it must be asked rarely and its answer kept.
+- **Not known.** How many requests an hour either service allows for pictures; whether Nexus gives a mod marked
+  adult its plain picture to a visitor who is not signed in, as it did for the one asked about, which is not so
+  marked.

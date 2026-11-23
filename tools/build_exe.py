@@ -104,8 +104,10 @@ Unpack this whole folder somewhere of your own (not inside the game's folder, no
 
   ModTrap.exe
 
-Your browser opens ModTrap's page. ModTrap's console window starts minimised, in the taskbar: what it writes there
-is on the page too (History, then Log). Quit on the page, or closing that window, ends ModTrap.
+Your browser opens ModTrap's page, and that is all there is to see: ModTrap has no window of its own. What its
+program writes is on the page (History, then Log). "Quit" at the top of the page ends ModTrap. Closing the browser
+tab does not: start ModTrap.exe again and the page is back, as you left it. To see the program's console window
+after all, minimised in the taskbar: Settings, "Show ModTrap's console window".
 
 %(python)s
 To update ModTrap later: press the version at the top of its page and give it the newer release file (this kind of
@@ -118,7 +120,7 @@ in the archive's name and in the programs' Properties.
 Windows may warn about a program it does not know, the first time: "More info", then "Run anyway". Or, before
 unpacking: right-click the zip file, Properties, tick "Unblock".
 
-Should ModTrap.exe not start, ModTrap.cmd does the same thing.
+Should ModTrap.exe not start, ModTrap.cmd does the same thing, in a window that shows what it says.
 
 To give ModTrap further switches, start it from a command prompt: ModTrap.exe --help
 

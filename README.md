@@ -41,7 +41,14 @@ when it overwrites what other plugins change; a press on the symbol tells it in 
 
 A split view shows the mods and the plugins side by side, parted by a line that is dragged sideways. In a search
 box, a star and a number (`*138`) goes to the entry with that priority. Every table's columns are set in width by
-the lines between their headings.
+the lines between them, and moved to another place by their headings.
+
+A click on a mod's name opens its web: the mod in the middle of every mod it has to do with (what it needs, what
+needs it, patches for it, what it overwrites and what overwrites it, records two plugins both change), each in the
+colour of its kind, with a link to the mod's page and, from Nexus or GitHub, the one picture that page opens with.
+
+ModTrap shows no window but its page in the browser: its program's console is hidden, and what it writes is on the
+page's Log.
 
 ModTrap updates itself: the version at the top of the page is a button, and a release file dropped in its box is
 checked, put in place (the version in use is kept aside), tried, and started.

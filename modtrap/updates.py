@@ -47,6 +47,11 @@ HOSTS = ("api.nexusmods.com", "api.github.com")
 # names in the download address it gives. The owner's key is never sent to any of them.
 DOWNLOAD_SUFFIXES = (".githubusercontent.com", ".nexus-cdn.com", ".nexusmods.com")
 GITHUB_FILE = re.compile(r"^/[^/]+/[^/]+/releases/download/")
+# A mod's one picture, for its pop-up (MT62, TL01§32): from Nexus's two picture hosts and GitHub's preview host, and
+# no others; no key is sent to any of them.
+PICTURE_HOSTS = ("staticdelivery.nexusmods.com", "images.nexusmods.com", "opengraph.githubassets.com")
+PICTURE_MAX = 6 * 1024 * 1024
+PICTURE_KINDS = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"), (b"GIF87a", "image/gif"), (b"GIF89a", "image/gif"))
 DOWNLOAD_MAX = 30 * 1024 ** 3
 HOPS = 6
 ARCHIVE = re.compile(r"\.(zip|7z|rar)$", re.IGNORECASE)
@@ -117,6 +122,32 @@ class Net:
             return status, got, json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return status, got, None
+
+    def picture(self, url: str) -> tuple[bytes, str]:
+        """One picture, as its bytes and its kind ("image/png", "image/jpeg", "image/webp", "image/gif"), read from
+        its first bytes and not from what the host calls it. Only from the picture hosts; nothing is followed
+        elsewhere. Raises Refused, with the reason in words."""
+        try:
+            parts = urllib.parse.urlsplit(url)
+            plain = parts.scheme == "https" and not parts.username and not parts.password and parts.port in (None, 443)
+        except ValueError:
+            plain = False
+        if not plain or (parts.hostname or "").lower() not in PICTURE_HOSTS:
+            raise Refused("the picture's address is not one ModTrap fetches a picture from")
+        req = urllib.request.Request(url, headers={"User-Agent": self.agent, "Accept": "image/webp,image/png,image/jpeg,image/gif"})
+        try:
+            with self._opener.open(req, timeout=TIMEOUT) as r:
+                data = r.read(PICTURE_MAX + 1)
+        except urllib.error.HTTPError as e:
+            raise Refused("the picture's host answered %d" % e.code) from None
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise Refused("the picture's host could not be reached (%s)" % logbook.why(getattr(e, "reason", e) if isinstance(getattr(e, "reason", None), BaseException) else e)) from None
+        if len(data) > PICTURE_MAX:
+            raise Refused("the picture is larger than ModTrap takes")
+        kind = next((k for magic, k in PICTURE_KINDS if data.startswith(magic)), "image/webp" if data[:4] == b"RIFF" and data[8:12] == b"WEBP" else "")
+        if not kind:
+            raise Refused("what the host sent is not a picture")
+        return data, kind
 
     def download(self, url: str, dest: Path, progress=None, stopped=None) -> int:
         """Fetches one file to `dest` (written beside it first, then swapped in). Only from the hosts mod files are
@@ -806,6 +837,40 @@ def get_of(row: dict, v: dict) -> str:
     return ""
 
 
+def picture_address(row: dict, net: Net) -> str:
+    """Where a mod's one picture is (the picture its page opens with), or "" where none is known. For a mod of
+    Nexus, the public service is asked, without any key (TL01§32); for a repository at GitHub it is the preview
+    picture GitHub draws for it. Other sites give none without an account."""
+    if row.get("host") == "github" and re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", row.get("repo") or ""):
+        return "https://opengraph.githubassets.com/1/%s" % row["repo"]
+    if row.get("host") != "nexus" or not row.get("mod_id") or not re.fullmatch(r"[a-z0-9]+", row.get("game") or ""):
+        return ""
+    headers = {"Application-Name": "ModTrap", "Application-Version": net.agent.split("/", 1)[-1]}
+    status, _h, body = net.ask(PUBLIC, '{ game(domainName: "%s") { id } }' % row["game"], headers)
+    game = body.get("data", {}).get("game") if status == 200 and isinstance(body, dict) and isinstance(body.get("data"), dict) else None
+    if not isinstance(game, dict) or not isinstance(game.get("id"), int):
+        return ""
+    status, _h, body = net.ask(PUBLIC, '{ mod(modId: "%d", gameId: "%d") { thumbnailLargeUrl pictureUrl } }' % (row["mod_id"], game["id"]), headers)
+    mod = body.get("data", {}).get("mod") if status == 200 and isinstance(body, dict) and isinstance(body.get("data"), dict) else None
+    if not isinstance(mod, dict):
+        return ""
+    for key in ("thumbnailLargeUrl", "pictureUrl"):
+        url = mod.get(key)
+        if isinstance(url, str) and (urllib.parse.urlsplit(url).hostname or "").lower() in PICTURE_HOSTS:
+            return url
+    return ""
+
+
+def home_of(row: dict) -> str:
+    """The mod's own page as a visitor opens it (its first page, not its files), for the pop-up's link."""
+    if row.get("host") == "nexus" and row.get("mod_id") and row.get("game"):
+        return "https://www.nexusmods.com/%s/mods/%d" % (row["game"], row["mod_id"])
+    if row.get("host") == "github" and row.get("repo"):
+        return "https://github.com/%s" % row["repo"]
+    url = row.get("url", "") if row.get("host") in ("url", "loverslab") else ""
+    return url if url.lower().startswith(("https://", "http://")) else ""
+
+
 def page_of(row: dict) -> str:
     """The mod's own page, for the owner to open."""
     if row["host"] == "nexus":
@@ -815,4 +880,4 @@ def page_of(row: dict) -> str:
     return row.get("url", "") if row["host"] in ("url", "loverslab") else ""
 
 
-__all__ = ["Net", "Refused", "fetch", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]
+__all__ = ["Net", "Refused", "fetch", "home_of", "picture_address", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]

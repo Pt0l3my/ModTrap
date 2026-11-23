@@ -28,7 +28,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from . import logbook, paths, version
+from . import console, logbook, paths, version
 
 log = logbook.get("update")
 TOP = "ModTrap"
@@ -231,12 +231,14 @@ def restart(root: Path, argv: list[str]) -> None:
     """Starts ModTrap again from `root`, with what this one was started with and without a new browser tab: the page
     that is open loads itself anew. The new start takes over from this one."""
     args = [a for a in argv if a != "--no-browser"] + ["--no-browser"]
+    if sys.platform == "win32" and console.SWITCH not in args:
+        args.append(console.SWITCH)                             # the console made below is the new start's own (MT63)
     env = dict(os.environ, PYTHONPATH=str(root / "app"))
     cmd = [sys.executable, "-m", "modtrap", *args]
     if sys.platform == "win32":
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = 7                                      # shown minimised, not taking the keyboard
+        si.wShowWindow = console.HIDE                           # hidden; the new start shows it if the setting says so
         subprocess.Popen(cmd, cwd=str(root), env=env, startupinfo=si, close_fds=True,
                          creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP)
     else:

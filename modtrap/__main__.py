@@ -146,7 +146,18 @@ DEFAULT_PORT = 8737
 def serve(a: argparse.Namespace) -> int:
     from . import api as api_mod, server          # imported here so that `scan` needs neither
 
-    from . import handover, version
+    from . import console, handover, version
+
+    # The console ModTrap writes to is hidden where it is ModTrap's own (MT63): its lines are on the page.
+    mine = console.own(sys.argv[1:])
+    wants = bool((paths.load_settings().get("options") or {}).get("console_window"))
+    if mine:
+        console.show(console.MINIMISED if wants else console.HIDE)
+
+    def leave(code: int) -> int:                  # a start that ends here is read in the window, not lost with it
+        if mine:
+            console.stay()
+        return code
 
     # One ModTrap at a time (WHY§68): one that is still running, of whatever version, saves its session and closes.
     took, was, where = handover.take_over()
@@ -155,16 +166,17 @@ def serve(a: argparse.Namespace) -> int:
               "Let the job end, press Quit there, then start %s again." % (NAME, was or "(an earlier version)", where, NAME))
         if not a.no_browser:
             webbrowser.open(where)
-        return 1
+        return 1                                  # its page is opened; the launcher says the rest
     if took == "quit":
         print("%s %s was still running: it saved its session and closed. This is %s %s."
               % (NAME, was or "(an earlier version)", NAME, VERSION), file=sys.stderr)
     elif took == "stays":
         print("%s %s is still running and did not close. Close its window, then start %s again."
               % (NAME, was or "(an earlier version)", NAME))
-        return 1
+        return leave(1)
     api = api_mod.Api()
     api.argv = list(sys.argv[1:])
+    api.own_console = mine
     app = server.App(api)
     try:
         httpd = server.Server(a.port, app)
@@ -175,7 +187,7 @@ def serve(a: argparse.Namespace) -> int:
             httpd = server.Server(0, app)         # the usual port is taken: any free one
         except OSError as e:
             print("%s could not open a port on this PC: %s" % (NAME, logbook.why(e)))
-            return 2
+            return leave(2)
     url = "http://127.0.0.1:%d/" % httpd.port
     api.port = httpd.port
     log = logbook.get("app")
@@ -203,7 +215,11 @@ def serve(a: argparse.Namespace) -> int:
             api.open(folder, paths.load_settings().get("profile") or None)
     if not a.no_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
-    print("%s %s is running. Leave this window open; press Ctrl+C here to stop it." % (NAME, VERSION), file=sys.stderr)
+    print("%s %s is running. Its page is at %s. Quit on the page, or Ctrl+C here, stops it; closing this window stops it too."
+          % (NAME, VERSION, url), file=sys.stderr)
+    if mine:
+        log.info("ModTrap's console window is %s: what it writes is here, on the Log (Settings: “Show ModTrap's console window”)",
+                 "minimised" if wants else "hidden")
     try:
         httpd.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
@@ -224,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     for p in (ap, v):
         p.add_argument("--port", type=int, default=DEFAULT_PORT, help="the port on 127.0.0.1 (default %(default)s)")
         p.add_argument("--no-browser", action="store_true", help="do not open the browser")
+        p.add_argument("--own-console", action="store_true", help=argparse.SUPPRESS)      # the launcher's: the console is ModTrap's own (MT63)
         p.add_argument("--folder", help="open this modlist folder at start")
         p.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
         p.add_argument("--allow-changes", action="store_true",
@@ -238,7 +255,18 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--profile", help="the profile to read (default: the one MO2 last used)")
     d.add_argument("--mod", action="append", required=True, help="a mod to add, by its name in MO2 (repeat for more)")
     a = ap.parse_args(argv)
-    return scan(a) if a.cmd == "scan" else add(a) if a.cmd == "add" else serve(a)
+    if a.cmd in ("scan", "add"):
+        return scan(a) if a.cmd == "scan" else add(a)
+    try:
+        return serve(a)
+    except Exception:                             # a start that fails is said where it can be read (MT63)
+        import traceback
+
+        from . import console
+        traceback.print_exc()
+        if console.own(sys.argv[1:]):
+            console.stay("\n%s %s could not start: the lines above say why." % (NAME, VERSION))
+        return 3
 
 
 if __name__ == "__main__":

@@ -150,6 +150,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 125 | 2026-11-23 | The split view shows the two sections that exist, side by side, and builds nothing twice | METHOD | #page |
 | 126 | 2026-11-23 | A star-number is a place to go to, not a filter; a found row is brought into view once per number; each search box waits on its own | METHOD | #page |
 | 127 | 2026-11-23 | Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest | METHOD | #page |
+| 128 | 2026-11-23 | Every column has its own width and the table is their sum; a mod's web is one box for each mod, read in two passes; a conflict is told by masters, not by what is inside a record; the picture goes through the server | METHOD | #page #model #updates #safety |
+| 129 | 2026-11-23 | The console is hidden, not done without; only a console of ModTrap's own is hidden | METHOD | #launcher #safety |
 
 ## Entries
 
@@ -3400,4 +3402,90 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked in a browser on stand-in lists, small and of 3,500 mods: a column narrowed and widened, the glow only
   while held, a press on the line not sorting, a press on the heading sorting, the widths after a Rescan, after
   the page was loaded anew, after a search drew the Updater list anew and in the split view, and the double-click.
+- **Later, 2026-11-23.** The owner found the fault in "the last shown column takes the rest": setting the column
+  before it moved the whole side of the list. Reworked in WHY§128.
 
+### 128. Every column has its own width and the table is their sum; a mod's web is one box for each mod, read in two passes; a conflict is told by masters, not by what is inside a record; the picture goes through the server
+
+`2026-11-23` · METHOD · `#page #model #updates #safety` · refs: MT62, MT61, DESIGN§23, DESIGN§24, TL01§32, WHY§127, WHY§121
+
+**Columns.**
+
+- FACT (the owner's screenshot at 0.3.54, and seen here): with one column left to take the rest, a line next to
+  it changed two columns at once, and the browser moved the rest of the row to fit. A table whose every column
+  has a width, and whose own width is their sum, has nothing left to share out: a line then moves one edge.
+- The line that glows down the list while a line is held is one element laid over the page at the column's edge,
+  not a border on thousands of cells: on a list of 3,500 rows a border changed per cell was slow to follow.
+- Columns change places by moving cells, row by row, when a table is drawn: a table has no order of columns apart
+  from its cells. Each cell carries the number of the column it was built as, so sorting, the split view's
+  left-out columns and the kept widths go by that number wherever the column stands.
+- A heading starts to move only after the mouse has gone a few pixels, so a press still sorts.
+- Rejected: laying the tables out as grids, to reorder by style alone. Every table would have had to be rebuilt,
+  and the fixed heading rows and the drop lines of MT56 and MT57 rest on rows being rows.
+
+**The web.**
+
+- Two passes, because the headers are in memory and the files and records are not: the first answer is there
+  with the click, the second in the seconds §21's scanner takes. One request that waited for both would have
+  shown nothing for those seconds.
+- One box for one mod. Rejected: one box for each tie. A patch needs the mod, overwrites a file of it and changes
+  its records: three boxes for one mod, and a line count that grows with them, read worse than one box with its
+  kinds listed when pressed.
+- Sides by meaning, not by a layout that arranges itself. Rejected: a force-laid graph. It puts boxes somewhere
+  different at every opening, needs a library or a good deal of code of our own, and says nothing by position.
+  Left and right for what a mod stands on and what stands on it, above and below for who wins, can be read
+  without the colours.
+- LIKELY: on the owner's list a framework has hundreds of mods that need it. A side therefore shows a fixed
+  number of boxes, the weightiest first, and lists the rest; the kinds can be switched off to give the others the
+  room.
+- A patch is told by two signs together (the whole mod depends on this one; its name says patch, fix, tweak or
+  the like). FACT (the stand-in list): by masters alone, a mod built on two others and a patch between them look
+  the same. Told by name alone, any mod with "fix" in its name would be a patch for everything it needs.
+- A conflict is told by masters: two plugins change the same record, neither names the other as a master, and no
+  active plugin names both. That is what can be read from headers in the time a pop-up may take. It is not
+  xEdit's conflict: xEdit compares what is inside the records. The box says which of the two it is.
+  SPECULATION: on a large list most pairs flagged this way are harmless, because the later plugin was made from
+  the earlier one's values without naming it; the count is a list of places to look, not of faults.
+- The drawing is the page's own: boxes are buttons laid over lines drawn as SVG paths. The SVG namespace is taken
+  from the browser, so the page's source still holds no outside address (the page test's rule).
+
+**The picture.**
+
+- FACT (TL01§32): Nexus's public service names a mod's preview picture without a key, and the picture hosts
+  serve it without one; GitHub draws one for any repository.
+- The page may load nothing from outside (DESIGN§2), and that rule is worth more than a picture. So the server
+  fetches it and the page gets it as data: the content policy is unchanged.
+- Only from the three hosts TL01§32 names, only https, only a file whose first bytes are a picture's, with a size
+  limit; the owner's Nexus key is never sent there (`Net.picture` sends no key at all).
+- Kept a month in ModTrap's own folder: the sites are asked once per mod, and only for a mod whose web is opened.
+  Never for the whole list: 3,500 requests for pictures nobody looks at.
+- LoversLab and other sites: no picture. Theirs need a signed-in visitor, and ModTrap signs in nowhere.
+
+**Checked** in a browser on an invented list with one busy mod (needs, dependants, patches, a tool's output,
+files overwritten both ways, conflicts, settled conflicts): the kinds and their counts, the boxes by side, the
+"+ N more" lists, a kind switched off and on, a box's details, a mod put in the middle and back, the link and the
+picture, Esc. **Not checked:** the picture against the live sites from ModTrap itself (this session cannot reach
+them; the addresses were read by a session that can), and the time the second pass takes on the owner's list.
+
+### 129. The console is hidden, not done without; only a console of ModTrap's own is hidden
+
+`2026-11-23` · METHOD · `#launcher #safety` · refs: MT63, MT64, MT51, MT22, DESIGN§24, WHY§120, WHY§124
+
+- FACT (`modtrap/logbook.py`): every line the console shows is also kept for the page's Log. Nothing reads from
+  the console, and no feature waits on it. The owner's "do we need a terminal": no.
+- Rejected: starting Python with no console at all. ModTrap starts console programs (7-Zip, Windows' tar, its
+  own helper for pressing a tool's button); a console program started by one that has no console gets a new
+  window of its own. A hidden console is inherited instead, and nothing flashes up. It also leaves every print
+  in the program working as it does.
+- The launcher starts the console hidden, and ModTrap hides it again itself: LIKELY needed where Windows hands
+  new consoles to its Terminal program, which may not take "hidden" from whoever starts it. SPECULATION: on such
+  a PC the window may show minimised instead of not at all; not tried here.
+- Whose console: the launcher says "this console is yours" with a switch; and a ModTrap that is alone in its
+  console owns it too, which covers the start after a self-update made by a version that did not know the switch.
+  A console with a command prompt in it has two programs, and is never hidden: hiding the owner's own window
+  would be a fault of a worse kind than a window too many.
+- A start that fails would vanish with a hidden window: it is shown instead and waits for a key.
+- With no window, a closed tab leaves nothing to see of a ModTrap that still runs. It is harmless (the next start
+  takes over, WHY§68), and whether it should end itself is the owner's to say: MT64.
+- **Not checked:** any of it on Windows. The launcher is built here and its source read by a test; what a hidden
+  console does on the owner's PC is for the owner's first start to show.

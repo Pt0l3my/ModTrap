@@ -771,3 +771,136 @@ tried, and ModTrap starts again and takes over (§17). ModTrap run from its sour
 parted by a line the owner drags; nothing is built twice (WHY§125). A mod looked at marks its plugins on the other
 side, a plugin its mod.
 
+
+## 23. One mod and its web (MT62)
+
+A click on a mod's name, on the mods' list, opens a box that shows the mod in the middle of every mod it has to do
+with. The name glows under the mouse; the rest of the row still only shows the mod's card. The same box opens from
+the mod's menu ("Show its web…") and from its card ("Its web…"). ModTrap only reads for it.
+
+### 23.1 What is read, and in which order
+
+Two passes (`modweb`), because the second takes seconds on a large modlist and the first none:
+
+- **What the plugins' headers say** (`modweb.near`), there at once: the mods whose plugins this mod's plugins name
+  as masters; the mods whose plugins name this mod's; of those, the patches made for it and the outputs of the
+  modlist's tools; and masters no enabled mod has.
+- **What the files and the records say** (`modweb.far`, on §21's scanner): the mods whose files this mod overwrites
+  and the mods that overwrite its files, by kind of file and with examples; and the plugins that change the same
+  records as this mod's plugins, with the kinds of record. Bounded in time as the scanner is; a look cut short says
+  so in the box.
+
+The box opens on the first pass and draws itself anew when the second is there. Both are kept by the page for the
+modlist as it stands, so a mod opened again is there at once; any change to the lists forgets them.
+
+### 23.2 The kinds of tie, and their colours
+
+Ten kinds. A box has the colour of its kind, a second line that names the kind in words (colour alone is never the
+only sign) and how much of it there is.
+
+| Kind | Colour | What it says |
+|---|---|---|
+| It needs | blue | a plugin of this mod names one of that mod's plugins as a master |
+| Needs it | teal | a plugin of that mod names one of this mod's as a master |
+| A patch for it | violet | every plugin of that mod needs this one, and the mod or a plugin of it is named a patch, a fix, a tweak, an add-on or the like |
+| A tool's output | sand | that mod is where a tool of the modlist writes (§13), and a plugin in it has this mod's among its masters |
+| Overwrites its files | orange | that mod has files of the same name and the higher priority |
+| Files it overwrites | green | this mod has files of the same name and the higher priority |
+| Conflict | red | plugins of both change the same records, neither is the other's master, and no active plugin has both as masters |
+| Conflict, settled | yellow | as a conflict, but an active third plugin has both as masters: a patch that can carry both changes |
+| Changes its records | pale orange | a plugin that knows this mod (one is the other's master) changes records this mod changes, and loads later |
+| Records it changes | pale green | the same, with this mod's plugin the later one |
+
+**What a patch is** cannot be read from masters alone: a mod with two masters may be a patch between them or a mod
+built on both. So a patch is told by both signs together, the whole mod depending on this one and its name saying
+so; anything else that needs the mod is "Needs it", with the other mods it needs named beside it.
+
+**What a conflict is, and is not.** The game takes a record whole from the plugin that loads last. Two plugins that
+change the same record, with neither made in view of the other, therefore lose the earlier one's change: that is
+the conflict. Where one plugin has the other as a master, its change over the other's is what it was made for, and
+is shown as such, not as a conflict. ModTrap reads which records a plugin changes (their headers), not what is
+changed inside them: whether anything that matters is lost, and whether the third plugin of a settled conflict
+does carry both changes, is for xEdit to show, and the box says so.
+
+### 23.3 The picture
+
+The mod stands in the middle. Around it, by what the tie means:
+
+- **left, "It needs":** the mods it stands on;
+- **right, "Built on it":** the mods that need it, the patches for it, the tools' outputs;
+- **above, "Win over it":** the mods that overwrite its files or whose changes to its records the game takes;
+- **below, "It wins over":** the mods whose files it overwrites or over whose changes its own win.
+
+A conflict stands above when the other mod's change wins, below when this mod's does.
+
+**One box for one mod**, however many things tie the two. The weightiest kind names the box, colours it and gives
+it its side, in this order: conflict, patch, tool's output, it needs, needs it, settled conflict, files overwritten
+either way, records either way. The further kinds show as small dots of their colours in the box's corner, and in
+full when the box is pressed.
+
+**A line** joins each box to the middle, in the box's colour, the thicker the more there is of the tie. Its arrow
+points at the mod that is needed, or the mod that is overwritten; where each of two mods wins somewhere, at both.
+
+**Room.** Nine boxes in a column, eight above and eight below. A side with more mods ends in a box "+ N more",
+which lists the rest beside the picture; within a side the weightiest kinds come first, then the ties with the
+most in them. A disabled mod's box has a broken border. The picture keeps its shape and scrolls sideways in a
+narrow window, never squeezing the boxes into each other.
+
+### 23.4 Beside the picture
+
+- **The kinds**, each with its colour and its count, as buttons: a press takes a kind out of the picture, or puts
+  it back, and the room it leaves goes to the others. While the second pass runs, its kinds show "…".
+- **The overview**, when no box is chosen: how many mods have to do with this one, masters nobody has, the largest
+  conflicts as rows to press, how much was looked through, and whether the look was cut short.
+- **A box pressed:** everything between the two mods, kind by kind: which plugin needs which; which kinds of files
+  are overwritten, how many of each, with examples; which plugin wins over which in how many records, by kind of
+  record; for a settled conflict, the plugin that has both as masters. From there: "Put it in the middle" (as a
+  double-click on the box), "Show it in the list".
+- **"Put it in the middle"** draws that mod's own web; "Back to …" returns, step by step.
+
+Esc leaves a chosen box, then closes the box; the keyboard stays inside it while it is open.
+
+### 23.5 Where the mod came from, and its one picture
+
+Under the mod's name stands its page: "From Nexus", "From GitHub", "From LoversLab", or the host of any other
+address the modlist or the owner gave for it (§20), as a link that opens a new tab with no tie to ModTrap's tab.
+A mod without one offers "Add a source link…".
+
+Where the page is at Nexus or a GitHub repository, the box shows **the one picture that page opens with**
+(`updates.picture_address`, TL01§32): for Nexus the mod's own preview picture, asked of its public service without
+a key; for GitHub the preview picture GitHub draws for the repository. Other sites give none without an account,
+and ModTrap never signs in anywhere.
+
+- The page asks ModTrap's server for it; the server fetches it and hands it over as data. The page itself still
+  loads nothing from outside (§2's content policy stands unchanged).
+- Only from the three hosts those two sites serve pictures from, only over https, only a file that is a picture by
+  its first bytes, and no larger than a few megabytes. No key is sent.
+- Kept in ModTrap's own folder for a month, so each is fetched once; a site that had none is asked again after a
+  day.
+- Fetched only when a mod's web is opened, one mod at a time: never for the whole list.
+- The setting "Show a mod's picture in its web" switches it off.
+
+### 23.6 Limits
+
+- The game's own files have no web: everything is built on them.
+- Record conflicts are read for an enabled mod with plugins; files for any mod.
+- On a mod with hundreds of ties the picture shows the weightiest and lists the rest; nothing is left out of the
+  lists but lines beyond the first dozen of one tie, which are counted.
+
+## 24. Tables' columns, and no window but the browser (MT61 to MT63)
+
+**Columns (MT61, MT62).** Every table with a heading row has a line at the right edge of every heading, the last
+one's included, and the same thin lines run down between the columns of its rows. A line held and moved sets the
+width of the column to its left and nothing else: the columns to its right move with it and keep their widths, the
+table growing or shrinking by as much, and the list scrolls sideways when the columns are wider than their pane.
+While a line is held it glows from the heading to the foot of the list. A heading held and moved sideways moves
+its whole column to another place; the leading columns of a table stay where they are (the ticks, the priority or
+position, and the name). Widths and order are kept with the session by the table's kind; a double-click on a line
+puts both back.
+
+**The console window (MT63).** ModTrap's program writes to a console, and every line of it is on the page (History,
+Log). Nothing needs the window, so the launcher starts it hidden and the browser is all there is to see. The
+console itself stays, hidden: the console programs ModTrap starts write to it and would each open a window without
+it. `console` hides only a console that is ModTrap's own (the launcher says so, or ModTrap is alone in it), shows
+it minimised where the setting says so, and shows it whole, waiting for a key, when a start fails. Quit on the page
+ends ModTrap; a closed tab does not, and starting ModTrap again brings its page back (§17).

@@ -276,6 +276,8 @@ const SETTING_TEXT = [
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
   ["install_on_drop", "Install a dropped mod by itself", "Off: a mod's archive dropped on the Installer tool is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it. On: it is installed as soon as it is read, with no press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing."],
   ["scan_on_enable", "Scan a mod when it is enabled on the Modlist page", "On: when you tick a mod with plugins on, ModTrap then looks through the load order for what the mod's plugins overwrite and what overwrites them, and tells you in a note at the bottom of the page. It only reads. Off: the scan runs when you ask for it, from the mod's right-click menu or its card."],
+  ["console_window", "Show ModTrap's console window", "ModTrap's program writes what it does to a console window. Every line of it is on this page too (History, then Log), and nothing ModTrap does needs the window, so it is hidden: the browser is all you see. On: the window is shown, minimised, in the taskbar. Either way “Quit” at the top ends ModTrap, and closing this tab does not: start ModTrap again and its page is back. A start that fails shows the window, with what went wrong. Windows only, and only for a ModTrap started by ModTrap.exe: one started from a command prompt of yours leaves that window alone."],
+  ["mod_pictures", "Show a mod's picture in its web", "A click on a mod's name opens its web. On: where the mod's page at Nexus or its GitHub repository is known, ModTrap fetches the one picture that page opens with, from the site, and shows it there; it is kept in ModTrap's own folder for a month, so it is fetched once. Only the picture is asked for, and no key is sent. Off: no picture is fetched."],
   ["manual_placement", "Always place a new mod by hand", "Off: “Install mod” puts a new mod last (before what the modlist's tools made) with one press, and tells what it overwrites there. On: “Install mod” takes you to the Mods tab instead, where you click between two mods to choose its place; ModTrap shows what the mod overwrites at that place and installs it there on your OK. An update always takes the older version's place."],
   ["stay_on_tab", "Stay on ModTrap's tab when a site's page is opened", "A browser always puts a new tab in front, and a page cannot change that. On: ModTrap's program takes the browser straight back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when the window in front is your browser's; the site's page stays open in its tab behind. Off: you stay on the site's page. Windows only."],
   ["downloads_move", "Move a mod's download from the browser's folder into ModTrap's downloads folder", "A file you download for an update in your browser lands in the browser's Downloads folder. On: ModTrap moves it into its own downloads folder (see the Downloads tab), where it is kept with where it came from and found again instead of being downloaded twice. Off: ModTrap copies it there and leaves yours where it is. A file in MO2's own downloads folder is always used from there and never moved."],
@@ -469,6 +471,7 @@ async function modMenu(ev, mod) {
     ...(onMods() && m && m.kind === "mod" ? [null,
       { text: m.enabled ? "Disable it" : "Enable it", off: !state.changes || !m.listed, note: state.changes ? "As its tick does: the mod's line in MO2's list, and its plugins by MO2's own rule" : NO_CHANGES, run: () => listSet([mod], !m.enabled) },
       { text: "Move to priority…", off: !state.changes || !m.listed, note: state.changes ? "For a place far away; nearby, drag the row" : NO_CHANGES, run: () => moveToPriority(mod) },
+      { text: "Show its web…", note: "The mod in the middle of every mod it has to do with: what it needs, what needs it, patches, what it overwrites and what overwrites it, conflicts. As a click on its name does.", run: () => webOpen(mod) },
       { text: "Scan what it overwrites", note: "Whether its plugins stand safely in the load order, the records and files it overwrites, and what overwrites its own. It only reads.", run: () => scanMod(mod, true) },
       { text: "Add separator below…", off: !state.changes, note: state.changes ? "A separator of MO2's list, right below this mod" : NO_CHANGES, run: () => addSeparator(mod) }] : []),
     null,
@@ -866,7 +869,7 @@ const d = state.updates || {};
 // list comes.
 function sortHeads(table, keys, sort, onSort) {
   [...table.tHead.rows[0].cells].forEach((th, i) => {
-    const key = keys[i];
+    const key = keys[th.dataset.c !== undefined ? Number(th.dataset.c) : i];        // a column that was moved is still itself (MT62)
     if (!key) return;
     th.classList.add("sortable");
     th.tabIndex = 0;
@@ -1269,6 +1272,7 @@ function renderUpdates(listOnly) {
     el("th", { class: "c-get", title: "Get the newer file: opens the mod's page for it", text: "" }), el("th", { text: "What is known" }))), body);
   table.addEventListener("contextmenu", (ev) => { const tr = ev.target.closest("tr[data-mod]"); if (tr) modMenu(ev, tr.dataset.mod); });
   sortHeads(table, ["priority", "mod", "from", "version", null, "update", null, null], sort, (key) => { state.upSort = nextSort(sort, key); renderUpdates(true); });
+  colSetup(table);                                          // its kept widths and order, before it is shown
   const how = sort.key === "priority" ? (sort.desc ? "highest priority first, under their separators" : "in the modlist's own order: lowest priority first, under their separators")
     : "sorted by " + { mod: "name", from: "where they come from", version: "installed version", update: "update state" }[sort.key] + (sort.desc ? ", descending" : ", ascending") + "; click “Priority” for the modlist's own order";
   box.replaceChildren(el("div", { class: "card" }, ...bar,
@@ -2181,10 +2185,13 @@ function modRow(m) {
     title: canSet ? (m.enabled ? "Enabled. Untick to disable the mod; its plugins are then switched off" : "Disabled. Tick to enable the mod; its plugins become active, placed by MO2's own rule")
       : m.kind !== "mod" ? "Always on: MO2 does not manage this entry" : !m.listed ? "Not in modlist.txt yet: open MO2 once" : NO_CHANGES });
   on.addEventListener("change", () => listSet([m.name], on.checked, on));
-  const name = el("td", { class: "modname" }, m.name);
+  // The mod's name is a button of its own (MT62): it opens the mod's web. The rest of the row only shows the mod.
+  const title = el("span", { class: "modtitle", role: "button", tabIndex: 0, text: m.kind === "overwrite" ? "Overwrite" : m.name, title: "Show this mod and every mod it has to do with: what it needs, what needs it, what it overwrites and what overwrites it" });
+  title.addEventListener("click", (ev) => { if (state.placing) return; ev.stopPropagation(); webOpen(m.name); });
+  title.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); webOpen(m.name); } });
+  const name = el("td", { class: "modname" }, title);
   if (m.kind === "foreign") name.append(el("span", { class: "tag", title: "A DLC or Creation Club item MO2 lists but does not manage", text: "not managed by MO2" }));
   if (m.kind === "game") name.replaceChildren("The game's own Data folder");
-  if (m.kind === "overwrite") name.replaceChildren("Overwrite");
   if (!m.enabled) name.append(el("span", { class: "tag", text: "disabled" }));
   if (!m.listed) name.append(el("span", { class: "tag warn", text: "not in modlist.txt" }));
   if (m.files > m.plugins.length && m.enabled) name.append(el("span", { class: "tag", title: "Another mod of higher priority provides a plugin of the same name", text: (m.files - m.plugins.length) + " plugin file(s) overridden" }));
@@ -2235,6 +2242,7 @@ function renderMods() {
     g.mods.forEach(modRow);
   }
   layoutMods();
+  colSetup($("mods-table"));
 }
 
 function layoutMods() {
@@ -2388,6 +2396,8 @@ function paintFocus() {
   only.addEventListener("change", () => { state.onlyRelated = only.checked; filterMods(); });
   const close = el("button", { type: "button", text: "Close" });
   close.addEventListener("click", () => focusMod(f.name));
+  const webBtn = el("button", { type: "button", text: "Its web…", title: "The mod in the middle of every mod it has to do with, as a click on its name shows" });
+  webBtn.addEventListener("click", () => webOpen(f.name));
   const nb = f.needed_by || [], nd = f.needs || [];
   box.replaceChildren(...[
     el("div", { class: "card-head" }, el("h2", { text: f.kind === "game" ? "The game's own Data folder" : f.name }),
@@ -2401,7 +2411,7 @@ function paintFocus() {
       : el("span", { class: "dim", text: "No other mod's plugin needs this mod: it can simply be disabled in MO2." })),
     nd.length ? el("p", { class: "rel-line" }, el("span", { class: "swatch needs" }),
       el("span", {}, "This mod needs: ", ...chips(nd), nd.length > 60 ? " …" : "")) : null,
-    el("div", { class: "actions" }, ...(listMode ? [setBtn, scanBtn] : [tick]), el("label", { title: "Hide every mod that is not tied to this one" }, only, " Show only this mod and the mods tied to it"), close),
+    el("div", { class: "actions" }, ...(listMode ? [setBtn, scanBtn] : [tick]), f.kind !== "game" ? webBtn : null, el("label", { title: "Hide every mod that is not tied to this one" }, only, " Show only this mod and the mods tied to it"), close),
     listMode ? scanView(f.name) : null].filter(Boolean));
 }
 
@@ -2969,6 +2979,397 @@ document.addEventListener("keydown", (ev) => {
   if (run.state !== "going") dropClose();
 }, true);
 
+// --- one mod and its web (MT62, DESIGN§23) ----------------------------------------------------------------------------
+// A click on a mod's name opens a box with the mod in the middle and, around it, every mod it has to do with: on the
+// left the mods it needs, on the right the mods built on it (those that need it, patches made for it, what a tool
+// made from it), above it the mods that win over it and below it the mods it wins over (files overwritten, records
+// both change). A box has the colour of its kind; a line joins it to the middle, its arrow pointing at the one that
+// is needed or overwritten. The server reads all of it and changes nothing: first what the plugins' headers say,
+// which is there at once, then the files and the records, which takes seconds on a large modlist.
+const WEB_KINDS = {
+  needs: ["It needs", "A plugin of this mod names one of its plugins as a master: without it, this mod's plugin cannot load"],
+  needed: ["Needs it", "One of its plugins names a plugin of this mod as a master"],
+  patch: ["A patch for it", "Every plugin in it needs this mod, and it is named a patch (or a fix, a tweak, an add-on): made for this mod, often to make it work with another"],
+  output: ["A tool's output", "What a tool of the modlist made, with a plugin of this mod among its masters: made anew when the tool runs again"],
+  overwritten: ["Overwrites its files", "It has files of the same name and a higher priority: the game loads its files in place of this mod's"],
+  overwrites: ["Files it overwrites", "This mod has files of the same name and the higher priority: the game loads this mod's files in place of its"],
+  conflict: ["Conflict", "Plugins of both change the same records and neither knows the other (neither is the other's master): the later one's change wins whole, the other's is lost unseen"],
+  settled: ["Conflict, settled", "Plugins of both change the same records without knowing each other, and an active third plugin has both as masters: a patch that can carry both changes"],
+  loses: ["Changes its records", "A plugin made with this mod in view (one is the other's master) changes records this mod changes too, and loads later: its change is the one the game takes, as a patch means it to be"],
+  wins: ["Records it changes", "A plugin of this mod changes records that a mod it knows changes too (one is the other's master), and loads later: this mod's change is the one the game takes"],
+};
+const WEB_LEGEND = ["needs", "needed", "patch", "output", "overwritten", "overwrites", "conflict", "settled", "loses", "wins"];
+const WEB_FIRST = ["conflict", "patch", "output", "needs", "needed", "settled", "overwritten", "overwrites", "loses", "wins"];    // which kind names a box that has several
+const WEB_DEEP = new Set(["overwritten", "overwrites", "conflict", "settled", "loses", "wins"]);
+const WEB_SIDE = { needs: "left", needed: "right", patch: "right", output: "right", overwritten: "top", loses: "top", overwrites: "bottom", wins: "bottom" };
+const WEB_HEAD = { left: "It needs", right: "Built on it", top: "Win over it", bottom: "It wins over" };
+const WEB_CAP = { left: 9, right: 9, top: 8, bottom: 8 };
+const WEB_W = 1000, WEB_H = 640;
+const WEB_MID = { x: 378, y: 280, w: 244, h: 80 };
+const SVG_NS = new DOMParser().parseFromString("<svg></svg>", "text/html").body.firstChild.namespaceURI;
+const svgEl = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); return e; };
+const webCache = new Map();                       // the modlist as it stands + the mod -> { near, deep }
+const webPics = new Map();                        // the mod -> { type, data }, { none } or { going }
+const webKey = (name) => (state.loaded || "") + "\n" + (state.gen || 0) + "\n" + name;
+const webRank = (k) => WEB_FIRST.indexOf(k);
+
+function webClose() {
+  const w = state.web;
+  if (!w) return;
+  state.web = null;
+  w.back.remove();
+  if (w.before && w.before.focus && document.contains(w.before)) w.before.focus();
+}
+
+async function webOpen(name, opts) {
+  const o = opts || {};
+  let w = state.web;
+  if (!w) {
+    const box = el("div", { class: "modal webbox", role: "dialog", "aria-modal": "true", "aria-label": "A mod and the mods it has to do with" });
+    const back = el("div", { class: "modal-back" }, box);
+    back.addEventListener("mousedown", (ev) => { if (ev.target === back) webClose(); });
+    w = state.web = { back, box, trail: [], hidden: new Set(), before: document.activeElement };
+    document.body.append(back);
+  } else if (!o.back && w.name && w.name !== name) w.trail.push(w.name);
+  Object.assign(w, { name, sel: null, more: null, error: "", going: false, data: null });
+  const key = webKey(name);
+  const here = () => state.web === w && w.name === name;
+  let kept = webCache.get(key);
+  if (kept) w.data = kept.deep || kept.near;
+  webRender();
+  try {
+    if (!kept) {
+      const near = await api("/api/mod/web", { mod: name });
+      kept = { near };
+      webCache.set(key, kept);
+      if (webCache.size > 40) webCache.delete(webCache.keys().next().value);
+      if (!here()) return;
+      w.data = near;
+      webRender();
+    }
+    webPicture(w, name);
+    if (!kept.deep) {
+      w.going = true;
+      webRender();
+      kept.deep = await api("/api/mod/web", { mod: name, deep: true });
+      if (!here()) return;
+      w.data = kept.deep;
+    }
+  } catch (e) { if (here()) w.error = e.message; }
+  if (here()) { w.going = false; webRender(); }
+}
+
+// The one picture the mod's page opens with (MT62): asked of the server, which fetches it from the mod's site once
+// and keeps it; shown as it comes, and the box stays as it is where there is none.
+async function webPicture(w, name) {
+  const origin = w.data && w.data.source;
+  if (!origin || !origin.picture || webPics.has(name)) return;
+  webPics.set(name, { going: true });
+  if (state.web === w && w.name === name) webRender();
+  let got;
+  try { got = await api("/api/mod/picture", { mod: name }); } catch (e) { got = { none: e.message }; }
+  webPics.set(name, got);
+  if (state.web === w && w.name === name) webRender();
+}
+
+// The mods around the one in the middle: one box for each, however many things tie the two; the weightiest kind
+// names the box and gives it its side.
+function webNodes(d, hidden) {
+  const by = new Map();
+  for (const x of d.links) {
+    if (hidden.has(x.kind)) continue;
+    let n = by.get(x.mod);
+    if (!n) by.set(x.mod, n = { mod: x.mod, shown: x.shown, priority: x.priority, enabled: x.enabled, links: [] });
+    n.links.push(x);
+  }
+  const sides = { left: [], right: [], top: [], bottom: [] };
+  for (const n of by.values()) {
+    n.links.sort((a, b) => webRank(a.kind) - webRank(b.kind));
+    const p = n.links[0];
+    n.kind = p.kind;
+    n.side = WEB_SIDE[p.kind] || ((p.loses || 0) >= (p.wins || 0) ? "top" : "bottom");
+    sides[n.side].push(n);
+  }
+  for (const list of Object.values(sides)) list.sort((a, b) => webRank(a.kind) - webRank(b.kind) || b.links[0].weight - a.links[0].weight || naturally(a.shown, b.shown));
+  return sides;
+}
+
+// Where each box stands, on a sheet of 1000 by 640: a column on either side, two rows above and two below. A side
+// with more mods than it has room for ends in one box that stands for the rest.
+function webPlace(sides) {
+  const placed = [];
+  for (const side of ["left", "right", "top", "bottom"]) {
+    const all = sides[side], cap = WEB_CAP[side];
+    const items = (all.length > cap ? all.slice(0, cap - 1) : all).map((n) => ({ n }));
+    if (all.length > cap) items.push({ more: all.slice(cap - 1) });
+    items.forEach((it, i) => {
+      it.side = side;
+      it.h = 40;
+      if (side === "left" || side === "right") {
+        it.w = 232;
+        it.x = side === "left" ? 8 : WEB_W - 8 - it.w;
+        it.y = WEB_H / 2 + (i - (items.length - 1) / 2) * 46 - it.h / 2;
+      } else {
+        const row = Math.floor(i / 4), inRow = Math.min(4, items.length - row * 4);
+        it.w = 238;
+        it.x = WEB_W / 2 - (inRow * 248 - 10) / 2 + (i % 4) * 248;
+        it.y = side === "top" ? (row ? 4 : 50) : (row ? WEB_H - 44 : WEB_H - 90);
+      }
+      placed.push(it);
+    });
+  }
+  return placed;
+}
+
+// The line from a box to the middle, bent, and which way its arrow points: at the one that is needed, or the one
+// whose files or changes are overwritten. Both ways where each wins somewhere.
+function webEdge(it) {
+  const m = WEB_MID, cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+  let a, b, bend;
+  if (it.side === "left" || it.side === "right") {
+    a = [it.side === "left" ? it.x + it.w : it.x, cy];
+    b = [it.side === "left" ? m.x : m.x + m.w, WEB_H / 2 + (cy - WEB_H / 2) * 0.13];
+    const mx = (a[0] + b[0]) / 2;
+    bend = [[mx, a[1]], [mx, b[1]]];
+  } else {
+    a = [cx, it.side === "top" ? it.y + it.h : it.y];
+    b = [WEB_W / 2 + (cx - WEB_W / 2) * 0.24, it.side === "top" ? m.y : m.y + m.h];
+    const my = (a[1] + b[1]) / 2;
+    bend = [[a[0], my], [b[0], my]];
+  }
+  const p = it.n ? it.n.links[0] : null;
+  const kind = p ? p.kind : "";
+  const toMid = ["needed", "patch", "output", "overwritten", "loses"].includes(kind) || ((kind === "conflict" || kind === "settled") && (p.loses || 0) >= (p.wins || 0));
+  const both = (kind === "conflict" || kind === "settled") && p.loses > 0 && p.wins > 0;
+  const pts = toMid ? [a, bend[0], bend[1], b] : [b, bend[1], bend[0], a];
+  const f = (q) => q[0].toFixed(1) + " " + q[1].toFixed(1);
+  return { d: "M" + f(pts[0]) + " C" + f(pts[1]) + ", " + f(pts[2]) + ", " + f(pts[3]), both };
+}
+
+// The second line of a box: its kind and how much of it, in few words. The whole of it is in the box's details.
+function webShort(x) {
+  const n = x.weight;
+  const much = { needs: plural(n, "master"), needed: plural(n, "plugin"), output: plural(n, "plugin"), overwritten: plural(n, "file"), overwrites: plural(n, "file"),
+    conflict: plural(n, "record"), settled: plural(n, "record"), loses: plural(n, "record"), wins: plural(n, "record"),
+    patch: x.between && x.between.length ? "with " + x.between[0] + (x.between.length > 1 ? " and more" : "") : plural(n, "plugin") }[x.kind];
+  return WEB_KINDS[x.kind][0] + " · " + much;
+}
+
+function webSelect(w, mod, more) {
+  w.sel = mod || null;
+  w.more = more || null;
+  for (const [name, b] of w.nodes) {
+    b.node.classList.toggle("sel", name === w.sel);
+    b.path.classList.toggle("sel", name === w.sel);
+  }
+  if (w.moreEls) for (const [side, b] of w.moreEls) b.classList.toggle("sel", !!w.more && w.more.side === side);
+  w.side.replaceChildren(...webSide(w));
+}
+
+function webMap(w) {
+  const d = w.data;
+  const map = el("div", { class: "webmap" });
+  const svg = svgEl("svg", { viewBox: "0 0 " + WEB_W + " " + WEB_H, "aria-hidden": "true" });
+  const defs = svgEl("defs");
+  for (const k of WEB_LEGEND) {
+    const mk = svgEl("marker", { id: "web-arrow-" + k, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+    mk.append(svgEl("path", { d: "M0 1 L10 5 L0 9 z", class: "wk-" + k }));
+    defs.append(mk);
+  }
+  svg.append(defs);
+  const put = (node, x, y, wd, h) => {
+    node.style.left = (x / WEB_W * 100) + "%"; node.style.top = (y / WEB_H * 100) + "%";
+    node.style.width = (wd / WEB_W * 100) + "%"; if (h) node.style.height = (h / WEB_H * 100) + "%";
+    return node;
+  };
+  const sides = webNodes(d, w.hidden);
+  const placed = webPlace(sides);
+  w.nodes = new Map();
+  w.moreEls = new Map();
+  const kids = [svg];
+  const hot = (path, on) => { path.classList.toggle("hot", on); map.classList.toggle("hover", on); };
+  for (const it of placed) {
+    const edge = webEdge(it);
+    if (it.more) {
+      const path = svgEl("path", { d: edge.d, class: "webline more" });
+      svg.append(path);
+      const b = put(el("button", { type: "button", class: "webnode more" + (w.more && w.more.side === it.side ? " sel" : ""), title: "The mods of this side that have no room here: listed on the right" },
+        el("span", { class: "wn-name", text: "+ " + it.more.length.toLocaleString("en-GB") + " more" }), el("span", { class: "wn-what", text: "show them as a list" })), it.x, it.y, it.w, it.h);
+      b.dataset.k = "more:" + it.side;
+      b.addEventListener("click", () => webSelect(w, null, { side: it.side, mods: it.more }));
+      w.moreEls.set(it.side, b);
+      kids.push(b);
+      continue;
+    }
+    const n = it.n, p = n.links[0];
+    const path = svgEl("path", { d: edge.d, class: "webline wk-" + n.kind + (w.sel === n.mod ? " sel" : ""), "marker-end": "url(#web-arrow-" + n.kind + ")" });
+    if (edge.both) path.setAttribute("marker-start", "url(#web-arrow-" + n.kind + ")");
+    path.setAttribute("stroke-width", (1.4 + Math.min(2.2, Math.log10(1 + p.weight))).toFixed(1));
+    svg.append(path);
+    const b = put(el("button", { type: "button", class: "webnode wk-" + n.kind + (n.enabled ? "" : " off") + (w.sel === n.mod ? " sel" : ""),
+      title: n.shown + (n.enabled ? "" : " (disabled)") + "\n" + n.links.map((x) => WEB_KINDS[x.kind][0] + ": " + x.text).join("\n") + "\n\nClick for what lies between the two; double-click to put this mod in the middle." },
+      el("span", { class: "wn-name", text: n.shown }),
+      el("span", { class: "wn-what", text: webShort(p) }),
+      n.links.length > 1 ? el("span", { class: "wn-dots" }, ...n.links.slice(1, 6).map((x) => el("i", { class: "wk-" + x.kind }))) : null), it.x, it.y, it.w, it.h);
+    b.dataset.k = "mod:" + n.mod;
+    b.addEventListener("click", () => webSelect(w, n.mod));
+    b.addEventListener("dblclick", () => webOpen(n.mod));
+    b.addEventListener("mouseenter", () => hot(path, true));
+    b.addEventListener("mouseleave", () => hot(path, false));
+    b.addEventListener("focus", () => hot(path, true));
+    b.addEventListener("blur", () => hot(path, false));
+    w.nodes.set(n.mod, { node: b, path });
+    kids.push(b);
+  }
+  for (const side of ["left", "right", "top", "bottom"]) {
+    const mine = placed.filter((it) => it.side === side);
+    if (!mine.length) continue;
+    const total = sides[side].length;
+    const lab = el("span", { class: "weblabel " + side, text: WEB_HEAD[side] + " · " + total.toLocaleString("en-GB") });
+    if (side === "left" || side === "right") put(lab, mine[0].x, mine[0].y - 22, mine[0].w);
+    else put(lab, WEB_MID.x, side === "top" ? 98 : WEB_H - 98 - 18, WEB_MID.w);
+    kids.push(lab);
+  }
+  const me = d.mod;
+  const mid = put(el("div", { class: "webmid" + (me.enabled ? "" : " off") },
+    el("span", { class: "wn-name", text: me.shown, title: me.shown }),
+    el("span", { class: "wn-what", text: (me.priority >= 0 ? "priority " + me.priority + " · " : "") + (me.enabled ? "enabled" : "disabled") + " · " + plural(me.plugins.length, "plugin") })), WEB_MID.x, WEB_MID.y, WEB_MID.w, WEB_MID.h);
+  kids.push(mid);
+  if (!placed.length) kids.push(put(el("span", { class: "weblabel none", text: w.going ? "Nothing in the plugins' headers ties it to another mod. Its files and records are being looked through…"
+    : w.hidden.size ? "Nothing of the kinds that are switched on. Switch a kind on again in the list on the right." : "No other mod has to do with it: it needs none, none needs it, and nothing is overwritten either way." }), 250, 150, 500));
+  map.append(...kids);
+  return map;
+}
+
+function webLinkBlock(x) {
+  return el("div", { class: "weblink-block wk-" + x.kind },
+    el("p", {}, el("b", { class: "wkw", text: WEB_KINDS[x.kind][0], title: WEB_KINDS[x.kind][1] }), " " + x.text),
+    x.lines && x.lines.length ? el("ul", { class: "small" }, ...x.lines.map((t) => el("li", { text: t })), x.more ? el("li", { class: "dim", text: "… and " + plural(x.more, "more line") }) : null) : null,
+    x.settled_by && x.settled_by.length && x.kind === "settled" ? el("p", { class: "small dim", text: "Has both as masters: " + x.settled_by.join(", ") }) : null,
+    x.between && x.between.length ? el("p", { class: "small dim", text: "It also needs: " + x.between.join(", ") }) : null,
+    x.kind === "conflict" ? el("p", { class: "small dim", text: "The game takes a record whole from the plugin that loads last, so what the earlier plugin changed in these records is not in the game, unless the later one happens to hold the same. ModTrap reads which records each plugin changes, not what is changed inside them: look at these in xEdit to see what is lost, and whether a patch is called for." }) : null,
+    x.kind === "settled" ? el("p", { class: "small dim", text: "Whether that plugin does carry both changes, for these very records, is for xEdit to show: ModTrap reads which records each plugin changes, not what is changed inside them." }) : null);
+}
+
+function webSide(w) {
+  const d = w.data;
+  const kids = [];
+  // The kinds and their colours; a press takes a kind out of the picture or puts it back.
+  kids.push(el("div", { class: "weblegend" }, ...WEB_LEGEND.map((k) => {
+    const n = d.counts[k] || 0;
+    const pending = !d.deep && WEB_DEEP.has(k);
+    const b = el("button", { type: "button", class: "wl wk-" + k + (w.hidden.has(k) ? " out" : "") + (n ? "" : " none"), title: WEB_KINDS[k][1] + (n ? "\n\nPress to take this kind out of the picture, or to put it back." : ""), "aria-pressed": w.hidden.has(k) ? "false" : "true" },
+      el("i", {}), el("span", { text: WEB_KINDS[k][0] }), el("b", { text: pending ? "…" : n.toLocaleString("en-GB") }));
+    b.dataset.k = "kind:" + k;
+    b.disabled = !n;
+    b.addEventListener("click", () => { if (w.hidden.has(k)) w.hidden.delete(k); else w.hidden.add(k); webRender(); });
+    return b;
+  })));
+  const go = (label, run, title, cls) => { const b = el("button", { type: "button", text: label, title: title || "", class: cls || "" }); b.addEventListener("click", run); return b; };
+  const pick = (n) => { const b = el("button", { type: "button", class: "webrow wk-" + n.kind, title: n.links.map((x) => WEB_KINDS[x.kind][0] + ": " + x.text).join("\n") },
+    el("i", {}), el("span", { class: "wn-name", text: n.shown }), el("span", { class: "dim", text: WEB_KINDS[n.kind][0] })); b.addEventListener("click", () => webSelect(w, n.mod)); b.addEventListener("dblclick", () => webOpen(n.mod)); return b; };
+  if (w.sel) {
+    const links = d.links.filter((x) => x.mod === w.sel).sort((a, b) => webRank(a.kind) - webRank(b.kind));
+    const first = links[0];
+    const inList = !!findMod(w.sel);
+    kids.push(el("div", { class: "webdetail" },
+      el("h3", {}, first.shown, first.enabled ? null : el("span", { class: "tag", text: "disabled" }), first.priority != null && first.priority >= 0 ? el("span", { class: "tag", text: "priority " + first.priority }) : null),
+      el("p", { class: "dim small", text: "Between it and “" + d.mod.shown + "”:" }),
+      ...links.map(webLinkBlock),
+      el("div", { class: "actions" }, inList && first.mod !== "<game>" ? go("Put it in the middle", () => webOpen(w.sel), "Shows this mod's own web; “Back” brings this one again") : null,
+        inList ? go("Show it in the list", () => { const n = w.sel; webClose(); gotoMod(n); focusMod(n, true); }) : null,
+        go("Back to the overview", () => webSelect(w, null)))));
+  } else if (w.more) {
+    kids.push(el("div", { class: "webdetail" }, el("h3", { text: WEB_HEAD[w.more.side] + ": " + plural(w.more.mods.length, "more mod") }),
+      el("p", { class: "dim small", text: "The mods that have no room in the picture. Press one for what lies between the two." }),
+      el("div", { class: "webrows" }, ...w.more.mods.slice(0, 400).map(pick)), w.more.mods.length > 400 ? el("p", { class: "dim small", text: "… and " + plural(w.more.mods.length - 400, "more mod") }) : null,
+      el("div", { class: "actions" }, go("Back to the overview", () => webSelect(w, null)))));
+  } else {
+    const mods = new Set(d.links.map((x) => x.mod)).size;
+    const said = [];
+    said.push(el("p", { text: mods ? plural(mods, "mod has", "mods have") + " to do with it" + (d.deep ? "." : " by the plugins' headers; its files and records are being looked through.") : d.deep ? "No other mod has to do with it." : "Nothing ties it to another mod by the plugins' headers; its files and records are being looked through." }));
+    for (const t of d.lacks || []) said.push(el("p", { class: "would-needs", text: t }));
+    const worst = d.links.filter((x) => x.kind === "conflict").sort((a, b) => b.weight - a.weight).slice(0, 6);
+    if (worst.length) said.push(el("p", {}, el("b", { class: "wkw wk-conflict", text: "Conflicts: " }), "records that two plugins change without knowing each other. The later plugin's change is the one in the game."),
+      el("div", { class: "webrows" }, ...worst.map((x) => { const b = el("button", { type: "button", class: "webrow wk-conflict" }, el("i", {}), el("span", { class: "wn-name", text: x.shown }), el("span", { class: "dim", text: plural(x.weight, "record") })); b.addEventListener("click", () => webSelect(w, x.mod)); return b; })));
+    if (d.deep && d.files !== undefined) said.push(el("p", { class: "dim small", text: "Looked through: " + plural(d.files, "file") + " of this mod against every other mod's, and the records of its " + plural(d.mod.plugins.length, "plugin") + " against the load order." }));
+    if (d.cut) said.push(el("p", { class: "small would-needs", text: "The look was cut short, so that it does not hold you up: on a mod this large there may be more than is shown." }));
+    said.push(el("p", { class: "dim small", text: "A box is a mod, in the colour of what ties it to this one. Click a box for what lies between the two: which plugin needs which, which kind of files is overwritten, which records. Double-click it to put that mod in the middle. An arrow points at the mod that is needed, or the one that is overwritten." }));
+    kids.push(el("div", { class: "webdetail" }, ...said));
+  }
+  return kids;
+}
+
+function webRender() {
+  const w = state.web;
+  if (!w) return;
+  const d = w.data;
+  const had = w.box.contains(document.activeElement) ? document.activeElement.dataset.k : null;
+  const scrolled = w.side ? w.side.scrollTop : 0;
+  const close = el("button", { type: "button", class: "webclose", text: "✕", title: "Close (Esc)", "aria-label": "Close" });
+  close.dataset.k = "close";
+  close.addEventListener("click", webClose);
+  const trail = w.trail.length ? el("button", { type: "button", class: "linkish webback", text: "← Back to “" + w.trail[w.trail.length - 1] + "”" }) : null;
+  if (trail) { trail.dataset.k = "back"; trail.addEventListener("click", () => webOpen(w.trail.pop(), { back: true })); }
+  if (!d) {
+    w.side = null;
+    w.box.replaceChildren(el("div", { class: "web-head" }, el("div", { class: "web-title" }, trail, el("h2", { text: w.name })), close),
+      el("p", { class: w.error ? "would-needs" : "dim", text: w.error || "Reading what this mod has to do with the others…" }));
+    close.focus();
+    return;
+  }
+  const me = d.mod, origin = d.source;
+  // The mod's page: where it came from, as a link that opens a new tab, and the picture its page opens with.
+  let source;
+  if (origin && /^https?:\/\//i.test(origin.page || "")) {
+    const word = { nexus: "Nexus", github: "GitHub", loverslab: "LoversLab" }[origin.host] || origin.host;
+    source = el("p", { class: "websource" }, "From ", el("a", { class: "weblink", href: origin.page, target: "_blank", rel: "noopener noreferrer", text: word + " ↗", title: "Opens the mod's page in a new tab:\n" + origin.page }),
+      el("span", { class: "dim small", text: " " + origin.page.replace(/^https?:\/\/(www\.)?/i, "") + (origin.version ? " · version " + origin.version : "") }));
+  } else if (me.kind === "mod") {
+    const add = el("button", { type: "button", class: "linkish", text: "Add a source link…" });
+    add.addEventListener("click", async () => { await sourceLink(me.name, ""); webCache.delete(webKey(me.name)); if (state.web === w && w.name === me.name) webOpen(me.name, { back: true }); });
+    source = el("p", { class: "websource dim" }, "Where it came from is not known. ", add);
+  }
+  const pic = webPics.get(me.name);
+  let picture = null;
+  if (pic && pic.data && /^image\/(png|jpeg|webp|gif)$/.test(pic.type || "")) {
+    picture = el("img", { class: "webpic", alt: "The picture of the mod's page", src: "data:" + pic.type + ";base64," + pic.data });
+    if (origin && origin.page) { picture.title = "From the mod's page. Click to open the page in a new tab."; picture.addEventListener("click", () => openTab(origin.page)); }
+  } else if (pic && pic.going) picture = el("div", { class: "webpic wait", text: "its picture…" });
+  const plugins = me.plugins.slice(0, 8).map((p, i) => {
+    const b = el("button", { type: "button", class: "linkish mono", text: p.name, title: (p.active ? "Active" : "Not active") + (p.position != null && p.position >= 0 ? ", place " + p.position : "") + ". Click to show it on the Plugins tab." });
+    b.addEventListener("click", () => { webClose(); gotoPlugin(p.name); });
+    return i ? [", ", b] : [b];
+  }).flat();
+  const head = el("div", { class: "web-head" }, picture, el("div", { class: "web-title" }, trail,
+    el("h2", {}, me.shown, el("span", { class: "tag " + (me.enabled ? "good" : ""), text: me.enabled ? "enabled" : "disabled" }), me.priority >= 0 ? el("span", { class: "tag", text: "priority " + me.priority }) : null),
+    el("p", { class: "dim" }, me.plugins.length ? "Plugins: " : "It has no plugin.", ...plugins, me.plugins.length > 8 ? " … +" + (me.plugins.length - 8) : ""),
+    source), close);
+  w.side = el("div", { class: "webside" }, ...webSide(w));
+  const body = el("div", { class: "web-body" }, el("div", { class: "webmap-wrap" }, webMap(w)), w.side);
+  const acts = [];
+  const act = (label, run, cls) => { const b = el("button", { type: "button", text: label, class: cls || "" }); b.addEventListener("click", run); b.dataset.k = "act:" + label; acts.push(b); };
+  if (findMod(me.name)) act("Show it in the list", () => { webClose(); gotoMod(me.name); focusMod(me.name, true); });
+  act("Close", webClose, "primary");
+  const status = w.error ? el("span", { class: "would-needs", text: w.error })
+    : w.going ? el("span", { class: "webstatus going" }, el("span", { class: "spinner small" }), "Looking through its files and its records…")
+      : el("span", { class: "webstatus dim", text: d.deep ? "Read from the modlist as it stands now. Nothing is changed." : "" });
+  w.box.replaceChildren(head, body, el("div", { class: "web-foot" }, status, el("div", { class: "actions" }, ...acts)));
+  w.side.scrollTop = scrolled;
+  const again = had ? [...w.box.querySelectorAll("[data-k]")].find((e) => e.dataset.k === had) : null;
+  (again || (w.box.contains(document.activeElement) ? null : close) || { focus() {} }).focus();
+}
+document.addEventListener("keydown", (ev) => {
+  const w = state.web;
+  if (!w || document.querySelectorAll(".modal-back").length > 1 || state.menu) return;
+  if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); if (w.sel || w.more) webSelect(w, null); else webClose(); return; }
+  if (ev.key !== "Tab") return;                    // the box keeps the keyboard while it is open
+  const stops = [...w.box.querySelectorAll("button:not([disabled]), a[href], [tabindex='0']")].filter((e) => e.offsetParent !== null);
+  if (!stops.length) return;
+  const i = stops.indexOf(document.activeElement);
+  if (i === -1 || (ev.shiftKey && i === 0) || (!ev.shiftKey && i === stops.length - 1)) { ev.preventDefault(); stops[ev.shiftKey ? stops.length - 1 : 0].focus(); }
+}, true);
+
 // --- ModTrap updates itself (MT58) -------------------------------------------------------------------------------------
 // The version at the top is a button. It opens a box with a drop zone and "Add file": a ModTrap release file
 // (ModTrap-<version>-win64.zip) given there is read by ModTrap's program, which says what version it is; one press
@@ -3128,72 +3529,93 @@ $("split-bar").addEventListener("keydown", (ev) => {
   saveUi();
 });
 
-// --- columns whose width the owner sets (MT61) ----------------------------------------------------------------------
-// Every table with a heading row has a thin line at the right edge of each heading but the last. Held and moved
-// sideways, the line glows and sets that column's width; the other columns keep theirs, and the last one takes
-// what is left (the list scrolls sideways when the columns are wider than their pane). A double-click on a line
-// gives the table its own widths back. The widths are kept with the session, for each kind of table.
+// --- columns the owner sets: their widths and their order (MT61, MT62) --------------------------------------------
+// Every table with a heading row has a thin line at the right edge of each heading, the last one too, and the same
+// thin lines between the columns down its rows. A line held and moved sideways sets the width of the column on its
+// left, exactly as far as the pointer goes: the columns to its right keep their widths and move along. While it is
+// held, the line glows from the heading down through the rows. A heading held and moved sideways takes its whole
+// column to another place; the first columns of a table (the tick, the priority or position, the name) stay.
+// A double-click on a line gives the table its own widths and order back. All of it is kept with the session, for
+// each kind of table.
 const COL_MIN = 28;
+const COL_FIXED = { "mods-table": 3, "plugins-table": 4 };          // the columns that keep their place; any other table: 2
 function colKey(table) {
   return table.id || "t:" + [...table.tHead.rows[0].cells].map((th) => th.childNodes[0] && th.childNodes[0].nodeType === 3 ? th.childNodes[0].textContent.trim() : th.textContent.trim()).join("|").slice(0, 120);
 }
-// The headings, and the last one that is shown: that column takes the room the others leave, so it has no line and
-// no width of its own (the split view hides some columns; then another column is the last).
-function colHeads(table) {
-  const ths = [...table.tHead.rows[0].cells];
-  const shown = ths.filter((th) => getComputedStyle(th).display !== "none");
-  return { ths, rest: shown[shown.length - 1] || null };
+const colOf = (cell) => Number(cell.dataset.c);
+const colShown = (th) => getComputedStyle(th).display !== "none";
+// Each cell is marked with the column it was drawn in (its number, and a class "k" + number): a column that was
+// moved is still known for what it is, to the sorting, to the widths, and to the split view, which leaves some out.
+function colTag(table) {
+  const head = table.tHead.rows[0], n = head.cells.length;
+  if (!head.dataset.o) { [...head.cells].forEach((th, i) => { th.dataset.c = String(i); th.classList.add("k" + i); }); head.dataset.o = "1"; }
+  for (const body of table.tBodies) for (const row of body.rows) {
+    if (row.dataset.o || row.cells.length !== n) continue;
+    for (let i = 0; i < n; i++) { const td = row.cells[i]; td.dataset.c = String(i); td.classList.add("k" + i); }
+    row.dataset.o = "1";
+  }
 }
-function colWidths(table, saved) {
-  const { ths, rest } = colHeads(table);
+function colSaved(table) { return (state.cols || {})[table.dataset.colKey] || null; }
+function colOrderOf(table) {
+  const n = table.tHead.rows[0].cells.length, fixed = Math.min(n, COL_FIXED[table.id] || 2);
+  const saved = colSaved(table), order = saved && Array.isArray(saved.order) ? saved.order.map(Number) : null;
+  const own = [...Array(n).keys()];
+  if (!order || order.length !== n || [...order].sort((x, y) => x - y).some((v, i) => v !== i) || order.slice(0, fixed).some((v, i) => v !== i)) return own;
+  return order;
+}
+function colOrder(table) {
+  const order = colOrderOf(table), n = order.length;
+  const rows = [table.tHead.rows[0]];
+  for (const body of table.tBodies) for (const row of body.rows) if (row.dataset.o && row.cells.length === n) rows.push(row);
+  for (const row of rows) {
+    let same = true;
+    for (let j = 0; j < n; j++) if (colOf(row.cells[j]) !== order[j]) { same = false; break; }
+    if (same) continue;
+    const by = {};
+    for (const cell of row.cells) by[colOf(cell)] = cell;
+    for (let j = 0; j < n; j++) row.append(by[order[j]]);
+  }
+}
+function colWidths(table) {
+  const saved = colSaved(table), ths = [...table.tHead.rows[0].cells];
+  const sized = !!saved && ths.some((th) => Number.isFinite(Number(saved[colOf(th)])));
+  if (!sized) {
+    if (table.classList.contains("colfixed")) { table.classList.remove("colfixed"); table.style.width = ""; for (const th of ths) th.style.width = ""; }
+    return;
+  }
   let sum = 0;
-  ths.forEach((th, i) => {
-    const w = Number(saved[i]);
-    const own = Number.isFinite(w) && th !== rest;
-    th.style.width = own ? Math.max(COL_MIN, w) + "px" : "";
-    th.classList.toggle("nogrip", th === rest);
-    if (own && getComputedStyle(th).display !== "none") sum += Math.max(COL_MIN, w);
-  });
+  for (const th of ths) {
+    const w = Math.max(COL_MIN, Number(saved[colOf(th)]) || (colOf(th) === ths.length - 1 && Number(saved.rest)) || 120);     // a column not seen when the widths were set
+    th.style.width = w + "px";
+    if (colShown(th)) sum += w;
+  }
   table.classList.add("colfixed");
-  // The column that takes the rest keeps at least the width it had when the widths were first set.
-  table.style.minWidth = (sum + (rest === ths[ths.length - 1] ? Math.max(60, Number(saved.rest) || 0) : 60)) + "px";
+  table.style.width = sum + "px";                           // the table is as wide as its columns: no column takes "the rest"
 }
-function colApply(table) {
-  const saved = (state.cols || {})[table.dataset.colKey];
-  if (saved) { colWidths(table, saved); return; }
-  const { ths, rest } = colHeads(table);
-  for (const th of ths) th.classList.toggle("nogrip", th === rest);
-  if (!table.classList.contains("colfixed")) return;
-  table.classList.remove("colfixed");
-  table.style.minWidth = "";
-  if (table.dataset.colOwnWidth) table.style.width = "";
-  for (const th of ths) th.style.width = "";
-}
+function colApply(table) { colTag(table); colOrder(table); colWidths(table); }
 function colSetup(table) {
   if (!table.tHead || !table.tHead.rows[0] || table.tHead.rows[0].cells.length < 2) return;
-  const ths = [...table.tHead.rows[0].cells];
   table.dataset.colKey = colKey(table);
-  ths.forEach((th, i) => {
-    if (th.querySelector(":scope > .colgrip")) return;
-    if (getComputedStyle(th).position === "static") th.style.position = "relative";
-    const grip = el("span", { class: "colgrip", role: "separator", "aria-orientation": "vertical", title: "Hold and move sideways to set this column's width; double-click to give the table its own widths back" });
+  table.classList.add("cols");
+  colTag(table);
+  for (const th of table.tHead.rows[0].cells) {
+    if (th.querySelector(":scope > .colgrip")) continue;
+    const grip = el("span", { class: "colgrip", role: "separator", "aria-orientation": "vertical", title: "Hold and move sideways to set this column's width; double-click to give the table its own widths and order back" });
     grip.addEventListener("mousedown", (ev) => {
       if (ev.button !== 0) return;
       ev.preventDefault();
       ev.stopPropagation();
       const key = table.dataset.colKey;
-      if (!(state.cols || {})[key]) {                      // the widths as they are now are fixed first: only this column changes
-        const { ths: all, rest } = colHeads(table);
-        const now = {};
-        all.forEach((x, k) => { if (x !== rest) now[k] = Math.round(x.getBoundingClientRect().width); });
-        now.rest = rest ? Math.round(rest.getBoundingClientRect().width) : 0;
-        if (table.classList.contains("plain")) { table.style.width = table.offsetWidth + "px"; table.dataset.colOwnWidth = "1"; }
-        state.cols = Object.assign({}, state.cols, { [key]: now });
-        colWidths(table, now);
+      const saved = Object.assign({}, (state.cols || {})[key]);
+      const all = [...table.tHead.rows[0].cells];
+      if (!all.some((x) => Number.isFinite(Number(saved[colOf(x)])))) {     // the widths as they are now are fixed first: only this column changes
+        for (const x of all) saved[colOf(x)] = colShown(x) ? Math.round(x.getBoundingClientRect().width) : 120;
+        state.cols = Object.assign({}, state.cols, { [key]: saved });
+        colWidths(table);
       }
-      state.colDrag = { key, index: i, x: ev.clientX, w: th.getBoundingClientRect().width };
-      grip.classList.add("on");
+      state.colDrag = { key, c: colOf(th), x: ev.clientX, w: th.getBoundingClientRect().width };
       document.body.classList.add("colsizing");
+      colGuide(table, colOf(th));
     });
     grip.addEventListener("click", (ev) => ev.stopPropagation());          // a press on the line is not a press on the heading (which sorts)
     grip.addEventListener("dblclick", (ev) => {
@@ -3203,34 +3625,103 @@ function colSetup(table) {
       saveUi();
     });
     th.append(grip);
-  });
+    th.addEventListener("mousedown", (ev) => {              // a heading held and moved takes its column along (MT62)
+      if (ev.button !== 0 || ev.target.closest(".colgrip")) return;
+      const n = table.tHead.rows[0].cells.length, fixed = Math.min(n, COL_FIXED[table.id] || 2);
+      if (colOf(th) < fixed || n - fixed < 2) return;
+      state.colMove = { table, key: table.dataset.colKey, c: colOf(th), x: ev.clientX, y: ev.clientY, going: false, to: null, label: (th.childNodes[0] && th.childNodes[0].textContent || "").trim() || "this column" };
+    });
+  }
   colApply(table);
 }
 function colSetupAll(again) {
-  for (const t of document.querySelectorAll("main table")) if (t.tHead && (again || !t.dataset.colKey || t.tHead.querySelectorAll(".colgrip").length === 0)) colSetup(t);
-  // A list drawn anew while one of its lines is held: the new table's line takes the glow over.
-  const d = state.colDrag;
-  if (d) for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === d.key) { const g = t.tHead.rows[0].cells[d.index] && t.tHead.rows[0].cells[d.index].querySelector(".colgrip"); if (g) g.classList.add("on"); }
+  for (const t of document.querySelectorAll("main table")) if (t.tHead && (again || !t.dataset.colKey || t.tHead.querySelectorAll(".colgrip").length === 0 || !t.tHead.rows[0].dataset.o)) colSetup(t);
+  else if (t.tHead && t.dataset.colKey) colApply(t);         // rows drawn anew in a table that stayed: marked, and put in the kept order
+  if (state.colDrag) for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === state.colDrag.key && t.offsetParent !== null) colGuide(t, state.colDrag.c);
+}
+// The glowing line of a column being set, or of the place a moved column would take: from the heading down
+// through the rows that are shown.
+function colGuide(table, c, x) {
+  let g = state.colGuideEl;
+  if (!table) { if (g) g.remove(); state.colGuideEl = null; return; }
+  if (!g) { g = state.colGuideEl = el("div", { class: "colguide" }); document.body.append(g); }
+  const th = [...table.tHead.rows[0].cells].find((h) => colOf(h) === c), r = th.getBoundingClientRect();
+  const pane = table.closest(".scroll"), pr = pane ? pane.getBoundingClientRect() : { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
+  const tr = table.getBoundingClientRect();
+  const left = x === undefined ? r.right - 1 : x;
+  g.hidden = left < pr.left - 1 || left > pr.right + 1;
+  g.style.left = left + "px";
+  g.style.top = Math.max(r.top, pr.top) + "px";
+  g.style.height = Math.max(0, Math.min(tr.bottom, pr.bottom, window.innerHeight) - Math.max(r.top, pr.top)) + "px";
 }
 // The widths are kept by the kind of table, not by the table: a list that is drawn anew while a line is held
 // (the Updater list does that as answers come in) goes on from the kept widths.
 document.addEventListener("mousemove", (ev) => {
   const d = state.colDrag;
-  if (!d) return;
-  const saved = Object.assign({}, (state.cols || {})[d.key]);
-  saved[d.index] = Math.max(COL_MIN, Math.round(d.w + ev.clientX - d.x));
-  state.cols = Object.assign({}, state.cols, { [d.key]: saved });
-  for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === d.key) colWidths(t, saved);
+  if (d) {
+    const saved = Object.assign({}, (state.cols || {})[d.key]);
+    saved[d.c] = Math.max(COL_MIN, Math.round(d.w + ev.clientX - d.x));
+    state.cols = Object.assign({}, state.cols, { [d.key]: saved });
+    for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === d.key) { colWidths(t); if (t.offsetParent !== null) colGuide(t, d.c); }
+    return;
+  }
+  const m = state.colMove;
+  if (!m) return;
+  if (!m.going) {
+    if (Math.abs(ev.clientX - m.x) < 8) return;
+    if (!m.table.isConnected) { state.colMove = null; return; }
+    m.going = true;
+    m.ghost = el("div", { class: "dragghost", text: m.label });
+    document.body.append(m.ghost);
+    document.body.classList.add("dragging-mod");
+  }
+  ev.preventDefault();
+  m.ghost.style.left = (ev.clientX + 14) + "px";
+  m.ghost.style.top = (ev.clientY + 12) + "px";
+  // Where it would go: before the heading under the pointer's left half, after it under its right half; never
+  // among the columns that keep their place.
+  const heads = [...m.table.tHead.rows[0].cells].filter(colShown);
+  const fixed = Math.min(m.table.tHead.rows[0].cells.length, COL_FIXED[m.table.id] || 2);
+  let to = null;
+  for (const h of heads) {
+    const r = h.getBoundingClientRect();
+    if (ev.clientX < r.left || ev.clientX > r.right || colOf(h) < fixed && !(colOf(h) === fixed - 1)) continue;
+    const after = ev.clientX > r.left + r.width / 2 || colOf(h) < fixed;
+    to = { c: colOf(h), after, x: after ? r.right - 1 : r.left };
+  }
+  const last = heads[heads.length - 1].getBoundingClientRect();
+  if (!to && ev.clientX > last.right) to = { c: colOf(heads[heads.length - 1]), after: true, x: last.right - 1 };
+  m.to = to && to.c !== m.c ? to : null;
+  if (m.to) colGuide(m.table, m.to.c, m.to.x); else colGuide(null);
 });
 document.addEventListener("mouseup", () => {
-  const d = state.colDrag;
-  if (!d) return;
-  state.colDrag = null;
-  for (const g of document.querySelectorAll(".colgrip.on")) g.classList.remove("on");
-  document.body.classList.remove("colsizing");
+  const d = state.colDrag, m = state.colMove;
+  state.colDrag = state.colMove = null;
+  if (d) {
+    colGuide(null);
+    document.body.classList.remove("colsizing");
+    saveUi();
+  }
+  if (!m || !m.going) return;
+  m.ghost.remove();
+  document.body.classList.remove("dragging-mod");
+  colGuide(null);
+  state.dragged = Date.now();                              // the press that ends the move is not a press on the heading
+  if (!m.to || !m.table.isConnected) return;
+  const order = colOrderOf(m.table).filter((c) => c !== m.c);
+  order.splice(order.indexOf(m.to.c) + (m.to.after ? 1 : 0), 0, m.c);
+  state.cols = Object.assign({}, state.cols, { [m.key]: Object.assign({}, (state.cols || {})[m.key], { order }) });
+  for (const t of document.querySelectorAll("main table")) if (t.dataset.colKey === m.key) colApply(t);
   saveUi();
 });
-// Tables are drawn anew as the lists change: each new one gets its lines and its kept widths.
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape" || !state.colMove) return;
+  if (state.colMove.ghost) state.colMove.ghost.remove();
+  document.body.classList.remove("dragging-mod");
+  colGuide(null);
+  state.colMove = null;
+});
+// Tables are drawn anew as the lists change: each new one gets its lines, its kept widths and its kept order.
 {
   let wait = 0;
   new MutationObserver(() => { clearTimeout(wait); wait = setTimeout(() => colSetupAll(false), 60); }).observe(document.querySelector("main"), { childList: true, subtree: true });
@@ -3295,6 +3786,7 @@ function renderPlugins() {
     frag.append(tr);
   }
   body.replaceChildren(frag);
+  colSetup($("plugins-table"));
   filterPlugins();
 }
 

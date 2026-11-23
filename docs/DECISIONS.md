@@ -64,7 +64,11 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT60 (a star and a number in a search box goes to the row with that priority or position; the rows a search
   finds glow).
   MT61 (every table's columns are set in width by lines between the headings, which glow while held).
-- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  MT62 (a column's line moves that column alone, the last column has a line of its own, the lines run down the
+  rows, and columns are moved by their headings; a click on a mod's name opens its web: the mod in the middle of
+  every mod it has to do with, coloured by kind, with its page as a link and its one picture).
+  MT63 (no window but the browser: ModTrap's console is hidden, its lines being on the page).
+- **Open.** MT64 (whether ModTrap ends itself some time after its page was closed, now that it has no window); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1507,3 +1511,101 @@ clicked on to adjust, they gain glow."
 - **The Updater list's heading row** now stays at the top of its list while it is scrolled, as the Mods and
   Plugins lists' do, so that its lines are in reach anywhere in the list.
 
+**Note, 2026-11-23 (MT62).** "The last one takes what is left" no longer holds: the owner asked that a line move
+its own column and nothing else, and that the last column have a line of its own. MT62 settles it.
+
+## MT62
+
+**Columns that move alone and can change places; a mod's web** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "When I move the column divider for dependants it will move the whole side of the list slightly.
+Can you make it so that if its the last column on the table, then it moves exactly with the divider line being
+adjusted, and if the user wants to extend the last column, then it can be done by the last divider on the end of
+the column (so on the right side of the dependants). Apply this to all tables.
+
+Also, can you add the same thin lines between column on the list as well? when the column are adjusted these lines
+also gain glow.
+
+Can you also add ability to click and drag columns as a whole to relocate order? The priority and mod/plugin name
+are the static first and second respectively, but other column can be relocated (also the tick boxes stay on the
+left as slot 0).
+
+Also would it be possible to add ability when user clicks on a mod text (gains glow effect when hoovering over the
+mod title text), then it brings up pop up window about the mod and its dependencies, affected mods by it, what it
+overwrites, or what overwrites it. I would like to see a Network with link, with the selected mod in the middle.
+Color each linked boxes by the type (is it a dependency, is it a patch for it, is it overwritten by it, the selected
+mod overwrites it (also show what part is overwritten), is there a conflict?, etc.). Also add Nexus/Github/Loverslab
+link (blue glow text, clickable open new tab). Make a comprehensive and in depth design for this. Take your time."
+
+And, while it was being built: "if you have a clear source link, can you also add picture for the mod (the
+introduction picture people see for the mod on nexus page, etc., just one picture)."
+
+**Settled** (DESIGN§23, DESIGN§24, WHY§128; the owner may overrule any of it):
+
+- **A line moves its own column.** Every column has a width of its own, the last one too, and a line at its right
+  edge. A line held and moved changes the column to its left by exactly as much as the mouse moved; every other
+  column keeps its width, and the table is as wide as its columns together. This amends MT61, where the last
+  column took what was left.
+- **Lines down the rows.** The same thin lines stand between the columns of every row. While a line is held, one
+  glowing line runs from the heading to the foot of the list where the column's edge is.
+- **Columns change places.** A heading held and moved sideways takes its column along; a glowing line shows where
+  it would stand, and Esc lets it go back. The leading columns stay: on the mods' list the ticks, the priority and
+  the mod; on the plugins' list the tick, the position, the kind and the plugin. On the other tables the first two.
+  A press on a heading without moving it still sorts the list. Order and widths are kept with the session, by the
+  table's kind; a double-click on a line puts both back as the table has them by itself.
+- **A mod's name opens its web.** The name glows under the mouse and is a button of its own; the rest of the row
+  shows the mod's card as before. Also from the mod's menu and its card.
+- **The web** is DESIGN§23: the mod in the middle; on the left what it needs, on the right what is built on it
+  (mods that need it, patches for it, tools' outputs), above what wins over it and below what it wins over. Ten
+  kinds, each with its colour and its words. "What part is overwritten" is told for files by their kind, with
+  counts and examples, and for records by the kind of record and which plugin wins over which.
+- **A conflict** is two plugins changing the same records with neither made in view of the other and no third
+  plugin having both as masters. ModTrap reads which records, not what is changed inside them, and says so: xEdit
+  shows what is lost.
+- **The mod's page** is a blue, glowing link under its name, opening a new tab: Nexus, GitHub, LoversLab, or any
+  other address kept for the mod.
+- **One picture**, where the page is at Nexus or a GitHub repository: the picture that page opens with. ModTrap's
+  server fetches it, without any key, only from those sites' picture hosts, keeps it for a month and hands it to
+  the page; the page itself still loads nothing from outside. LoversLab and other sites give none without an
+  account, so there is none for them. A setting switches pictures off. Read into the owner's "a clear source
+  link": a page at one of the two sites that name a picture for it.
+
+## MT63
+
+**No window but the browser** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "would it be also possible to open the launch terminal integrated into the browser page
+terminal? or do we need a terminal running separately? I would like to keep only browser if possible, but if the
+features need a terminal window then make sure it starts minimized."
+
+**Settled** (DESIGN§24, WHY§129; the owner may overrule any of it):
+
+- **No feature needs the window.** What the terminal shows is on the page already: History, then Log, every line.
+- **So it is hidden.** ModTrap.exe starts ModTrap's program with its console hidden: no window, nothing in the
+  taskbar. The console itself is kept, unseen, because the console programs ModTrap starts would otherwise each
+  open a window of their own.
+- **A setting brings it back, minimised:** "Show ModTrap's console window", off by default, taking effect at once.
+- **A start that fails is shown.** The window appears with what went wrong and waits for a key. A Python that does
+  not get that far is told by the launcher's own message, as before.
+- **Only ModTrap's own console.** One that ModTrap was started in from a command prompt is the owner's and is left
+  alone; ModTrap.cmd stays the start that shows what is written.
+- **Ending ModTrap** is "Quit" on the page. A closed tab does not end it; starting ModTrap again brings the page
+  back as it was (MT22). Whether it should end by itself after a closed tab is MT64.
+
+## MT64
+
+**Should ModTrap end itself some time after its page was closed?** · *2026-11-23 · **Open***
+
+With MT63 ModTrap has no window. A tab closed without "Quit" leaves it running unseen: it holds the modlist's
+session and does nothing else. Starting ModTrap again takes over from it and opens the page (MT22), so nothing is
+lost either way.
+
+- **A. Leave it running (as built).** Nothing ends by itself; a job in hand is never at risk. The cost is a
+  program that stays in memory unseen until ModTrap is started again or the PC is shut down.
+- **B. End after the page has been gone for a while.** When no page has asked anything for, say, ten minutes, and
+  no job, tool or download is in hand, ModTrap saves its session and closes. A browser that puts a sleeping tab
+  aside would end it too; the next start brings everything back.
+
+**Recommendation: A for now**, with B as a setting if the unseen program turns out to be a nuisance. A browser
+gives a page no sure way to say that its tab was closed, so B rests on a wait, and a wait that is wrong ends
+ModTrap under the owner's hands.

@@ -124,9 +124,49 @@ class PageTests(unittest.TestCase):
         self.assertIn('grip.addEventListener("click", (ev) => ev.stopPropagation());', self.js)
         line = re.search(r"\.colgrip::before \{([^}]+)\}", self.css).group(1)
         self.assertNotIn("box-shadow", line)                                       # no glow as it stands
-        self.assertIn("box-shadow", re.search(r"\.colgrip\.on::before \{([^}]+)\}", self.css).group(1))   # a glow while held
+        self.assertIn("box-shadow", re.search(r"\.colguide \{([^}]+)\}", self.css).group(1))               # the glow while held: from the heading down the rows
+        # MT62: the same thin lines down the rows; the table as wide as its columns; a column known by what it is.
+        self.assertIn("table.cols tbody td { border-right: 1px solid", self.css)
+        self.assertIn('table.style.width = sum + "px";', self.js)
+        self.assertIn('const COL_FIXED = { "mods-table": 3, "plugins-table": 4 };', self.js)
+        self.assertIn("const key = keys[th.dataset.c !== undefined ? Number(th.dataset.c) : i];", self.js)
+        self.assertIn("main.sidebyside #mods-table .k3,", self.css)
+        self.assertNotIn("nth-child(n+7)", self.css)
         self.assertIn("table.colfixed { table-layout: fixed; }", self.css)
 
+
+    def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
+        """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
+        the server read; the mod's page is a link that opens a new tab; the picture comes through the server."""
+        self.assertIn('class: "modtitle", role: "button", tabIndex: 0', self.js)
+        self.assertIn('title.addEventListener("click", (ev) => { if (state.placing) return; ev.stopPropagation(); webOpen(m.name); });', self.js)
+        self.assertRegex(self.css, r"\.modtitle:hover, \.modtitle:focus-visible \{[^}]*text-shadow: 0 0 9px var\(--accent\)")
+        from modtrap import modweb
+        for kind in modweb.KINDS:                               # every kind the server names has its words and its colour
+            self.assertRegex(self.js, r"\n  %s: \[\"" % kind)
+            self.assertIn(".wk-%s { --k: #" % kind, self.css)
+        self.assertEqual(sorted(re.findall(r'"(\w+)"', re.search(r"const WEB_LEGEND = \[(.*?)\]", self.js).group(1))), sorted(modweb.KINDS))
+        self.assertEqual(sorted(re.findall(r'"(\w+)"', re.search(r"const WEB_FIRST = \[(.*?)\]", self.js).group(1))), sorted(modweb.KINDS))
+        self.assertIn('await api("/api/mod/web", { mod: name });', self.js)
+        self.assertIn('kept.deep = await api("/api/mod/web", { mod: name, deep: true });', self.js)
+        # The link: the address the server gave, a new tab, no tie to ModTrap's tab; blue, and it glows.
+        self.assertIn('el("a", { class: "weblink", href: origin.page, target: "_blank", rel: "noopener noreferrer"', self.js)
+        self.assertIn('if (origin && /^https?:\\/\\//i.test(origin.page || "")) {', self.js)
+        self.assertRegex(self.css, r"\.weblink \{ color: #6cb6ff;[^}]*text-shadow: 0 0 9px rgba\(108, 182, 255, \.8\)")
+        # The picture: only what the server hands over, as data; the page itself fetches nothing from outside.
+        self.assertIn('got = await api("/api/mod/picture", { mod: name });', self.js)
+        self.assertIn('src: "data:" + pic.type + ";base64," + pic.data', self.js)
+        self.assertIn("/^image\\/(png|jpeg|webp|gif)$/.test(pic.type", self.js)
+        self.assertIn("img-src 'self' data:", server.CSP)
+        # Drawn without an address of the drawing's kind in the page's source, and without inline styles.
+        self.assertIn('new DOMParser().parseFromString("<svg></svg>", "text/html").body.firstChild.namespaceURI', self.js)
+        self.assertNotIn("innerHTML", self.js)
+
+    def test_every_setting_has_its_words_on_the_settings_tab(self):
+        from modtrap import api
+        told = set(re.findall(r'\n  \["(\w+)", "', self.js[self.js.index("const SETTING_TEXT = ["):self.js.index("function renderSettings")]))
+        self.assertTrue({"mod_pictures", "console_window"} <= told)
+        self.assertEqual(sorted(told - set(api.SETTINGS)), [])
 
 if __name__ == "__main__":
     unittest.main()
