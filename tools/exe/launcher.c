@@ -7,7 +7,8 @@
    through python\python313._pth and takes nothing else of the PC into its path); else the Python installed on the
    PC, found as Windows finds programs: the "py" launcher first, then "python". Nothing on the PC is changed.
 
-   Built twice from this one file: plain, and with EXTRA_ARGS set to ModTrap's switch for changes. */
+   Built twice from this one file: with EXTRA_ARGS set to ModTrap's switch for changes (ModTrap.exe), and plain
+   (the "look only" program). */
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef UNICODE

@@ -6,11 +6,11 @@
     python3 tools/build_exe.py --fetch                                # the same, fetching that file from NuGet first
 
 Without Python inside, the package is ModTrap-<version>-win64.zip and its launcher starts the Python installed on the
-PC; with it, ModTrap-<version>-win64-with-python.zip.
+PC; with it, ModTrap-<version>-win64-with-python.zip. Inside either, the one folder is named ModTrap.
 
-What goes in:
-    ModTrap.exe, ModTrap (changes allowed).exe     ModTrap's own launcher (tools/exe/launcher.c), built here with
-                                                   the MinGW-w64 cross compiler; the second passes --allow-changes
+What goes in, in a folder named ModTrap (the version is in the archive's name and in the programs' properties):
+    ModTrap.exe, ModTrap (look only).exe           ModTrap's own launcher (tools/exe/launcher.c), built here with
+                                                   the MinGW-w64 cross compiler; the first passes --allow-changes
     python/        CPython for Windows as the Python Software Foundation publishes it on NuGet, unchanged, with the
                    parts ModTrap never uses left out (pip, the headers, tkinter's and the tests' files)
     app/modtrap/   ModTrap itself, as it is in this repository
@@ -36,6 +36,38 @@ PY_VERSION = "3.13.17"
 PY_SHA256 = "dce409744b088f94c6e37ba41f8100c384c27e029e843237364c602d30d475e5"
 PY_URL = "https://api.nuget.org/v3-flatcontainer/python/%s/python.%s.nupkg" % (PY_VERSION, PY_VERSION)
 COMPILER = "x86_64-w64-mingw32-gcc"
+RESOURCES = "x86_64-w64-mingw32-windres"
+FOLDER = "ModTrap"                       # the one folder inside the archive, the same for every version (MT52)
+
+# What Windows shows under a program's Properties, Details.
+VERSION_RC = """1 VERSIONINFO
+FILEVERSION %(commas)s
+PRODUCTVERSION %(commas)s
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "FileDescription", "%(what)s"
+      VALUE "FileVersion", "%(version)s"
+      VALUE "InternalName", "ModTrap"
+      VALUE "OriginalFilename", "%(file)s"
+      VALUE "ProductName", "ModTrap"
+      VALUE "ProductVersion", "%(version)s"
+      VALUE "LegalCopyright", "MIT licence"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
+"""
 
 # Parts of the Python package ModTrap never uses: left out, nothing else is touched.
 LEFT_OUT = ("tools/include/", "tools/libs/", "tools/Lib/site-packages/", "tools/Lib/ensurepip/", "tools/Lib/venv/",
@@ -70,15 +102,16 @@ READ_ME = """ModTrap %(version)s for Windows
 
 Unpack this whole folder somewhere of your own (not inside the game's folder, not inside a modlist), and start:
 
-  ModTrap.exe                      ModTrap as it comes: it reads and reports, and changes nothing in a modlist.
-  ModTrap (changes allowed).exe    The same, started with its switch for changes: demaster, install mods, update.
+  ModTrap.exe                 ModTrap, able to do its work: demaster, install mods, update mods.
+  ModTrap (look only).exe     The same, without its switch for changes: it reads and reports, and changes nothing.
 
 A console window opens and says where ModTrap's page is; your browser opens it. Closing the window, or Quit on the
 page, ends ModTrap.
 
 %(python)s
 ModTrap keeps its sessions, settings and downloads in its own folder under your Windows profile, not in here, so a
-newer ModTrap can simply replace this folder.
+newer ModTrap can simply replace this folder: the folder is named ModTrap in every version, and the version is in
+the archive's name and in the programs' Properties.
 
 Windows may warn about a program it does not know, the first time: "More info", then "Run anyway". Or, before
 unpacking: right-click the zip file, Properties, tick "Unblock".
@@ -121,24 +154,33 @@ def main() -> int:
     if nupkg is not None and sha256(nupkg) != PY_SHA256:
         print("the Python package is not the one this script was written for (its checksum differs): %s" % nupkg, file=sys.stderr)
         return 1
-    if shutil.which(COMPILER) is None:
-        print("%s is not installed (Debian and Ubuntu: the package gcc-mingw-w64-x86-64)" % COMPILER, file=sys.stderr)
+    if shutil.which(COMPILER) is None or shutil.which(RESOURCES) is None:
+        print("%s and %s are not installed (Debian and Ubuntu: the package gcc-mingw-w64-x86-64)" % (COMPILER, RESOURCES), file=sys.stderr)
         return 1
 
     ver = version()
     name = "ModTrap-%s-win64%s" % (ver, "-with-python" if nupkg is not None else "")
-    out = a.out / name
-    if out.exists():
-        shutil.rmtree(out)
+    work = a.out / (name + ".build")
+    if work.exists():
+        shutil.rmtree(work)
+    out = work / FOLDER
     out.mkdir(parents=True)
 
-    # The launcher, twice.
+    # The launcher, twice, each with its version for Windows' Properties.
     src = ROOT / "tools" / "exe" / "launcher.c"
-    for exe, extra in (("ModTrap.exe", None), ("ModTrap (changes allowed).exe", ' --allow-changes')):
-        cmd = [COMPILER, "-O2", "-s", "-municode", "-Wall", "-Wextra", "-o", str(out / exe), str(src), "-luser32"]
+    numbers = [int(x) for x in ver.split(".")[:4] if x.isdigit()]
+    commas = ",".join(str(x) for x in (numbers + [0, 0, 0, 0])[:4])
+    for exe, extra, what in (("ModTrap.exe", " --allow-changes", "ModTrap"), ("ModTrap (look only).exe", None, "ModTrap (look only: changes nothing in a modlist)")):
+        rc = work / "version.rc"
+        rc.write_text(VERSION_RC % {"commas": commas, "version": ver, "what": what, "file": exe}, encoding="ascii")
+        res = work / "version.o"
+        subprocess.run([RESOURCES, "-O", "coff", "-i", str(rc), "-o", str(res)], check=True)
+        cmd = [COMPILER, "-O2", "-s", "-municode", "-Wall", "-Wextra", "-o", str(out / exe), str(src), str(res), "-luser32"]
         if extra:
             cmd.insert(1, '-DEXTRA_ARGS=L"%s"' % extra)
         subprocess.run(cmd, check=True)
+        rc.unlink()
+        res.unlink()
 
     kept = 0
     if nupkg is not None:
@@ -161,7 +203,7 @@ def main() -> int:
     for f in ("LICENSE", "NOTICE"):
         shutil.copyfile(ROOT / f, out / f)
     # A second way in, should Windows not let the launcher run: the same start, as a command file.
-    for cmd_name, extra in (("ModTrap.cmd", ""), ("ModTrap (changes allowed).cmd", " --allow-changes")):
+    for cmd_name, extra in (("ModTrap.cmd", " --allow-changes"), ("ModTrap (look only).cmd", "")):
         (out / cmd_name).write_text(CMD.replace("EXTRA", extra).replace("\n", "\r\n"), encoding="ascii", newline="")
     (out / "READ ME FIRST.txt").write_text(READ_ME % {"version": ver, "python": WITH_PYTHON % PY_VERSION if nupkg is not None else WITHOUT_PYTHON},
                                              encoding="utf-8", newline="\r\n")
@@ -172,7 +214,7 @@ def main() -> int:
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in sorted(out.rglob("*")):
             if f.is_file():
-                z.write(f, (Path(name) / f.relative_to(out)).as_posix())
+                z.write(f, (Path(FOLDER) / f.relative_to(out)).as_posix())
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
     print("%s: %s, %.1f MB unpacked" % (out, "%d files of Python kept" % kept if nupkg is not None else "without Python inside", size / 1048576))
     print("%s: %.1f MB, sha256 %s" % (archive, archive.stat().st_size / 1048576, sha256(archive)))

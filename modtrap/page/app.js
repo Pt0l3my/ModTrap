@@ -274,6 +274,7 @@ const SETTING_TEXT = [
   ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updater list). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
+  ["stay_on_tab", "Stay on ModTrap's tab when a site's page is opened", "A browser always puts a new tab in front, and a page cannot change that. On: ModTrap's program takes the browser straight back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when the window in front is your browser's; the site's page stays open in its tab behind. Off: you stay on the site's page. Windows only."],
   ["downloads_move", "Move a mod's download from the browser's folder into ModTrap's downloads folder", "A file you download for an update in your browser lands in the browser's Downloads folder. On: ModTrap moves it into its own downloads folder (see the Downloads tab), where it is kept with where it came from and found again instead of being downloaded twice. Off: ModTrap copies it there and leaves yours where it is. A file in MO2's own downloads folder is always used from there and never moved."],
   ["mo2_leave_alone", "When a tool's compiler crashes inside MO2, have MO2 leave the compiler alone", "MO2 hooks every program a tool starts, so that it sees the modlist's files. Synthesis starts the C# compiler to build its patchers; the compiler reads nothing of the modlist, and on some PCs it crashes when hooked. MO2 has its own list of programs it leaves alone (Settings, Workarounds, Executables Blacklist). On: when Synthesis's own log shows the compiler crashing, ModTrap adds the compiler (csc.exe and VBCSCompiler.dll) to that list in MO2's settings file, with MO2 closed and a copy of the file kept with the session, and the row of tools starts Synthesis once more. Off: ModTrap only says so."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
@@ -631,7 +632,7 @@ function siteWindow() {
     const w = st.site_window
       ? window.open("", "modtrap-site", "popup=yes,width=1040,height=820,left=" + Math.max(0, window.screenX + window.outerWidth - 1080) + ",top=" + Math.max(0, window.screenY + 60))
       : window.open("", "_blank");
-    if (w) { try { w.document.title = "ModTrap is opening the mod's page…"; } catch (e) { /* a page of a site is in it: not ours to write to */ } }
+    if (w) { try { w.document.title = "Opening the mod's page…"; } catch (e) { /* a page of a site is in it: not ours to write to */ } }
     return w || null;
   } catch (e) { return null; }
 }
@@ -679,9 +680,12 @@ async function getUpdate(mod, byBrowser) {
   const win = byBrowser || (r && r.fetches) ? null : siteWindow();
   let got;
   try { got = await api("/api/updater/start", { mod }); } catch (e) { if (win) { try { win.close(); } catch (e2) { /* gone */ } } toast(e.message); return; }
-  if (got.open && !byBrowser) openSite(got.open, mod, win);
-  else if (win) { try { win.close(); } catch (e) { /* gone */ } }
-  if (got.open) toast("Press the download button on the page that opened (“Start download” at Nexus): that press is yours. ModTrap does the rest and shows it here.");
+  if (got.open && !byBrowser) {
+    openSite(got.open, mod, win);
+    // The browser puts a new tab in front. ModTrap's program takes it back to this tab (MT52; a setting, on Windows).
+    if ((state.settings || {}).stay_on_tab && !(state.settings || {}).site_window) api("/api/updater/back", {}).catch(() => {});
+  } else if (win) { try { win.close(); } catch (e) { /* gone */ } }
+  if (got.open) toast("Its download page is opened in another tab. Without a Nexus key of a Premium account the download starts with your press on that page's download button; ModTrap does everything after it. See the Download box below.");
   showTab("updater");
   pollUpdater(true);
   state.upSig = "";
@@ -730,6 +734,12 @@ function renderUpdater() {
     const acts = [];
     const act = (label, title, run, cls) => { const b = el("button", { type: "button", text: label, title, class: cls || "" }); b.addEventListener("click", run); acts.push(b); };
     if (r.waits_page && r.open) act(r.needs_open ? "Open its download page" : "Open its download page again", "Opens the page where you press the site's download button", () => { openSite(r.open, r.mod, siteWindow()); }, r.needs_open ? "primary" : "");
+    if (r.waits_page && /nexusmods\.com/.test(r.open || "") && state.updates && state.updates.premium !== true) act(state.updates.key ? "Your Nexus key…" : "Do it without this page: give your Nexus key…",
+      "With the key of a Premium account ModTrap downloads the file itself: no page, no press", () => nexusKeyBox(async (premium) => {
+        if (!premium) return;
+        try { await api("/api/updater/stop", { run: r.id }); await api("/api/updater/start", { mod: r.mod }); } catch (e) { toast(e.message); }      // the same update, now fetched by ModTrap
+        pollUpdater(true);
+      }), "primary");
     if (["going", "yours"].includes(r.state) && !r.handed) act("Stop", "Stop this update; nothing of the modlist is changed before the add itself", async () => { try { await api("/api/updater/stop", { run: r.id }); } catch (e) { toast(e.message); } pollUpdater(true); });
     if (r.handed && r.staged) act("Go to Install mods", "The archive waits there, with the steps of an update", () => { if (!(state.staged || []).includes(r.staged)) state.staged = (state.staged || []).concat(r.staged); saveUi(); showTab("add"); pollAdd(true); }, "primary");
     if (r.state === "done" && r.job) act("Take it out again", "Puts the modlist back as it was before this update: the older version enabled again, the newer one taken out", async () => {
@@ -755,6 +765,53 @@ function renderUpdater() {
             t.note ? el("span", { class: "note", text: t.note }) : null))));
       })));
   }));
+}
+
+// The Nexus key, asked for where it is needed (MT52): with the key of a Premium account ModTrap fetches a file
+// itself, with no page of Nexus's and no press there. The box says what the key is and where it is made, keeps it,
+// and says at once which kind of account it is of.
+async function nexusKeyBox(after) {
+  if (!state.updates) { try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { /* the box still serves */ } }
+  const d = state.updates || {};
+  const keyIn = el("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: "paste your personal API key from Nexus here", size: "52" });
+  const page = el("a", { target: "_blank", rel: "noopener noreferrer", text: "Open Nexus's page for API keys" });
+  page.setAttribute("href", d.key_page || "");            // the address comes from ModTrap's program: the page holds no outside address
+  const keep = el("button", { type: "button", class: "primary", text: "Keep the key" });
+  const cancel = el("button", { type: "button", text: "Cancel" });
+  const said = el("p", { class: "would-needs", hidden: "hidden" });
+  const box = el("div", { class: "modal wide", role: "dialog", "aria-modal": "true" },
+    el("p", {}, el("b", { text: "One press, with no page of Nexus's: your Nexus API key" })),
+    el("p", { text: "Nexus gives a file to a program only through its key service, and only for a Premium account. With your account's key ModTrap downloads a newer file itself: no tab opens, and there is no download button to press." }),
+    el("ol", { class: "small upsteps" },
+      el("li", {}, "Signed in at Nexus Mods: ", page, "."),
+      el("li", { text: "At the bottom of that page, “Personal API Key”: make one if there is none, and copy it." }),
+      el("li", { text: "Paste it below and press “Keep the key”." })),
+    el("p", {}, keyIn),
+    el("p", { class: "dim small", text: "The key is not your password, and you can take it back at any time on that same page of Nexus's. ModTrap keeps it on this PC only, locked by Windows to your Windows account, sends it to Nexus's key service and nowhere else, and never writes it to the log or a session file. “Forget the key”, on the Updater list, removes it." }),
+    said, el("div", { class: "actions" }, cancel, keep));
+  const back = el("div", { class: "modal-back" }, box);
+  const done = () => { document.removeEventListener("keydown", key, true); back.remove(); };
+  const key = (ev) => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); done(); } };
+  cancel.addEventListener("click", done);
+  keep.addEventListener("click", async () => {
+    keep.disabled = true;
+    let got;
+    try { got = await api("/api/updates/key", { key: keyIn.value }); } catch (e) { said.textContent = e.message; said.hidden = false; keep.disabled = false; return; }
+    keyIn.value = "";
+    done();
+    state.upSig = "";
+    loadUpdates();
+    if (got.premium === true) {
+      toast("The key is kept, and Nexus says the account is Premium: from now on ModTrap downloads a newer file itself, with no page and no press.");
+      if (after) after(true);
+    } else if (got.premium === false) {
+      toast("The key is kept, but Nexus says the account is not Premium. Nexus lets a program download only for a Premium account, so for this account the press on Nexus's own download button stays.");
+      if (after) after(false);
+    } else toast("The key is kept, but Nexus could not be asked what kind of account it is of just now. Press a mod's update button to try.");
+  });
+  document.addEventListener("keydown", key, true);
+  document.body.append(back);
+  keyIn.focus();
 }
 
 // The Downloads tab (MT50): the mod files ModTrap fetched or took over, each with where it came from.

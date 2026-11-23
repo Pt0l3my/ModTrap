@@ -138,7 +138,7 @@ class TheUpdater(unittest.TestCase):
         self.net.answers["/mods/updated?period=1m"] = (200, {}, [])
         self.net.answers["/mods/4321/files"] = (200, {}, files_answer([(111, "Quill-4321-1-2.7z", "1.2", 4, 100), (113, "Quill-4321-1-4.zip", "1.4", 1, int(time.time()))],
                                                                        [(111, 113, "Quill-4321-1-2.7z", "Quill-4321-1-4.zip")]))
-        self.api.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
+        self.assertEqual(self.api.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})[1], {"key": True, "premium": True})   # said at once
         self.api.post("/api/updates/scan", {})
         for _ in range(400):
             st = self.api.get("/api/updates", {})[1]

@@ -45,6 +45,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT50 (the Updater: its own section with a list and a tool, one press from start to finish; ModTrap's own downloads
   folder and a Downloads section; Add mods is Install mods). MT51 (a package for Windows with ModTrap.exe, handed
   over with each release).
+  MT52 (the package's one folder is named ModTrap and ModTrap.exe is the program that does the work; the browser is
+  taken back to ModTrap's tab; the press at Nexus goes only with the key of a Premium account).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1146,3 +1148,31 @@ you are done, so github repo upload or download doesn't fail."
 - `ModTrap.exe` starts ModTrap as it comes, changing nothing in a modlist; `ModTrap (changes allowed).exe` starts it
   with its switch for changes. The switch stays a thing the owner chooses, by which program they start.
 - The package is built by `tools/build_exe.py` and is never committed. The launcher is ModTrap's own code.
+
+## MT52
+
+**The package's names; staying on ModTrap's tab; the press at Nexus** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "name the main directory only ModTrap inside the compressed file. only keep version for the
+compressed file title (and the executable version in windows properties if applicable). It now opens a tab when
+clicking on update button for a mod, but it will still not download anything unless I click on download button on the
+nexus page. Also I asked not to switch to opened tab, keep on ModTrap tab. Can you actually get these two working,
+because so far you have failed every time."
+
+**Settled** (WHY§117; the owner may overrule any of it):
+
+- **The package.** The one folder inside the archive is named `ModTrap`, in every version. The version is in the
+  archive's name and in the programs' Properties (Details) in Windows.
+- **Which program.** `ModTrap.exe` starts ModTrap with its switch for changes: it is the program that does ModTrap's
+  work, and the one the owner starts. `ModTrap (look only).exe` starts it without. This amends MT51, whose plain
+  `ModTrap.exe` changed nothing: the owner started it, and no update could begin. The proving run that every real
+  job needs first (DESIGN§9) stands as it is.
+- **Staying on ModTrap's tab.** A setting, on: when ModTrap opens a site's page in a new tab, ModTrap's program takes
+  the browser back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when
+  the window in front is a browser's and its title is no longer ModTrap's, and checked by the title afterwards.
+  Windows only. The site's page stays open in its tab behind.
+- **No press at Nexus.** With the key of a Premium account ModTrap fetches the file itself: no tab, no press. The
+  key is asked for where it is needed, on the Updater tool, in a box that says what it is and where it is made, and
+  says at once whether the account is Premium; an update that was waiting for the press then goes on by itself.
+  For an account that is not Premium the press stays, on Nexus's own page: ModTrap does not press a site's button
+  in the owner's place.

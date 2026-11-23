@@ -19,7 +19,7 @@ import tempfile
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import downloads, process, updater, updating, version
+from . import downloads, process, tabback, updater, updating, version
 from .server import Bad
 
 
@@ -107,6 +107,7 @@ SETTINGS = {
     "site_window": False,      # a site's page for a download opens in a small window of its own, not a tab (MT46, MT47)
     "site_window_closes": True,    # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT48, WHY§111)
     "downloads_move": True,    # a mod's download in the browser's folder is moved into ModTrap's own downloads folder, not copied (MT50)
+    "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -465,6 +466,13 @@ class Api:
                 return self.updater.reopen(text("run", 40))
             if what == "updater/revert":
                 return self.updater.revert(text("run", 40))
+            if what == "updater/back":
+                # A site's page was opened in a new tab, which the browser put in front: back to ModTrap's tab (MT52).
+                def go() -> None:
+                    got = tabback.back()
+                    log.info("a site's page was opened in a new tab; back on ModTrap's tab: %s", "yes" if got["back"] else "no (%s)" % got["why"])
+                threading.Thread(target=go, name="tab-back", daemon=True).start()
+                return {"going": True}
             if what == "updater/clear":
                 return self.updater.clear()
             if what == "downloads/folder":
@@ -509,7 +517,13 @@ class Api:
                 text = body.get("key")
                 if text is not None and not isinstance(text, str):
                     raise Bad("the key did not arrive")
-                return self.updating.set_key(text)
+                got = self.updating.set_key(text)
+                if got.get("key"):
+                    # Nexus is asked at once what kind of account the key is of: only a Premium one lets ModTrap
+                    # fetch a file itself, and the owner is told which it is (MT52).
+                    self.updating._account()
+                    got["premium"] = self.updating.premium
+                return got
             if what == "list":
                 path = body.get("path", "")
                 if not isinstance(path, str) or len(path) > 1000:
