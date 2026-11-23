@@ -556,6 +556,13 @@ tool's card and in ModTrap's log, and a copy is kept with the session and packed
 5. **A page of the one that closed** is refused by the new one and loads itself again.
 6. ModTrap does not fetch updates. The owner replaces the folder; the steps above make sure the new one is what runs.
 
+**The package for Windows (MT51, MT52, WHY§116, WHY§117).** `tools/build_exe.py` builds `ModTrap-<version>-win64.zip`,
+holding one folder named `ModTrap`: ModTrap's files and ModTrap's own launcher, built twice: `ModTrap.exe`, which
+passes the switch for changes, and `ModTrap (look only).exe`, which does not. Both carry the version for Windows'
+Properties. The launcher starts the Python that lies beside it where the package was built with one (CPython
+as published, with a `._pth` file that keeps the rest of the PC out of its path), else the Python installed on the
+PC. The package is never committed.
+
 ## 18. The Process tab
 
 The demaster from start to finish, shown as it happens (WHY§70). It adds nothing to what ModTrap does: it shows it.
@@ -686,6 +693,21 @@ one, the plugins keeping their places; place a plugin the older version did not 
 health. The steps of a new mod (its place among all mods, shared files, records, tools, the game) are not shown, and
 the older version is not counted among the mods it shares files with. The Updates tab shows a mod whose newer file is
 installed as another, enabled mod as "Older version".
+
+**The Updater (MT50, WHY§115; amends this section and §16).** The update check's list is the "Updater list"; beside it
+the "Updater tool" shows an update as it goes, a box for each stage: find the newer file (asked of the site at the
+press, and looked for on the PC), download it (fetched by ModTrap where the host gives it to a program; else the
+owner's press on the site's button, on the page ModTrap opens), unpack it, check what it needs, put it in the older
+version's place (the add job of §16.8, with its Revert), check the result. One press starts it and it goes through
+by itself, on the server; it stops for the owner only at an installer's questions, a missing master, or MO2 open.
+ModTrap keeps downloads in a folder of its own with a list of what each is ("Downloads"): a fetched file goes there,
+a browser's download for an update is moved there (a setting), a file in MO2's downloads folder is used where it
+lies, and a file that is on the PC already is never downloaded again. "Add mods" is "Install mods", for new mods.
+
+**Staying on ModTrap's tab, and the key (MT52, WHY§117).** When the page opens a site's page in a new tab, ModTrap's
+program takes the browser back to ModTrap's tab with the browser's own key for the tab before, on Windows, guarded
+by the kind and the title of the window in front (a setting, on). The Nexus key is asked for on the Updater tool
+where an update waits for the press at Nexus; with a Premium account's key the file is fetched with no page.
 
 **Closing the tab (MT48, WHY§113).** ModTrap closes the tab it opened for a download when the file is whole and
 taken, or the waiting ends (a setting, on; only for Nexus, GitHub and LoversLab). While a file is being written, the

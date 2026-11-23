@@ -137,6 +137,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 112 | 2026-11-23 | The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again | DECIDED | #updates #page #network |
 | 113 | 2026-11-23 | Still a window in the owner's browser, and nothing told of a download in progress: Firefox answers window.open with “noopener” among its features with a window; a folder's listing on Windows gives a file being written no size | LIKELY | #updates #page #windows |
 | 114 | 2026-11-23 | The download works on the owner's PC; an update was judged as a new mod, with eight steps of tools and judgements, and the Updates tab still asked for it: an update now has its own few steps, and an older version replaced is shown as such | DECIDED | #updates #add |
+| 115 | 2026-11-23 | The add did not go by itself because an entry left on Install mods' list stood in its way; the update is now carried through on the server, in an Updater of its own, with ModTrap's downloads folder and nothing downloaded twice | DECIDED | #updates #add #page |
+| 116 | 2026-11-23 | A package for Windows: CPython from NuGet, a launcher of our own built with MinGW-w64, the path set by a ._pth file; built here, and not run here, since Wine does not start in this container | METHOD | #release #windows |
+| 117 | 2026-11-23 | The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program | DECIDED | #updates #page #release #windows |
 
 ## Entries
 
@@ -2980,3 +2983,120 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   code), and in a browser against a stand-in service, with the setting of MT43 on: one press, the file comes,
   the add runs by itself, Add mods says every step is done, and the Updates tab shows the older version as
   such and the newer one, a favourite, as up to date.
+
+### 115. The add did not go by itself because an entry left on Install mods' list stood in its way; the update is now carried through on the server, in an Updater of its own, with ModTrap's downloads folder and nothing downloaded twice
+
+`2026-11-23` · DECIDED · `#updates #add #page` · refs: MT50, MT49, MT43, MT42, MT21, DESIGN§16, DESIGN§20, TL01§28, WHY§105, WHY§111, WHY§112, WHY§114
+
+- FACT (the owner's session file at 0.3.42): the owner took the earlier update out again, then pressed the
+  arrow once more. The download came and was known (this time by the file's own code in its name), was unpacked,
+  and then "analysed 2 mod(s): 3 step(s) to go": the mod taken out was still on the "To add" list of the page,
+  and the page's own rule, that an add goes by itself only when it is the one thing on the list (MT43), held it
+  back. The owner saw a first step that read like work by hand and took it that ModTrap cannot add a mod.
+- The fault is in where the carrying-through lived: in the page, tied to one tab's list. It is now on the
+  server, a run of its own for one mod, with nothing of Install mods' list in it; the page only shows it. That
+  is also what lets it go on while ModTrap's tab is not in front.
+- The run's stages are the ones the owner asked to see as boxes: find, download, unpack, check, put in place,
+  check the result. The change to the modlist is still the add job's, with its record and its Revert (MT21);
+  what an update is and is not asked is MT49's.
+- The press on the site, said plainly, since the owner asks why it is still there: without the key of a Premium
+  account Nexus gives a file's address only to its own page in a signed-in browser (WHY§105). A program that
+  pressed that button for the owner would be doing what Nexus forbids a program to do for an account that is
+  not Premium; Wabbajack, for the same reason, has such an account press each download by hand (TL01§28).
+  ModTrap does not go round it. What ModTrap can do is make the press needless wherever the file is already on
+  the PC, and be done with one press where the account's key allows fetching.
+- Nothing twice. The owner's browser folder held the same file three times by now. Before a download ModTrap
+  looks in its own downloads folder (by the source, else by size), in MO2's downloads folder (by the numbers MO2
+  wrote beside the file, else by size) and in the browser's (by size, to the byte; where the site gave no size,
+  by the mod's number and the file's code in the name). The answer comes within the press, so that no page is
+  opened where the file is here.
+- ModTrap's downloads folder amends MT42's "moves and deletes nothing". DECIDED from the owner's words
+  ("download mod files there"): a file the owner downloaded in the browser for an update, known to be the
+  site's file to the byte, is moved into ModTrap's folder; a setting makes it a copy. A file in MO2's downloads
+  folder is MO2's: referred to, never moved. Where a file of the same source is already in ModTrap's folder, the
+  other copy is left where it is and not taken in again.
+- The watch for a download (WHY§112) now hands what it finds to the run that waits for it; with no run waiting,
+  to Install mods as before.
+- The setting of MT43 has no part in an update any more and is no longer shown; the Updater goes through by
+  itself. It still holds for a newer version that reaches Install mods another way.
+- Checked: tests (the whole run from a browser's download; the file moved, listed, and the mod installed; taken
+  out and pressed again with nothing downloaded and nothing unpacked twice; a file from an earlier day used by
+  its size; a file in MO2's folder used from there; a fetch with a key; stopping; the folder named anew), and in
+  a browser against a stand-in service: one press, the page for the press, the boxes to their end, the page
+  closed, the Downloads tab, the list's two rows, "Take it out again", and a second press that downloads nothing.
+  Not checked: on the owner's PC.
+
+### 116. A package for Windows: CPython from NuGet, a launcher of our own built with MinGW-w64, the path set by a ._pth file; built here, and not run here, since Wine does not start in this container
+
+`2026-11-23` · METHOD · `#release #windows` · refs: MT51, MT22
+
+- The owner asked for a program to start, and for each release to be handed over in the conversation.
+- Rejected: a tool that packs Python programs into one .exe. Those are built on Windows, for Windows; none is
+  to hand here, and what they make is a program ModTrap's own "files differ" check (MT22) could not look into.
+- The package: CPython for Windows as the Python Software Foundation itself publishes it on NuGet (version and
+  checksum fixed in tools/build_exe.py; its licence read, and kept in the package), ModTrap's folder beside it,
+  and a small launcher of our own. A file `python313._pth` beside that Python names its library and ModTrap's
+  folder; with such a file Python takes nothing else of the PC into its path, so an installed Python, PATH and
+  the registry play no part.
+- The launcher (tools/exe/launcher.c) starts that Python with `-m modtrap`, hands on its own arguments, waits,
+  and ends with Python's result. It is built twice with the MinGW-w64 cross compiler: once plain, once passing
+  `--allow-changes`. Two programs rather than one that allows changes: the switch stays the owner's choice
+  (DESIGN§8), made by which program they start.
+- FACT: the package was built here and its contents checked (every module ModTrap imports is in the package's
+  Python; the launchers hold the command lines they should). It was NOT run: Wine, installed to try it, does not
+  start in this container ("free(): invalid pointer" before any program runs). So the package also holds two
+  command files that start the same Python the same way, should a launcher not run.
+- An unsigned program fetched from elsewhere is met by Windows with a warning the first time; the package's
+  note says how to go on.
+- FACT: the owner's sweep, which a file handed to the owner must pass, looks inside the package and reports the
+  e-mail addresses of CPython's own authors, written in its source and its libraries: 215 findings, none of them
+  the owner's. They are not ModTrap's to remove (the Python is published as it is) and not ModTrap's to allow
+  (the sweep's list of what is allowed is the owner's). So the package is built two ways: without Python inside,
+  which passes the sweep and is what is handed over, and whose launcher starts the Python installed on the PC
+  (the "py" launcher, else "python", with ModTrap's folder given to it); and with Python inside, which is built
+  the same way and waits for the owner's word on the sweep. The launcher is the same program in both: it takes
+  the Python beside it where there is one.
+
+### 117. The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program
+
+`2026-11-23` · DECIDED · `#updates #page #release #windows` · refs: MT52, MT51, MT50, MT48, DESIGN§9, TL01§28, TL01§29, WHY§105, WHY§111, WHY§115, WHY§116
+
+- FACT (the owner's session file at 0.3.43): ModTrap ran from the package (the launcher found the PC's own
+  Python, 3.14), and the session says "changes allowed: no". The owner had started `ModTrap.exe`, which in MT51
+  was the program that changes nothing; pressed there, a mod's update button only opens the mod's page and says
+  so in a passing note. No update was begun, so nothing was downloaded. The log holds no line of the Updater.
+- So the first of the two things the owner calls failed was, this time, the package's doing: of two programs the
+  plainly named one was the one that could not do the work. DECIDED: `ModTrap.exe` passes the switch for
+  changes; the other program is named for what it is, "look only". The switch is still a choice made by which
+  program is started, and a real job still needs the proving run first (DESIGN§9).
+- Staying on ModTrap's tab. A page cannot open a tab behind itself nor bring itself to the front (WHY§111), and
+  that held. But ModTrap is a program too, on the same PC, and a program may press a key. So after its page
+  opens a site's page, the page tells the program, and the program presses the browser's own key for "the tab
+  before this one", Ctrl+Page Up: a new tab opened from a page stands right after it. Guards, since a key
+  goes to whatever window is in front: it is pressed only when that window is a browser's (by its window class:
+  Firefox's, or the one Chrome, Edge and their kin share) and its title no longer begins as ModTrap's does; the
+  title is read again afterwards, and where the tab before was not ModTrap's, the key for "the tab after" puts
+  the browser back where it was. The page that is opened first, empty, no longer carries ModTrap's name in its
+  title, so that the two can be told apart. Nothing is read from the browser but the title and the class of the
+  window in front.
+- The press at Nexus. Twice more the owner asks that nothing be pressed there. What can be done: Nexus's key
+  service gives a file's address to a program for a Premium account (WHY§105), and then there is no page at all.
+  LIKELY the owner's account is Premium: its downloads in the session files ran at 7 to 8 MB a second (134 MB in
+  16 and in 19 seconds), well above what Nexus gives an account that is not. So the key is now asked for where
+  the need shows, on the Updater tool beside the update that waits; the box tells where the key is made and how
+  it is kept; Nexus is asked at once what kind of account it is of, and the owner is told; and an update that was
+  waiting for the press is begun again and fetched by ModTrap.
+- Not built, and why: a program that presses Nexus's download button in the owner's browser. It could be done on
+  Windows as the key press above is. But for an account that is not Premium that press is the one thing Nexus
+  requires a person to do (TL01§28: Wabbajack keeps to it; TL01§29: Nexus's rules for programs), and a program
+  doing it puts the owner's account at risk of being closed. For a Premium account it is needless: the key does
+  it within the rules.
+- The package: one folder, `ModTrap`, in every version (the build now works in a folder beside the archive and
+  names the folder inside it by a constant); a version resource in both programs, made with the cross compiler's
+  resource tool, so that Windows shows the version under Properties.
+- Checked: tests (the key press with a stand-in for the window in front: taken back; nothing pressed where
+  ModTrap's tab stayed in front or the window is no browser's; put back where the tab before was another;
+  titles that only begin like ModTrap's), and in a browser against a stand-in service: the page asks the program
+  to come back; a key given while an update waits is found to be a Premium account's, and the update goes on by
+  itself and ends, fetched by ModTrap. Not checked, and not checkable here: the key press itself on Windows, in
+  Firefox; a real fetch from Nexus with a real key.

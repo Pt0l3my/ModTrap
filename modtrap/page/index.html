@@ -53,7 +53,9 @@
 <nav id="groups" hidden aria-label="Sections">
   <button data-group="modlist" class="on" title="Look at the modlist: its mods, its plugins, the health check, its tools">Modlist</button>
   <button data-group="demaster" title="Take mods out: what depends on them, the dry run, the steps, and the process as it goes">Demaster <span id="group-count" class="count">0</span><span id="group-dot" class="live-dot" hidden></span></button>
-  <button data-group="add" title="Add a mod to the modlist safely">Add mods</button>
+  <button data-group="add" title="Install a new mod into the modlist safely: what it needs, where it goes, what it replaces, and the steps">Install mods</button>
+  <button data-group="update" title="Which mods have a newer version, and the update of a mod from start to finish">Updater <span id="updater-group-dot" class="live-dot" hidden></span></button>
+  <button data-group="downloads" title="The mod files ModTrap has downloaded or taken over, each with where it came from">Downloads</button>
   <button data-group="record" title="What ModTrap changed, and its log">History</button>
   <button data-group="settings" title="How ModTrap goes about its work">Settings</button>
   <span id="tray" class="tray" hidden>
@@ -67,12 +69,14 @@
   <button data-group="modlist" data-tab="plugins">Plugins</button>
   <button data-group="modlist" data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-group="modlist" data-tab="tools">Tools</button>
-  <button data-group="modlist" data-tab="updates" title="Where each mod came from, and whether a newer file of it is out">Updates <span id="updates-count" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-group="demaster" data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="process" title="The demaster as it goes: each stage a box, its tasks inside, coloured as they are carried out">Process <span id="process-dot" class="live-dot" hidden></span></button>
-  <button data-group="add" data-tab="add" title="Add a mod to the modlist safely: what it needs, where it goes, what it replaces, and the steps">Add mods <span id="add-count" class="count" hidden></span></button>
+  <button data-group="add" data-tab="add" title="Install a new mod into the modlist safely: what it needs, where it goes, what it replaces, and the steps">Install mods <span id="add-count" class="count" hidden></span></button>
+  <button data-group="update" data-tab="updates" title="Where each mod came from, and whether a newer file of it is out">Updater list <span id="updates-count" class="count" hidden></span></button>
+  <button data-group="update" data-tab="updater" title="The update of a mod as it goes: each stage a box, its tasks inside, coloured as they are carried out">Updater tool <span id="updater-dot" class="live-dot" hidden></span></button>
+  <button data-group="downloads" data-tab="downloads" title="The mod files ModTrap has downloaded or taken over, each with where it came from">Downloads</button>
   <button data-group="record" data-tab="history" title="Everything ModTrap changed in this modlist, with date and time">History</button>
   <button data-group="record" data-tab="log">Log</button>
   <button data-group="settings" data-tab="settings">Settings</button>
@@ -93,7 +97,7 @@
         <h3>Opened before</h3>
         <div id="recent-list" class="recent-list"></div>
       </div>
-      <p class="dim">Adding a mod instead? Once the modlist is open, drop the mod's archive on the page: the Add mods tab tells what it needs, where it should go, what it replaces, and the steps to add it safely.</p>
+      <p class="dim">Adding a mod instead? Once the modlist is open, drop the mod's archive on the page: the Install mods tab tells what it needs, where it should go, what it replaces, and the steps to add it safely.</p>
       <p class="dim small">ModTrap runs on this PC only and sends nothing anywhere.</p>
     </div>
   </section>
@@ -221,6 +225,26 @@
     <div class="scroll">
       <div id="updates-head" class="pad"></div>
       <div id="updates-list" class="pad"></div>
+    </div>
+  </section>
+
+  <section id="tab-updater" class="tab" hidden>
+    <div class="tools">
+      <strong id="updater-summary">Updater tool</strong>
+      <span class="spacer"></span>
+      <span class="legend"><span class="t-waiting">to come</span><span class="t-going">going on now</span><span class="t-done">done</span><span class="t-failed">stopped with an error</span><span class="t-yours">waits for you</span></span>
+      <button id="updater-clear" type="button" title="Take the updates that have ended off this view; nothing of the modlist is touched">Clear finished</button>
+    </div>
+    <div class="scroll pad">
+      <p class="dim">An update from start to finish, as it happens: one press on a mod's update button in the Updater list starts it. The newer version goes right after the older one in MO2's list, the older one is disabled and not deleted, and the plugins keep their places. A file that is already on this PC is not downloaded again.</p>
+      <div id="updater-runs"></div>
+    </div>
+  </section>
+
+  <section id="tab-downloads" class="tab" hidden>
+    <div class="scroll pad">
+      <div id="downloads-head"></div>
+      <div id="downloads-list"></div>
     </div>
   </section>
 

@@ -1114,7 +1114,7 @@ class TheKeyAndThePage(unittest.TestCase):
         a.open(str(self.root), wait=True)
         mark = logbook.lines_after(0)[1]
         code, got, _after = a.post("/api/updates/key", {"key": "INVENTEDKEY0123456789abcdef"})
-        self.assertEqual((code, got), (200, {"key": True}))
+        self.assertEqual((code, got), (200, {"key": True, "premium": None}))        # the kind of account is asked at once; here Nexus gives no answer
         self.assertEqual(secret.read("nexus"), "INVENTEDKEY0123456789abcdef")
         state = a.get("/api/updates", {})[1]
         self.assertTrue(state["key"])

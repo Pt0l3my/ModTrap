@@ -42,7 +42,13 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT47 (the owner's correction: a site's page opens as a tab, not a window; the download is taken whatever its name).
   MT48 (ModTrap closes the download's tab when the download is here; still a window in the owner's browser, mended).
   MT49 (an update is not a new mod: it takes the older version's place, and nothing else is judged or asked).
-- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+  MT50 (the Updater: its own section with a list and a tool, one press from start to finish; ModTrap's own downloads
+  folder and a Downloads section; Add mods is Install mods). MT51 (a package for Windows with ModTrap.exe, handed
+  over with each release).
+  MT52 (the package's one folder is named ModTrap and ModTrap.exe is the program that does the work; the browser is
+  taken back to ModTrap's tab; the press at Nexus goes only with the key of a Premium account).
+- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -1082,3 +1088,91 @@ be involved."
 - **The Updates tab.** A mod whose newer file is installed as another, enabled mod is shown as "Older version", with
   no update asked for; the newer mod is up to date. A favourite's newer version is a favourite too.
 - A mixed add (an update together with a new mod) keeps the full list of steps.
+
+## MT50
+
+**The Updater, ModTrap's downloads folder, and Install mods** · *2026-11-23 · The owner's ruling*
+
+**Owner's words.** "why can't ModTrap add the mod? if it can do the demaster and then add the new patched files as
+mod, then this should be doable as well. ModTrap should be able to add the mod or update the mod without user having
+to place it in MO2 manually first... The whole update process should be 1 click, I don't understand why I have to
+click on the nexus page download either (that still hasn't been fixed either). Maybe it would be better if we renamed
+Add mods to Install mods, and then kept that one as installing new mods. Then we add Updater its own processing tool
+within its own tabs, make current tab a subtab called Updater list, and make a new one Updater tool (this one will
+show the process boxes). Make the update process 1 click, just like demaster. Also implement Modtrap its own
+download folder, and download mod files there, don't double download already existing files as duplicates. Implement
+Donwload main tab, here downloaded mods will be shown with IDs and references (where they were downloaded from, what
+mod, what version, etc.)."
+
+**Settled** (WHY§115; the owner may overrule any of it):
+
+- **Sections.** "Add mods" is "Install mods", for new mods. "Updater" is a section of its own with two tabs:
+  "Updater list" (the list that was the Updates tab) and "Updater tool" (the update as it goes, a box for each
+  stage, as the Demaster's process is shown). "Downloads" is a section of its own.
+- **One press.** The arrow beside a mod starts its update, and ModTrap carries it through by itself: find the newer
+  file, download it, unpack it, check what it needs, put it right after the older version with that one disabled and
+  the plugins keeping their places (MT49), and check the result. No list of Install mods has a part in it, and no
+  setting has to be on. It stops, and says why, only where something is the owner's: an installer that asks
+  questions and a master that is missing go to Install mods; MO2 open waits for MO2 to be closed.
+- **The press on the site.** Where the host gives a file only to the owner's signed-in browser (Nexus without the
+  key of a Premium account, LoversLab), the download itself needs the owner's press on the site's own button, on the
+  page ModTrap opens. ModTrap does not press it: that is the site's rule for a program, and the one Wabbajack keeps
+  to as well. With the key of a Premium account ModTrap fetches the file itself and the update is one press.
+- **Nothing twice.** Before anything is downloaded ModTrap looks for the file on the PC: in its own downloads
+  folder, in MO2's and in the browser's, by the mod's and the file's number or by the size the site gives, to the
+  byte. A file that is here is used. An archive unpacked before for the same update is used as it lies.
+- **ModTrap's downloads folder.** A folder of ModTrap's own, in ModTrap's folder or where the owner names it, with a
+  list of what each file is. A file ModTrap fetches goes there. A file the owner downloads in the browser for an
+  update is moved there from the browser's folder (a setting, on; off copies it). This amends MT42, which left
+  every file where it lay. A file in MO2's own downloads folder is used from there and never moved.
+- **Downloads.** Each file with its name, the mod it was got for and the mod it was installed as, its source (the
+  host, the mod's and the file's number, its page), version, size, how and when it came, and where it lies.
+- **Taking an update out again** is on the Updater tool; it is the add's own Revert (MT21).
+- "Manual update" hands the owner's archive to the Updater.
+
+## MT51
+
+**A package for Windows with ModTrap.exe, handed over with each release** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "can you start building it with an executable that I can run? also, add the release here each time
+you are done, so github repo upload or download doesn't fail."
+
+**Settled** (WHY§116; the owner may overrule any of it):
+
+- Each release is also built as a package for Windows, `ModTrap-<version>-win64.zip`, and handed to the owner in
+  the conversation. Its launcher starts ModTrap on the Python installed on the PC.
+- The same package can be built with the Python it runs on inside (`…-win64-with-python.zip`), as the Python
+  Software Foundation publishes it, so that nothing needs installing. **Open:** the owner's sweep reports the e-mail
+  addresses of that Python's own authors in it, so it is not handed over until the owner allows them in the sweep's
+  own list. Recommended: allow them, for the package's `python` folder only.
+- `ModTrap.exe` starts ModTrap as it comes, changing nothing in a modlist; `ModTrap (changes allowed).exe` starts it
+  with its switch for changes. The switch stays a thing the owner chooses, by which program they start.
+- The package is built by `tools/build_exe.py` and is never committed. The launcher is ModTrap's own code.
+
+## MT52
+
+**The package's names; staying on ModTrap's tab; the press at Nexus** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "name the main directory only ModTrap inside the compressed file. only keep version for the
+compressed file title (and the executable version in windows properties if applicable). It now opens a tab when
+clicking on update button for a mod, but it will still not download anything unless I click on download button on the
+nexus page. Also I asked not to switch to opened tab, keep on ModTrap tab. Can you actually get these two working,
+because so far you have failed every time."
+
+**Settled** (WHY§117; the owner may overrule any of it):
+
+- **The package.** The one folder inside the archive is named `ModTrap`, in every version. The version is in the
+  archive's name and in the programs' Properties (Details) in Windows.
+- **Which program.** `ModTrap.exe` starts ModTrap with its switch for changes: it is the program that does ModTrap's
+  work, and the one the owner starts. `ModTrap (look only).exe` starts it without. This amends MT51, whose plain
+  `ModTrap.exe` changed nothing: the owner started it, and no update could begin. The proving run that every real
+  job needs first (DESIGN§9) stands as it is.
+- **Staying on ModTrap's tab.** A setting, on: when ModTrap opens a site's page in a new tab, ModTrap's program takes
+  the browser back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when
+  the window in front is a browser's and its title is no longer ModTrap's, and checked by the title afterwards.
+  Windows only. The site's page stays open in its tab behind.
+- **No press at Nexus.** With the key of a Premium account ModTrap fetches the file itself: no tab, no press. The
+  key is asked for where it is needed, on the Updater tool, in a box that says what it is and where it is made, and
+  says at once whether the account is Premium; an update that was waiting for the press then goes on by itself.
+  For an account that is not Premium the press stays, on Nexus's own page: ModTrap does not press a site's button
+  in the owner's place.

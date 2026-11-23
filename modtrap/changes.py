@@ -1,7 +1,7 @@
 """The endpoints that change a modlist (DESIGN§8, DESIGN§16.8). Loaded only when ModTrap is started with
 `--allow-changes`: without it this module is never imported and the page's "Add it" stays switched off (WHY§44).
 
-What is here: the probe (DESIGN§9), which must pass before the rest works; adding the mods on the Add mods tab,
+What is here: the probe (DESIGN§9), which must pass before the rest works; adding the mods on the Install mods tab,
 and taking them out again; and the demaster with its Revert. Each goes through the job modules, which keep the
 rules: MO2 closed, the lists in the safe folder first, the result checked, any failure put back, everything in the
 history.

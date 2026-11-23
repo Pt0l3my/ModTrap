@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const state = { status: "none", mods: [], plugins: [], picked: new Set(), logAfter: 0, loaded: "", details: new Map() };
 
 // What changes MO2's lists must find MO2 closed: an open MO2 holds them in memory and writes its own back.
-const NEEDS_MO2_CLOSED = new Set(["/api/add/run", "/api/add/revert", "/api/demaster/install", "/api/demaster/revert",
+const NEEDS_MO2_CLOSED = new Set(["/api/add/run", "/api/add/revert", "/api/updater/revert", "/api/demaster/install", "/api/demaster/revert",
   "/api/probe/start", "/api/probe/cleanup"]);
 
 async function api(path, body) {
@@ -271,10 +271,11 @@ const SETTING_TEXT = [
   ["tools_self", "Let a tool that can do so run and close by itself", "Some tools have switches of their own to do their work and close without being touched; ModTrap knows these from the tool's own source, tool by tool (so far: Pandora, which then builds for the mods ticked in it when it was last used). On: ModTrap starts such a tool with those switches, beside the arguments MO2 has for it, and the tool's step is done once it has written its output. Synthesis has no such switch, only its run button: ModTrap presses that button once Synthesis has it ready (never while it is greyed), and asks the window to close when Synthesis's own log says the run has finished; if the press does not start a run, Synthesis stays open and is yours. Off: every tool is started as MO2's Run button starts it, and is yours to work and close. A tool without such switches is always yours to work."],
   ["tool_versions", "Before Synthesis starts, set library versions that do not fit it right", "Synthesis builds its patchers against two libraries whose versions its profile names (Nuget Versions). Versions newer than the Synthesis program can build for make every patcher fail. On: when Synthesis's own last log shows exactly that for the versions its profile is still set to, ModTrap sets the profile to the versions the program was built with (its log states them), in Synthesis's settings file, before it starts Synthesis; a copy of that file as it was is kept with the session, and the change is in the History. Off: ModTrap only says so. Nothing is set without that proof in the log."],
   ["tool_prebuild", "Before Synthesis starts, build its patchers outside MO2 when they are not built", "Synthesis builds its patchers on your PC, and on some PCs that fails inside MO2. On: when Synthesis's own last log names patchers whose build is not there, ModTrap first opens Synthesis by itself, outside MO2, waits until its log and its build records show every patcher built, and closes it again (as a click on its X does); then it starts it through MO2, where Synthesis takes the builds as done. Nothing in Synthesis is pressed, so no patcher runs and nothing is written to the game's folder; do not press Run in it yourself while it is open this way. If opening it changed its settings file, ModTrap puts the file back as it was. Off: Synthesis is only ever started through MO2."],
-  ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updates tab). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
+  ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updater list). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
-  ["updates_go", "Add a newer file without asking, when its plan leaves nothing to you", "One press on a mod's update button then goes all the way: the file is fetched (or taken from your Downloads folder once you have pressed download on the site), unpacked, and added as the mod's newer version, with the older one disabled. ModTrap still stops and shows the plan when the archive has an installer with questions, when something the mod needs is missing, or when more than this one mod is on the Add mods list. Revert undoes it. Off: the newer file waits on the Add mods tab for “Add it for me”."],
+  ["stay_on_tab", "Stay on ModTrap's tab when a site's page is opened", "A browser always puts a new tab in front, and a page cannot change that. On: ModTrap's program takes the browser straight back to ModTrap's tab, with the browser's own key for the tab before (Ctrl+Page Up), pressed only when the window in front is your browser's; the site's page stays open in its tab behind. Off: you stay on the site's page. Windows only."],
+  ["downloads_move", "Move a mod's download from the browser's folder into ModTrap's downloads folder", "A file you download for an update in your browser lands in the browser's Downloads folder. On: ModTrap moves it into its own downloads folder (see the Downloads tab), where it is kept with where it came from and found again instead of being downloaded twice. Off: ModTrap copies it there and leaves yours where it is. A file in MO2's own downloads folder is always used from there and never moved."],
   ["mo2_leave_alone", "When a tool's compiler crashes inside MO2, have MO2 leave the compiler alone", "MO2 hooks every program a tool starts, so that it sees the modlist's files. Synthesis starts the C# compiler to build its patchers; the compiler reads nothing of the modlist, and on some PCs it crashes when hooked. MO2 has its own list of programs it leaves alone (Settings, Workarounds, Executables Blacklist). On: when Synthesis's own log shows the compiler crashing, ModTrap adds the compiler (csc.exe and VBCSCompiler.dll) to that list in MO2's settings file, with MO2 closed and a copy of the file kept with the session, and the row of tools starts Synthesis once more. Off: ModTrap only says so."],
   ["script_props", "Take script properties that point at the mod out", "A script on another plugin's record can point at a record of the mod. On: that property is taken out, as a list entry is; the script then finds nothing there. Off: such a plugin is left to you, and the mod stays enabled until you have dealt with it. Takes effect at the next dry run."],
 ];
@@ -432,7 +433,7 @@ document.addEventListener("keydown", (ev) => {
 window.addEventListener("blur", closeMenu);
 document.addEventListener("scroll", closeMenu, true);
 
-// The menu of one mod (WHY§103), on the Mods tab and on the Updates tab.
+// The menu of one mod (WHY§103), on the Mods tab and on the Updater list.
 async function sourceLink(mod, now) {
   const text = "A source link for “" + mod + "”\n\nThe web address the mod comes from: its page at Nexus, its GitHub repository, or any other page. With a Nexus or GitHub address ModTrap can ask whether a newer file is out; any other address is kept for you to open."
     + "\n\nModTrap keeps the link in its own folder. The mod's own files are not touched.";
@@ -456,21 +457,21 @@ async function modMenu(ev, mod) {
   const rows = [
     { text: r && r.given ? "Change the source link…" : "Add a source link…", run: () => sourceLink(mod, r ? r.given : "") },
     r && r.given ? { text: "Forget my source link", run: async () => { try { await api("/api/updates/link", { mod, url: "" }); toast("The source link is forgotten."); await loadUpdates(); } catch (e) { toast(e.message); } } } : undefined,
-    r && r.get ? { text: r.state === "update" ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") + "…" : "Look at its files for a newer one…", note: r.fetches ? "ModTrap fetches it and takes it to Add mods" : r.get, run: () => getUpdate(mod) } : undefined,
-    m && m.kind === "mod" ? { text: "Manual update…", note: "For a file you downloaded yourself, from any site: it goes to Add mods as a newer version of this mod", off: !state.changes, run: () => manualUpdate(mod) } : undefined,
+    r && r.get ? { text: r.state === "update" ? "Update it" + (r.newest ? " to " + r.newest : "") : "Look at its files for a newer one…", note: "The Updater carries the update through; where the site gives the file only to your browser, its page is opened for your press on its download button", run: () => getUpdate(mod) } : undefined,
+    m && m.kind === "mod" ? { text: "Manual update…", note: "For a file you downloaded yourself, from any site: it goes to Install mods as a newer version of this mod", off: !state.changes, run: () => manualUpdate(mod) } : undefined,
     r ? { text: r.fav ? "Remove from favourites" : "Mark as favourite", run: () => setFavourite(mod, !r.fav) } : undefined,
     r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => openTab(page) },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
     null,
     { text: "Copy the mod's name", run: () => navigator.clipboard.writeText(mod).then(() => toast("The name is copied."), () => toast("The name could not be copied.")) },
-    state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => focusMod(mod) } : { text: "Show it on the Updates tab", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
+    state.tab === "updates" ? { text: "Show it on the Mods tab", run: () => focusMod(mod) } : { text: "Show it on the Updater list", run: () => { state.upFilter = { state: "", origin: "", on: false, text: mod }; showTab("updates"); } },
     m && m.row && m.row.classList.contains("tickable") ? { text: state.picked.has(mod) ? "Untick it" : "Tick it, to take it out", run: () => { togglePick(mod, !state.picked.has(mod)); updateTray(); } } : undefined,
   ].filter((v) => v !== undefined);
   menuAt(x, y, mod, rows);
 }
 
-// Files dropped on the Updates tab, or chosen with its button (WHY§103): a Wabbajack file, meta files of downloads,
+// Files dropped on the Updater list, or chosen with its button (WHY§103): a Wabbajack file, meta files of downloads,
 // mods' folders. A Wabbajack file can be gigabytes: only its list is cut out of it here and sent.
 async function wabbajackList(file) {
   const view = async (from, to) => new DataView(await file.slice(from, to).arrayBuffer());
@@ -607,7 +608,7 @@ function updatesChosen(input) {
 const UP_STATE = { update: ["Update out", "bad"], maybe: ["Unclear", "warn"], current: ["Up to date", "good"], "not asked": ["Not asked yet", ""], none: ["Cannot be asked", ""], gone: ["Gone from its page", "warn"], replaced: ["Older version", ""] };
 const UP_ORIGIN = { list: "the list's own", added: "added afterwards", modtrap: "added by ModTrap", "": "" };
 const UP_HOST = { nexus: "Nexus", github: "GitHub", loverslab: "LoversLab", url: "web address", "": "not known" };
-// The update button of one mod (MT40): ModTrap fetches the newer file where it can and takes it to Add mods; where it
+// The update button of one mod (MT40): ModTrap fetches the newer file where it can and takes it to Install mods; where it
 // cannot, the file's page is opened and the reason said.
 // A site's page for a download (MT46, MT47). It opens as a new tab, which a browser puts in front; a page has no way
 // to open one behind itself. With "site_window" it is a small window beside ModTrap instead. A page opened by another
@@ -631,7 +632,7 @@ function siteWindow() {
     const w = st.site_window
       ? window.open("", "modtrap-site", "popup=yes,width=1040,height=820,left=" + Math.max(0, window.screenX + window.outerWidth - 1080) + ",top=" + Math.max(0, window.screenY + 60))
       : window.open("", "_blank");
-    if (w) { try { w.document.title = "ModTrap is opening the mod's page…"; } catch (e) { /* a page of a site is in it: not ours to write to */ } }
+    if (w) { try { w.document.title = "Opening the mod's page…"; } catch (e) { /* a page of a site is in it: not ours to write to */ } }
     return w || null;
   } catch (e) { return null; }
 }
@@ -664,37 +665,193 @@ function openSite(url, mod, win) {
   }
   openTab(url);
 }
-// The browser itself opened the mod's page (Ctrl+click, a middle click): ModTrap only starts watching for the file.
-async function watchOnly(mod) {
-  try {
-    const got = await api("/api/updates/get", { mod });
-    toast(got.watching ? "The page is opened behind this tab. Press its download button there: ModTrap watches for the file and takes it to Add mods." : "The page is opened behind this tab.");
-  } catch (e) { toast(e.message); }
-  state.upSig = "";
-  loadUpdates();
-}
-document.addEventListener("visibilitychange", () => { if (!document.hidden && state.tab === "updates" && state.updates) loadUpdates(); });
-async function getUpdate(mod) {
+// The update button (MT50): one press starts the mod's update in the Updater, which carries it through by itself and
+// shows each stage on the Updater tool. Where the site gives the file only to the owner's browser, its page is opened
+// for their press on its download button; `byBrowser`: the browser opened that page itself (Ctrl+click, a middle
+// click), so ModTrap opens nothing.
+async function getUpdate(mod, byBrowser) {
   const r = state.updates ? state.updates.rows.find((u) => u.mod === mod) : null;
-  // The window is opened at once, while the press still counts as the owner's; it is closed again if it is not needed.
-  const win = r && r.fetches ? null : siteWindow();
-  let got;
-  try { got = await api("/api/updates/get", { mod }); } catch (e) { if (win) win.close(); toast(e.message); return; }
-  if (got.open) {
-    openSite(got.open, mod, win);
-    toast((got.watching ? "Now press the download button on the page that opened (“Start download” at Nexus): ModTrap cannot press it for you. It then watches your Downloads folder, takes the file to Add mods when it is whole"
-      + ((state.settings || {}).site_window_closes ? ", and closes that page." : ".") + " " : "") + "Why a page: " + got.why + ".");
-    state.upSig = "";
-    loadUpdates();
+  if (!state.changes) {                 // without the switch for changes nothing is installed: the page is all there is
+    if (!byBrowser && r && (r.get || r.page)) openTab(r.get || r.page);
+    toast("ModTrap updates a mod only when it is started with its switch for changes; the mod's page is opened for you.");
     return;
   }
-  if (win) win.close();
-  toast("ModTrap is fetching the newer file of “" + mod + "”. It goes to Add mods when it is here.");
+  // The tab is opened at once, while the press still counts as the owner's; it is closed again if it is not needed.
+  const win = byBrowser || (r && r.fetches) ? null : siteWindow();
+  let got;
+  try { got = await api("/api/updater/start", { mod }); } catch (e) { if (win) { try { win.close(); } catch (e2) { /* gone */ } } toast(e.message); return; }
+  if (got.open && !byBrowser) {
+    openSite(got.open, mod, win);
+    // The browser puts a new tab in front. ModTrap's program takes it back to this tab (MT52; a setting, on Windows).
+    if ((state.settings || {}).stay_on_tab && !(state.settings || {}).site_window) api("/api/updater/back", {}).catch(() => {});
+  } else if (win) { try { win.close(); } catch (e) { /* gone */ } }
+  if (got.open) toast("Its download page is opened in another tab. Without a Nexus key of a Premium account the download starts with your press on that page's download button; ModTrap does everything after it. See the Download box below.");
+  showTab("updater");
+  pollUpdater(true);
   state.upSig = "";
-  loadUpdates();
 }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { if (state.tab === "updates" && state.updates) loadUpdates(); pollUpdater(true); } });
+
+// The Updater tool (MT50): each update a row of boxes, a stage each, as the Demaster's process is shown.
+async function pollUpdater(now) {
+  if (state.updaterBusy || state.status !== "ready") return;
+  clearTimeout(state.updaterTimer);
+  state.updaterBusy = true;
+  try { state.updater = await api("/api/updater"); } catch (e) { /* asked again at the next turn */ }
+  state.updaterBusy = false;
+  const d = state.updater;
+  if (!d) return;
+  // A site's page ModTrap opened for a download is closed once its update no longer waits for it.
+  for (const mod of Object.keys(state.siteWins || {})) if (!d.runs.some((r) => r.mod === mod && r.waits_page)) closeSiteWindow(mod);
+  siteWindowsLeft();
+  const ended = d.runs.filter((r) => r.ended).map((r) => r.id + r.state).join(",");
+  if (state.updaterEnded !== undefined && ended !== state.updaterEnded) {       // an update ended: the lists it changed are read again
+    state.upSig = "";
+    if (state.tab === "updates") loadUpdates();
+    if (state.tab === "downloads") loadDownloads();
+  }
+  state.updaterEnded = ended;
+  renderUpdater();
+  if (d.going || state.tab === "updater") state.updaterTimer = setTimeout(pollUpdater, d.going ? 800 : 4000);
+}
+function renderUpdater() {
+  const d = state.updater || { runs: [] };
+  const going = d.runs.find((r) => r.state === "going"), yours = d.runs.find((r) => r.state === "yours" && !r.handed), failed = d.runs.find((r) => r.state === "failed");
+  for (const id of ["updater-dot", "updater-group-dot"]) {
+    const dot = $(id);
+    dot.hidden = !(going || yours);
+    dot.className = "live-dot" + (yours && !going ? " yours" : "");
+  }
+  const text = JSON.stringify(d.runs);
+  if (text === state.updaterText) return;
+  state.updaterText = text;
+  $("updater-summary").textContent = yours ? "Waits for you: “" + yours.mod + "”" : going ? "Now: “" + going.mod + "”" : failed && d.runs[0] === failed ? "Stopped: “" + failed.mod + "”" : "Updater tool";
+  $("updater-clear").disabled = !d.runs.some((r) => !["going", "yours"].includes(r.state) || r.handed);
+  if (!d.runs.length) { $("updater-runs").replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "No update has been started. On the Updater list, press the arrow beside a mod that has a newer version." }))); return; }
+  const WORD = { going: ["going on", "warn"], yours: ["waits for you", ""], done: ["done", "good"], failed: ["stopped", "bad"], stopped: ["stopped by you", ""], reverted: ["taken out again", ""] };
+  $("updater-runs").replaceChildren(...d.runs.map((r) => {
+    const word = WORD[r.state] || WORD.going;
+    const acts = [];
+    const act = (label, title, run, cls) => { const b = el("button", { type: "button", text: label, title, class: cls || "" }); b.addEventListener("click", run); acts.push(b); };
+    if (r.waits_page && r.open) act(r.needs_open ? "Open its download page" : "Open its download page again", "Opens the page where you press the site's download button", () => { openSite(r.open, r.mod, siteWindow()); }, r.needs_open ? "primary" : "");
+    if (r.waits_page && /nexusmods\.com/.test(r.open || "") && state.updates && state.updates.premium !== true) act(state.updates.key ? "Your Nexus key…" : "Do it without this page: give your Nexus key…",
+      "With the key of a Premium account ModTrap downloads the file itself: no page, no press", () => nexusKeyBox(async (premium) => {
+        if (!premium) return;
+        try { await api("/api/updater/stop", { run: r.id }); await api("/api/updater/start", { mod: r.mod }); } catch (e) { toast(e.message); }      // the same update, now fetched by ModTrap
+        pollUpdater(true);
+      }), "primary");
+    if (["going", "yours"].includes(r.state) && !r.handed) act("Stop", "Stop this update; nothing of the modlist is changed before the add itself", async () => { try { await api("/api/updater/stop", { run: r.id }); } catch (e) { toast(e.message); } pollUpdater(true); });
+    if (r.handed && r.staged) act("Go to Install mods", "The archive waits there, with the steps of an update", () => { if (!(state.staged || []).includes(r.staged)) state.staged = (state.staged || []).concat(r.staged); saveUi(); showTab("add"); pollAdd(true); }, "primary");
+    if (r.state === "done" && r.job) act("Take it out again", "Puts the modlist back as it was before this update: the older version enabled again, the newer one taken out", async () => {
+      if (!await confirmBox("Take “" + r.new + "” out again and enable “" + r.mod + "”, the older version, as before? The downloaded file stays where it is.")) return;
+      try { await api("/api/updater/revert", { run: r.id }); toast("Put back as it was."); } catch (e) { toast(e.message); }
+      pollUpdater(true);
+    });
+    return el("div", { class: "uprun card s-" + r.state },
+      el("div", { class: "uprun-head" }, el("b", { text: "“" + r.mod + "”" + (r.version ? " → " + r.version : "") }),
+        el("span", { class: "tag " + word[1] + (r.state === "yours" ? " t-yours" : ""), text: word[0] }),
+        el("span", { class: "dim small", text: new Date(r.started * 1000).toLocaleTimeString() + (r.ended ? " · " + Math.max(1, Math.round(r.ended - r.started)) + " s" : "") }),
+        el("span", { class: "spacer" }), ...acts),
+      r.summary ? el("p", { class: r.state === "failed" ? "would-needs" : "", text: r.summary }) : null,
+      el("div", { class: "flow" }, ...r.stages.map((s, i) => {
+        const w = STAGE_WORD[s.state] || STAGE_WORD.waiting;
+        return el("div", { class: "stage s-" + s.state },
+          el("div", { class: "stage-head" }, el("span", { class: "n", text: String(i + 1) }), el("b", { text: s.title }),
+            el("span", { class: "tag " + w[1] + (s.state === "yours" ? " t-yours" : ""), text: w[0] })),
+          s.note ? el("p", { class: "stage-note", text: s.note }) : null,
+          el("ul", { class: "tasks" }, ...s.tasks.map((t) => el("li", { class: "t-" + t.state },
+            el("span", { class: "ico", "aria-hidden": "true", text: TASK_ICON[t.state] || "○" }),
+            el("span", { text: t.text + (t.state === "going" ? " …" : "") }),
+            t.note ? el("span", { class: "note", text: t.note }) : null))));
+      })));
+  }));
+}
+
+// The Nexus key, asked for where it is needed (MT52): with the key of a Premium account ModTrap fetches a file
+// itself, with no page of Nexus's and no press there. The box says what the key is and where it is made, keeps it,
+// and says at once which kind of account it is of.
+async function nexusKeyBox(after) {
+  if (!state.updates) { try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { /* the box still serves */ } }
+  const d = state.updates || {};
+  const keyIn = el("input", { type: "password", autocomplete: "off", spellcheck: "false", placeholder: "paste your personal API key from Nexus here", size: "52" });
+  const page = el("a", { target: "_blank", rel: "noopener noreferrer", text: "Open Nexus's page for API keys" });
+  page.setAttribute("href", d.key_page || "");            // the address comes from ModTrap's program: the page holds no outside address
+  const keep = el("button", { type: "button", class: "primary", text: "Keep the key" });
+  const cancel = el("button", { type: "button", text: "Cancel" });
+  const said = el("p", { class: "would-needs", hidden: "hidden" });
+  const box = el("div", { class: "modal wide", role: "dialog", "aria-modal": "true" },
+    el("p", {}, el("b", { text: "One press, with no page of Nexus's: your Nexus API key" })),
+    el("p", { text: "Nexus gives a file to a program only through its key service, and only for a Premium account. With your account's key ModTrap downloads a newer file itself: no tab opens, and there is no download button to press." }),
+    el("ol", { class: "small upsteps" },
+      el("li", {}, "Signed in at Nexus Mods: ", page, "."),
+      el("li", { text: "At the bottom of that page, “Personal API Key”: make one if there is none, and copy it." }),
+      el("li", { text: "Paste it below and press “Keep the key”." })),
+    el("p", {}, keyIn),
+    el("p", { class: "dim small", text: "The key is not your password, and you can take it back at any time on that same page of Nexus's. ModTrap keeps it on this PC only, locked by Windows to your Windows account, sends it to Nexus's key service and nowhere else, and never writes it to the log or a session file. “Forget the key”, on the Updater list, removes it." }),
+    said, el("div", { class: "actions" }, cancel, keep));
+  const back = el("div", { class: "modal-back" }, box);
+  const done = () => { document.removeEventListener("keydown", key, true); back.remove(); };
+  const key = (ev) => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); done(); } };
+  cancel.addEventListener("click", done);
+  keep.addEventListener("click", async () => {
+    keep.disabled = true;
+    let got;
+    try { got = await api("/api/updates/key", { key: keyIn.value }); } catch (e) { said.textContent = e.message; said.hidden = false; keep.disabled = false; return; }
+    keyIn.value = "";
+    done();
+    state.upSig = "";
+    loadUpdates();
+    if (got.premium === true) {
+      toast("The key is kept, and Nexus says the account is Premium: from now on ModTrap downloads a newer file itself, with no page and no press.");
+      if (after) after(true);
+    } else if (got.premium === false) {
+      toast("The key is kept, but Nexus says the account is not Premium. Nexus lets a program download only for a Premium account, so for this account the press on Nexus's own download button stays.");
+      if (after) after(false);
+    } else toast("The key is kept, but Nexus could not be asked what kind of account it is of just now. Press a mod's update button to try.");
+  });
+  document.addEventListener("keydown", key, true);
+  document.body.append(back);
+  keyIn.focus();
+}
+
+// The Downloads tab (MT50): the mod files ModTrap fetched or took over, each with where it came from.
+async function loadDownloads() {
+  if (state.status !== "ready") return;
+  let d;
+  try { d = await api("/api/downloads"); } catch (e) { toast(e.message); return; }
+  state.downloads = d;
+  const folderIn = el("input", { type: "text", spellcheck: "false", placeholder: "another folder's full path, such as C:\\ModTrap downloads", size: "56" });
+  const set = el("button", { type: "button", text: "Keep downloads there" });
+  set.addEventListener("click", async () => { try { await api("/api/downloads/folder", { path: folderIn.value }); } catch (e) { toast(e.message); } loadDownloads(); });
+  const own = el("button", { type: "button", text: "Back to ModTrap's own folder", disabled: d.own });
+  own.addEventListener("click", async () => { try { await api("/api/downloads/folder", { path: "" }); } catch (e) { toast(e.message); } loadDownloads(); });
+  const total = d.rows.filter((r) => r.there && r.where === "ModTrap's downloads folder").reduce((n, r) => n + r.size, 0);
+  $("downloads-head").replaceChildren(el("div", { class: "card" },
+    el("h3", { text: "Downloads" }),
+    el("p", { class: "dim", text: "The mod files ModTrap fetched for an update, or took over from your browser's Downloads folder, each with where it came from. Before anything is downloaded, ModTrap looks here, in MO2's own downloads folder and in your browser's: a file that is already on this PC is not downloaded again. Nothing here is deleted by ModTrap." }),
+    el("p", {}, "ModTrap's downloads folder: ", el("span", { class: "mono", text: d.folder }), el("span", { class: "dim", text: "  ·  " + plural(d.rows.length, "file") + ", " + (total / (1024 * 1024)).toFixed(1) + " MB kept here" })),
+    el("p", {}, folderIn, " ", set, " ", own),
+    el("p", { class: "dim small", text: "Naming another folder moves nothing: the files downloaded so far stay in the folder named before, with its list." })));
+  if (!d.rows.length) { $("downloads-list").replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "Nothing has been downloaded yet. A mod's update, started on the Updater list, brings its file here." }))); return; }
+  const HOW_HOST = { nexus: "Nexus", github: "GitHub", loverslab: "LoversLab", url: "web address" };
+  const table = el("table", { class: "grid", id: "downloads-table" },
+    el("thead", {}, el("tr", {}, ...["File", "For the mod", "From", "Version", "Size", "How it came here", "When", "Where it lies"].map((h) => el("th", { text: h })))),
+    el("tbody", {}, ...d.rows.map((r) => el("tr", { class: r.there ? "" : "dimrow" },
+      el("td", { class: "mono small", text: r.file }),
+      el("td", {}, r.for_mod ? modLink(r.for_mod) : el("span", { class: "dim", text: "not said" }), r.installed_as ? el("div", { class: "dim small" }, "installed as ", modLink(r.installed_as)) : null,
+        r.this_modlist ? null : el("div", { class: "dim small", text: "of another modlist" })),
+      el("td", {}, (HOW_HOST[r.host] || "not known") + (r.mod_id ? " " + r.mod_id : ""), r.file_id ? el("div", { class: "dim small", text: "file " + r.file_id }) : null,
+        r.page || r.url ? el("div", {}, el("a", { href: r.page || r.url, target: "_blank", rel: "noopener noreferrer", text: "its page" })) : null),
+      el("td", { text: r.version || "" }),
+      el("td", { class: "num", text: (r.size / (1024 * 1024)).toFixed(1) + " MB" }),
+      el("td", { class: "small", text: r.how }),
+      el("td", { class: "small", text: r.when ? new Date(r.when * 1000).toLocaleString() : "" }),
+      el("td", {}, r.where, r.there ? null : el("span", { class: "tag warn", text: "no longer there" }))))));
+  $("downloads-list").replaceChildren(el("div", { class: "card" }, table));
+}
+
 // "Manual update" (MT46): a box with a drop zone and a button, for a file the owner downloaded themselves. The file
-// goes to Add mods as the mod's newer version.
+// goes to Install mods as the mod's newer version.
 function manualUpdate(mod) {
   const pick = el("input", { type: "file", accept: ".zip,.7z,.rar", hidden: "hidden" });
   const add = el("button", { type: "button", class: "primary", text: "Add file…" });
@@ -705,7 +862,7 @@ function manualUpdate(mod) {
     el("div", { class: "dim small", text: "A .zip, .7z or .rar file you downloaded yourself, from any site." }));
   const box = el("div", { class: "modal wide", role: "dialog", "aria-modal": "true" },
     el("p", {}, el("b", { text: "Manual update of “" + mod + "”" })),
-    el("p", { class: "dim", text: "ModTrap takes the file to Add mods as this mod's newer version: it goes right after “" + mod + "” in MO2's list, and “" + mod + "” is disabled, not deleted. Nothing changes before Add mods has shown you its plan" + ((state.settings || {}).updates_go ? " (or, with your setting, as soon as the plan leaves nothing open)." : ".") }),
+    el("p", { class: "dim", text: "The Updater takes the file as this mod's newer version: it goes right after “" + mod + "” in MO2's list, and “" + mod + "” is disabled, not deleted. The Updater tool shows each stage." }),
     zone, el("div", { class: "actions" }, cancel));
   const back = el("div", { class: "modal-back" }, box);
   const done = () => { document.removeEventListener("keydown", key, true); back.remove(); };
@@ -717,11 +874,9 @@ function manualUpdate(mod) {
     try {
       toast("Taking in “" + file.name + "” as a newer version of “" + mod + "”…");
       const rec = await sendArchive(file, mod);
-      state.staged = (state.staged || []).concat(rec.id);
-      if ((state.settings || {}).updates_go) state.autoAdd = { staged: rec.id, mod: mod, since: Date.now() };
-      saveUi();
-      showTab("add");
-      pollAdd(true);
+      await api("/api/updater/start", { mod, staged: rec.id });
+      showTab("updater");
+      pollUpdater(true);
     } catch (e) { toast(e.message); }
   };
   add.addEventListener("click", () => pick.click());
@@ -744,19 +899,6 @@ function fetchingEnded(d) {
   for (const [mod, f] of Object.entries(d.fetching || {})) {
     if (f.state === "going") continue;
     api("/api/updates/seen", { mod }).catch(() => {});
-    if (f.state !== "open") closeSiteWindow(mod);
-    if (f.state === "done") {
-      if (!(state.staged || []).includes(f.staged)) state.staged = (state.staged || []).concat(f.staged);
-      // One press all the way (MT43): with the setting on, the add goes ahead by itself where its plan leaves nothing open.
-      if ((state.settings || {}).updates_go) state.autoAdd = { staged: f.staged, mod: mod, since: Date.now() };
-      saveUi();
-      toast("The newer file of “" + mod + "” is here, as “" + f.name + "”. Add mods shows what it needs and where it goes.");
-      showTab("add");
-      pollAdd(true);
-    } else if (f.state === "open") {
-      openSite(f.open, mod, null);
-      toast("Its page is opened instead: " + f.why + ". Press download there: ModTrap takes the file from your Downloads folder or MO2's.");
-    } else toast("The newer file of “" + mod + "” was not fetched: " + f.error + "." + (f.open ? " Its page is in the mod's menu." : ""));
   }
 }
 async function loadUpdates() {
@@ -813,7 +955,7 @@ function renderUpdates(listOnly) {
     const stop = going ? el("button", { type: "button", text: "Stop the scan" }) : null;
     if (stop) stop.addEventListener("click", async () => { try { await api("/api/updates/stop", {}); } catch (e) { toast(e.message); } });
     const kids = [el("div", { class: "card-head" }, el("h2", { text: "Updates" }), el("span", {}, stop, " ", scan)),
-      el("p", { class: "dim", text: "Where each mod came from, read from MO2's own records on this PC, and whether a newer file of it is out, asked of Nexus and GitHub. A scan only asks and reads. A newer file is fetched only when you press a mod's update button, and nothing in the modlist changes before Add mods has shown you its plan." })];
+      el("p", { class: "dim", text: "Where each mod came from, read from MO2's own records on this PC, and whether a newer file of it is out, asked of Nexus and GitHub. A scan only asks and reads. A newer file is fetched only when you press a mod's update button, and nothing in the modlist changes before Install mods has shown you its plan." })];
     if (going) kids.push(el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " ModTrap is " + (d.scan.text || "scanning") + "…"));
     if (d.scan.error) kids.push(el("p", { class: "would-needs", text: d.scan.error }));
     const last = d.last;
@@ -898,7 +1040,7 @@ function renderUpdates(listOnly) {
     usual.addEventListener("click", async () => { try { await api("/api/updates/folder", { path: "" }); } catch (e) { toast(e.message); } loadUpdates(); });
     const waitingFor = Object.keys(w.waiting || {});
     kids.push(el("h3", { text: "Downloads ModTrap watches" }),
-      el("p", { class: "dim small", text: "Where ModTrap cannot fetch a file itself, the button opens the mod's page and you press download there, in the browser where you are signed in. ModTrap then watches two folders for the file, for 45 minutes, and takes it to Add mods as the mod's newer version once it is whole: MO2's own downloads folder, and the folder your browser saves to. It reads the file where it lies; it moves and deletes nothing." }),
+      el("p", { class: "dim small", text: "Where ModTrap cannot fetch a file itself, the button opens the mod's page and you press download there, in the browser where you are signed in. ModTrap then watches two folders for the file, for 45 minutes, and takes it to Install mods as the mod's newer version once it is whole: MO2's own downloads folder, and the folder your browser saves to. It reads the file where it lies; it moves and deletes nothing." }),
       el("p", {}, "Your browser's folder: ", el("span", { class: "mono", text: w.folder }), w.there ? null : el("span", { class: "tag warn", text: "not found" })),
       el("p", {}, folderIn, " ", setFolder, " ", usual),
       waitingFor.length ? el("p", { class: "would-needs" }, el("span", { class: "spinner small", "aria-hidden": "true" }), " Waiting for the download of: " + waitingFor.join(", ") + ". "
@@ -988,8 +1130,8 @@ function renderUpdates(listOnly) {
     }
     const known = r.state === "update" || r.state === "maybe";
     const title = (sure ? "Get the newer file" + (r.newest ? " (" + r.newest + ")" : "") : known ? "Unclear whether a newer file is out: look at the mod's files" : "This site cannot be asked for versions: look at the mod's page yourself") + ". "
-        + (r.fetches ? "ModTrap fetches it and takes it to Add mods, which shows what it needs and where it goes before anything is changed."
-          : "Opens its page" + (r.host === "nexus" ? " at Nexus" : "") + ". Press its download button there: ModTrap watches your Downloads folder and MO2's, and takes the file to Add mods as this mod's newer version. Ctrl+click or a middle click opens the page in a tab behind this one.");
+        + (r.fetches ? "One press: ModTrap fetches it and updates the mod; the Updater tool shows each stage."
+          : "One press starts the update. Where the file is not on this PC yet, its page" + (r.host === "nexus" ? " at Nexus" : "") + " opens for your press on its download button; ModTrap does the rest. Ctrl+click or a middle click opens that page in a tab behind this one.");
     if (r.fetches || !r.get) {
       const b = el("button", { type: "button", class: "upget" + (sure ? "" : " unsure"), text: known ? "↑" : "↗", "aria-label": "Get the newer file of " + r.mod, title });
       b.addEventListener("click", (ev) => { ev.stopPropagation(); getUpdate(r.mod); });
@@ -1000,11 +1142,11 @@ function renderUpdates(listOnly) {
     const link = el("a", { class: "upget" + (sure ? "" : " unsure"), href: r.get, target: "_blank", rel: "noopener noreferrer", role: "button", text: known ? "↑" : "↗", "aria-label": "Get the newer file of " + r.mod, title });
     link.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      if (ev.ctrlKey || ev.metaKey || ev.shiftKey) { watchOnly(r.mod); return; }       // the browser opens it its own way
+      if (ev.ctrlKey || ev.metaKey || ev.shiftKey) { getUpdate(r.mod, true); return; }       // the browser opens it its own way
       ev.preventDefault();
       getUpdate(r.mod);
     });
-    link.addEventListener("auxclick", (ev) => { if (ev.button === 1) { ev.stopPropagation(); watchOnly(r.mod); } });
+    link.addEventListener("auxclick", (ev) => { if (ev.button === 1) { ev.stopPropagation(); getUpdate(r.mod, true); } });
     return link;
   };
   const COLS = 8;
@@ -2796,7 +2938,7 @@ async function pollSteps(force) {
   } catch (e) { /* the next round tries again */ }
 }
 
-// --- the Add mods tab (MT21, DESIGN§16) ------------------------------------------------------------------------------
+// --- the Install mods tab (MT21, DESIGN§16) ------------------------------------------------------------------------------
 
 function addKey(k) { return "add::" + (state.adding || []).slice().sort().join("|") + "::" + k; }
 
@@ -3252,7 +3394,7 @@ function renderAdd(d) {
 async function autoAddStep(d) {
   const a = state.autoAdd;
   if (!a || state.autoAddBusy) return;
-  const stop = (why) => { state.autoAdd = null; if (why) toast("“" + a.mod + "”: its newer version is on the Add mods list and waits for you: " + why + "."); };
+  const stop = (why) => { state.autoAdd = null; if (why) toast("“" + a.mod + "”: its newer version is on the Install mods list and waits for you: " + why + "."); };
   if (Date.now() - a.since > 15 * 60 * 1000) return stop("it took too long to get ready");
   if ((state.adding || []).length || (state.staged || []).length !== 1 || state.staged[0] !== a.staged) return stop("more than this one mod is on the list");
   const rec = (d.staged || []).find((r) => r.id === a.staged);
@@ -3273,7 +3415,7 @@ async function autoAddStep(d) {
     await api("/api/add/run", addBody());
     state.autoAdd = null;
     state.addPlan = null;
-    toast("“" + rec.name + "” is added as the newer version of “" + a.mod + "”" + (x.updates_enabled ? ", and “" + a.mod + "” is disabled" : "") + ". Revert, on the Add mods tab, undoes it.");
+    toast("“" + rec.name + "” is added as the newer version of “" + a.mod + "”" + (x.updates_enabled ? ", and “" + a.mod + "” is disabled" : "") + ". Revert, on the Install mods tab, undoes it.");
     if (!(state.adding || []).includes(rec.name)) state.adding.push(rec.name);
     saveUi();
     state.addText = ""; state.upSig = "";
@@ -3334,6 +3476,8 @@ function showTab(name) {
   saveUi();
   if (name === "history") { state.historyText = ""; pollHistory(); }
   if (name === "updates") loadUpdates();
+  if (name === "updater") pollUpdater(true);
+  if (name === "downloads") loadDownloads();
   if (name === "job") paneFollow("job-log");
   if (name === "log") paneFollow("log");
 }
@@ -3409,6 +3553,7 @@ async function tick() {
   renderMo2();
   state.settings = s.settings || {};
   renderSettings();
+  if (s.status === "ready" && state.updater === undefined && !state.updaterBusy) pollUpdater(true);     // updates begun before the page was opened
   state.process = s.process || [];
   renderProcess();
   const up = $("updated");
@@ -3610,7 +3755,7 @@ $("rescan").addEventListener("click", async () => {
   tick();
 });
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-const GROUP_FIRST = { modlist: "mods", demaster: "selection", add: "add", record: "history", settings: "settings" };
+const GROUP_FIRST = { modlist: "mods", demaster: "selection", add: "add", update: "updates", downloads: "downloads", record: "history", settings: "settings" };
 document.querySelectorAll("#groups button[data-group]").forEach((b) => b.addEventListener("click", () =>
   showTab((state.groupTab || {})[b.dataset.group] || GROUP_FIRST[b.dataset.group])));
 $("dry-run").addEventListener("click", showPlan);
@@ -3624,6 +3769,7 @@ $("job-stop").addEventListener("click", async () => {
 $("quit").addEventListener("click", quitModTrap);
 $("steps-rescan").addEventListener("click", () => $("rescan").click());
 $("add-rescan").addEventListener("click", () => $("rescan").click());
+$("updater-clear").addEventListener("click", async () => { try { await api("/api/updater/clear", {}); } catch (e) { toast(e.message); } pollUpdater(true); });
 $("add-search").addEventListener("input", () => addMatches());
 $("add-search").addEventListener("focus", () => addMatches());
 $("add-search").addEventListener("keydown", (ev) => {

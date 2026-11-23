@@ -67,7 +67,7 @@ class Updating:
         self.premium: bool | None = None           # whether the key's account is a paying one, once Nexus has said
         self.fetching: dict[str, dict] = {}        # a mod's name -> how the fetching of its newer file stands
         self.mark_reader = None                    # reads a download's mark of the browser; a test's stand-in
-        self._ctx: tuple | None = None             # (the model, the way into Add mods): what a look by itself needs
+        self._ctx: tuple | None = None             # (the model, the way into Install mods): what a look by itself needs
         self._watching = False
         self.by_itself = True                      # the watch looks by itself; off in tests that count the looks
         self._look_lock = threading.Lock()
@@ -291,7 +291,7 @@ class Updating:
         return rows, wj
 
     def account(self, model, modlist_key: str, added: set[str], stage=None) -> dict:
-        """Everything the Updates tab shows. `stage` takes an archive that lies in a watched folder to Add mods."""
+        """Everything the Updates tab shows. `stage` takes an archive that lies in a watched folder to Install mods."""
         rows, wj = self.rows(model, modlist_key, added)
         if stage is not None:
             self._ctx = (model, stage)
@@ -435,7 +435,7 @@ class Updating:
 
     def look(self, model, stage) -> None:
         """Looks into MO2's downloads folder and the browser's for an archive a waiting mod's download has brought, and
-        hands it to Add mods through `stage(path, name, mod, version)`, read where it lies. A file counts once it is
+        hands it to Install mods through `stage(path, name, mod, version)`, read where it lies. A file counts once it is
         whole: not under a name browsers and MO2 give an unfinished download, and of the same size at two looks.
         An archive is known by its first bytes, whatever its name. It never deletes or moves a file of the owner's.
         Every file that came after the press is told in the log once, with what was made of it."""
@@ -592,7 +592,7 @@ class Updating:
                        {"version": w["version"], "url": sources.source_of_mark(sources.web_mark(path, self.mark_reader)) or w.get("url") or ""}
                 rec = stage(path, as_name, mod, w["version"], meta)
                 self.fetching[mod] = {"state": "done", "staged": rec["id"], "name": rec["name"]}
-                log.info("the download for “%s” is taken to Add mods as its newer version", mod)
+                log.info("the download for “%s” is taken to Install mods as its newer version", mod)
             except Exception as e:
                 why = str(e) if e.__class__.__name__ == "Bad" else logbook.why(e)
                 self.fetching[mod] = {"state": "failed", "error": why, "open": ""}
@@ -614,9 +614,9 @@ class Updating:
 
     def get(self, model, modlist_key: str, added: set[str], mod: str, folder: Path, stage, only_open: bool = False, in_place=None) -> dict:
         """The update button for one mod. Where ModTrap can fetch the newer file itself (a Nexus key of a paying
-        account; a GitHub release), it does, beside everything else, and hands the file to Add mods through `stage`;
+        account; a GitHub release), it does, beside everything else, and hands the file to Install mods through `stage`;
         the answer is {"going": True}. Otherwise the answer names the page to open and why: {"open", "why"}.
-        `in_place` takes an archive of the owner's to Add mods where it lies: what the watch for a download uses."""
+        `in_place` takes an archive of the owner's to Install mods where it lies: what the watch for a download uses."""
         rows, _wj = self.rows(model, modlist_key, added)
         row = next((r for r in rows if r["mod"] == mod), None)
         if row is None:
