@@ -134,6 +134,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 109 | 2026-11-22 | A source without typing: the mark a browser leaves on a downloaded file names its address; and a mod ModTrap adds had no source in its record, so an updated mod could no longer be asked about | DECIDED | #updates #add |
 | 110 | 2026-11-22 | A download from Nexus's page was not taken: the public service gave a storage code where a file's name was expected; a download is now known by the browser's mark, or by the mod's number and the upload's time in its name | FACT | #updates #network |
 | 111 | 2026-11-22 | A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting | DECIDED | #updates #page #safety |
+| 112 | 2026-11-23 | The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again | DECIDED | #updates #page #network |
+| 113 | 2026-11-23 | Still a window in the owner's browser, and nothing told of a download in progress: Firefox answers window.open with “noopener” among its features with a window; a folder's listing on Windows gives a file being written no size | LIKELY | #updates #page #windows |
+| 114 | 2026-11-23 | The download works on the owner's PC; an update was judged as a new mod, with eight steps of tools and judgements, and the Updates tab still asked for it: an update now has its own few steps, and an older version replaced is shown as such | DECIDED | #updates #add |
 
 ## Entries
 
@@ -2858,3 +2861,122 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked in a browser against a stand-in page: cut loose, the page sees no opener and stays open after "stop
   waiting"; tied, the page sees its opener, is closed on "stop waiting" and when the file arrives. The page test
   that forbids outside addresses and inline code still holds.
+- Later (2026-11-23, MT47, WHY§112): the owner had asked for a tab, not a window. The window is now a setting
+  that is off; the page opens as a tab, and the setting that keeps the tie holds for a tab as for the window.
+
+### 112. The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again
+
+`2026-11-23` · DECIDED · `#updates #page #network` · refs: MT47, MT46, MT42, TL01§30, WHY§105, WHY§106, WHY§110, WHY§111
+
+- The owner's session file at 0.3.39: the page was opened for the mod twice (23:57 and 23:59) and the log says
+  nothing more of it until the file was packed three minutes later. FACT: the log could not tell what the watch
+  saw, because the watch wrote nothing; that is itself a fault, mended here.
+- FACT (the owner's pictures): the page ModTrap opened carried `nmm=1`, the way of Nexus's "mod manager
+  download". LIKELY the cause that nothing was saved: on that page the press hands the download to a program
+  registered for such links (MO2's handler), and the browser saves no file; with MO2 closed, as it is while
+  ModTrap adds mods, nothing visible follows. Not proved from here. The page is now opened without it, the way
+  of "manual download", where the browser itself saves the file into its Downloads folder, which ModTrap watches.
+- FACT (found by reading the code): the watch looked only when ModTrap's page asked for the Updates tab's
+  state, and a browser slows or stops the asking of a tab that is not in front, as ModTrap's is not while the
+  owner is on the site's page. The watch now runs by itself for as long as a download is waited for.
+- FACT (TL01§30): for every file uploaded since the summer of 2026 the public service gives a storage code, not
+  the name; no field gives the name the download is saved under; `sizeInBytes` gives the size to the byte. So a
+  download is now also known by its size, which holds whatever the name, and tells two waited mods apart. The
+  files of the one mod are asked afresh at the press (one question), so that the number, the name on the page
+  and the size waited for are the page's at that moment; what an older scan kept had neither name nor size.
+- A file with no archive's ending to its name is now looked at too: an archive is known by its first bytes (zip,
+  7z, rar), and unpacked under its name with the ending those bytes call for. A new file that is no archive is
+  passed by and said so in the log.
+- The one-mod fallback of WHY§110 now holds only where no size is known: a size that is known and differs says
+  the file is another.
+- Found by the new test, before any release: the first wiring gave the watch the function that takes in a file
+  ModTrap fetched itself, which moves the file; a download of the owner's would have been moved out of their
+  Downloads folder. The watch now gets only the function that reads a file where it lies, and the test asserts
+  that every file in the watched folder is still there afterwards.
+- The log now says, without the folder's path (it holds the owner's name on the PC): at the press, what the
+  download is known by and whether the browser's folder was found; for each file that came after the press,
+  once, that it is being written, is no archive, fits no waited mod (with what is waited for), or is whole and
+  by what it was known; and the end of the waiting.
+- The tab: DECIDED as in MT47. A page cannot open a tab behind itself (WHY§111); a real link pressed with Ctrl
+  or the middle button is opened by the browser itself, behind ModTrap's tab, so the update button is now such a
+  link, and ModTrap then only starts watching. LIKELY, not checked: Firefox's own setting
+  `browser.tabs.loadDivertedInBackground` makes every tab a page opens load behind the one in front; that is
+  the owner's to set in their browser, not ModTrap's.
+- Checked: tests (the watch by itself takes a download with a name that says nothing and no ending, by its
+  size, passes by a text file, an unfinished download and an archive of another size, and leaves all four files
+  where they are; the address has no `nmm=1`), and in a browser against a stand-in service: a plain press opens
+  a tab that sees no opener; the nameless file is taken to Add mods as the mod's newer version; a middle click
+  is left to the browser and starts the watch; with the tie kept, ModTrap closes the tab when the file arrives.
+  Not checked: a real download from Nexus on the owner's PC, and under which name the browser saves it.
+
+### 113. Still a window in the owner's browser, and nothing told of a download in progress: Firefox answers window.open with “noopener” among its features with a window; a folder's listing on Windows gives a file being written no size
+
+`2026-11-23` · LIKELY · `#updates #page #windows` · refs: MT48, MT47, WHY§111, WHY§112
+
+- The owner's session file at 0.3.40. FACT: at the press the log says the download is known by the mod's number,
+  its size to the byte and the time of its upload, and that the browser's folder is there. No file is told of in
+  the 107 seconds until the session was packed. The owner's picture, taken in that time, shows Nexus's page with
+  its "Start download" button not yet pressed, in a window of its own with next to no furniture.
+- So two things are open and cannot be told apart from here: the button on the site was not pressed, or it was
+  and the download had not ended when the session was packed (a file of that size takes a minute or two).
+- LIKELY, from what is commonly told of Windows' file system and not checked on Windows from here: what a folder's listing says of a
+  file lags on Windows while the file is being written; its size reads as nothing until the writing ends. The
+  watch took a file's size and time from the listing, so a download in progress was not told of, on the page or
+  in the log, and the row went on saying that ModTrap waited for the press. Each file that came after the press
+  is now asked of itself. A file counts as having come after the press by when it was made or last written,
+  whichever is later, where the system keeps the time of making.
+- The row now says what to do ("press “Start download” on Nexus's page") and, once a file is being written, how
+  far it is, against the size the site gave. The log gets a line every half minute while the watch waits: how
+  many files came since the press and how far the one being written is; so the next session file tells which of
+  the two it was.
+- LIKELY, from the owner's picture and not checked in Firefox from here: Firefox answers `window.open` that has
+  "noopener" among its features with a window of its own, where Chromium opens a tab. With the window of MT46
+  switched off, ModTrap still opened the page that way. A tab with no tie is now opened by a link with
+  `rel="noopener noreferrer"` pressed for the owner, and the tab for a download by `window.open` with no features
+  at all, at the press itself, cut loose or tied afterwards (WHY§111). Nowhere is "noopener" given as a feature.
+- DECIDED (MT48): closing the site's page is on as ModTrap comes, because the owner asked for it; the reasons it
+  was off (WHY§111) stand and are said with the setting.
+- Not done, and the owner's to decide: reading the browser's own settings for where it saves downloads. Where
+  the browser saves elsewhere than Windows' Downloads folder, the owner names the folder on the Updates tab.
+- Checked: tests (a download in progress is told with how far it is), and in Chromium against a stand-in: a
+  plain press opens a tab, the row says to press, then "downloading 27%", then the tab is closed by ModTrap and
+  Add mods holds the file; "Open its page" opens a tab that sees no opener. Not checked: Firefox, Windows.
+
+### 114. The download works on the owner's PC; an update was judged as a new mod, with eight steps of tools and judgements, and the Updates tab still asked for it: an update now has its own few steps, and an older version replaced is shown as such
+
+`2026-11-23` · DECIDED · `#updates #add` · refs: MT49, MT41, MT43, MT47, MT48, DESIGN§16, TL01§31, WHY§105, WHY§112, WHY§113
+
+- FACT (the owner's session file at 0.3.41): the whole way worked. Ten seconds after the press on ModTrap's
+  button a download was being written in the browser's folder; sixteen seconds later it was whole and known "by
+  its size, to the byte"; it was unpacked (8,932 files), added by itself (the setting of MT43), enabled one
+  priority above the older version, and the older version disabled. The owner was brought to Add mods, and says the
+  press on the site's own button was what it took (WHY§113's first reading).
+- FACT (same file): the saved name had a shape ModTrap had not seen, recorded in TL01§31. It ends with the
+  file's own short code, which the public service gives; a download is now also known by that code together with
+  the mod's number in its name, and a name that carries another file's code is nobody's.
+- The owner's two complaints are both right. After the add, Add mods showed eight steps to go: look at shared
+  files, check records through xEdit, run four tools again, a look in the game. And the Updates tab still showed
+  the older mod with "Update out" and its button.
+- Why the steps came: before the add, the analysis knew the mod was a newer version (the unpacked archive said
+  so) and placed it by the older one; after the add, the mod was read from MO2 like any other and nothing said
+  it was an update, so it was judged as a new mod. And even before the add, the steps of a new mod were all
+  there, only with the place changed.
+- DECIDED (MT49): an update has its own short list: what the mod needs (kept, because a newer version can name
+  a new master), put it in the older one's place, a plugin the older version did not have, what the newer
+  version changes (told, not asked), the load order's health. No step is ticked by hand. The older version is
+  left out of the mods the newer one is compared with: what it shares with the mod it stands in for is no
+  conflict. That an added mod is an update is read from the add's own record for as long as the add stands.
+- What the newer version changes is found by comparing both folders' files by name and size, without reading
+  them. The tools named are those that read a kind of file that differs; they are named in a note, and nothing
+  is asked. Rejected: leaving the tools out altogether. An update that changes animation files does leave a
+  behaviour tool's output stale, and the owner should be able to know it without being made to act on it.
+- The Updates tab: rather than record what replaced what, it is read from the modlist as it is: a mod whose
+  newer file (by its number at Nexus) is installed in another, enabled mod is an older version. This also holds
+  for an update the owner made in MO2 by hand, and undoes itself when the add is reverted.
+- A favourite's mark is copied to the newer version when its archive is taken in, as the owner's source link is.
+- Not done: what the owner wrote of the older mod in MO2 (its notes) is not copied to the newer one.
+- Checked: tests (an update's steps before the add, after it, and without the word that it is an update; the
+  add's record; the older version shown as replaced and the newer as up to date; a download known by the file's
+  code), and in a browser against a stand-in service, with the setting of MT43 on: one press, the file comes,
+  the add runs by itself, Add mods says every step is done, and the Updates tab shows the older version as
+  such and the newer one, a favourite, as up to date.

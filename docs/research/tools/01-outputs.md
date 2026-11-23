@@ -555,3 +555,35 @@ needs.
 - **FACT (Nexus's page on acceptable use, of 2020).** A program is asked to name itself in `Application-Name` and
   `Application-Version`; a personal key is tolerated for a program meant for personal use; a program meant for
   the public is asked to get in touch with Nexus first.
+
+## 30. What the public service tells of one file, and what it does not (2026-11-23)
+
+Asked of the live service on 2026-11-23, without a key, for two mods of the game ModTrap is for (one with 62
+files, one with 55), by a session that can reach it.
+
+- **FACT (asked, by the service's own description of itself).** A file has these fields: `category`,
+  `categoryId`, `changelogText`, `count`, `date`, `description`, `detectedFileExtension`, `fileId`, `game`,
+  `groupId`, `id`, `manager`, `mod`, `modId`, `modUid`, `name`, `owner`, `primary`, `reportLink`,
+  `requirementsAlert`, `scanned`, `scannedV2`, `size`, `sizeInBytes`, `sqid`, `totalDownloads`, `uCount`, `uid`,
+  `uniqueDownloads`, `uri`, `version`.
+- **FACT (asked).** `size` is in units of 1,024 bytes; `sizeInBytes` is the size to the byte, given as a text of
+  digits, not a number.
+- **FACT (asked, both mods).** For files uploaded up to the summer of 2026, `uri` is the name the download is
+  saved under ("…-<mod's number>-<version>-<time of upload>.7z"). For every file uploaded since, in both mods,
+  `uri` is a storage code instead: three pairs of hexadecimal digits and a longer code of such digits and dashes,
+  divided by slashes. This corrects §29, which took `uri` for the name in every case.
+- **FACT (asked).** No field gives the name a storage-coded file is saved under: `fileName`, `originalFileName`
+  and `downloadName` do not exist. `name` is the file's name on the mod's page, which several files of a mod
+  share. `detectedFileExtension` gave "zip" for the newest such files of one mod and nothing for the other's.
+- **Not known.** Under which name a browser saves a storage-coded file. It is not asked for here: a download
+  needs the owner's signed-in browser.
+
+## 31. The name a storage-coded file is saved under (2026-11-23)
+
+- **FACT (the owner's session file at 0.3.41, a real download in Firefox).** A file whose `uri` is a storage code
+  (§30) was saved under a name of this shape: the file's name on the mod's page, the mod's number, the version, the
+  day and time of upload written as `2026-11-14T12-13Z`, and a short code of letters and digits, divided by
+  spaces, with the archive's ending; a second download of the same file had `(1)` before the ending. This answers
+  what §30 left not known.
+- **FACT (compared with §30's answers).** The short code is the file's `sqid`, which the public service gives.
+- **FACT (same session file).** The saved file's size was the service's `sizeInBytes`, to the byte.

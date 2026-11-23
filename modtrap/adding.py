@@ -21,6 +21,7 @@ LIGHT_SLOTS = 4096             # XE02§6: light plugins
 NEW_HEADER = 1.71              # XE02§6: the header version the newer game versions introduced
 META_BYTES = 256 * 1024        # meta.ini is read no further than this
 CONFLICT_SECONDS = 25.0        # looking for shared files, over all the mods to add
+DIFFER_SECONDS = 20.0        # the most a comparing of two versions' files may take
 EXAMPLES = 4
 TAIL_GAP = 2                   # plugins of unknown making that may sit among the tools' output at the load order's end
 ARCHIVE = re.compile(r"\.(7z|zip|rar|fomod|exe|001)$", re.IGNORECASE)
@@ -296,6 +297,49 @@ def tail_start(m: model.Model, memo: dict, masters: bool) -> tuple[int, list[str
 
 # --- the analysis ---------------------------------------------------------------------------------------------------
 
+def _sizes(folder: Path, stop: float) -> tuple[dict[str, tuple[str, int]], bool]:
+    """Every file under a mod's folder: {its path in lower case: (its path, its size)}; and whether time ran out."""
+    out: dict[str, tuple[str, int]] = {}
+    todo = [(folder, "")]
+    while todo:
+        if time.monotonic() > stop:
+            return out, True
+        here, rel = todo.pop()
+        try:
+            with os.scandir(here) as it:
+                for e in it:
+                    name = rel + e.name
+                    try:
+                        if e.is_dir(follow_symlinks=False):
+                            todo.append((Path(e.path), name + "/"))
+                        elif name.lower() != "meta.ini":
+                            out[name.lower()] = (name, e.stat(follow_symlinks=False).st_size)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return out, False
+
+
+def version_changes(old: Path, new: Path, stop: float) -> dict:
+    """What a newer version of a mod differs in from the older one, by its files' names and sizes (MT49): how many
+    files are new, gone, of another size, and the same; the same by kind; and the plugins among them. A file of the
+    same name and size counts as the same: its contents are not read."""
+    a, cut_a = _sizes(old, stop)
+    b, cut_b = _sizes(new, stop)
+    added = [b[k][0] for k in b if k not in a]
+    gone = [a[k][0] for k in a if k not in b]
+    changed = [b[k][0] for k in b if k in a and a[k][1] != b[k][1]]
+    kinds: dict[str, int] = {}
+    for f in added + gone + changed:
+        k = kind_of(f)
+        kinds[k] = kinds.get(k, 0) + 1
+    plug = lambda files: sorted((f for f in files if kind_of(f) == "plugin"), key=str.lower)
+    return {"added": len(added), "gone": len(gone), "changed": len(changed), "same": len(b) - len(added) - len(changed),
+            "kinds": kinds, "plugins": {"added": plug(added), "gone": plug(gone), "changed": plug(changed)},
+            "examples": sorted(added + gone + changed, key=str.lower)[:EXAMPLES], "cut": cut_a or cut_b}
+
+
 def staged_mod(name: str, folder: Path) -> Mod:
     """A mod ModTrap has unpacked in its own work folder and MO2 does not have yet (DESIGN§16.1)."""
     try:
@@ -440,8 +484,10 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
         trie = _trie(files)
         my_priority = effective(x)
         wins, loses = [], []
+        # The older version of an update is not another mod it shares files with: it is the one it stands in for.
+        mine_old = olds[fold(x.name)].name if fold(x.name) in olds else None
         others = [o for o in inst.mods if o.kind in ("mod", "overwrite") and o.folder is not None and o.enabled
-                  and o.name != x.name]
+                  and o.name != x.name and o.name != mine_old]
         others += [o for o in cands if o.name != x.name and not o.enabled]
         for o in others:
             if not trie or time.monotonic() > stop:
@@ -473,7 +519,10 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
                          # older one is enabled now and so is to be disabled when this one is added.
                          "updates": olds[fold(x.name)].name if fold(x.name) in olds else "",
                          "own_before": above(olds[fold(x.name)]) if fold(x.name) in olds else "",
-                         "updates_enabled": bool(fold(x.name) in olds and olds[fold(x.name)].enabled)})
+                         "updates_enabled": bool(fold(x.name) in olds and olds[fold(x.name)].enabled),
+                         # What the newer version differs in from the older one, by its files (MT49).
+                         "differs": version_changes(olds[fold(x.name)].folder, x.folder, time.monotonic() + DIFFER_SECONDS)
+                         if fold(x.name) in olds and olds[fold(x.name)].folder is not None else None})
 
     # The new plugins among themselves: masters' block first, then each after the masters that come along.
     entries = {fold(p["name"]): p for x in out_mods for p in x["plugins"]}
@@ -491,14 +540,25 @@ def analyse(m: model.Model, names: list[str], read=plugin.read, seconds: float =
 
     slots = {"full": {"now": full_now, "after": full_now + full_add, "limit": FULL_SLOTS},
              "light": {"now": light_now, "after": light_now + light_add, "limit": LIGHT_SLOTS}}
-    again = run_again(m, kinds_all, new_plugins, memo)
-    report = {"mods": out_mods, "place": place, "slots": slots, "tools": again, "cut": cut_any,
+    # An update (MT49): every mod of the batch is a newer version of a mod of the modlist. It takes the older one's
+    # place and nothing of the modlist is judged anew; the tools are named only where the files they read changed.
+    update = bool(out_mods) and all(x["updates"] for x in out_mods)
+    if update:
+        differing: dict[str, int] = {}
+        for x in out_mods:
+            for k, n in ((x.get("differs") or {}).get("kinds") or {}).items():
+                differing[k] = differing.get(k, 0) + n
+        again = run_again(m, {k: n for k, n in differing.items() if k != "plugin"}, differing.get("plugin", 0), memo)
+    else:
+        again = run_again(m, kinds_all, new_plugins, memo)
+    report = {"mods": out_mods, "place": place, "slots": slots, "tools": again, "cut": cut_any, "update": update,
               "unknown": [n for n in names if inst.mod(n) is None]}
     report["steps"] = compile_steps(m, report, auto)
     todo = [s for s in report["steps"] if s["state"] not in ("done", "not needed") and not s["manual"]]
     report["complete"] = bool(out_mods) and not todo
     report["summary"] = ("Nothing to analyse yet." if not out_mods else
-                         "Every step that files can prove is done." if not todo else "%d step(s) to go." % len(todo))
+                         ("The newer version is in place and the older one disabled." if update else
+                          "Every step that files can prove is done.") if not todo else "%d step(s) to go." % len(todo))
     return report
 
 
@@ -542,6 +602,88 @@ def run_again(m: model.Model, kinds: dict[str, int], new_plugins: int, memo: dic
 
 
 # --- the steps (DESIGN§16.7) ----------------------------------------------------------------------------------------
+
+def _update_steps(m: model.Model, rep: dict, step, doer: str, auto: bool, held: bool) -> None:
+    """The steps of an update (MT49): the newer version takes the older one's place, the older one is disabled, the
+    plugins keep their places. What a new mod is judged for (its place among all mods, the files it shares, the
+    records it overrides, the tools to run again, a look in the game) held for the older version and is not asked
+    again; what the newer version changes is told, with the tools that read it, as something to know."""
+    mods = rep["mods"]
+    several = len(mods) > 1
+    items, placed = [], True
+    for x in mods:
+        here = x["enabled"] and not x["updates_enabled"]
+        placed = placed and here
+        items.append({"text": "%s: %s, right after “%s”" % (x["name"], ("enabled, at priority %d" % x["priority"]) if x["enabled"] else "to enable", x["updates"]),
+                      "mod": x["name"], "tag": "enabled" if x["enabled"] else "not in place yet", "cls": "good" if x["enabled"] else ""})
+        items.append({"text": "“%s”, the older version: %s" % (x["updates"], "to disable; it is not deleted" if x["updates_enabled"] and not x["enabled"] else
+                                                                  "still enabled beside the newer one: disable it in MO2" if x["updates_enabled"] else
+                                                                  "disabled, and kept as it is"),
+                      "mod": x["updates"], "tag": "enabled" if x["updates_enabled"] else "disabled",
+                      "cls": "warn" if x["updates_enabled"] and x["enabled"] else "good" if not x["updates_enabled"] else ""})
+        for p in x["plugins"]:
+            keeps = p.get("keeps")
+            if p["active"] or keeps:
+                items.append({"text": "%s: %s" % (p["name"], "active, at position %s, the place it had" % p["position"] if p["active"] else
+                                                   "keeps its place in the load order, position %s%s" % (keeps["position"], "" if keeps["active"] else " (not active there, as you have it)")),
+                              "plugin": p["name"] if p["active"] else "", "tag": "keeps its place", "cls": "good"})
+    step("update", doer, "Put the newer version%s in the older one's place" % ("s" if several else ""),
+         "This is an update of a mod you have, not a new mod. The newer version goes right after the older one in "
+         "MO2's list, the older one is disabled and not deleted, and the plugins keep their places in the load order. "
+         "Nothing else of the modlist is judged anew: the place, the files it shares with other mods and the records "
+         "it overrides are the older version's. Revert, in the list of what was added, puts the older version back." + (
+             " “Add it for me”, above, does all of it." if auto else " Started with --allow-changes, ModTrap does this itself (“Add it for me”)."),
+         "done" if placed else "waiting" if held else "to do", items)
+
+    # A plugin the older version did not have has no place to keep: it is placed as a new plugin is.
+    fresh = sorted(((x, p) for x in mods for p in x["plugins"] if not p["unreadable"] and not p["active"] and not p.get("keeps")),
+                   key=lambda xp: xp[1].get("order", 0))
+    if fresh:
+        step("activate", doer, "Activate the plugin%s the newer version adds" % ("s" if len(fresh) > 1 else ""),
+             "The older version had no plugin of that name, so there is no place to keep: it goes after every master it "
+             "names, and before the plugins the modlist's tools made.",
+             "waiting" if not placed or held else "to do",
+             [{"text": "%s [%s]: to activate, %s (%s)" % (p["name"], p["kind"], ("directly before %s" % p["proposed"]["before"]) if p["proposed"]["before"]
+                                                           else "at the end of the load order", p["proposed"]["why"]), "tag": "not active"} for _, p in fresh])
+
+    # What the newer version changes: told, not asked.
+    told = []
+    for x in mods:
+        d = x.get("differs")
+        if not d:
+            continue
+        lead = "%s: " % x["name"] if several else ""
+        if not (d["added"] or d["gone"] or d["changed"]):
+            told.append({"text": lead + "every one of its %d file(s) has the older version's name and size." % d["same"], "tag": "same files", "cls": "good"})
+            continue
+        told.append({"text": lead + "%d file(s) are new, %d are gone, %d have another size, %d are the same by name and size%s." % (
+            d["added"], d["gone"], d["changed"], d["same"], "; the comparing was cut short" if d["cut"] else "")})
+        told.append({"text": lead + "what differs, by kind: " + ", ".join("%d %s" % (n, k if k != "plugin" else "plugin(s)")
+                                                                           for k, n in sorted(d["kinds"].items(), key=lambda kv: (-kv[1], kv[0])))})
+        for word, names in (("has another size", d["plugins"]["changed"]), ("is new", d["plugins"]["added"]), ("is gone", d["plugins"]["gone"])):
+            for n in names[:8]:
+                told.append({"text": "%s%s %s" % (lead, n, word), "tag": "plugin", "cls": "warn" if word != "has another size" else ""})
+    tools_named = []
+    for t in rep["tools"]:
+        names = t["titles"] or ([t["tool"]] if t["tool"] else [])
+        if names:
+            tools_named.append("%s (%s)" % (" or ".join("“%s”" % n for n in names), ", ".join(t["because"])))
+    if told:
+        step("differs", "ModTrap", "What the newer version changes",
+             "For you to know; nothing here is asked of you. Files are compared by name and size, their contents are not read.",
+             "done", told,
+             note=("Tools of this modlist read files that changed: %s. What they built still holds the older version's until they run "
+                   "again: with the modlist's other outputs when you next rebuild them, or now if the mod misbehaves in the game." % "; ".join(tools_named))
+             if tools_named else "Nothing that a tool of this modlist builds from has changed.")
+
+    mine = {fold(p["name"]) for x in mods for p in x["plugins"]}
+    issues = [i for i in m.issues if fold(i.plugin) in mine]
+    step("health", "ModTrap", "Check the load order: no missing or inactive masters",
+         "The same check as MO2's warning triangle, done on the modlist as it is on disk now.",
+         "to do" if issues else "done" if placed and not fresh else "waiting",
+         [{"text": "%s needs %s, which is %s" % (i.plugin, i.master, "not active" if i.what == "inactive" else "missing"),
+           "plugin": i.plugin, "tag": "missing" if i.what == "missing" else "not active", "cls": "bad"} for i in issues[:50]])
+
 
 def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
     out: list[dict] = []
@@ -599,6 +741,12 @@ def compile_steps(m: model.Model, rep: dict, auto: bool = False) -> list[dict]:
          "enabled keeps MO2's warning triangle away.",
          "to do" if needs else "done", needs,
          note="" if needs else "Every master is in the modlist and active, and there is room in the load order.")
+
+    if rep.get("update"):
+        _update_steps(m, rep, step, doer, auto, bool(needs or unpacked))
+        for i, st in enumerate(out):
+            st["n"] = i + 1
+        return out
 
     # 2. The mod's place.
     off = [x for x in mods if not x["enabled"]]

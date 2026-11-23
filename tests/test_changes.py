@@ -297,7 +297,7 @@ class DemasterThroughThePage(unittest.TestCase):
         self.assertEqual(self.api.state()["settings"], {"auto_go": False, "close_mo2": False, "open_mo2_after": False,
                                                         "follow": True, "script_props": True, "retire_copies": True,
                                                         "auto_tools": False, "tools_self": True, "tool_versions": True, "tool_prebuild": True, "mo2_leave_alone": True,
-                                                    "updates_at_launch": True, "updates_go": False, "site_window": True, "site_window_closes": False})
+                                                    "updates_at_launch": True, "updates_go": False, "site_window": False, "site_window_closes": True})
         self.assertTrue(self.api.post("/api/settings", {"name": "auto_go", "value": True})[1]["auto_go"])
         self.assertTrue(self.api.state()["settings"]["auto_go"])
         for bad in ({"name": "anything", "value": True}, {"name": "auto_go", "value": "yes"}, {}):

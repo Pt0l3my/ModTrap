@@ -39,6 +39,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   a mod ModTrap adds keeps its source).
   MT46 (a "Manual update" box and favourites in a mod's menu, a Favourites filter; a site's page for a download in a
   small window of its own, so that ModTrap's tab stays).
+  MT47 (the owner's correction: a site's page opens as a tab, not a window; the download is taken whatever its name).
+  MT48 (ModTrap closes the download's tab when the download is here; still a window in the owner's browser, mended).
+  MT49 (an update is not a new mod: it takes the older version's place, and nothing else is judged or asked).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1000,3 +1003,82 @@ opened, stay on ModTrap browser tab (could be a setting). The nexus page was ope
 - **The file that was not taken.** Nexus's public service gave a storage code where the file's name was expected, so
   ModTrap waited for a name no download carries. A download is now known by the browser's mark on it, or by the mod's
   number and the upload's time in its name; the storage code is never shown or waited for.
+
+## MT47
+
+**A tab, not a window; and the download taken whatever its name** · *2026-11-23 · The owner's correction of MT46*
+
+**Owner's words.** "when pressing the mod update button, it now opens a new window instead of a tab (did I ask for
+this?), and still nothing gets downloaded. The mod won't be updated. I asked, if you have to open a nexus page, then
+add a setting to open as new tab, but stay on ModTrap tab, don't switch to Nexus browser tab."
+
+**Settled** (WHY§112; this amends MT46, whose small window the owner had not asked for):
+
+- **A tab again.** A site's page opens as a new tab, as before 0.3.39. The small window stays as a setting, now off.
+- **Staying on ModTrap's tab.** A page cannot open a tab behind itself; only the browser can, at the owner's own
+  doing. So the update button is a real link: pressed with Ctrl held, or with the middle mouse button, the browser
+  itself opens the page in a tab behind ModTrap's, and ModTrap only starts watching for the file. A setting of
+  ModTrap's cannot do this for a plain press, and the page says so.
+- **Coming back by itself.** The setting of MT46 that lets ModTrap close the site's page now holds for a tab too:
+  when the file is here, ModTrap closes the tab it opened and the browser returns to ModTrap. Off as it comes, for
+  the reason given in MT46.
+- **The press on the site stays the owner's.** Without the key of a paying account, Nexus starts a download only
+  at a press on its own page, in the signed-in browser.
+- **The download.** The page is opened the way Nexus's "manual download" opens it, so that the browser itself
+  saves the file; before, it was opened the way of "mod manager download", which hands the file to a program set
+  up for such links and saves nothing in the browser. The file is known by its size to the byte, asked of Nexus at
+  the press, whatever its name, and an archive is known by its first bytes, with or without an ending to its name.
+- **The watch runs by itself**, not only while ModTrap's tab is looked at, and writes to the log every file that
+  came after the press and what it made of it.
+
+## MT48
+
+**The download's tab is closed when the download is here** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "still not downloading the file, also still opens new browser window instead of a tab. Once you
+fixed those, can you also make ModTrap to close the download page browser tab after the download is completed?"
+
+**Settled** (WHY§113; the owner may overrule any of it):
+
+- **Closing the tab.** The setting of MT46 and MT47 by which ModTrap closes the site's page is now on as ModTrap
+  comes, at the owner's asking: when the file is whole and taken to Add mods, or the waiting ends, ModTrap closes
+  the tab it opened and the browser returns to ModTrap. What it costs is unchanged and said with the setting: the
+  site's page stays tied to ModTrap's tab; it is done only for Nexus, GitHub and LoversLab; the browser asks before
+  ModTrap's tab goes anywhere while such a page is open. A tab the browser opened itself (Ctrl or the middle
+  button) cannot be closed by ModTrap.
+- **A tab, in the owner's browser too.** ModTrap no longer opens a page in the way the owner's browser answers
+  with a window.
+- **The press on the site stays the owner's**, and ModTrap now says so in as many words: on the row, "press
+  “Start download” on Nexus's page", and while the file comes, how far it is.
+
+## MT49
+
+**An update is not a new mod** · *2026-11-23 · The owner's ruling*
+
+**Owner's words.** "I had to click on the nexus page download button, then the file downloaded, and I was brought to
+add mods page. There the mod was added, but the steps also show to run all sorts of tools. also the update page
+didn't update the mod row (was the mod actually updated?) to new version. This should've been a simple mod update,
+just install the new version underneath the old version in priority, then disable to old mod version in MO2. It's
+that simple. ModTrap should be able to make a distinction between a mod update and a newly installed (added) mod
+that needs to be carefully placed by judging the whole modlist (conflicts, overwrites, etc.) and what tools should
+be involved."
+
+**Settled** (WHY§114; this amends MT41 and DESIGN§16 for a newer version of a mod of the modlist):
+
+- **What an update is.** Every mod of the add is a newer version of a mod the modlist has. It is put right after
+  the older version in MO2's list, the older version is disabled and not deleted, and its plugins keep their places
+  in the load order. That is all an update does.
+- **What it is not asked.** The steps of a new mod do not apply and are not shown: its place among all mods, a look
+  at the files it shares with other mods, the check of the records it overrides, the tools to run again, a look in
+  the game. They held for the older version. The older version is not counted as a mod the newer one shares files
+  or a plugin's name with.
+- **What is told.** One step that asks nothing: what the newer version changes, by its files' names and sizes, and,
+  only where files changed that a tool of the modlist builds from, which tools those are. Whether to run them is the
+  owner's, with the list's other outputs or when something misbehaves.
+- **What is still checked.** That every master is there and active, before and after; and a plugin the older version
+  did not have is placed as a new plugin is, since it has no place to keep.
+- **After the add.** The same few steps, done, for as long as that add stands; the add's own record says which mod
+  it was a newer version of.
+- **The Updates tab.** A mod whose newer file is installed as another, enabled mod is shown as "Older version", with
+  no update asked for; the newer mod is up to date. A favourite's newer version is a favourite too.
+- A mixed add (an update together with a new mod) keeps the full list of steps.

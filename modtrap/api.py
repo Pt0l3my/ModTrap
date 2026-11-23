@@ -104,8 +104,8 @@ SETTINGS = {
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
-    "site_window": True,       # a site's page for a download opens in a small window of its own (MT46)
-    "site_window_closes": False,   # that window stays tied to ModTrap's tab, so that ModTrap can close it (MT46, WHY§111)
+    "site_window": False,      # a site's page for a download opens in a small window of its own, not a tab (MT46, MT47)
+    "site_window_closes": True,    # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT48, WHY§111)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -497,7 +497,8 @@ class Api:
                     only_open = True                    # without the switch nothing is added, so nothing is fetched to add
                 else:
                     only_open = False
-                return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open)
+                return self.updating.get(m, key, added, mod, self._incoming() / "fetching", self.stage_fetched, only_open=only_open,
+                                         in_place=self.stage_where_it_lies if self.session is not None else None)
             if what == "folder":
                 path = body.get("path", "")
                 if not isinstance(path, str) or len(path) > 1000:
@@ -1138,8 +1139,13 @@ class Api:
             key, _added = self._updates_for()
             given = sources.given_load()
             link = given["links"].get(key, {}).get(instance.fold(old))
+            favs = given["favourites"].get(key, [])
+            fav = instance.fold(old) in favs and instance.fold(new) not in favs
             if link:
                 given["links"].setdefault(key, {})[instance.fold(new)] = link
+            if fav:
+                given["favourites"][key] = sorted(set(favs) | {instance.fold(new)})     # a favourite's newer version is one too (MT49)
+            if link or fav:
                 sources.given_save(given)
         except Exception:
             pass
@@ -1416,7 +1422,16 @@ class Api:
             return {"looking": False, "unpacking": busy, "mods": [], "steps": [], "staged": status, "gone": gone,
                     "summary": "Nothing to analyse yet.",
                     "added": self.changes.jobs() if self.changes is not None else []}
-        key = (id(m), tuple(mods), tuple(r["id"] for r in ready))
+        # Which of the mods are newer versions of a mod of the modlist (MT49): the ones still unpacked say so
+        # themselves; of the ones added, the add's own record says so, for as long as that add stands.
+        newer = {r["name"]: r["updates"] for r in ready if r.get("updates")}
+        if self.changes is not None and mods:
+            for j in self.changes.jobs():
+                if j["state"] == "added":
+                    for new_name, old_name in (j.get("updates") or {}).items():
+                        if new_name in mods:
+                            newer.setdefault(new_name, old_name)
+        key = (id(m), tuple(mods), tuple(r["id"] for r in ready), tuple(sorted(newer.items())))
         with self._lock:
             started = key in self._adding
             if not started:
@@ -1427,8 +1442,7 @@ class Api:
 
             def work() -> None:
                 try:
-                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None,
-                                           updates={r["name"]: r["updates"] for r in ready if r.get("updates")})
+                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None, updates=newer)
                     log.info("add: analysed %d mod(s): %s", len(found["mods"]), found["summary"])
                 except Exception as e:
                     log.warn("analysing the mods to add failed: %s", logbook.why(e))

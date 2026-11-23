@@ -672,3 +672,21 @@ is named "Filter:" and ends with "★ Favourites". A site's page for a download 
 (a setting, on), cut loose from ModTrap; a second setting, off, keeps it tied for Nexus, GitHub and LoversLab so
 that ModTrap can close it. A download is known by MO2's numbers, the browser's mark, its exact name, or the mod's
 number and the upload's time in its name; a storage code given for a name is never shown or waited for.
+
+**A tab, and the download whatever its name (MT47, WHY§112, amending the above).** The site's page opens as a tab;
+the small window is a setting, off. The update button is a real link: with Ctrl or the middle button the browser
+opens the page behind ModTrap's tab and ModTrap only watches. Nexus's page is opened for a download by the browser
+itself, not by a mod manager. The watch runs by itself while a download is waited for, knows an archive by its first
+bytes and a download by its size to the byte, asked at the press, and tells the log of every file that came.
+
+**An update is not a new mod (MT49, WHY§114; amends §16 for a newer version).** Where every mod of an add is a newer
+version of a mod of the modlist, the steps are: what it needs; put it right after the older version, disable that
+one, the plugins keeping their places; place a plugin the older version did not have; what the newer version changes
+(by its files' names and sizes, with the tools that build from what changed: told, not asked); the load order's
+health. The steps of a new mod (its place among all mods, shared files, records, tools, the game) are not shown, and
+the older version is not counted among the mods it shares files with. The Updates tab shows a mod whose newer file is
+installed as another, enabled mod as "Older version".
+
+**Closing the tab (MT48, WHY§113).** ModTrap closes the tab it opened for a download when the file is whole and
+taken, or the waiting ends (a setting, on; only for Nexus, GitHub and LoversLab). While a file is being written, the
+row says how far it is; before that, that the press on the site's download button is the owner's.

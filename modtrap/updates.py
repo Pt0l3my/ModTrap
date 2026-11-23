@@ -241,7 +241,7 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
         return {"state": "not asked", "text": "Nexus has not been asked for this mod's files yet", "newest": "", "file": "", "when": "", "asked": ""}
     # "name" is what the file is downloaded as, where the service gives that; for newer uploads it gives a storage
     # code instead (WHY§110), so "label", the file's name on its page, is what is shown.
-    files = {f[0]: {"id": f[0], "name": f[1], "version": f[2], "state": f[3], "time": f[4], "group": f[5] if len(f) > 5 else 0,
+    files = {f[0]: {"id": f[0], "name": f[1], "version": f[2], "state": f[3], "time": f[4], "group": f[5] if len(f) > 5 else 0, "size": f[7] if len(f) > 7 else 0, "code": f[8] if len(f) > 8 else "",
                     "label": (f[6] if len(f) > 6 and f[6] else f[1] if ARCHIVE.search(f[1]) else "the mod's newer file")} for f in kept.get("files", [])}
     chain = {c[0]: c for c in kept.get("chain", [])}
     installed = [i for i in row.get("files", []) if i in files or i in chain or any(c[1] == i for c in chain.values())]
@@ -296,7 +296,7 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
         return {"state": "update", "text": "a newer file replaced the installed one (%s): %s, version %s, of %s" % (
             how, best["label"], best["version"] or "(none given)", _day(best["time"])),
                 "newest": best["version"], "file": best["label"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"],
-                "file_name": best["name"] if ARCHIVE.search(best["name"]) else "", "time": best["time"]}
+                "file_name": best["name"] if ARCHIVE.search(best["name"]) else "", "time": best["time"], "size": best["size"], "code": best["code"]}
     if unsure is not None:
         return {"state": "maybe", "text": "the installed file is marked old or is no longer listed, with no word of what replaced it; a later "
                                           "main file is there: %s, version %s, of %s" % (unsure["label"], unsure["version"] or "(none given)", _day(unsure["time"])),
@@ -345,6 +345,54 @@ def verdict(row: dict, store: dict) -> dict:
 
 
 # --- the scan --------------------------------------------------------------------------------------------------------
+
+# What is asked of each file of a mod (TL01§29, TL01§30): its number, its name on the mod's page, the name or the
+# storage code of the file itself, version, category, time of upload, the line of versions it belongs to, and its size.
+FILE_FIELDS = "fileId name uri version categoryId date groupId sizeInBytes sqid"
+
+
+def _public_files(got: list) -> list:
+    """The public service's files of one mod as ModTrap keeps them: [number, name or storage code, version,
+    category, time, group, name on the page, size in bytes, the file's own short code]."""
+    files = []
+    for f in got:
+        try:
+            size = f.get("sizeInBytes")
+            files.append([int(f["fileId"]), str(f.get("uri") or ""), str(f.get("version") or ""), int(f.get("categoryId") or 0),
+                          int(f.get("date") or 0), int(f.get("groupId") or 0), str(f.get("name") or ""),
+                          int(size) if isinstance(size, (int, str)) and str(size).isdigit() else 0,
+                          str(f.get("sqid") or "") if re.fullmatch(r"[0-9A-Za-z]{6,16}", str(f.get("sqid") or "")) else ""])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return files
+
+
+def ask_files(row: dict, net: Net, store: dict, now: float | None = None) -> str:
+    """Asks Nexus's public service for the files of one mod, now, and keeps them: at the press of the update button,
+    so that what ModTrap waits for is what the page offers at that moment. "" when kept, else why not."""
+    if row.get("host") != "nexus" or not row.get("mod_id") or not re.fullmatch(r"[a-z0-9]+", row.get("game") or ""):
+        return "not a mod of Nexus"
+    headers = {"Application-Name": "ModTrap", "Application-Version": net.agent.split("/", 1)[-1]}
+    answers = []
+    for query in ('{ game(domainName: "%s") { id } }' % row["game"], None):
+        if query is None:
+            game = answers[0].get("game")
+            if not isinstance(game, dict) or not isinstance(game.get("id"), int):
+                return "Nexus's public service does not know the game"
+            query = '{ m0: modFiles(modId: "%d", gameId: "%d") { %s } }' % (row["mod_id"], game["id"], FILE_FIELDS)
+        status, h, body = net.ask(PUBLIC, query, headers)
+        if status != 200 or not isinstance(body, dict) or not isinstance(body.get("data"), dict):
+            return "Nexus's public service could not be reached (%s)" % h.get("why", "no answer") if status == 0 else "Nexus's public service did not answer the question (%d)" % status
+        answers.append(body["data"])
+    got = answers[1].get("m0")
+    if not isinstance(got, list):
+        return "Nexus's public service gave no files"
+    name = "%s/%d" % (row["game"], row["mod_id"])
+    rec = store.setdefault("nexus", {}).get(name) or {"asked": 0, "updated": 0, "via": "public"}
+    rec.update(files=_public_files(got), chain=[], asked=int(now if now is not None else time.time()), via="public")
+    store["nexus"][name] = rec
+    save(store)
+    return ""
 
 def _scan_public(rows: list[dict], wanted: dict, net: Net, store: dict, now: float, say, halted, nx: dict, force: bool, pause: float) -> bool:
     """Asks Nexus's public service, without any key (MT44, TL01§29). First, in questions of fifty mods each, when
@@ -440,7 +488,7 @@ def _scan_public(rows: list[dict], wanted: dict, net: Net, store: dict, now: flo
         say("asking Nexus for the files of mod %d of %d" % (min(at + len(part), len(need)), len(need)))
 
         def files_of(some):
-            return "{ %s }" % " ".join('m%d: modFiles(modId: "%d", gameId: "%d") { fileId name uri version categoryId date groupId }' % (i, k[1], games[k[0]])
+            return "{ %s }" % " ".join('m%d: modFiles(modId: "%d", gameId: "%d") { %s }' % (i, k[1], games[k[0]], FILE_FIELDS)
                                        for i, k in enumerate(some))
         data, why = ask(files_of(part))
         answers: dict[tuple[str, int], object] = {}
@@ -463,14 +511,7 @@ def _scan_public(rows: list[dict], wanted: dict, net: Net, store: dict, now: flo
                 rec["updated"] = 0                          # not answered: asked again at the next scan
                 store["nexus"][name] = rec
                 continue
-            files = []
-            for f in got:
-                try:
-                    files.append([int(f["fileId"]), str(f.get("uri") or ""), str(f.get("version") or ""), int(f.get("categoryId") or 0),
-                                  int(f.get("date") or 0), int(f.get("groupId") or 0), str(f.get("name") or "")])
-                except (KeyError, TypeError, ValueError):
-                    continue
-            rec.update(files=files, chain=[], asked=int(now), via="public")
+            rec.update(files=_public_files(got), chain=[], asked=int(now), via="public")
             store["nexus"][name] = rec
             nx["asked"] += 1
         if nx["asked"] % 100 < FILES_PER_QUESTION:
@@ -703,9 +744,9 @@ def how_to_get(row: dict, v: dict, store: dict, key: bool, premium: bool | None)
         if v["state"] != "update" or not v.get("file_id"):
             return {"open": page, "why": "which file is the newer one is not known for certain"}
         if not key:
-            return {"open": page, "why": "no Nexus key is kept, so the download goes through Nexus's page and MO2"}
+            return {"open": page, "why": "no Nexus key is kept, so the download goes through Nexus's page, in your browser"}
         if premium is False:
-            return {"open": page, "why": "Nexus lets a program start a download only for a Premium account, so it goes through Nexus's page and MO2"}
+            return {"open": page, "why": "Nexus lets a program start a download only for a Premium account, so it goes through Nexus's page, in your browser"}
         return {"fetch": "nexus", "file_id": v["file_id"], "name": v.get("file_name") or v.get("file") or "", "version": v.get("newest") or "", "page": page}
     if row["host"] == "github" and row.get("repo"):
         kept = store["github"].get(row["repo"].lower())
@@ -726,7 +767,7 @@ def fetch(how: dict, row: dict, key: str, net: Net, folder: Path, progress=None,
         url, why = nexus_link(key, net, row["game"], row["mod_id"], how["file_id"])
         if not url:
             if "Premium" in why:
-                return {"open": how["page"], "why": why + ", so it goes through Nexus's page and MO2"}
+                return {"open": how["page"], "why": why + ", so it goes through Nexus's page, in your browser"}
             raise Refused(why)
     else:
         url = how["url"]
@@ -738,12 +779,13 @@ def fetch(how: dict, row: dict, key: str, net: Net, folder: Path, progress=None,
 
 def get_of(row: dict, v: dict) -> str:
     """Where the owner gets the newer file a verdict speaks of: for Nexus the file's own page, opened the way
-    Nexus's "mod manager download" button opens it, so that MO2 takes the download; for GitHub the newest release."""
+    Nexus's "manual download" button opens it, so that the browser itself saves the file (WHY§112: the "mod manager
+    download" hands it to a program set up for such links, which need not be there); for GitHub the newest release."""
     if v["state"] not in ("update", "maybe"):
         return ""
     if row["host"] == "nexus":
         if v.get("file_id"):
-            return "https://www.nexusmods.com/%s/mods/%d?tab=files&file_id=%d&nmm=1" % (row["game"], row["mod_id"], v["file_id"])
+            return "https://www.nexusmods.com/%s/mods/%d?tab=files&file_id=%d" % (row["game"], row["mod_id"], v["file_id"])
         return "https://www.nexusmods.com/%s/mods/%d?tab=files" % (row["game"], row["mod_id"])
     if row["host"] == "github" and row.get("repo"):
         return "https://github.com/%s/releases/latest" % row["repo"]

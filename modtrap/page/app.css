@@ -392,3 +392,6 @@ table.updates .c-get { width: 34px; padding-left: 0; padding-right: 4px; }
 .upzone.manual.over { background: #3b3170; border-style: solid; }
 .modal.wide { max-width: 640px; }
 .upfav { color: var(--warn); }
+a.upget { display: inline-block; box-sizing: border-box; text-decoration: none; text-align: center; cursor: pointer; line-height: 24px; }
+.upsaw { white-space: nowrap; }
+.upcoming { color: var(--good); }
