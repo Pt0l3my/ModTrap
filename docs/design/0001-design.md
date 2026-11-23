@@ -1150,3 +1150,24 @@ plugins is hidden there.
 - The overview says what "It needs" means: how many mods the mod's plugins are built on, and that there is
   nothing to do while all of them are there and active. A master that is missing, or not active while the plugin
   that needs it is, is a warning line above it.
+
+## 32. ModTrap's own copies in a mod's web; a demaster and the plugins' groups (MT74)
+
+**A demastered copy** is a plugin whose file lies in a mod ModTrap made for a demaster (its name begins with
+"ModTrap - "); it stands for the plugin of the same name in the highest other enabled mod that has it. In a mod's
+web (§23, §31), a pair of plugins that change the same records without one naming the other as a master is, in
+this order:
+
+1. *as before the demaster*, where one of the two is such a copy and the other plugin's mod is not younger than
+   the copy's file: told as the later one's change winning, with the reason; never a conflict;
+2. *a tool's last word*, where the later one was made by a tool, or is a copy of a plugin a tool made (§31);
+3. *settled*, where an active third plugin has both as masters;
+4. *a conflict*.
+
+The overview of ModTrap's own mod names the mods its copies stand for and says that a copy adds no conflict and
+takes none away.
+
+**A demaster's safe folder** (§8) holds MO2's groups file with the three lists, where the profile has one. A
+demaster writes no group. Its Revert by lines (§11), and the finishing of an earlier Revert, give each plugin they
+put back in the load order its group again where it has none: the one the safe's copy names, or, without such a
+copy, the one it stands inside.

@@ -162,6 +162,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 137 | 2026-11-23 | The page greys what the server already refuses; a re-read keeps the page; a run of the load order is not a separator's group; two saves at once shared one temporary file | METHOD | #page #safety #sessions |
 | 138 | 2026-11-23 | A progress symbol is not decoration: it moves even where the PC asks for less motion | FACT | #page |
 | 139 | 2026-11-23 | MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands | FACT | #model #page #safety |
+| 140 | 2026-11-23 | A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed | METHOD | #model #page #safety |
 
 ## Entries
 
@@ -3793,3 +3794,39 @@ them; the addresses were read by a session that can), and the time the second pa
 - Not done: a demaster's Revert that puts back plugin lines MO2 had dropped (DESIGN§11) does not put back their
   groups, which MO2 dropped with them. The groups file is not among that job's safe copies, and nothing is written
   without one (MT14). Such a plugin shows under "No group", for the owner to give it one.
+- Later (2026-11-23, MT74, WHY§140): done. A demaster takes the groups file into its safe, and its Revert puts the
+  groups back; and the web's rule for ModTrap's copies no longer rests on who made the plugin.
+
+### 140. A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed
+
+`2026-11-23` · METHOD · `#model #page #safety` · refs: MT74, MT75, MT73, DESIGN§32, DESIGN§23, DESIGN§11, MO05§2, WHY§139, WHY§83
+
+- FACT (the owner's screenshot of 0.3.64): the web of ModTrap's demaster mod still showed 355 mods in conflict.
+  Its seven plugins are two tools' outputs and five hand-made plugins, most of them the list author's own patches
+  (the plugins' groups in MO2 say so: two stand in the outputs' group, the five in three ordinary groups of the
+  load order). WHY§139's rule asks whether a tool made the later plugin, so it cleared the two and left the five.
+- METHOD: the owner's point was never about tools. It was that these files only stand in for the originals. That
+  is exact: the demaster's change run takes a master out and leaves every record the plugin overrides as it was
+  (the dry run and the check after it hold that), and the copy takes the original's place in the load order by its
+  name. So for any other plugin P, the set of records the copy and P both change, and which of the two loads
+  later, is what it was between the original and P. Whether that was ever a conflict is a question about the
+  modlist (MT75), not about the demaster. The web of ModTrap's own mod is where the owner looks for what ModTrap
+  did, so there it must not be told as a conflict.
+- METHOD (the limit): "as it was before" is only true of a plugin that was there before. The copy's file time is
+  when the demaster made it; a mod's folder is made when MO2 or ModTrap installs it, and made anew by an update
+  (MO04§3, the Installation column). A mod whose folder is younger than the copy is weighed by the ordinary rules.
+  Not caught: a mod installed before the demaster and enabled only after it. The demaster's safe folder holds the
+  lists of that time and could say; left until it matters.
+- Rejected: telling such pairs by a kind of their own. The ten kinds each have a colour and a side of the picture;
+  "records it changes" with the reason beside it says what is the case.
+- Rejected for now, and asked as MT75: taking the author's hand-made patches out of the conflicts wherever they
+  stand. That needs to know what came with the list, or a guess by how many mods a plugin is built on.
+- METHOD (the gap of WHY§139): a demaster takes MO2's groups file into its safe with the three lists, so that the
+  groups of that time can be read when plugin lines MO2 dropped are put back (`groups_back`). A demaster made
+  earlier has no such copy: there the only thing known is where the plugin stands now, so it gets the group it
+  stands inside, and none at a group's edge, where two answers are possible. MT14 is kept by taking the copy at
+  that moment, before the write.
+- Checked: on invented lists, both directions and both sides of the web, the mod that came since, the Revert by
+  lines to the byte with the groups' copy, and the Revert of a demaster without one. Not checked on the owner's
+  PC: the web of the demaster mod, where every mod of the list is older than the copies and the mods installed on
+  the 23rd are younger.

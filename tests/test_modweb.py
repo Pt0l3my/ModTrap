@@ -91,7 +91,7 @@ class TheWebOfAMod(unittest.TestCase):
         last = thistle[("loses", "Tool Output")]
         self.assertEqual((last["weight"], last["lines"]), (1, ["Thistle.esp loses to Generated.esp in 1 record (GLOB 1)"]))
         self.assertEqual(last["text"], "its change wins over this mod's in 1 record: made by a tool to have the last word")
-        self.assertEqual(last["made"], "a tool made Generated.esp from the load order as a whole")
+        self.assertTrue(last["made"].startswith("No conflict: a tool made Generated.esp from the load order as a whole. Such a plugin gathers"))
         out = self.links("Tool Output")
         self.assertEqual((out[("wins", "Thistle")]["made"], [k for k in out if k[0] == "conflict"]), (last["made"], []))
         # The patch changes what Quill changes and has Quill as a master: how a patch works, and no conflict.
@@ -110,18 +110,53 @@ class TheWebOfAMod(unittest.TestCase):
         self.assertEqual(late[("conflict", "Tool Output")]["lines"], ["Late.esp wins over Generated.esp in 1 record (GLOB 1)"])      # it undoes the tool's work, unseen
         self.assertEqual(self.links("Tool Output")[("conflict", "Late")]["made"], "")
 
-    def test_modtraps_demastered_copy_of_a_tools_output_has_the_last_word_as_the_output_has(self):
-        # ModTrap's own mod holds the plugin again, with a master taken out; the tool's own is under “Outputs”.
-        fx.write(self.root / "mods" / "ModTrap - Lantern" / "Generated.esp", pf((CORE,), (B, 4.0)))
+    def copies(self, files: dict) -> None:
+        """ModTrap's own mod with demastered copies, above everything; made an hour ago, after every other mod."""
+        for name, data in files.items():
+            fx.write(self.root / "mods" / "ModTrap - Lantern" / name, data)
+        fx.write(self.root / "mods" / "Demaster_separator" / "meta.ini", b"[General]\r\n")
         ml = self.root / "profiles" / "Default" / "modlist.txt"
         ml.write_bytes(ml.read_bytes().replace(b"+Tool Output\r\n", b"+ModTrap - Lantern\r\n+Demaster_separator\r\n+Tool Output\r\n"))
+        then = time.time() - 3600
+        for folder in (self.root / "mods").iterdir():
+            os.utime(folder, (then - 3600, then - 3600))
+        for name in files:
+            os.utime(self.root / "mods" / "ModTrap - Lantern" / name, (then, then))
         self.m = model.build(instance.load(self.root))
-        self.assertEqual(self.m.row("Generated.esp").source, "ModTrap - Lantern")
+
+    def test_modtraps_demastered_copy_stands_for_the_plugin_it_was_made_from(self):
+        """MT74."""
+        # Before: Thistle and the patch for Quill and Lantern change the same record, neither knowing the other.
+        self.assertIn(("conflict", "Quill - Lantern Patch"), self.links("Thistle"))
+        self.copies({"QuillLanternPatch.esp": pf((CORE, "Quill.esp"), (A, 6.0)), "Generated.esp": pf((CORE,), (B, 4.0))})
+        self.assertEqual((self.m.row("QuillLanternPatch.esp").source, self.m.row("Generated.esp").source), ("ModTrap - Lantern", "ModTrap - Lantern"))
+        got = modweb.web(self.m, self.m.instance.mod("ModTrap - Lantern"), True)
+        self.assertEqual((got["mod"]["modtrap"], got["mod"]["copies"]), (True, ["Quill - Lantern Patch", "Tool Output"]))
+        mine = {(x["kind"], x["mod"]): x for x in got["links"]}
+        # The copy shares with Thistle what the plugin it stands for shared: as before, and not the demaster's doing.
+        self.assertEqual([k for k in mine if k[0] == "conflict"], [])
+        won = mine[("wins", "Thistle")]
+        self.assertEqual((won["weight"], won["text"]), (2, "this mod's change wins in 2 records: as before the demaster"))
+        self.assertTrue(won["made"].startswith("Not the demaster's doing: QuillLanternPatch.esp is ModTrap's demastered copy of the plugin in “Quill - Lantern Patch”, with the same records"))
+        self.assertIn(("overwrites", "Tool Output"), mine)                      # the files it stands in for
+        # And from the other mod's side the same.
+        thistle = self.links("Thistle")
+        self.assertEqual(([k for k in thistle if k[0] == "conflict"], thistle[("loses", "ModTrap - Lantern")]["text"]),
+                         ([], "its change wins over this mod's in 2 records: as before the demaster"))
+
+    def test_a_mod_that_came_after_the_copy_was_made_is_weighed_anew(self):
+        """MT74."""
+        self.copies({"QuillLanternPatch.esp": pf((CORE, "Quill.esp"), (A, 6.0)), "Generated.esp": pf((CORE,), (B, 4.0))})
+        os.utime(self.root / "mods" / "Thistle")                                # installed now: after the demaster
+        self.m = model.build(instance.load(self.root))
         got = self.links("ModTrap - Lantern")
-        self.assertEqual([k for k in got if k[0] == "conflict"], [])
-        self.assertEqual(got[("wins", "Thistle")]["made"], "Generated.esp is ModTrap's demastered copy of a tool's output (Tool Output has the one the tool made)")
-        self.assertEqual(got[("wins", "Thistle")]["text"], "this mod's change wins in 1 record: made by a tool to have the last word")
-        self.assertIn(("overwrites", "Tool Output"), got)                       # the file it stands in for
+        # The hand-made patch's copy never stood beside it: a conflict, as between any two such plugins.
+        clash = got[("conflict", "Thistle")]
+        self.assertEqual((clash["lines"], clash["made"]), (["QuillLanternPatch.esp wins over Thistle.esp in 1 record (GLOB 1)"], ""))
+        # The copy of the tool's output has the last word as the tool's output has.
+        last = got[("wins", "Thistle")]
+        self.assertEqual(last["text"], "this mod's change wins in 1 record: made by a tool to have the last word")
+        self.assertTrue(last["made"].startswith("No conflict: Generated.esp is ModTrap's demastered copy of a plugin a tool made from the load order as a whole."))
 
     def test_what_it_needs_is_counted_and_only_a_master_that_is_absent_or_off_is_a_fault(self):
         got = modweb.web(self.m, self.m.instance.mod("Bridge"), False)

@@ -1120,7 +1120,7 @@ class Changes:
             raise Bad("the safe folder's copies of the plugin lists are not there any more, so ModTrap cannot say "
                       "where the plugins stood")
         gap = gap or {"place": [], "activate": []}
-        placed, notes = demaster.lists_back(pdir, gap)
+        placed, notes = demaster.lists_back(pdir, gap, the_safe)
         # What the Revert left of ModTrap's own mod (WHY§96): set aside, kept, and the emptied folder taken away. Only
         # while the mod is not in MO2's list any more: a folder MO2 has listed again is MO2's and the owner's.
         aside = 0

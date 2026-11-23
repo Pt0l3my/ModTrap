@@ -160,7 +160,10 @@ class PageTests(unittest.TestCase):
         """MT73."""
         self.assertIn('if (d.needs) said.push(', self.js)
         self.assertIn("every one of them is there and active. Nothing to do:", self.js)
-        self.assertIn('x.made ? el("p", { class: "small dim", text: "No conflict: " + x.made + ". Such a plugin', self.js)
+        self.assertIn('x.made ? el("p", { class: "small dim", text: x.made }) : null,', self.js)
+        # MT74: ModTrap's own mod says what its copies stand for, and that they add no conflict.
+        self.assertIn('if (d.mod.modtrap) said.push(el("p", {}, el("b", { text: "ModTrap\'s own mod: " })', self.js)
+        self.assertIn("so it adds no conflict and takes none away", self.js)
         self.assertIn("and the later one is no tool's output", self.js)
 
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):

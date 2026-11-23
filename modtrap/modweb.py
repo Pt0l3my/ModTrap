@@ -9,15 +9,20 @@ Reading only. Two passes, because the second takes seconds on a large list:
   where neither plugin knows the other (neither is the other's master), that is a conflict, unless a third plugin
   that has both as masters is there to settle it, or the later of the two was made by a tool from the load order
   as a whole (a tool's output, or ModTrap's demastered copy of one): that one is meant to have the last word (MT73).
+  And ModTrap's demastered copy of a plugin stands for that plugin, with the same records at the same place: what
+  it shares with a plugin that was there when the copy was made is the modlist's own, as before, and no conflict
+  of the demaster's (MT74).
 
 Every link is {"mod", "kind", "weight", "text", "lines", ...}. Kinds: "needs", "needed", "patch", "output",
 "overwrites", "overwritten", "conflict", "settled", "wins", "loses" (the last two: records of a common master that a
 mod it needs or is needed by also changes, which is how a patch works, and no conflict; or records a tool-made
-plugin changes after the other, which is what the tool made it for: such a link says so in `made`).
+plugin changes after the other, which is what the tool made it for; or records ModTrap's demastered copy shares
+with a plugin as the plugin it stands for did: such a link says so in `made`, a sentence for the page).
 """
 
 from __future__ import annotations
 
+import os
 import re
 
 from . import adding, loadcheck, model
@@ -91,26 +96,68 @@ def near(m: model.Model, mod: Mod) -> dict:
         else:
             links.append(_link(m, g.mod.name, "needed", n, "%d of its plugins need%s it" % (n, "s" if n == 1 else "") + ("" if whole else " (it has %d more that do not)" % g.others)
                                + (", and %s" % ", ".join(_name(x) for x in between[:2]) if between else ""), lines, between=between[:8], whole=whole))
-    return {"mod": _base(m, mod), "links": links, "lacks": lacks[:LINES], "lacking": len(lacks), "needs": len(needs), "deep": False, "cut": False}
+    base = _base(m, mod)
+    if mod.name.startswith(MOD_PREFIX):
+        base["copies"] = sorted({x for r in own if (x := copy_of(m, r))}, key=fold)[:8]          # the mods whose plugins its copies stand for
+        base["modtrap"] = True
+    return {"mod": base, "links": links, "lacks": lacks[:LINES], "lacking": len(lacks), "needs": len(needs), "deep": False, "cut": False}
+
+
+TOOL_WORD = ("Such a plugin gathers what the plugins before it change and is meant to have the last word on the records it holds, "
+             "whether or not it names them as masters.")
 
 
 def made_to_win(m: model.Model, r: model.PluginRow, memo: dict) -> str:
-    """Why this plugin's change over a plugin it does not know is no conflict, or "" (MT73). A tool made it from
-    the load order as a whole, to have the last word on the records it holds; and ModTrap's demastered copy of
-    such a plugin stands in its place, with the same records."""
+    """Why this plugin's change over a plugin it does not know is no conflict, in a sentence for the page, or ""
+    (MT73). A tool made it from the load order as a whole, to have the last word on the records it holds."""
     f = fold(r.name)
     if f not in memo.setdefault("made", {}):
         why = ""
-        if r.source and r.source.startswith(MOD_PREFIX):
-            held = next((x for x in r.also_in if (o := m.instance.mod(x)) is not None and adding.is_output_mod(m, o, memo)), "")
-            if held:
-                why = "%s is ModTrap's demastered copy of a tool's output (%s has the one the tool made)" % (r.name, held)
-            elif adding.generated(m, r, memo):
-                why = "%s is ModTrap's demastered copy of a plugin a tool made" % r.name
+        held = copy_of(m, r)
+        if held is not None:                        # ModTrap's copy: a tool's work where the plugin it stands for is
+            o = m.instance.mod(held) if held else None
+            if (o is not None and adding.is_output_mod(m, o, memo)) or adding.generated(m, r, memo):
+                why = "No conflict: %s is ModTrap's demastered copy of a plugin a tool made from the load order as a whole. %s" % (r.name, TOOL_WORD)
         elif adding.generated(m, r, memo):
-            why = "a tool made %s from the load order as a whole" % r.name
+            why = "No conflict: a tool made %s from the load order as a whole. %s" % (r.name, TOOL_WORD)
         memo["made"][f] = why
     return memo["made"][f]
+
+
+def copy_of(m: model.Model, r: model.PluginRow) -> str | None:
+    """For ModTrap's demastered copy of a plugin: the mod that holds the plugin it stands for ("" when no enabled
+    mod has it any more). None for any other plugin."""
+    if not r.source or not r.source.startswith(MOD_PREFIX):
+        return None
+    return r.also_in[-1] if r.also_in else ""
+
+
+def _newer(m: model.Model, copy: model.PluginRow, other: model.PluginRow) -> bool:
+    """Did the other plugin's mod come into MO2 after the copy was made? Then the plugin the copy stands for never
+    stood beside it, and what the two share is new. By the copy's file time and the mod folder's making (as
+    MO2's Installation column, MO04§3); where a time cannot be read, it is taken as there before."""
+    try:
+        made = os.stat(copy.path).st_mtime
+        o = m.instance.mod(other.source) if other.source else None
+        if o is None or o.folder is None or o.kind != "mod":
+            return False
+        st = os.stat(o.folder)
+        born = getattr(st, "st_birthtime", None) or (st.st_ctime if os.name == "nt" else st.st_mtime)
+        return born > made
+    except (OSError, TypeError):
+        return False
+
+
+def as_before(m: model.Model, mine: model.PluginRow, theirs: model.PluginRow) -> str:
+    """Why what these two plugins share is not the demaster's doing, in a sentence for the page, or "" (MT74)."""
+    for copy, other in ((mine, theirs), (theirs, mine)):
+        held = copy_of(m, copy)
+        if held is None or _newer(m, copy, other):
+            continue
+        return ("Not the demaster's doing: %s is ModTrap's demastered copy of the plugin %s, with the same records at the same place in the load order. "
+                "What the two plugins change in common they changed before the demaster too, in the same order: that is the modlist's own arrangement, "
+                "and the copy alters nothing in it." % (copy.name, "in “%s”" % _name(held) if held else "of that name"))
+    return ""
 
 
 def far(m: model.Model, mod: Mod, files_seconds: float = loadcheck.FILES_SECONDS, records_seconds: float = loadcheck.SCAN_SECONDS) -> dict:
@@ -151,13 +198,16 @@ def far(m: model.Model, mod: Mod, files_seconds: float = loadcheck.FILES_SECONDS
                     # A plugin a tool made from the whole load order is meant to have the last word: what it
                     # changes after a plugin it does not name is its work, not a conflict (MT73). The other way
                     # round stays one: a plugin that loads after a tool's output and does not know it undoes it.
-                    made = "" if known else made_to_win(m, mine if wins else theirs, memo)
-                    kind = kind_known if known or made else ("settled" if active_both else kind_unknown)
-                    entry = by.setdefault((x["mod"], kind), {"records": 0, "lines": [], "settled_by": set(), "wins": 0, "loses": 0, "made": 0, "why": ""})
+                    # ModTrap's demastered copy stands for the plugin it was made from: what it shares with a
+                    # plugin that was there then is as it was before the demaster (MT74).
+                    before = "" if known else as_before(m, mine, theirs)
+                    made = "" if known or before else made_to_win(m, mine if wins else theirs, memo)
+                    kind = kind_known if known or before or made else ("settled" if active_both else kind_unknown)
+                    entry = by.setdefault((x["mod"], kind), {"records": 0, "lines": [], "settled_by": set(), "wins": 0, "loses": 0, "made": 0, "before": 0, "why": ""})
                     entry["records"] += x["records"]
-                    if made:
-                        entry["made"] += x["records"]
-                        entry["why"] = entry["why"] or made
+                    if before or made:
+                        entry["before" if before else "made"] += x["records"]
+                        entry["why"] = entry["why"] or before or made
                     entry["wins" if wins else "loses"] += x["records"]
                     kinds = ", ".join("%s %d" % (k, n) for k, n in x["kinds"].items())
                     entry["lines"].append("%s %s %s in %d record%s (%s)" % (mine.name, "wins over" if wins else "loses to", theirs.name, x["records"], "" if x["records"] == 1 else "s", kinds))
@@ -171,7 +221,9 @@ def far(m: model.Model, mod: Mod, files_seconds: float = loadcheck.FILES_SECONDS
                 text = "this mod's change wins in %d record%s" % (e["records"], "" if e["records"] == 1 else "s")
             else:
                 text = "its change wins over this mod's in %d record%s" % (e["records"], "" if e["records"] == 1 else "s")
-            if e["made"]:
+            if e["before"]:
+                text += ": as before the demaster" if e["before"] == e["records"] else " (%d of them as before the demaster)" % e["before"]
+            elif e["made"]:
                 text += ": made by a tool to have the last word" if e["made"] == e["records"] else " (%d of them by a tool's output, made to have the last word)" % e["made"]
             links.append(_link(m, other, kind, e["records"], text, e["lines"], wins=e["wins"], loses=e["loses"], settled_by=sorted(e["settled_by"], key=fold)[:6],
                                made=e["why"]))
