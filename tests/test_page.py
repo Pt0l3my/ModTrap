@@ -39,9 +39,26 @@ class PageTests(unittest.TestCase):
         self.assertIn('document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); });', self.js)
 
     def test_every_tab_button_has_its_section(self):
-        tabs = re.findall(r'<button data-tab="([^"]+)"', self.html)
+        tabs = re.findall(r'<button data-group="[^"]+" data-tab="([^"]+)"', self.html)
+        self.assertGreater(len(tabs), 12)
         for t in tabs:
-            self.assertIn('id="tab-%s"' % t, self.html)
+            # "Pick mods" shows the mods' table too: one table serves it and the Modlist section's Mods tab (MT56).
+            self.assertIn('id="tab-%s"' % ("mods" if t == "pick" else t), self.html)
+
+    def test_the_mods_list_is_modlists_own_tab_and_the_demasters_first(self):
+        """MT56: Modlist › Mods is MO2's own list; the demaster's ticks are Demaster's first tab, on the same table."""
+        tabs = re.findall(r'<button data-group="([^"]+)" data-tab="([^"]+)"', self.html)
+        self.assertEqual([t for g, t in tabs if g == "modlist"][0], "mods")
+        self.assertEqual([t for g, t in tabs if g == "demaster"][:2], ["pick", "selection"])
+        self.assertIn('demaster: "pick"', self.js)
+        self.assertIn('const pane = name === "pick" ? "mods" : name;', self.js)
+        self.assertIn("#mods-table.picking .onbox, #mods-table:not(.picking) .pickbox { display: none; }", self.css)
+        for path in ("/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo", "/api/list/scan"):
+            self.assertIn('"%s"' % path, self.js)
+        # What changes MO2's lists is begun only with MO2 closed.
+        closed = re.search(r"const NEEDS_MO2_CLOSED = new Set\(\[(.+?)\]\);", self.js, re.S).group(1)
+        for path in ("/api/list/move", "/api/list/rename", "/api/list/undo", "/api/separator/add"):
+            self.assertIn('"%s"' % path, closed)
 
 
 if __name__ == "__main__":

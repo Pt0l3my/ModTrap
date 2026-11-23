@@ -52,6 +52,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   MT54 (a dropped mod is installed by itself, with no further press; nothing ModTrap does is shown as a step to do).
   MT55 (a dropped mod is read and shown first, then installed at one press; a separator added below a mod; column
   titles that sort; ModTrap's console starts minimised).
+  MT56 (the Modlist section's Mods tab is MO2's own list: tick to enable or disable, plugins placed by MO2's rule,
+  drag to move, a separator renamed, Undo, a scanner of what a mod overwrites; the ticks for a demaster move to
+  Demaster, as its first tab).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1295,3 +1298,50 @@ it have to run separately? if so, can you make it start minimized?"
 - **The console.** ModTrap's program needs a home for what it writes and for ending it, so the console stays; it now
   starts minimised, in the taskbar. What it writes is on the page already (History, then Log). The launcher has no
   window of its own, and says so in a box should ModTrap end at once.
+
+## MT56
+
+**The Modlist page as MO2's own list; the demaster's ticks on a tab of their own** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "can you make the current modlist page the first subtab of demaster tab? And instead add the same
+modlist page, but instead of selecting for demaster, it will function as normal MO2 page, where the user can activate
+or deactivate mods. Plugin placements (esp, esm) get automatically placed at the bottom. Can we actually use the same
+logic as MO2 for plugin placements? can you implement scanner if plugin placements are safe and what they overwrite?
+any other ideas? Also the ability to click and drag mods on modlist page to change placement. Can you also add rename
+Separator to right click menu in modlist page?"
+
+**Settled** (WHY§121; the owner may overrule any of it):
+
+- **Two tabs, one list.** Demaster's first tab is "Pick mods": the list as it was, where a tick chooses a mod for
+  the demaster. Modlist's "Mods" is the same list as MO2 shows its own: the box says whether the mod is enabled,
+  and ticking it enables or disables the mod.
+- **Enabling and disabling, as MO2 does it (MO03§5).** The mod's line in the profile's list changes; so do its
+  plugins, those no other enabled mod also has. Disabled: they are switched off. Enabled: they become active.
+- **Where the plugins go: MO2's rule (MO03§2 to §4).** A plugin new to the load order goes to the end; a master
+  (an .esm, an .esl, a plugin flagged as one) goes to the end of the masters' block; none loads before a master of
+  its own. One thing ModTrap does that MO2 does not: a disabled mod's plugin keeps its line, switched off, so that
+  it comes back to the place it had; once MO2 has run and dropped the line, it is new and goes to the end.
+- **Safe or not.** Before a tick is carried out ModTrap reads what it would do. A master that is missing or not
+  active, plugins of other mods that would lose a master, or more plugins than the game loads: these are shown in a
+  box, and done only on "Enable anyway" or "Disable anyway". Everything else is one press, and said afterwards.
+- **The scanner.** For one mod, from its right-click menu or its card, and by itself after a mod with plugins is
+  enabled (a setting, on): whether its plugins stand safely in the load order (masters there, active, before them),
+  which records of their masters they change, which other plugins change the same records before them (overwritten
+  by this mod) and after them (overwriting it), and the files the mod shares with the mods below and above it. It
+  reads record headers with ModTrap's own reader and opens no xEdit; what a record's fields hold is still xEdit's to
+  tell (the record check of Install mods).
+- **Dragging.** On Modlist's Mods tab, in MO2's order, a mod or a separator is moved by holding the mouse down on
+  its row and moving it: a line shows where it would go. A folded separator takes the mods under it along; an
+  unfolded one moves alone, as in MO2. "Move to priority…" in the menu is for a place far away.
+- **A separator's menu.** "Rename separator…" (a box with the name, OK and Cancel), "Add separator below…",
+  "Enable all under it", "Disable all under it". Renaming is done as MO2 does it (MO03§6): the separator's folder
+  in MO2's mods folder, and its line in every profile's list.
+- **Every change is a job of its own, with a way back.** MO2 closed; the lists copied into the job's safe folder
+  first (MT14); the result read back, and put back if it is not as planned; the change in the history (MT15).
+  "Undo" on the tab (and Ctrl+Z) turns the newest change back, then the one before it.
+- **MT9 stands.** Nothing is deleted. Renaming a separator renames a folder MO2 keeps for the separator alone: no
+  mod's file is touched.
+
+**Not built, offered to the owner as ideas:** the same for the Plugins tab (tick to activate, drag to reorder, with
+the rules of MO03§3 and §4 kept); several rows chosen at once; "Send to separator…"; a filter for mods with
+conflicts; profiles (a copy of a profile before a risky change).

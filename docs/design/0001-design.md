@@ -722,3 +722,28 @@ where an update waits for the press at Nexus; with a Premium account's key the f
 **Closing the tab (MT48, WHY§113).** ModTrap closes the tab it opened for a download when the file is whole and
 taken, or the waiting ends (a setting, on; only for Nexus, GitHub and LoversLab). While a file is being written, the
 row says how far it is; before that, that the press on the site's download button is the owner's.
+
+## 21. The Modlist page as MO2's own list (MT56)
+
+The mods' table serves two tabs. **Demaster › Pick mods** is the list with the demaster's ticks (§4). **Modlist ›
+Mods** is the list as MO2 shows its own: the box is the mod's state, and a change there is made at once, as in MO2.
+
+**A change is a job** (`listjob`, WHY§121): enable or disable mods, move a block of entries, rename a separator.
+Each keeps §8: MO2 closed, a copy of every list it touches in its safe folder first, the lists read back from disk
+and put back when they are not as planned, the change in the history, and Undo (§11: the whole files while they are
+as the job left them, else its own lines).
+
+**Plugins follow MO2's rule** (`loadcheck.place`, MO03§2 to §5): on enabling, the mod's plugins that no other
+enabled mod has become active; one new to the load order goes to the end, a master to the end of the masters'
+block, none before a master of its own. On disabling they are switched off and keep their lines.
+
+**What is not safe is asked first** (`loadcheck.plan_set`): a missing or inactive master, plugins that would lose
+a master, the game's limit. The rest is told after the change.
+
+**The scanner** (`loadcheck.overrides`, `loadcheck.files`) reads, for one mod, its plugins' place and masters, the
+records they change, the plugins that change the same records before and after them, and the files shared with the
+mods below and above. Record headers only, bounded in time; no xEdit.
+
+**Moving** is by dragging a row (a folded separator with its mods) or "Move to priority…"; a place is always
+"directly before" an entry of MO2's list, or last.
+

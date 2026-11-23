@@ -12,7 +12,7 @@
     <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
     <ol id="steps" class="steps" hidden>
       <li data-step="open" data-tab="mods"><span class="n">1</span><span class="t">Modlist open</span></li>
-      <li data-step="pick" data-tab="mods"><span class="n">2</span><span class="t" id="step-pick">Tick the mods to take out</span></li>
+      <li data-step="pick" data-tab="pick"><span class="n">2</span><span class="t" id="step-pick">Tick the mods to take out</span></li>
       <li data-step="dry" data-tab="selection"><span class="n">3</span><span class="t" id="step-dry">Dry run</span></li>
       <li data-step="trap" data-tab="steps" title="The steps of the demaster itself: what ModTrap does (“Demaster Selected”, when it is switched on), what is yours to do, and which steps the modlist's files show as done."><span class="n">4</span><span class="t">Demaster: the steps</span></li>
     </ol>
@@ -65,10 +65,11 @@
   </span>
 </nav>
 <nav id="tabs" hidden>
-  <button data-group="modlist" data-tab="mods" class="on">Mods</button>
+  <button data-group="modlist" data-tab="mods" class="on" title="MO2's own list: tick a mod to enable or disable it, drag a row to move it, right-click for more">Mods</button>
   <button data-group="modlist" data-tab="plugins">Plugins</button>
   <button data-group="modlist" data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-group="modlist" data-tab="tools">Tools</button>
+  <button data-group="demaster" data-tab="pick" title="Tick the mods to take out: what is ticked here goes to the dry run and the demaster">Pick mods</button>
   <button data-group="demaster" data-tab="selection">Selection <span id="sel-count" class="count">0</span></button>
   <button data-group="demaster" data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
@@ -131,11 +132,13 @@
       <button id="collapse-all" type="button" title="Fold every group">Fold all</button>
       <button id="expand-all" type="button" title="Unfold every group">Unfold all</button>
       <span id="mods-shown" class="dim"></span>
+      <button id="list-undo" type="button" hidden></button>
+      <span id="mods-hint" class="dim"></span>
     </div>
     <div id="place-banner" class="card placebanner" hidden></div>
     <div id="mod-info" class="card modinfo" hidden></div>
     <div class="scroll"><table id="mods-table">
-      <thead><tr><th class="c-tick"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
+      <thead><tr><th class="c-tick" id="mods-tick-head"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
         <th title="The plugins this mod provides, as MO2 would use them">Plugins</th>
         <th class="c-num" title="Plugins of other mods that list one of this mod's plugins as a master. While there are any, disabling the mod gives missing-master errors.">Dependants</th></tr></thead>
       <tbody></tbody>
@@ -185,7 +188,7 @@
       <button id="job-copy" type="button" title="Copy these lines, to paste when asking for help. Your folders are already replaced by placeholders.">Copy the lines</button>
     </div>
     <div class="split">
-      <div id="job-result" class="scroll pad"><p class="dim">Tick mods on the Mods tab, then press “Dry run through xEdit” on the Selection tab.</p></div>
+      <div id="job-result" class="scroll pad"><p class="dim">Tick mods on Pick mods, then press “Dry run through xEdit” on the Selection tab.</p></div>
       <pre id="job-log" class="terminal side" tabindex="0" aria-label="The dry run's lines"></pre>
     </div>
   </section>
@@ -317,6 +320,7 @@
     </div>
   </div>
 </div>
+<div id="scan-note" class="scannote" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script nonce="__NONCE__">/*__JS__*/</script>
 </body>
