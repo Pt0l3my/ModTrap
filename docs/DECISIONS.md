@@ -41,6 +41,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   small window of its own, so that ModTrap's tab stays).
   MT47 (the owner's correction: a site's page opens as a tab, not a window; the download is taken whatever its name).
   MT48 (ModTrap closes the download's tab when the download is here; still a window in the owner's browser, mended).
+  MT49 (an update is not a new mod: it takes the older version's place, and nothing else is judged or asked).
 - **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1049,3 +1050,35 @@ fixed those, can you also make ModTrap to close the download page browser tab af
   with a window.
 - **The press on the site stays the owner's**, and ModTrap now says so in as many words: on the row, "press
   “Start download” on Nexus's page", and while the file comes, how far it is.
+
+## MT49
+
+**An update is not a new mod** · *2026-11-23 · The owner's ruling*
+
+**Owner's words.** "I had to click on the nexus page download button, then the file downloaded, and I was brought to
+add mods page. There the mod was added, but the steps also show to run all sorts of tools. also the update page
+didn't update the mod row (was the mod actually updated?) to new version. This should've been a simple mod update,
+just install the new version underneath the old version in priority, then disable to old mod version in MO2. It's
+that simple. ModTrap should be able to make a distinction between a mod update and a newly installed (added) mod
+that needs to be carefully placed by judging the whole modlist (conflicts, overwrites, etc.) and what tools should
+be involved."
+
+**Settled** (WHY§114; this amends MT41 and DESIGN§16 for a newer version of a mod of the modlist):
+
+- **What an update is.** Every mod of the add is a newer version of a mod the modlist has. It is put right after
+  the older version in MO2's list, the older version is disabled and not deleted, and its plugins keep their places
+  in the load order. That is all an update does.
+- **What it is not asked.** The steps of a new mod do not apply and are not shown: its place among all mods, a look
+  at the files it shares with other mods, the check of the records it overrides, the tools to run again, a look in
+  the game. They held for the older version. The older version is not counted as a mod the newer one shares files
+  or a plugin's name with.
+- **What is told.** One step that asks nothing: what the newer version changes, by its files' names and sizes, and,
+  only where files changed that a tool of the modlist builds from, which tools those are. Whether to run them is the
+  owner's, with the list's other outputs or when something misbehaves.
+- **What is still checked.** That every master is there and active, before and after; and a plugin the older version
+  did not have is placed as a new plugin is, since it has no place to keep.
+- **After the add.** The same few steps, done, for as long as that add stands; the add's own record says which mod
+  it was a newer version of.
+- **The Updates tab.** A mod whose newer file is installed as another, enabled mod is shown as "Older version", with
+  no update asked for; the newer mod is up to date. A favourite's newer version is a favourite too.
+- A mixed add (an update together with a new mod) keeps the full list of steps.

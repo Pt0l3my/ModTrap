@@ -359,7 +359,9 @@ class AddJob:
             return None
         state = "reverted" if (work / "reverted.json").is_file() else "added" if (work / "added.json").is_file() else "failed"
         return {"job": work.name, "when": data.get("when", ""), "state": state,
-                "mods": [x["name"] for x in data.get("mods", [])], "plugins": [x["name"] for x in data.get("plugins", [])]}
+                "mods": [x["name"] for x in data.get("mods", [])], "plugins": [x["name"] for x in data.get("plugins", [])],
+                # the mods of this job that are newer versions, each with the mod it is a newer version of (MT49)
+                "updates": {x["name"]: x["updates"] for x in data.get("mods", []) if x.get("updates")}}
 
 
 __all__ = ["AddJob", "Plan", "plan", "Refused"]

@@ -160,6 +160,46 @@ class Adding(unittest.TestCase):
         self.assertEqual(snapshot(self.root), self.before)
         self.assertIn(("mod enabled", "Quill"), [(e["kind"], e.get("mod")) for e in history.History(self.work).all()])
 
+    def test_an_update_has_its_own_few_steps_and_is_not_judged_as_a_new_mod(self) -> None:
+        """MT49: a newer version takes the older one's place; the place among all mods, the shared files, the
+        records, the tools and a look in the game are a new mod's steps, not an update's. Before the add, after
+        it, and when the add's own record is all that says the mod is an update."""
+        root = Path(self.tmp.name) / "unpacked" / "Quill (1.4)"
+        old_files = {p.relative_to(self.root / "mods" / "Quill").as_posix(): p.read_bytes()
+                     for p in (self.root / "mods" / "Quill").rglob("*") if p.is_file() and p.name != "meta.ini"}
+        self.assertIn("Quill.esp", old_files)
+        j = self.newer({**old_files, "Quill.esp": old_files["Quill.esp"] + b"\0" * 8, "meshes/quill/added.nif": b"new", "textures/quill/only.dds": b"newer"})
+        inst = instance.load(self.root)
+        m = model.build(inst)
+        rep = adding.analyse(m, [], staged=[adding.staged_mod("Quill (1.4)", root)], updates={"Quill (1.4)": "Quill"})
+        self.assertTrue(rep["update"])
+        self.assertEqual([st["key"] for st in rep["steps"]], ["install", "needs", "update", "differs", "health"])
+        self.assertEqual([st["n"] for st in rep["steps"]], [1, 2, 3, 4, 5])
+        self.assertFalse(any(st["manual"] for st in rep["steps"]))                       # nothing to tick off by hand
+        update = rep["steps"][2]
+        self.assertEqual(update["state"], "waiting")
+        self.assertIn("Quill (1.4): to enable, right after “Quill”", [i["text"] for i in update["items"]])
+        self.assertIn("“Quill”, the older version: to disable; it is not deleted", [i["text"] for i in update["items"]])
+        d = rep["mods"][0]["differs"]
+        self.assertEqual((d["added"], d["gone"], d["changed"], d["plugins"]["changed"]), (1, 0, 2, ["Quill.esp"]))
+        self.assertEqual(d["same"], len(old_files) - 2)
+        self.assertIn("1 file(s) are new, 0 are gone, 2 have another size", rep["steps"][3]["items"][0]["text"])
+        # After the add: the same few steps, all done; nothing is left "to go".
+        j.run()
+        m = model.build(instance.load(self.root))
+        rep = adding.analyse(m, ["Quill (1.4)"], updates={"Quill (1.4)": "Quill"})
+        self.assertEqual([(st["key"], st["state"]) for st in rep["steps"]], [("needs", "done"), ("update", "done"), ("differs", "done"), ("health", "done")])
+        self.assertEqual((rep["complete"], rep["summary"]), (True, "The newer version is in place and the older one disabled."))
+        texts = [i["text"] for i in rep["steps"][1]["items"]]
+        self.assertIn("“Quill”, the older version: disabled, and kept as it is", texts)
+        self.assertTrue(any(t.startswith("Quill.esp: active, at position") for t in texts), texts)
+        # Without the word that it is an update, the same mod is judged as a new one is.
+        rep = adding.analyse(m, ["Quill (1.4)"])
+        self.assertFalse(rep["update"])
+        self.assertIn("play", [st["key"] for st in rep["steps"]])
+        # The add's own record says which mod it was a newer version of.
+        self.assertEqual(addjob.AddJob.summary(self.work / "jobs" / "add-2")["updates"], {"Quill (1.4)": "Quill"})
+
     def test_a_newer_version_that_lacks_a_plugin_others_need_is_put_back(self) -> None:
         """The newer file no longer brings Quill.esp, which a plugin of the modlist needs: the check after the add
         finds the missing master, and everything is as it was."""

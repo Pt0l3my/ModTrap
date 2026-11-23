@@ -37,6 +37,8 @@ def _when(st) -> float:
     return max(st.st_mtime, born or 0.0)
 
 
+# The end of a download's name as Nexus gives it since 2026 (TL01§31): "… <date>T<hour-minute>Z <the file's code>.zip".
+NEXUS_CODE = re.compile(r" \d{4}-\d\d-\d\dT\d\d-\d\dZ ([0-9A-Za-z]{6,16})(?: ?\(\d+\))?\.(?:zip|7z|rar)$", re.IGNORECASE)
 MAGIC = ((b"PK\x03\x04", ".zip"), (b"PK\x05\x06", ".zip"), (b"7z\xbc\xaf\x27\x1c", ".7z"), (b"Rar!\x1a\x07", ".rar"))    # an archive's first bytes
 PARTIAL = (".crdownload", ".part", ".partial", ".tmp", ".download", ".unfinished", ".opdownload")
 LIST_MAX = 2 * 1024 * 1024 * 1024    # the bytes of a dropped list, at most
@@ -300,12 +302,25 @@ class Updating:
             except Exception as e:
                 log.warn("looking for a download failed: %s", logbook.why(e))
         out_rows = []
-        counts = {"update": 0, "maybe": 0, "current": 0, "not asked": 0, "none": 0, "gone": 0}
+        counts = {"update": 0, "maybe": 0, "current": 0, "not asked": 0, "none": 0, "gone": 0, "replaced": 0}
         origins = {"list": 0, "added": 0, "modtrap": 0, "": 0}
         hosts: dict[str, int] = {}
         key_kept = secret.kept(KEY)
+        # Which enabled mod holds which file of Nexus: a mod whose newer file is installed as another, enabled mod
+        # is an older version that was replaced, however that came about (MT49).
+        holds: dict[tuple, list[str]] = {}
+        for r in rows[:ROWS_MAX]:
+            if r["host"] == "nexus" and r["enabled"]:
+                for f in r.get("files") or []:
+                    holds.setdefault((r.get("game"), r["mod_id"], f), []).append(r["mod"])
         for r in rows[:ROWS_MAX]:
             v = updates.verdict(r, self.store)
+            newer = [n for n in holds.get((r.get("game"), r["mod_id"], v.get("file_id")), []) if n != r["mod"]] \
+                if v["state"] == "update" and r["host"] == "nexus" and v.get("file_id") else []
+            if newer:
+                v = dict(v, state="replaced", text="Its newer file%s is installed as “%s”, which is enabled.%s" % (
+                    " (%s)" % v["newest"] if v.get("newest") else "", newer[0],
+                    " This older one is enabled too: disable it in MO2" if r["enabled"] else " This older version is disabled and kept"))
             counts[v["state"]] = counts.get(v["state"], 0) + 1
             origins[r["origin"]] = origins.get(r["origin"], 0) + 1
             hosts[r["host"] or "not known"] = hosts.get(r["host"] or "not known", 0) + 1
@@ -376,7 +391,7 @@ class Updating:
 
     def _expect(self, row: dict, v: dict) -> None:
         self.waiting[row["mod"]] = {"since": time.time(), "host": row["host"], "mod_id": row.get("mod_id") or 0, "file_id": v.get("file_id") or 0,
-                                    "name": v.get("file_name") or "", "label": v.get("file") or "", "time": v.get("time") or 0, "size": v.get("size") or 0,
+                                    "name": v.get("file_name") or "", "label": v.get("file") or "", "time": v.get("time") or 0, "size": v.get("size") or 0, "code": v.get("code") or "",
                                     "game": row.get("game") or "", "archive": row.get("archive") or "", "version": v.get("newest") or "",
                                     "installed": list(row.get("files") or []), "url": row.get("url") or "", "saw": ""}
         w = self.waiting[row["mod"]]
@@ -463,8 +478,8 @@ class Updating:
                 continue
             for e in entries:
                 low = e.name.lower()
-                if low.endswith((".meta", ".ini", ".lnk")) or mo2 and not updates.ARCHIVE.search(e.name) and not low.endswith(PARTIAL):
-                    continue
+                if low.endswith((".meta", ".ini", ".lnk")) or low.startswith("modtrap-") or mo2 and not updates.ARCHIVE.search(e.name) and not low.endswith(PARTIAL):
+                    continue                                    # (a session's logs packed by ModTrap itself are no download)
                 try:
                     if _when(e.stat()) < first - 5:
                         continue                                # there before the press
@@ -503,6 +518,7 @@ class Updating:
                 marked = [sources.NEXUS_PAGE.match(u) for u in (mark.get("page", ""), mark.get("url", "")) if u]
                 marked = next((m for m in marked if m), None)
                 named = NEXUS_NAME.search(plain(as_name))            # "…-<mod's number>-<version>-<time of upload>.7z"
+                coded = NEXUS_CODE.search(as_name)                   # "… <date> <the file's code>.zip"
                 for mod, w in self.waiting.items():
                     if _when(st) < w["since"] - 5:
                         continue
@@ -525,12 +541,16 @@ class Updating:
                             (int(named.group(2)) == w["time"] if w["time"] else int(named.group(2)) != updates.archive_time(w["archive"])):
                         mine, how = mod, "the mod's number and the upload's time in its name"
                         break
+                    if w.get("code") and w["mod_id"] and re.search(r"(?<![0-9A-Za-z])%s(?![0-9A-Za-z])" % re.escape(w["code"]), e.name) \
+                            and re.search(r"(?<!\d)%d(?!\d)" % w["mod_id"], e.name):
+                        mine, how = mod, "the mod's number and the file's own code in its name"
+                        break
                     if w["size"] and st.st_size == w["size"]:
                         mine, how = mod, "its size, to the byte"         # the size the site gives for the file (WHY§112)
                         break
-                if mine is None and named is None and marked is None:
-                    # Nothing certain to go by (a name that carries a mod's number and a time, or a mark of a mod's
-                    # page, has said whose file it is, and it is not a waited one's). A new archive is taken for the
+                if mine is None and named is None and marked is None and not (coded is not None and all(w.get("code") for w in self.waiting.values())):
+                    # Nothing certain to go by (a name that carries a mod's number and a time, or a file's code, or a
+                    # mark of a mod's page, has said whose file it is, and it is not a waited one's). A new archive is taken for the
                     # one mod waited for where its size is not known to differ and its name begins as the file's
                     # name on its page does, or as the installed archive's, or tells nothing at all (a storage
                     # code, a site that gives no name); never while several are waited for.

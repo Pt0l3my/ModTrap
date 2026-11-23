@@ -789,7 +789,7 @@ def public_service(mods: dict, game_id: int = 1704, asked: list | None = None):
         if "modFiles" in query:
             out = {}
             for alias, mod_id in _re.findall(r'(m\d+): modFiles\(modId: "(\d+)"', query):
-                out[alias] = [{"fileId": f[0], "name": f[6] if len(f) > 6 else f[1], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5], "sizeInBytes": str(f[7]) if len(f) > 7 else None}
+                out[alias] = [{"fileId": f[0], "name": f[6] if len(f) > 6 else f[1], "uri": f[1], "version": f[2], "categoryId": f[3], "date": f[4], "groupId": f[5], "sizeInBytes": str(f[7]) if len(f) > 7 else None, "sqid": f[8] if len(f) > 8 else None}
                               for f in mods[int(mod_id)]["files"]]
             return 200, {}, {"data": out}
         return 200, {}, {"errors": [{"message": "not a question this stand-in knows"}], "data": None}
@@ -984,6 +984,19 @@ class TheDownloadsOwnName(unittest.TestCase):
         self.assertEqual([(n, m) for n, m, _v, _ in self.staged], [("renamed.zip", "Quill")])
         self.assertEqual(list(self.up.waiting), ["Reed"])
 
+    def test_the_download_is_known_by_the_files_own_code_in_its_name(self):
+        """TL01§31: the site names a download "<name> <mod's number> <version> <date> <code>.zip"; the code is the
+        file's own, and the public service gives it."""
+        self.up._expect(self.row, dict(self.verdict(), size=0, time=0, code="Zx9InventedQ"))
+        data = a_zip({"readme.txt": b"x"})
+        fx.write(self.browser / "Quill Main File 4321 6.10 2026-11-01T10-00Z Aa1OtherCode.zip", data)      # another file of the mod
+        fx.write(self.browser / "Reed 5000 1.0 2026-11-01T10-00Z Zx9InventedQ.zip", data)                   # the code, another mod's number
+        self.looks()
+        self.assertEqual(self.staged, [])
+        fx.write(self.browser / "Quill Main File 4321 6.11 2026-11-14T12-13Z Zx9InventedQ(1).zip", data)
+        self.looks()
+        self.assertEqual([(n, m) for n, m, _v, _ in self.staged], [("Quill Main File 4321 6.11 2026-11-14T12-13Z Zx9InventedQ(1).zip", "Quill")])
+
     def test_a_download_in_progress_is_told_with_how_far_it_is(self):
         """WHY§113: what is being written is shown while it comes, by the file's own size, not the folder's listing."""
         v = dict(self.verdict(), size=1000)
@@ -1006,6 +1019,60 @@ class TheDownloadsOwnName(unittest.TestCase):
         fx.write(self.browser / "Quill Main File 6.11.zip", data)
         self.looks()
         self.assertEqual([(n, m) for n, m, _v, _ in self.staged], [("Quill Main File 6.11.zip", "Quill")])
+
+
+class AnOlderVersionReplaced(unittest.TestCase):
+    """MT49: a mod whose newer file is installed as another, enabled mod is shown as the older version it is, with
+    no update asked for; the newer one is up to date."""
+
+    def setUp(self):
+        logbook.set_console(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["MODTRAP_HOME"] = str(Path(self.tmp.name) / "home")
+        self.root = fx.small_list(Path(self.tmp.name) / "Example List")
+        mods = self.root / "mods"
+        fx.write(mods / "Quill" / "meta.ini", meta(gameName="SkyrimSE", modid=4321, version="1.2", installationFile="Quill-4321-1-2.7z", files=[(4321, 111)]))
+        self.net = FakeNet({})
+        self.net.public = public_service({4321: {"updated": "2026-11-21T00:00:00Z", "files": [
+            (111, "Quill-4321-1-2.7z", "1.2", 4, 1700000000, 42, "Quill", 1000), (113, "ab/cd/ef/0123456789abcdef", "1.4", 1, 1795219200, 42, "Quill", 2000)]}})
+        self.api = api.Api()
+        self.api.updating.net = self.net
+        self.api.running = lambda image: False
+        self.api.open(str(self.root), wait=True)
+
+    def tearDown(self):
+        os.environ.pop("MODTRAP_HOME", None)
+        self.tmp.cleanup()
+        logbook.set_console(True)
+
+    def state(self):
+        end = time.time() + 10
+        while time.time() < end:
+            st = self.api.get("/api/updates", {})[1]
+            if st["scan"]["state"] != "going" and st["last"]:
+                return st
+            time.sleep(0.05)
+        self.fail("the scan did not end")
+
+    def test_the_older_version_is_told_as_such_and_the_newer_is_up_to_date(self):
+        st = self.state()
+        row = next(r for r in st["rows"] if r["mod"] == "Quill")
+        self.assertEqual((row["state"], st["counts"]["update"], st["counts"]["replaced"]), ("update", 1, 0))
+        # The newer file is installed as a mod of its own, enabled; the older one is disabled.
+        from modtrap import profile
+        new = self.root / "mods" / "Quill (1.4)"
+        fx.write(new / "Quill.esp", (self.root / "mods" / "Quill" / "Quill.esp").read_bytes())
+        fx.write(new / "meta.ini", sources.own_record("0123456789abcdef.zip", {"game": "SkyrimSE", "mod_id": 4321, "file_id": 113, "version": "1.4"}))
+        ml = self.root / "profiles" / "Default" / "modlist.txt"
+        ml.write_bytes(ml.read_bytes().replace(b"+Quill\r\n", b"+Quill (1.4)\r\n-Quill\r\n", 1))
+        self.assertIn(b"-Quill\r\n", ml.read_bytes())
+        self.api.open(str(self.root), wait=True)
+        st = self.state()
+        rows = {r["mod"]: r for r in st["rows"]}
+        self.assertEqual((rows["Quill"]["state"], rows["Quill"]["get"], rows["Quill"]["enabled"]), ("replaced", "", False))
+        self.assertEqual(rows["Quill"]["text"], "Its newer file (1.4) is installed as “Quill (1.4)”, which is enabled. This older version is disabled and kept")
+        self.assertEqual((rows["Quill (1.4)"]["state"], rows["Quill (1.4)"]["version"]), ("current", "1.4"))
+        self.assertEqual((st["counts"]["update"], st["counts"]["replaced"]), (0, 1))
 
 
 class Favourites(Sources):

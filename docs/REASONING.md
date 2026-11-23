@@ -136,6 +136,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 111 | 2026-11-22 | A site's page in a small window of its own: a window ModTrap can close stays tied to ModTrap's tab, which the site's page could then send elsewhere; cut loose by default, tied only by the owner's setting | DECIDED | #updates #page #safety |
 | 112 | 2026-11-23 | The download was still not taken, and a window was not what the owner asked for: the page handed the file to a mod manager instead of the browser; the watch looked only while ModTrap's tab was asked; a download is now known by its size, and the site's page is a tab again | DECIDED | #updates #page #network |
 | 113 | 2026-11-23 | Still a window in the owner's browser, and nothing told of a download in progress: Firefox answers window.open with “noopener” among its features with a window; a folder's listing on Windows gives a file being written no size | LIKELY | #updates #page #windows |
+| 114 | 2026-11-23 | The download works on the owner's PC; an update was judged as a new mod, with eight steps of tools and judgements, and the Updates tab still asked for it: an update now has its own few steps, and an older version replaced is shown as such | DECIDED | #updates #add |
 
 ## Entries
 
@@ -2940,3 +2941,42 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Checked: tests (a download in progress is told with how far it is), and in Chromium against a stand-in: a
   plain press opens a tab, the row says to press, then "downloading 27%", then the tab is closed by ModTrap and
   Add mods holds the file; "Open its page" opens a tab that sees no opener. Not checked: Firefox, Windows.
+
+### 114. The download works on the owner's PC; an update was judged as a new mod, with eight steps of tools and judgements, and the Updates tab still asked for it: an update now has its own few steps, and an older version replaced is shown as such
+
+`2026-11-23` · DECIDED · `#updates #add` · refs: MT49, MT41, MT43, MT47, MT48, DESIGN§16, TL01§31, WHY§105, WHY§112, WHY§113
+
+- FACT (the owner's session file at 0.3.41): the whole way worked. Ten seconds after the press on ModTrap's
+  button a download was being written in the browser's folder; sixteen seconds later it was whole and known "by
+  its size, to the byte"; it was unpacked (8,932 files), added by itself (the setting of MT43), enabled one
+  priority above the older version, and the older version disabled. The owner was brought to Add mods, and says the
+  press on the site's own button was what it took (WHY§113's first reading).
+- FACT (same file): the saved name had a shape ModTrap had not seen, recorded in TL01§31. It ends with the
+  file's own short code, which the public service gives; a download is now also known by that code together with
+  the mod's number in its name, and a name that carries another file's code is nobody's.
+- The owner's two complaints are both right. After the add, Add mods showed eight steps to go: look at shared
+  files, check records through xEdit, run four tools again, a look in the game. And the Updates tab still showed
+  the older mod with "Update out" and its button.
+- Why the steps came: before the add, the analysis knew the mod was a newer version (the unpacked archive said
+  so) and placed it by the older one; after the add, the mod was read from MO2 like any other and nothing said
+  it was an update, so it was judged as a new mod. And even before the add, the steps of a new mod were all
+  there, only with the place changed.
+- DECIDED (MT49): an update has its own short list: what the mod needs (kept, because a newer version can name
+  a new master), put it in the older one's place, a plugin the older version did not have, what the newer
+  version changes (told, not asked), the load order's health. No step is ticked by hand. The older version is
+  left out of the mods the newer one is compared with: what it shares with the mod it stands in for is no
+  conflict. That an added mod is an update is read from the add's own record for as long as the add stands.
+- What the newer version changes is found by comparing both folders' files by name and size, without reading
+  them. The tools named are those that read a kind of file that differs; they are named in a note, and nothing
+  is asked. Rejected: leaving the tools out altogether. An update that changes animation files does leave a
+  behaviour tool's output stale, and the owner should be able to know it without being made to act on it.
+- The Updates tab: rather than record what replaced what, it is read from the modlist as it is: a mod whose
+  newer file (by its number at Nexus) is installed in another, enabled mod is an older version. This also holds
+  for an update the owner made in MO2 by hand, and undoes itself when the add is reverted.
+- A favourite's mark is copied to the newer version when its archive is taken in, as the owner's source link is.
+- Not done: what the owner wrote of the older mod in MO2 (its notes) is not copied to the newer one.
+- Checked: tests (an update's steps before the add, after it, and without the word that it is an update; the
+  add's record; the older version shown as replaced and the newer as up to date; a download known by the file's
+  code), and in a browser against a stand-in service, with the setting of MT43 on: one press, the file comes,
+  the add runs by itself, Add mods says every step is done, and the Updates tab shows the older version as
+  such and the newer one, a favourite, as up to date.

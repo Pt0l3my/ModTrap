@@ -577,3 +577,13 @@ files, one with 55), by a session that can reach it.
   share. `detectedFileExtension` gave "zip" for the newest such files of one mod and nothing for the other's.
 - **Not known.** Under which name a browser saves a storage-coded file. It is not asked for here: a download
   needs the owner's signed-in browser.
+
+## 31. The name a storage-coded file is saved under (2026-11-23)
+
+- **FACT (the owner's session file at 0.3.41, a real download in Firefox).** A file whose `uri` is a storage code
+  (§30) was saved under a name of this shape: the file's name on the mod's page, the mod's number, the version, the
+  day and time of upload written as `2026-11-14T12-13Z`, and a short code of letters and digits, divided by
+  spaces, with the archive's ending; a second download of the same file had `(1)` before the ending. This answers
+  what §30 left not known.
+- **FACT (compared with §30's answers).** The short code is the file's `sqid`, which the public service gives.
+- **FACT (same session file).** The saved file's size was the service's `sizeInBytes`, to the byte.

@@ -604,7 +604,7 @@ function updatesChosen(input) {
 }
 
 // The update check (MT37, WHY§101): where each mod came from, and whether a newer file of it is out.
-const UP_STATE = { update: ["Update out", "bad"], maybe: ["Unclear", "warn"], current: ["Up to date", "good"], "not asked": ["Not asked yet", ""], none: ["Cannot be asked", ""], gone: ["Gone from its page", "warn"] };
+const UP_STATE = { update: ["Update out", "bad"], maybe: ["Unclear", "warn"], current: ["Up to date", "good"], "not asked": ["Not asked yet", ""], none: ["Cannot be asked", ""], gone: ["Gone from its page", "warn"], replaced: ["Older version", ""] };
 const UP_ORIGIN = { list: "the list's own", added: "added afterwards", modtrap: "added by ModTrap", "": "" };
 const UP_HOST = { nexus: "Nexus", github: "GitHub", loverslab: "LoversLab", url: "web address", "": "not known" };
 // The update button of one mod (MT40): ModTrap fetches the newer file where it can and takes it to Add mods; where it
@@ -705,7 +705,7 @@ function manualUpdate(mod) {
     el("div", { class: "dim small", text: "A .zip, .7z or .rar file you downloaded yourself, from any site." }));
   const box = el("div", { class: "modal wide", role: "dialog", "aria-modal": "true" },
     el("p", {}, el("b", { text: "Manual update of “" + mod + "”" })),
-    el("p", { class: "dim", text: "ModTrap takes the file to Add mods as this mod's newer version: it goes right above “" + mod + "”, which is disabled, not deleted. Nothing changes before Add mods has shown you its plan" + ((state.settings || {}).updates_go ? " (or, with your setting, as soon as the plan leaves nothing open)." : ".") }),
+    el("p", { class: "dim", text: "ModTrap takes the file to Add mods as this mod's newer version: it goes right after “" + mod + "” in MO2's list, and “" + mod + "” is disabled, not deleted. Nothing changes before Add mods has shown you its plan" + ((state.settings || {}).updates_go ? " (or, with your setting, as soon as the plan leaves nothing open)." : ".") }),
     zone, el("div", { class: "actions" }, cancel));
   const back = el("div", { class: "modal-back" }, box);
   const done = () => { document.removeEventListener("keydown", key, true); back.remove(); };
@@ -948,7 +948,7 @@ function renderUpdates(listOnly) {
   const favChip = el("button", { type: "button", class: "chip link" + (f.fav ? " on" : ""), text: "★ Favourites " + num(d.counts.fav || 0), title: "Show only the mods you marked as favourites (right-click a mod to mark it)" });
   favChip.addEventListener("click", () => upFilter("fav", !f.fav));
   const bar = [el("div", { class: "chips" }, el("span", { class: "dim", text: "Filter:" }), pick("state", "", "All", d.rows.length),
-    ...["update", "maybe", "current", "not asked", "none", "gone"].filter((k) => d.counts[k]).map((k) => pick("state", k, UP_STATE[k][0], d.counts[k])), favChip),
+    ...["update", "maybe", "current", "replaced", "not asked", "none", "gone"].filter((k) => d.counts[k]).map((k) => pick("state", k, UP_STATE[k][0], d.counts[k])), favChip),
     el("div", { class: "chips" }, el("span", { class: "dim", text: "Mods:" }), pick("origin", "", "All"),
       ...(known ? [pick("origin", "list", "The list's own", d.origins.list), pick("origin", "added", "Added afterwards", d.origins.added)] : []),
       pick("origin", "modtrap", "Added by ModTrap", d.origins.modtrap),
@@ -2948,7 +2948,7 @@ function shareTable(title, list, word) {
 }
 
 function addModCard(x, place, built) {
-  const where = x.updates ? "right above “" + x.updates + "”, the version it is newer than" + (x.updates_enabled ? "; “" + x.updates + "” is disabled when this one is added, not deleted, and enabled again by Revert" : " (which is disabled already)")
+  const where = x.updates ? "right after “" + x.updates + "”, the version it is newer than, in MO2's list" + (x.updates_enabled ? "; “" + x.updates + "” is disabled when this one is added, not deleted, and enabled again by Revert" : " (which is disabled already)")
     : place.before ? "directly before “" + place.before + "” in MO2's list" : "last in MO2's list (the highest priority)";
   const plugs = x.plugins.map((p) => {
     if (p.unreadable) return el("div", { class: "plug" }, el("p", {}, el("span", { class: "mono", text: p.name }), el("span", { class: "tag bad", text: "could not be read" })), el("p", { class: "dim", text: p.unreadable }));
@@ -2962,7 +2962,7 @@ function addModCard(x, place, built) {
       el("p", { class: "dim" }, "Masters: " + (p.masters.length ? p.masters.map((m) => m.name).join(", ") : "none"),
         bad.length ? el("span", { class: "tag bad", text: plural(bad.length, "master") + " not ready" }) : p.masters.length ? el("span", { class: "tag good", text: "all there" }) : null),
       ...bad.map((m) => el("p", { class: "would-needs", text: m.name + ": " + (m.state === "missing" ? "no mod in this MO2 has it" : m.state === "inactive" ? "in the modlist, not active" : "in a disabled mod: " + m.mods.join(" or ")) })),
-      p.replaces ? el("p", { class: "would-needs" }, "Another mod has a plugin of this name: ", modLink(p.replaces.mod), ". This mod's copy would be the one used; " + plural(p.replaces.dependants, "plugin") + " name it as a master.") : null,
+      p.replaces && p.replaces.mod !== x.updates ? el("p", { class: "would-needs" }, "Another mod has a plugin of this name: ", modLink(p.replaces.mod), ". This mod's copy would be the one used; " + plural(p.replaces.dependants, "plugin") + " name it as a master.") : null,
       ...p.notes.map((n) => el("p", { class: "would-needs", text: n })));
   });
   const carries = Object.keys(x.kinds).length ? kindsText(x.kinds) : "no files";
@@ -3050,14 +3050,14 @@ async function askAddPlan() {
 
 function addActionCard(d) {
   const st = (k) => (d.steps || []).find((x) => x.key === k) || { state: "done" };
-  const todo = ["install", "enable", "activate"].some((k) => (d.steps || []).some((x) => x.key === k && x.state !== "done"));
+  const todo = ["install", "enable", "activate", "update"].some((k) => (d.steps || []).some((x) => x.key === k && x.state !== "done"));
   const kids = [];
   if (state.addPlan) {
     const p = state.addPlan;
     const lines = [];
     for (const x of p.mods) {
       if (x.staged) lines.push("Copy “" + x.name + "” from ModTrap's work folder into MO2's mods folder.");
-      if (!x.enabled) lines.push("Put “" + x.name + "” " + (x.before ? "directly before “" + x.before + "”" : "last") + " in MO2's mod list" + (x.updates ? ", which is right above “" + x.updates + "”, the version it is newer than" : "") + ", and enable it.");
+      if (!x.enabled) lines.push("Put “" + x.name + "” " + (x.before ? "directly before “" + x.before + "”" : "last") + " in MO2's mod list" + (x.updates ? ", which is right after “" + x.updates + "”, the version it is newer than" : "") + ", and enable it.");
       if (x.replaces) lines.push("Disable “" + x.replaces + "”, the older version. It is not deleted; Revert enables it again.");
       else if (x.updates) lines.push("“" + x.updates + "”, the older version, is disabled already and stays so.");
     }
@@ -3095,7 +3095,8 @@ function addActionCard(d) {
     b.addEventListener("click", askAddPlan);
     kids.push(el("div", { class: "actions" }, b, probeButton(), el("span", { class: probeReason() ? "would-needs" : "dim", text: probeReason() ? "Not yet: " + probeReason() + "." : !state.changes ?
       "Switched off for now: ModTrap putting the mod in for you waits until it has been proven on your modlist. The steps below say how to do it by hand." :
-      "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
+      d.update ? "An update of a mod you have: ModTrap copies the newer version in, puts it right after the older one, disables the older one (it is not deleted) and checks the result. The plugins keep their places. It shows the plan and asks first."
+        : "ModTrap copies the mod in, places and enables it, places and activates its plugins, and checks the result. It shows the plan and asks first." })),
       state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null);
   }
   for (const j of (d.added || []).filter((x) => x.state === "added").slice(0, 12)) {
@@ -3238,7 +3239,8 @@ function renderAdd(d) {
     text: "Room in the load order: full plugins " + s.full.now + (s.full.after !== s.full.now ? " → " + s.full.after : "") + " of " + s.full.limit +
       ", light plugins " + s.light.now + (s.light.after !== s.light.now ? " → " + s.light.after : "") + " of " + s.light.limit + "." });
   box.replaceChildren(...[noteCard,
-    el("div", { class: "card" }, el("p", { text: "What ModTrap can tell from the files; what is inside the plugins' records is read through xEdit in its own step. ModTrap checks every step against the modlist's files each time the modlist is read." }), room,
+    el("div", { class: "card" }, el("p", { text: d.update ? "An update: a newer version of a mod you have. It takes the older one's place and nothing else of the modlist is judged anew; a new mod gets the full list of steps."
+      : "What ModTrap can tell from the files; what is inside the plugins' records is read through xEdit in its own step. ModTrap checks every step against the modlist's files each time the modlist is read." }), room,
       d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
       d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
     toolCard(), addActionCard(d),
