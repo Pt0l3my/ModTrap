@@ -9,7 +9,7 @@
 <body data-token="__TOKEN__">
 <header>
   <div class="top">
-    <div class="brand"><span class="mark">ModTrap</span><span id="version" class="dim"></span></div>
+    <div class="brand"><span class="mark">ModTrap</span><button id="version" type="button" class="verbtn" title="This ModTrap's version. Press to update ModTrap from a release file."></button></div>
     <ol id="steps" class="steps" hidden>
       <li data-step="open" data-tab="mods"><span class="n">1</span><span class="t">Modlist open</span></li>
       <li data-step="pick" data-tab="pick"><span class="n">2</span><span class="t" id="step-pick">Tick the mods to take out</span></li>
@@ -67,6 +67,7 @@
 <nav id="tabs" hidden>
   <button data-group="modlist" data-tab="mods" class="on" title="MO2's own list: tick a mod to enable or disable it, drag a row to move it, right-click for more">Mods</button>
   <button data-group="modlist" data-tab="plugins">Plugins</button>
+  <button data-group="modlist" data-tab="split" title="The mods and the plugins side by side: drag the line between them sideways to give one side more room">Split view</button>
   <button data-group="modlist" data-tab="health">Health <span id="health-count" class="count">0</span></button>
   <button data-group="modlist" data-tab="tools">Tools</button>
   <button data-group="demaster" data-tab="pick" title="Tick the mods to take out: what is ticked here goes to the dry run and the demaster">Pick mods</button>
@@ -82,6 +83,7 @@
   <button data-group="record" data-tab="history" title="Everything ModTrap changed in this modlist, with date and time">History</button>
   <button data-group="record" data-tab="log">Log</button>
   <button data-group="settings" data-tab="settings">Settings</button>
+  <button id="split-swap" type="button" class="tabtool" aria-pressed="false" title="Swaps the two sides of the split view: the plugins to the left and the mods to the right, or back" hidden>⇄ Swap sides</button>
 </nav>
 
 <main>
@@ -113,7 +115,7 @@
 
   <section id="tab-mods" class="tab" hidden>
     <div class="tools">
-      <input id="mods-search" type="search" placeholder="Search mods and plugins   ( / )" spellcheck="false" aria-label="Search mods and plugins">
+      <input id="mods-search" type="search" placeholder="Search mods and plugins, or *138 for priority 138   ( / )" spellcheck="false" aria-label="Search mods and plugins, or a star and a number to go to that priority" title="Type a part of a mod's or a plugin's name. A star and a number, like *138, goes to the entry with that priority; Enter goes there again.">
       <label title="Hide mods that are disabled in MO2"><input type="checkbox" id="f-enabled"> Enabled only</label>
       <label title="Hide mods that provide no plugin: there is nothing to demaster in those"><input type="checkbox" id="f-plugins"> Has plugins</label>
       <label title="Show only mods that other plugins depend on: the ones that cannot simply be disabled"><input type="checkbox" id="f-deps"> Has dependants</label>
@@ -147,16 +149,22 @@
     </div>
   </section>
 
+  <div id="split-bar" class="splitbar" role="separator" aria-orientation="vertical" tabindex="0" title="Drag sideways to give one side more room; double-click for equal halves; the arrow keys move it too" hidden></div>
+
   <section id="tab-plugins" class="tab" hidden>
     <div class="tools">
-      <input id="plugins-search" type="search" placeholder="Search plugins and their mods   ( / )" spellcheck="false" aria-label="Search plugins">
+      <input id="plugins-search" type="search" placeholder="Search plugins and their mods, or *138 for position 138   ( / )" spellcheck="false" aria-label="Search plugins, or a star and a number to go to that position" title="Type a part of a plugin's or a mod's name. A star and a number, like *138, goes to the plugin at that position of the load order; Enter goes there again.">
       <label title="Plugins with a missing or inactive master, or that could not be read"><input type="checkbox" id="p-problems"> With problems</label>
       <label title="Plugins that other plugins list as a master"><input type="checkbox" id="p-deps"> Needed by others</label>
       <span id="plugins-shown" class="dim"></span>
+      <button id="plugins-undo" type="button" hidden></button>
+      <span id="plugins-hint" class="dim"></span>
     </div>
     <div class="split">
       <div class="scroll"><table id="plugins-table">
-        <thead><tr><th class="c-num" title="The plugin's place in the load order">Position</th><th>Plugin</th>
+        <thead><tr><th class="c-tick" title="Ticked: the plugin is active. Tick or untick it to activate or deactivate the plugin"></th>
+          <th class="c-num" title="The plugin's place in the load order">Position</th>
+          <th class="c-mark" title="Issues and conflicts: press a symbol for what it stands for"></th><th>Plugin</th>
           <th title="esm: a master file; esl: a light plugin; esp+esl: an .esp flagged light">Kind</th><th>Mod</th><th class="c-num">Mod priority</th>
           <th class="c-num" title="How many plugins this one lists as its masters">Masters</th>
           <th class="c-num" title="How many plugins list this one as a master">Needed by</th></tr></thead>

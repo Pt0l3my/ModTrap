@@ -57,7 +57,18 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   Demaster, as its first tab).
   MT57 (a mod's file dropped on the Modlist page's list is installed at the place it is dropped, shown in a box on
   that page; a list keeps its place when it is shown again).
-- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
+  MT58 (the Plugins tab as MO2's own list, with issues and conflicts as a symbol on the row; ModTrap unpacks .7z
+  itself; ModTrap updates itself from a release file, behind the version at the top).
+  MT59 (a split view in the Modlist section: the mods and the plugins side by side, parted by a line that is
+  dragged sideways).
+  MT60 (a star and a number in a search box goes to the row with that priority or position; the rows a search
+  finds glow).
+  MT61 (every table's columns are set in width by lines between the headings, which glow while held).
+  MT62 (a column's line moves that column alone, the last column has a line of its own, the lines run down the
+  rows, and columns are moved by their headings; a click on a mod's name opens its web: the mod in the middle of
+  every mod it has to do with, coloured by kind, with its page as a link and its one picture).
+  MT63 (no window but the browser: ModTrap's console is hidden, its lines being on the page).
+- **Open.** MT64 (whether ModTrap ends itself some time after its page was closed, now that it has no window); MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
@@ -1387,3 +1398,214 @@ modlist return where it was?"
 - **A list keeps its place.** The Mods list, and every other list of the page, comes back scrolled to where it was:
   after a change that makes ModTrap read the modlist again, after a Rescan, and after a look at another tab.
 
+## MT58
+
+**The Plugins tab as MO2's own; ModTrap's own .7z unpacker; ModTrap updates itself** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "build the same for the Plugins tab (to be able to drag plugins, and warn user about conflicts or
+issues, but not as pop up but as a symbol on the plugin row that can be clicked).
+
+looks like the install didn't work because ModTrap does not have the tool to decompress file. 7z is part of windows
+11 by the way.
+
+Can you also add updater feature, make the version text a button, clicking on it a pop up window with colored drop
+zone and Add file button in middle. Make it so that ModTrap release files can be read by this feature."
+
+And, while it was being built: "but modtrap should already have its own unpacker, it compresses logs into 7z
+already"
+
+**Settled** (WHY§123, WHY§124; the owner may overrule any of it):
+
+- **Plugins: the box is the plugin's state.** Ticking it activates or deactivates the plugin, as in MO2. Nothing is
+  asked first. What follows (active plugins that now lack a master) is said in a line, and shows on their rows.
+- **Plugins: dragging.** A row is dragged to another place in the load order. The limits MO2 itself keeps (MO03§3,
+  §4) are kept: nothing above the game's own plugins, masters among the masters and no other plugin there, no
+  plugin above a master of its own or below a plugin that needs it. A plugin let go where it may not stand comes
+  to stand at the nearest place it may, and the page says why. A plugin keeps its state when it is moved.
+- **Plugins: the symbol on the row.** ⚠ where something is wrong with an active plugin (a master missing, not
+  active, or loading after it; its file gone or unreadable); ⇄ where a scan found that it overwrites what other
+  plugins changed, or that others overwrite what it changes; ✓ where a scan found nothing. A press on the symbol
+  opens the plugin's pane beside the list with all of it. The scan is asked for in the pane, and runs by itself
+  after a plugin is moved or activated (the setting of MT56).
+- **Plugins: Undo** as on the Mods tab, by its button and Ctrl+Z; the changes are jobs of the same kind (MT56).
+- **A .7z is unpacked by ModTrap itself.** Its own reader, written as its writer was, with Python's own
+  decompression: LZMA and LZMA2, the filters 7-Zip puts before them for programs (BCJ, BCJ2) and for sound (Delta),
+  Deflate, BZip2 and stored data; every file's checksum is checked. What it does not read (PPMd, a rare method)
+  goes to the owner's 7-Zip where there is one, else to the unpacker Windows 11 comes with (`tar.exe`), which is
+  also what a .rar goes through. A password is refused in words by all three.
+- **ModTrap updates itself.** The version at the top is a button. Its box has a coloured drop zone with "Add file"
+  in the middle; a release file dropped anywhere on the page opens it too. The file must be a ModTrap release
+  package whose program is whole (the mark its own version names). One press then: the version in use is copied
+  aside, the new files are written, the new version is tried once, and ModTrap starts again while the page waits
+  and loads itself anew. A version that does not start is put back. An older release file is taken too ("Go back
+  to …"). The Python ModTrap runs on is never replaced. Nothing is fetched from anywhere: the owner gives the file.
+
+## MT59
+
+**A split view: the mods and the plugins side by side** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "can you also add split view to Modlist as sub tab? on that page user will have modslist rows and
+plugin page rows split view, split by a vertical glow line that can be moved sideways to adjust which side gets more
+area shown"
+
+**Settled** (WHY§125; the owner may overrule any of it):
+
+- **A tab of its own.** Modlist has "Split view" after Mods and Plugins. It shows the mods' list on the left and
+  the plugins' list on the right, each exactly as on its own tab: the same rows, ticks, drags, menus, search,
+  filters, Undo, and a mod's file dropped on the left is installed at its place.
+- **The line.** A glowing vertical line parts the two. Dragged sideways, it gives one side more room (between 15
+  and 85 in a hundred); a double-click makes the halves equal; with the keyboard, the arrow keys move it. Where it
+  stands is kept with the session.
+- **The two sides know each other**, as MO2's two panes do: a mod looked at marks its plugins on the right, and a
+  plugin looked at marks its mod on the left, each brought into view.
+- **To fit.** In the split view the mods' list leaves its Plugins column out (the plugins are beside it), the
+  plugins' list its three last columns, and the plugin's pane stands below its list, not beside it.
+
+**Note (2026-11-23, the owner's request).** "can you also add button to header on this sub tab, to swap side
+arrangement of plugin and modlist split, this will swap sides." Settled: "⇄ Swap sides" stands at the right end of
+the tab row, on the split view only. It puts the plugins on the left and the mods on the right, or back; each list
+keeps the room it had, so the line moves to the mirrored place. Kept with the session.
+
+## MT60
+
+**A star and a number goes to that row; what a search finds glows** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "for the search boxes on mods and plugins page (and other pages where this could be applicable)
+allow the user to enter a number which would be accepted as priority number as long as it's entered with a * at the
+start, e.g. *138, this will jump to priority 138 row on the list. Makes this part of the grey text in the search
+boxes. Also when a mod or priority number is searched, make the resulting row also gain glow effect around its
+borders."
+
+**Settled** (WHY§126; the owner may overrule any of it):
+
+- **Where.** The search boxes of the mods' list (Modlist › Mods, Demaster › Pick mods, the split view's left side),
+  of the plugins' list (there the number is the position in the load order), and of the Updater list.
+- **A star and a number.** `*138` does not narrow the list: the entry with that number is brought to the middle of
+  its list and glows. A folded group that holds it is unfolded. A separator has a priority too, and is gone to as
+  any entry. Enter in the box goes there again after the list was scrolled away. Beside the box a line says what
+  the number is ("priority 138: …"), or that nothing has it, or that the filters hide it.
+- **The grey text** of each box names it: "…, or *138 for priority 138" (for plugins: "position 138").
+- **The glow.** The row a number went to glows, with a border all round. The rows a search by words found glow
+  too, as long as they are a hundred or fewer; with more, the narrowed list is the answer and nothing glows.
+
+## MT61
+
+**Columns whose width the owner sets** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "can you add column space adjusters at the top for modlist, plugins, update list (all lists with
+a table), so users can adjust width of each column. Normal separator lines without glow between columns, and when
+clicked on to adjust, they gain glow."
+
+**Settled** (WHY§127; the owner may overrule any of it):
+
+- **Where.** Every table with a heading row: the mods' list, the plugins' list, the Updater list, Installed mods,
+  Downloads, the History's tables and the Tools tab's.
+- **The lines.** A thin plain line stands at the right edge of each heading but the last one shown. Held with the
+  mouse and moved sideways, it glows and sets that column's width. The other columns keep theirs; the last one
+  takes what is left, and never less than it had; where the columns are wider than their pane, the list scrolls
+  sideways. A press on a line does not sort the list.
+- **Back to the table's own widths:** a double-click on any of its lines.
+- **Kept** with the session, for each kind of table, so a list drawn anew, a Rescan and a new start of the page
+  show the widths as they were set. In the split view, which leaves some columns out, the columns that are shown
+  keep their widths.
+- **The Updater list's heading row** now stays at the top of its list while it is scrolled, as the Mods and
+  Plugins lists' do, so that its lines are in reach anywhere in the list.
+
+**Note, 2026-11-23 (MT62).** "The last one takes what is left" no longer holds: the owner asked that a line move
+its own column and nothing else, and that the last column have a line of its own. MT62 settles it.
+
+## MT62
+
+**Columns that move alone and can change places; a mod's web** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "When I move the column divider for dependants it will move the whole side of the list slightly.
+Can you make it so that if its the last column on the table, then it moves exactly with the divider line being
+adjusted, and if the user wants to extend the last column, then it can be done by the last divider on the end of
+the column (so on the right side of the dependants). Apply this to all tables.
+
+Also, can you add the same thin lines between column on the list as well? when the column are adjusted these lines
+also gain glow.
+
+Can you also add ability to click and drag columns as a whole to relocate order? The priority and mod/plugin name
+are the static first and second respectively, but other column can be relocated (also the tick boxes stay on the
+left as slot 0).
+
+Also would it be possible to add ability when user clicks on a mod text (gains glow effect when hoovering over the
+mod title text), then it brings up pop up window about the mod and its dependencies, affected mods by it, what it
+overwrites, or what overwrites it. I would like to see a Network with link, with the selected mod in the middle.
+Color each linked boxes by the type (is it a dependency, is it a patch for it, is it overwritten by it, the selected
+mod overwrites it (also show what part is overwritten), is there a conflict?, etc.). Also add Nexus/Github/Loverslab
+link (blue glow text, clickable open new tab). Make a comprehensive and in depth design for this. Take your time."
+
+And, while it was being built: "if you have a clear source link, can you also add picture for the mod (the
+introduction picture people see for the mod on nexus page, etc., just one picture)."
+
+**Settled** (DESIGN§23, DESIGN§24, WHY§128; the owner may overrule any of it):
+
+- **A line moves its own column.** Every column has a width of its own, the last one too, and a line at its right
+  edge. A line held and moved changes the column to its left by exactly as much as the mouse moved; every other
+  column keeps its width, and the table is as wide as its columns together. This amends MT61, where the last
+  column took what was left.
+- **Lines down the rows.** The same thin lines stand between the columns of every row. While a line is held, one
+  glowing line runs from the heading to the foot of the list where the column's edge is.
+- **Columns change places.** A heading held and moved sideways takes its column along; a glowing line shows where
+  it would stand, and Esc lets it go back. The leading columns stay: on the mods' list the ticks, the priority and
+  the mod; on the plugins' list the tick, the position, the kind and the plugin. On the other tables the first two.
+  A press on a heading without moving it still sorts the list. Order and widths are kept with the session, by the
+  table's kind; a double-click on a line puts both back as the table has them by itself.
+- **A mod's name opens its web.** The name glows under the mouse and is a button of its own; the rest of the row
+  shows the mod's card as before. Also from the mod's menu and its card.
+- **The web** is DESIGN§23: the mod in the middle; on the left what it needs, on the right what is built on it
+  (mods that need it, patches for it, tools' outputs), above what wins over it and below what it wins over. Ten
+  kinds, each with its colour and its words. "What part is overwritten" is told for files by their kind, with
+  counts and examples, and for records by the kind of record and which plugin wins over which.
+- **A conflict** is two plugins changing the same records with neither made in view of the other and no third
+  plugin having both as masters. ModTrap reads which records, not what is changed inside them, and says so: xEdit
+  shows what is lost.
+- **The mod's page** is a blue, glowing link under its name, opening a new tab: Nexus, GitHub, LoversLab, or any
+  other address kept for the mod.
+- **One picture**, where the page is at Nexus or a GitHub repository: the picture that page opens with. ModTrap's
+  server fetches it, without any key, only from those sites' picture hosts, keeps it for a month and hands it to
+  the page; the page itself still loads nothing from outside. LoversLab and other sites give none without an
+  account, so there is none for them. A setting switches pictures off. Read into the owner's "a clear source
+  link": a page at one of the two sites that name a picture for it.
+
+## MT63
+
+**No window but the browser** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "would it be also possible to open the launch terminal integrated into the browser page
+terminal? or do we need a terminal running separately? I would like to keep only browser if possible, but if the
+features need a terminal window then make sure it starts minimized."
+
+**Settled** (DESIGN§24, WHY§129; the owner may overrule any of it):
+
+- **No feature needs the window.** What the terminal shows is on the page already: History, then Log, every line.
+- **So it is hidden.** ModTrap.exe starts ModTrap's program with its console hidden: no window, nothing in the
+  taskbar. The console itself is kept, unseen, because the console programs ModTrap starts would otherwise each
+  open a window of their own.
+- **A setting brings it back, minimised:** "Show ModTrap's console window", off by default, taking effect at once.
+- **A start that fails is shown.** The window appears with what went wrong and waits for a key. A Python that does
+  not get that far is told by the launcher's own message, as before.
+- **Only ModTrap's own console.** One that ModTrap was started in from a command prompt is the owner's and is left
+  alone; ModTrap.cmd stays the start that shows what is written.
+- **Ending ModTrap** is "Quit" on the page. A closed tab does not end it; starting ModTrap again brings the page
+  back as it was (MT22). Whether it should end by itself after a closed tab is MT64.
+
+## MT64
+
+**Should ModTrap end itself some time after its page was closed?** · *2026-11-23 · **Open***
+
+With MT63 ModTrap has no window. A tab closed without "Quit" leaves it running unseen: it holds the modlist's
+session and does nothing else. Starting ModTrap again takes over from it and opens the page (MT22), so nothing is
+lost either way.
+
+- **A. Leave it running (as built).** Nothing ends by itself; a job in hand is never at risk. The cost is a
+  program that stays in memory unseen until ModTrap is started again or the PC is shut down.
+- **B. End after the page has been gone for a while.** When no page has asked anything for, say, ten minutes, and
+  no job, tool or download is in hand, ModTrap saves its session and closes. A browser that puts a sleeping tab
+  aside would end it too; the next start brings everything back.
+
+**Recommendation: A for now**, with B as a setting if the unseen program turns out to be a nuisance. A browser
+gives a page no sure way to say that its tab was closed, so B rests on a wait, and a wait that is wrong ends
+ModTrap under the owner's hands.

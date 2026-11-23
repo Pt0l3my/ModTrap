@@ -145,6 +145,13 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 120 | 2026-11-23 | Install and placement by hand work on the owner's list; a separator is added through the add job; lists sort by their columns' titles; the launcher is a windowless program that starts ModTrap's console minimised | DECIDED | #add #page #release #windows |
 | 121 | 2026-11-23 | The Modlist page changes MO2's lists as MO2 does: one job per change, MO2's own rule for plugins, a disabled mod's plugin keeps its line, a scanner that reads record headers | DECIDED | #page #mo2 #safety |
 | 122 | 2026-11-23 | A hidden list forgets its place, so each list's place is noted while it is shown; a file dropped on the list is installed at that place by a run of the page's own, apart from the Installer tool's list | DECIDED | #page #add |
+| 123 | 2026-11-23 | ModTrap reads .7z itself; what its reader does not read goes to 7-Zip or to Windows' own unpacker | METHOD | #adding #safety #licence |
+| 124 | 2026-11-23 | The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again | DECIDED | #page #mo2 #release #safety |
+| 125 | 2026-11-23 | The split view shows the two sections that exist, side by side, and builds nothing twice | METHOD | #page |
+| 126 | 2026-11-23 | A star-number is a place to go to, not a filter; a found row is brought into view once per number; each search box waits on its own | METHOD | #page |
+| 127 | 2026-11-23 | Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest | METHOD | #page |
+| 128 | 2026-11-23 | Every column has its own width and the table is their sum; a mod's web is one box for each mod, read in two passes; a conflict is told by masters, not by what is inside a record; the picture goes through the server | METHOD | #page #model #updates #safety |
+| 129 | 2026-11-23 | The console is hidden, not done without; only a console of ModTrap's own is hidden | METHOD | #launcher #safety |
 
 ## Entries
 
@@ -850,6 +857,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   password, with or without its names hidden, is refused in words; one holding a link is refused. Its listing
   shows a link as a mode starting with "l", which the reader now looks for. Still not run: 7-Zip on Windows, whose
   listing gives attribute letters instead of a mode.
+- **Later (2026-11-23).** ModTrap now reads .7z itself, and Windows' `tar` is the last resort for what it does
+  not read: WHY§123.
 
 ### 42. Carrying out an add: written and tested against invented lists, switched off
 
@@ -3282,3 +3291,201 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - Rejected: the mod's own installer questions inside the box. They need the Installer tool's whole card; the box
   hands over, and the place goes with it.
 
+### 123. ModTrap reads .7z itself; what its reader does not read goes to 7-Zip or to Windows' own unpacker
+
+`2026-11-23` · METHOD · `#adding #safety #licence` · refs: MT58, MT21, WHY§41, WHY§48, DESIGN§16.1
+
+- FACT (the owner's session file at 0.3.49): a mod dropped as .7z was refused, "needs 7-Zip, which ModTrap did not
+  find on this PC". WHY§41 had ruled out an unpacker of ModTrap's own "for now" and left Windows' `tar` as untried.
+- The owner's point decides it: ModTrap writes .7z itself (WHY§48), so it can read it. METHOD: `sevenz_read.py`,
+  from the format's published description, nothing copied. Python's own lzma, zlib and bz2 do the decompression;
+  the reader parses the header (also a compressed one), builds each folder's chain of coders, and checks every
+  file's CRC, so a mistake of the reader cannot pass as a file.
+- What 7-Zip puts before the packer. BCJ and Delta are filters Python's decoder knows, but only in a chain that
+  ends in LZMA2 and so says where it ends. FACT (tried): with old-style LZMA under BCJ, the last bytes never came
+  out. METHOD: where the filter stands before anything but LZMA2, the unpacked bytes are packed again lightly and
+  unpacked through a chain that ends in LZMA2. BCJ2, 7-Zip's x86 filter with four streams, is decoded by our own
+  code, in memory, up to 512 MB.
+- Checked against 7-Zip 23.01 with invented files and real programs as the programs' part: default, ultra,
+  non-solid, header not packed, LZMA, BCJ, BCJ2, Delta, ARM, Deflate, BZip2, stored: every file the same. A
+  password (also over the header) is told as one; PPMd is told as not read. A .7z written by ModTrap on the
+  owner's PC read through, 354 files, every checksum right. Not checked: an archive from Nexus (none is here, and
+  none may be kept); the owner's next drop is that check.
+- The order for a .7z: ModTrap's reader; if it says "not read" or "damaged", the owner's 7-Zip; else Windows'
+  `tar.exe`. A .rar: 7-Zip, else `tar.exe`. FACT: `tar.exe` is bsdtar; tried here as the same program (3.7.2):
+  it lists and unpacks .7z, refuses a step upwards, and names a password. LIKELY, not seen: the one of Windows 11
+  from 23H2 has the LZMA part (the one of Windows 10 has not; ModTrap asks it what it is and says so).
+- Safety as before (WHY§41): names checked before anything is written, links refused, sizes capped, the result
+  walked for links; with `tar`, what was written is measured too, since its listing is only what the archive says.
+
+### 124. The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again
+
+`2026-11-23` · DECIDED · `#page #mo2 #release #safety` · refs: MT58, MT56, MT22, MO03§3, MO03§4, WHY§68, WHY§121, DESIGN§17, DESIGN§21
+
+- Plugins. The owner asked for marks on rows, not boxes that ask. So a tick is carried out at once and its
+  consequences are shown: the rows of plugins that now lack a master carry ⚠, the Health count rises, and Undo
+  is one press. Different from mods (MT56), where the unsafe is asked first: there one tick can switch off many
+  plugins at once.
+- Dragging within limits, not freely with warnings. MO2 does not let a plugin stand where the game would not
+  load it as listed (MO03§3, §4); a list ModTrap wrote otherwise would be changed by MO2 at its next start. The
+  server works out the nearest allowed place and says why (`loadcheck.place_moved`); the page shows it.
+- The scan's mark is per plugin and asked for, or follows a move: scanning every plugin of a list of 3,700 up
+  front would take minutes. Marks of scans are dropped when the order changes, since they describe the old one.
+- Self-update: files, not a network. The owner hands ModTrap a release package; ModTrap fetches nothing. The
+  package is trusted as the owner's; what is checked is that it is one, stays inside its folder, and is whole
+  (its program's mark is the one its `version.json` names, MT22).
+- Order of the update: copy the version in use aside; write; compare the mark on disk; start the new program once
+  in a process of its own (import only); put the copy back if any of it fails. Then start anew: the new start
+  takes over from the running one as any second start does (WHY§68), on the same port, and the open page asks
+  the address until another start answers, then loads itself anew.
+- The Python inside a package is left alone: the running one holds its files. A package with Python inside
+  updates the program only.
+- Checked here, on Linux, with a package folder made of ModTrap's own files: box, a wrong file, the release file,
+  update, restart, page anew at the new version, 2.4 s. Not checked: Windows, where a running `ModTrap.exe` cannot
+  be written over (it is then renamed aside first) and where the new start gets a console of its own, minimised.
+
+### 125. The split view shows the two sections that exist, side by side, and builds nothing twice
+
+`2026-11-23` · METHOD · `#page` · refs: MT59, MT58, MT56, WHY§121, WHY§122, DESIGN§21
+
+- The page's sections already stand in a row that shows one of them. The split view shows two, the mods' and the
+  plugins', with a bar between them, and sets the left one's share. No second table: 3,500 mod rows and 3,700
+  plugin rows exist once, and every handler (tick, drag, menu, the line of a place, Undo, the dropped file) serves
+  both views without knowing which is shown. What asked "is the Mods tab shown" now asks "are the mods shown".
+- The line's place is kept in the session's saved view, with the tab and the filters.
+- Marking across the sides is done on the owner's click only, never while the lists are drawn again: bringing a
+  row into view while they scroll would pull the list from under them.
+- Each list keeps its own scroll place in the split view too (WHY§122: the place belongs to the list, not the tab).
+- Checked in a browser on a stand-in modlist: the line dragged and its place kept across a re-reading and a change
+  of tab, the double-click, a tick on the left and a drag on the right, Ctrl+Z, the marks across the sides, and the
+  plain tabs whole again afterwards.
+- **Later (2026-11-23).** "Swap sides" turns the row of the two sections round and nothing else; the share that is
+  kept is the mods' side's, so that dragging the line and the arrow keys mean the same on either arrangement. The
+  button first stayed hidden: it was set before the tab's name was, and the browser check showed it.
+
+### 126. A star-number is a place to go to, not a filter; a found row is brought into view once per number; each search box waits on its own
+
+`2026-11-23` · METHOD · `#page` · refs: MT60, MT59, MT56, WHY§122, WHY§125
+
+- A number names one row, and its neighbours are what the owner wants to see with it: so `*138` leaves the list
+  whole and goes there. Narrowing the list to one row would show the row without its place.
+- The lists are filtered again for many reasons (a tick, a fold, the page saving its view). Going to the row at
+  each of them would pull the list back while the owner scrolls. METHOD: the row is brought into view once for each
+  number typed; Enter asks for it again.
+- The glow is capped at a hundred rows found by words: a single letter finds thousands, and a glow on all of them
+  marks nothing.
+- FACT (found by the browser check of the split view): the Mods and the Plugins box shared one short wait before
+  filtering, so typing in one within that wait dropped the other's search. Never met while one box was shown at a
+  time; each box now has its own.
+- METHOD (a note on checking): the stand-in server puts the page together once, at its start. A fix to the page is
+  only tried once that server is started again; one run here checked the old page and showed the old fault.
+- Checked in a browser on stand-in lists of 3,500 mods and 2,000 plugins: a number inside a folded group, a
+  separator's number, a number nobody has, the star alone, words that find ten rows and words that find
+  thousands, Enter after scrolling away, both boxes of the split view at once, and the Updater list.
+
+### 127. Column widths are kept by the kind of table and put on every table as it is drawn; the last shown column takes the rest
+
+`2026-11-23` · METHOD · `#page` · refs: MT61, MT59, MT55, WHY§122, WHY§125
+
+- One mechanism for every table, not one per list: the page watches for tables being drawn and gives each its
+  lines and its kept widths. Several lists are drawn anew at every change (the Updater list, Installed mods,
+  Downloads); nothing had to be added where they are drawn.
+- Until a line is first held, a table lays itself out as before. Then the widths it has are fixed, so that only
+  the column being set changes. One column must take what the others leave, or the browser spreads the spare room
+  over all of them: the last column that is shown has no line and no width. FACT (seen): in the split view the
+  plugins' last columns are left out, and with the widths put on all the shown ones every column grew; the
+  "last shown" is now worked out each time the tab changes.
+- FACT (seen): a list drawn anew while a line was held left the drag working on a table no longer on the page.
+  The widths are therefore kept by the table's kind while the line is held, and every table of that kind follows.
+- FACT (seen): the Updater list's heading row scrolled away with the list, which put its lines out of reach (and
+  out of the browser check's window, which is how it was noticed). It now stays at the top.
+- Checked in a browser on stand-in lists, small and of 3,500 mods: a column narrowed and widened, the glow only
+  while held, a press on the line not sorting, a press on the heading sorting, the widths after a Rescan, after
+  the page was loaded anew, after a search drew the Updater list anew and in the split view, and the double-click.
+- **Later, 2026-11-23.** The owner found the fault in "the last shown column takes the rest": setting the column
+  before it moved the whole side of the list. Reworked in WHY§128.
+
+### 128. Every column has its own width and the table is their sum; a mod's web is one box for each mod, read in two passes; a conflict is told by masters, not by what is inside a record; the picture goes through the server
+
+`2026-11-23` · METHOD · `#page #model #updates #safety` · refs: MT62, MT61, DESIGN§23, DESIGN§24, TL01§32, WHY§127, WHY§121
+
+**Columns.**
+
+- FACT (the owner's screenshot at 0.3.54, and seen here): with one column left to take the rest, a line next to
+  it changed two columns at once, and the browser moved the rest of the row to fit. A table whose every column
+  has a width, and whose own width is their sum, has nothing left to share out: a line then moves one edge.
+- The line that glows down the list while a line is held is one element laid over the page at the column's edge,
+  not a border on thousands of cells: on a list of 3,500 rows a border changed per cell was slow to follow.
+- Columns change places by moving cells, row by row, when a table is drawn: a table has no order of columns apart
+  from its cells. Each cell carries the number of the column it was built as, so sorting, the split view's
+  left-out columns and the kept widths go by that number wherever the column stands.
+- A heading starts to move only after the mouse has gone a few pixels, so a press still sorts.
+- Rejected: laying the tables out as grids, to reorder by style alone. Every table would have had to be rebuilt,
+  and the fixed heading rows and the drop lines of MT56 and MT57 rest on rows being rows.
+
+**The web.**
+
+- Two passes, because the headers are in memory and the files and records are not: the first answer is there
+  with the click, the second in the seconds §21's scanner takes. One request that waited for both would have
+  shown nothing for those seconds.
+- One box for one mod. Rejected: one box for each tie. A patch needs the mod, overwrites a file of it and changes
+  its records: three boxes for one mod, and a line count that grows with them, read worse than one box with its
+  kinds listed when pressed.
+- Sides by meaning, not by a layout that arranges itself. Rejected: a force-laid graph. It puts boxes somewhere
+  different at every opening, needs a library or a good deal of code of our own, and says nothing by position.
+  Left and right for what a mod stands on and what stands on it, above and below for who wins, can be read
+  without the colours.
+- LIKELY: on the owner's list a framework has hundreds of mods that need it. A side therefore shows a fixed
+  number of boxes, the weightiest first, and lists the rest; the kinds can be switched off to give the others the
+  room.
+- A patch is told by two signs together (the whole mod depends on this one; its name says patch, fix, tweak or
+  the like). FACT (the stand-in list): by masters alone, a mod built on two others and a patch between them look
+  the same. Told by name alone, any mod with "fix" in its name would be a patch for everything it needs.
+- A conflict is told by masters: two plugins change the same record, neither names the other as a master, and no
+  active plugin names both. That is what can be read from headers in the time a pop-up may take. It is not
+  xEdit's conflict: xEdit compares what is inside the records. The box says which of the two it is.
+  SPECULATION: on a large list most pairs flagged this way are harmless, because the later plugin was made from
+  the earlier one's values without naming it; the count is a list of places to look, not of faults.
+- The drawing is the page's own: boxes are buttons laid over lines drawn as SVG paths. The SVG namespace is taken
+  from the browser, so the page's source still holds no outside address (the page test's rule).
+
+**The picture.**
+
+- FACT (TL01§32): Nexus's public service names a mod's preview picture without a key, and the picture hosts
+  serve it without one; GitHub draws one for any repository.
+- The page may load nothing from outside (DESIGN§2), and that rule is worth more than a picture. So the server
+  fetches it and the page gets it as data: the content policy is unchanged.
+- Only from the three hosts TL01§32 names, only https, only a file whose first bytes are a picture's, with a size
+  limit; the owner's Nexus key is never sent there (`Net.picture` sends no key at all).
+- Kept a month in ModTrap's own folder: the sites are asked once per mod, and only for a mod whose web is opened.
+  Never for the whole list: 3,500 requests for pictures nobody looks at.
+- LoversLab and other sites: no picture. Theirs need a signed-in visitor, and ModTrap signs in nowhere.
+
+**Checked** in a browser on an invented list with one busy mod (needs, dependants, patches, a tool's output,
+files overwritten both ways, conflicts, settled conflicts): the kinds and their counts, the boxes by side, the
+"+ N more" lists, a kind switched off and on, a box's details, a mod put in the middle and back, the link and the
+picture, Esc. **Not checked:** the picture against the live sites from ModTrap itself (this session cannot reach
+them; the addresses were read by a session that can), and the time the second pass takes on the owner's list.
+
+### 129. The console is hidden, not done without; only a console of ModTrap's own is hidden
+
+`2026-11-23` · METHOD · `#launcher #safety` · refs: MT63, MT64, MT51, MT22, DESIGN§24, WHY§120, WHY§124
+
+- FACT (`modtrap/logbook.py`): every line the console shows is also kept for the page's Log. Nothing reads from
+  the console, and no feature waits on it. The owner's "do we need a terminal": no.
+- Rejected: starting Python with no console at all. ModTrap starts console programs (7-Zip, Windows' tar, its
+  own helper for pressing a tool's button); a console program started by one that has no console gets a new
+  window of its own. A hidden console is inherited instead, and nothing flashes up. It also leaves every print
+  in the program working as it does.
+- The launcher starts the console hidden, and ModTrap hides it again itself: LIKELY needed where Windows hands
+  new consoles to its Terminal program, which may not take "hidden" from whoever starts it. SPECULATION: on such
+  a PC the window may show minimised instead of not at all; not tried here.
+- Whose console: the launcher says "this console is yours" with a switch; and a ModTrap that is alone in its
+  console owns it too, which covers the start after a self-update made by a version that did not know the switch.
+  A console with a command prompt in it has two programs, and is never hidden: hiding the owner's own window
+  would be a fault of a worse kind than a window too many.
+- A start that fails would vanish with a hidden window: it is shown instead and waits for a key.
+- With no window, a closed tab leaves nothing to see of a ModTrap that still runs. It is harmless (the next start
+  takes over, WHY§68), and whether it should end itself is the owner's to say: MT64.
+- **Not checked:** any of it on Windows. The launcher is built here and its source read by a test; what a hidden
+  console does on the owner's PC is for the owner's first start to show.

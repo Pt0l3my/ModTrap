@@ -2,8 +2,10 @@
 the folder that would become the mod. Nothing here touches a modlist.
 
 An archive is someone else's file: every name in it is checked before anything is written (no path that leaves the
-target folder, no link), and the unpacked size and file count are capped. A .zip is read with Python itself; .7z
-and .rar need the owner's own installed 7-Zip, which ModTrap calls and does not contain (WHY§41).
+target folder, no link), and the unpacked size and file count are capped. A .zip is read with Python itself, and a
+.7z with ModTrap's own reader (`sevenz_read.py`, WHY§123), each file's checksum checked. A .rar, and a .7z packed in
+a way that reader does not read, go through a program of the owner's PC, which ModTrap calls and does not contain
+(WHY§41): the owner's installed 7-Zip where there is one, else the unpacker Windows itself comes with (`tar.exe`).
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from . import plugin
+from . import plugin, sevenz_read
 
 MAX_FILES = 400_000
 MAX_BYTES = 120 * 1024 ** 3            # unpacked; a mod larger than this is not taken in
@@ -129,7 +131,73 @@ def _unzip(src: Path, dest: Path) -> int:
         return len(infos)
 
 
+# --- 7z, with ModTrap's own reader (WHY§123) ---------------------------------------------------------------------------
+
+class _Other(Exception):
+    """ModTrap's own reader does not read this archive; the text says why. Another unpacker is tried."""
+
+
+def _unseven(src: Path, dest: Path) -> int:
+    try:
+        a = sevenz_read.Archive(src)
+    except sevenz_read.Locked:
+        raise Refused("The archive is protected by a password. Install it through MO2.") from None
+    except (sevenz_read.Unsupported, sevenz_read.Bad) as e:
+        raise _Other(str(e)) from None
+    except OSError as e:
+        raise Refused("The .7z could not be read (%s)." % type(e).__name__) from None
+    with a:
+        try:
+            a.check()
+        except sevenz_read.Locked:
+            raise Refused("The archive is protected by a password. Install it through MO2.") from None
+        except (sevenz_read.Unsupported, sevenz_read.Bad) as e:
+            raise _Other(str(e)) from None
+        if any(x.link for x in a.entries):
+            raise Refused("The archive holds a link to another place. ModTrap does not unpack it.")
+        files = [x for x in a.entries if not x.is_dir]
+        if not files:
+            raise Refused("There is no file in the archive.")
+        total = _check_listing([(x.name, x.size) for x in files])
+        _room(dest, total)
+        try:
+            for x, blocks in a.extract():
+                target = dest.joinpath(*safe_parts(x.name))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with open(target, "wb") as w:
+                    for block in blocks:
+                        w.write(block)
+        except sevenz_read.Locked:
+            raise Refused("The archive is protected by a password. Install it through MO2.") from None
+        except (sevenz_read.Unsupported, sevenz_read.Bad) as e:
+            raise _Other(str(e)) from None
+        except OSError as e:
+            raise Refused("A file of the .7z could not be written (%s)." % type(e).__name__) from None
+    return len(files)
+
+
 # --- 7z and rar, through the owner's own 7-Zip -----------------------------------------------------------------------
+
+def _registry_7zip() -> list[Path]:
+    """Where 7-Zip's own installer says it is, for one installed outside Program Files."""
+    out: list[Path] = []
+    if sys.platform != "win32":
+        return out
+    try:
+        import winreg
+    except ImportError:
+        return out
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for value in ("Path64", "Path"):
+            try:
+                with winreg.OpenKey(hive, r"Software\7-Zip") as key:
+                    folder, _kind = winreg.QueryValueEx(key, value)
+            except OSError:
+                continue
+            if isinstance(folder, str) and folder:
+                out.append(Path(folder) / "7z.exe")
+    return out
+
 
 def find_7zip() -> Path | None:
     """The owner's installed 7-Zip program, or None. MODTRAP_7ZIP names one outright."""
@@ -140,11 +208,105 @@ def find_7zip() -> Path | None:
         base = os.environ.get(var)
         if base and (Path(base) / "7-Zip" / "7z.exe").is_file():
             return Path(base) / "7-Zip" / "7z.exe"
-    for name in ("7z", "7zz", "7za"):
+    for exe in _registry_7zip():
+        if exe.is_file():
+            return exe
+    for name in ("7z", "7zz", "7za", "NanaZipC"):
         hit = shutil.which(name)
         if hit:
             return Path(hit)
     return None
+
+
+# --- 7z and rar, through the unpacker Windows comes with (WHY§123) ----------------------------------------------------
+# Windows' own `tar.exe` is bsdtar, the libarchive program. From Windows 11 23H2 it reads .7z and .rar; the one of
+# Windows 10 lacks the LZMA part and cannot. It is asked what it is before it is used.
+
+def find_tar() -> tuple[Path, str] | None:
+    """The system's bsdtar and what it says of itself, or None. MODTRAP_TAR names one outright."""
+    named = os.environ.get("MODTRAP_TAR")
+    cands: list[Path] = []
+    if named:
+        cands.append(Path(named))
+    elif sys.platform == "win32":
+        root = os.environ.get("SystemRoot") or r"C:\Windows"
+        cands += [Path(root) / "Sysnative" / "tar.exe", Path(root) / "System32" / "tar.exe"]
+    else:
+        hit = shutil.which("bsdtar")
+        if hit:
+            cands.append(Path(hit))
+    for exe in cands:
+        if not exe.is_file():
+            continue
+        try:
+            got = _run([str(exe), "--version"], 20)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        said = got.stdout.decode("utf-8", "replace").strip()
+        if got.returncode == 0 and said.lower().startswith("bsdtar"):
+            return exe, said
+    return None
+
+
+_TAR_LINE = re.compile(r"^(\S+)\s+\d+\s+\S+\s+\S+\s+(\d+)\s")
+
+
+def parse_tar_listing(text: str) -> list[tuple[str, int]]:
+    """The entries of `tar -tvf`, each (kind, size): the kind is the first letter of the entry's mode ("-" a file,
+    "d" a folder, "l" and "h" links); a line that does not read as an entry counts as a file of unknown size."""
+    out = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        m = _TAR_LINE.match(line)
+        out.append((m.group(1)[0], int(m.group(2))) if m else ("-", 0))
+    return out
+
+
+def _untar(exe: Path, said: str, src: Path, dest: Path, k: str) -> int:
+    who = "Windows' own unpacker" if sys.platform == "win32" else "the system's unpacker"
+    if k == "7z" and "liblzma" not in said.lower():
+        raise Refused("A .7z archive needs 7-Zip here: %s on this PC is an older one that cannot read .7z (Windows 11 "
+                      "from 23H2 can). Install 7-Zip (it is free) and drop the archive again, or install the mod "
+                      "through MO2." % who)
+    try:
+        names = _run([str(exe), "-tf", str(src)], 600)
+        long = _run([str(exe), "-tvf", str(src)], 600)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Refused("%s could not be started to read the archive (%s)." % (who[0].upper() + who[1:], type(e).__name__)) from None
+    if names.returncode != 0 or long.returncode != 0:
+        raise Refused("%s could not read the archive. It may be damaged, protected by a password, or packed in a way only "
+                      "7-Zip reads: install 7-Zip (it is free) and drop the archive again." % (who[0].upper() + who[1:]))
+    listed = [n for n in names.stdout.decode("utf-8", "replace").splitlines() if n.strip()]
+    kinds = parse_tar_listing(long.stdout.decode("utf-8", "replace"))
+    if any(kd in ("l", "h") for kd, _size in kinds):
+        raise Refused("The archive holds a link to another place. ModTrap does not unpack it.")
+    files = [(n, size) for n, (kd, size) in zip(listed, kinds + [("-", 0)] * len(listed)) if kd != "d" and not n.endswith("/")]
+    if not files:
+        raise Refused("%s found no file in the archive." % (who[0].upper() + who[1:]))
+    total = _check_listing(files)
+    _room(dest, total)
+    try:
+        got = _run([str(exe), "-xf", str(src), "-C", str(dest)], SEVEN_ZIP_SECONDS)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Refused("%s did not finish unpacking the archive (%s)." % (who[0].upper() + who[1:], type(e).__name__)) from None
+    if got.returncode != 0:
+        told = got.stderr.decode("utf-8", "replace")
+        if "encrypt" in told.lower():
+            raise Refused("The archive is protected by a password. Install it through MO2.")
+        raise Refused("%s reported a problem while unpacking the archive; nothing of it is used. 7-Zip may read it: "
+                      "install 7-Zip (it is free) and drop the archive again." % (who[0].upper() + who[1:]))
+    # What was written is measured too: the listing's sizes are only what the archive says of itself.
+    written = 0
+    for base, _dirs, fnames in os.walk(dest):
+        for n in fnames:
+            try:
+                written += os.path.getsize(os.path.join(base, n))
+            except OSError:
+                pass
+    if written > MAX_BYTES:
+        raise Refused("The archive unpacks to %s, more than ModTrap takes in." % size_words(written))
+    return len(files)
 
 
 def _run(cmd: list[str], seconds: float) -> subprocess.CompletedProcess:
@@ -217,22 +379,43 @@ def _no_links(dest: Path) -> int:
     return count
 
 
-def unpack(src: Path, dest: Path, seven_zip: Path | None = None) -> dict:
-    """Unpacks `src` into the new folder `dest`. On a refusal `dest` is removed again."""
+def unpack(src: Path, dest: Path, seven_zip: Path | None = None, tar: tuple[Path, str] | None = None) -> dict:
+    """Unpacks `src` into the new folder `dest`. On a refusal `dest` is removed again. A .7z or .rar goes through
+    the owner's 7-Zip where there is one, else through the unpacker Windows comes with; the answer's "by" says
+    which."""
     k = kind(src)
     if not k:
         raise Refused("This is not a .zip, .7z or .rar archive, whatever its name says.")
     dest.mkdir(parents=True, exist_ok=False)
     try:
+        by, own = "ModTrap itself", ""
+        if k == "7z":
+            try:
+                _unseven(src, dest)
+            except _Other as e:
+                own = str(e)                                # another unpacker is tried; nothing of this try is kept
+                shutil.rmtree(dest, ignore_errors=True)
+                dest.mkdir(parents=True, exist_ok=False)
         if k == "zip":
             _unzip(src, dest)
-        else:
+        elif k == "rar" or own:
             exe = seven_zip or find_7zip()
-            if exe is None:
-                raise Refused("A .%s archive needs 7-Zip, which ModTrap did not find on this PC. Install 7-Zip (it "
-                              "is free) and drop the archive again, or install the mod through MO2." % k)
-            _un7z(exe, src, dest)
-        return {"kind": k, "files": _no_links(dest)}
+            other = None if exe is not None else (tar or find_tar())
+            if exe is not None:
+                _un7z(exe, src, dest)
+                by = "7-Zip"
+            elif other is not None:
+                _untar(other[0], other[1], src, dest, k)
+                by = "Windows' own unpacker" if sys.platform == "win32" else "the system's unpacker"
+            elif own:
+                raise Refused("ModTrap's own reader does not unpack this .7z (%s), and neither 7-Zip nor the unpacker Windows 11 "
+                              "comes with was found on this PC to do it. Install 7-Zip (it is free) and drop the archive again, "
+                              "or install the mod through MO2." % own)
+            else:
+                raise Refused("A .%s archive needs 7-Zip, or the unpacker Windows 11 comes with, and ModTrap found neither "
+                              "on this PC. Install 7-Zip (it is free) and drop the archive again, or install the mod "
+                              "through MO2." % k)
+        return {"kind": k, "files": _no_links(dest), "by": by}
     except BaseException:
         shutil.rmtree(dest, ignore_errors=True)
         raise
@@ -294,5 +477,5 @@ def plugins_in(folder: Path) -> tuple[str, ...]:
     return tuple(f for f in files if plugin.is_plugin_name(f))
 
 
-__all__ = ["Refused", "kind", "safe_parts", "unpack", "layout", "find_7zip", "parse_7z_listing", "plugins_in",
+__all__ = ["Refused", "kind", "safe_parts", "unpack", "layout", "find_7zip", "find_tar", "parse_7z_listing", "parse_tar_listing", "plugins_in",
            "looks_like_data", "size_words"]

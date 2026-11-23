@@ -56,7 +56,7 @@ class Unpacking(unittest.TestCase):
         src = self.archive("Thistle.zip", zipped({"Thistle/Thistle.esp": plugin.build(("Skyrim.esm",)),
                                                   "Thistle/textures/a.dds": b"x"}))
         got = unpack.unpack(src, self.dir / "out")
-        self.assertEqual(got, {"kind": "zip", "files": 2})
+        self.assertEqual(got, {"kind": "zip", "files": 2, "by": "ModTrap itself"})
         self.assertTrue((self.dir / "out" / "Thistle" / "textures" / "a.dds").is_file())
 
     def test_the_kind_is_read_from_the_file_not_its_name(self) -> None:
@@ -106,17 +106,20 @@ class Unpacking(unittest.TestCase):
             src = self.archive("Thistle." + k, magic + inner)
             self.assertEqual(unpack.kind(src), k)
             got = unpack.unpack(src, self.dir / ("out-" + k), seven_zip=self.fake_7zip())
-            self.assertEqual(got, {"kind": k, "files": 2})
+            self.assertEqual(got, {"kind": k, "files": 2, "by": "7-Zip"})
 
     def test_without_7zip_a_7z_is_refused_in_words(self) -> None:
         src = self.archive("Thistle.7z", b"7z\xbc\xaf\x27\x1c" + zipped({"a.txt": b"x"}))
         os.environ["MODTRAP_7ZIP"] = str(self.dir / "not-there.exe")
+        os.environ["MODTRAP_TAR"] = str(self.dir / "not-there-either.exe")
         try:
             with self.assertRaises(unpack.Refused) as c:
                 unpack.unpack(src, self.dir / "out")
         finally:
             os.environ.pop("MODTRAP_7ZIP", None)
+            os.environ.pop("MODTRAP_TAR", None)
         self.assertIn("7-Zip", str(c.exception))
+        self.assertIn("Windows 11", str(c.exception))
 
     def test_what_7zip_reports_is_checked_too(self) -> None:
         src = self.archive("Thistle.7z", b"7z\xbc\xaf\x27\x1c" + zipped({"a.txt": b"x"}))
@@ -155,7 +158,7 @@ class WithTheReal7Zip(unittest.TestCase):
 
     def test_a_7z_made_by_7zip_is_unpacked(self) -> None:
         got = unpack.unpack(self.made("plain.7z"), self.dir / "out")
-        self.assertEqual(got, {"kind": "7z", "files": 2})
+        self.assertEqual(got, {"kind": "7z", "files": 2, "by": "ModTrap itself"})        # its own reader comes first (WHY§123)
         self.assertEqual((self.dir / "out" / "Wrapper" / "textures" / "x" / "b c.dds").read_bytes(), b"invented")
         self.assertEqual(unpack.layout(self.dir / "out")["root"].name, "Wrapper")
 
@@ -216,6 +219,79 @@ class Layout(unittest.TestCase):
     def test_what_is_not_recognised_is_said_to_be_unsure(self) -> None:
         got = unpack.layout(self.make("a.dll", "b.ini"))
         self.assertEqual((got["installer"], got["sure"]), ("", False))
+
+
+@unittest.skipIf(unpack.find_tar() is None, "the system's bsdtar is not installed here")
+class WithoutSevenZip(unittest.TestCase):
+    """WHY§123: where 7-Zip is not installed, a .7z goes through the unpacker the system comes with (on Windows 11,
+    `tar.exe`; here the same program under its own name). The archives are written by ModTrap's own .7z writer."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        os.environ["MODTRAP_7ZIP"] = str(self.dir / "no-7-zip-here.exe")
+
+    def tearDown(self) -> None:
+        os.environ.pop("MODTRAP_7ZIP", None)
+        self.tmp.cleanup()
+
+    def made(self, name: str, files: dict) -> Path:
+        from modtrap import sevenz
+        w = sevenz.Writer(self.dir / name)
+        for n, data in files.items():
+            w.add(n, 1_700_000_000, [data])
+        w.close()
+        return self.dir / name
+
+    def through_tar(self, src: Path, dest: Path, said: str | None = None) -> int:
+        """The system's unpacker itself, as `unpack` calls it for an archive ModTrap's own reader does not read."""
+        exe, told = unpack.find_tar()
+        dest.mkdir()
+        return unpack._untar(exe, said or told, src, dest, "7z")
+
+    def test_a_7z_is_unpacked_by_the_systems_own_unpacker(self) -> None:
+        src = self.made("Thistle.7z", {"Wrapper/Thistle.esp": plugin.build(("Skyrim.esm",)), "Wrapper/textures/x/b c.dds": b"invented"})
+        self.assertEqual(self.through_tar(src, self.dir / "out"), 2)
+        self.assertEqual((self.dir / "out" / "Wrapper" / "textures" / "x" / "b c.dds").read_bytes(), b"invented")
+
+    @unittest.skipIf(REAL_7Z is None, "the 7-Zip program is not installed here, to make the archive")
+    def test_a_7z_modtraps_own_reader_does_not_read_goes_to_the_systems_unpacker(self) -> None:
+        (self.dir / "src").mkdir()
+        (self.dir / "src" / "a.txt").write_bytes(b"invented text " * 200)
+        subprocess.run([REAL_7Z, "a", "-bd", "-m0=PPMd", str(self.dir / "ppmd.7z"), "a.txt"], cwd=self.dir / "src", check=True, stdout=subprocess.DEVNULL)
+        got = unpack.unpack(self.dir / "ppmd.7z", self.dir / "out")
+        self.assertEqual((got["files"], "unpacker" in got["by"]), (1, True))
+        self.assertEqual((self.dir / "out" / "a.txt").read_bytes(), b"invented text " * 200)
+
+    def test_a_name_that_leaves_the_folder_is_refused_before_anything_is_written(self) -> None:
+        src = self.made("Sly.7z", {"../outside.txt": b"x", "inside.txt": b"y"})
+        with self.assertRaises(unpack.Refused) as c:
+            self.through_tar(src, self.dir / "out")
+        self.assertIn("outside its own folder", str(c.exception))
+        self.assertEqual(list((self.dir / "out").iterdir()), [])
+        self.assertFalse((self.dir / "outside.txt").exists())
+
+    def test_an_older_unpacker_that_cannot_read_7z_is_named_as_such(self) -> None:
+        src = self.made("Thistle.7z", {"a.txt": b"x"})
+        with self.assertRaises(unpack.Refused) as c:
+            self.through_tar(src, self.dir / "out", "bsdtar 3.5.2 - libarchive 3.5.2 zlib/1.2.5.f-ipp")
+        self.assertIn("older one that cannot read .7z", str(c.exception))
+
+    def test_what_is_no_archive_inside_is_refused_in_words(self) -> None:
+        src = self.dir / "Broken.7z"
+        src.write_bytes(b"7z\xbc\xaf\x27\x1c" + b"not an archive at all" * 20)
+        with self.assertRaises(unpack.Refused) as c:
+            unpack.unpack(src, self.dir / "out")                # ModTrap's own reader first, then the system's
+        self.assertIn("could not read the archive", str(c.exception))
+        self.assertFalse((self.dir / "out").exists())
+
+
+class TheUnpackersListing(unittest.TestCase):
+    def test_a_listing_gives_each_entrys_kind_and_size(self) -> None:
+        text = ("drwxr-xr-x  0 0      0           0 Nov 23 13:05 sub/\n-rw-r--r--  0 0      0           5 Nov 23 13:05 a file.txt\n"
+                "lrwxrwxrwx  0 0      0           0 Nov 23 13:05 link -> /somewhere\nhrw-r--r--  0 0      0           0 Nov 23 13:05 b link to a\n"
+                "something this reader does not know\n")
+        self.assertEqual(unpack.parse_tar_listing(text), [("d", 0), ("-", 5), ("l", 0), ("h", 0), ("-", 0)])
 
 
 if __name__ == "__main__":

@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Callable
 
 import tempfile
+import urllib.parse
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import downloads, loadcheck, process, tabback, updater, updating, version
+from . import console, downloads, loadcheck, modweb, process, selfupdate, tabback, updater, updating, version
+from . import updates as updates_mod
 from .server import Bad
 
 
@@ -110,6 +112,8 @@ SETTINGS = {
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
     "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
     "install_on_drop": False,  # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55)
+    "console_window": False,   # ModTrap's own console window is shown, minimised; off: it is hidden, its lines being on the page (MT63)
+    "mod_pictures": True,      # a mod's pop-up shows the picture its page opens with, fetched from its site (MT62)
     "scan_on_enable": True,    # a mod enabled on the Modlist page is then scanned for what its plugins overwrite (MT56)
 }
 
@@ -137,6 +141,9 @@ class Api:
         self._installed: tuple[object, dict] | None = None    # adding.installed_from of the current reading
         self._staged: dict[str, dict] = {}            # archives taken in, unpacked in the session's folder, by id
         self.seven_zip: Path | None = None            # replaced in tests; else the owner's own 7-Zip is looked for
+        self.argv: list[str] = []                     # what this ModTrap was started with, for starting itself again (MT58)
+        self.port = 0                                 # the port its page is on
+        self.own_console = False                      # the console it writes to is its own, and may be hidden (MT63)
         self.job: dryrun.Job | None = None
         self.launcher = dryrun.launch          # replaced in tests
         self.running = dryrun.image_running
@@ -454,6 +461,175 @@ class Api:
         threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
         return self._staged_public(rec)
 
+    # --- one mod and the mods it has to do with (MT62) ---------------------------------------------------------------
+
+    def _source_row(self, m: model.Model, name: str) -> dict | None:
+        try:
+            rows, _wj = self.updating.rows(m, *self._updates_for())
+        except Exception as e:                  # the pop-up shows the mod without its source rather than not at all
+            log.warn("the mod's source could not be read: %s", logbook.why(e))
+            return None
+        return next((r for r in rows if r["mod"] == name), None)
+
+    def mod_web(self, body: dict) -> dict:
+        """The mod's web for its pop-up: with `deep`, the files and the records are looked through too."""
+        m = self._need()
+        name = body.get("mod")
+        if not isinstance(name, str) or len(name) > 300:
+            raise Bad("which mod was not said")
+        mod = m.instance.mod(name)
+        if mod is None or mod.kind == "separator":
+            raise Bad("that is not a mod of this modlist")
+        if mod.kind == "game":
+            raise Bad("The game's own files are what every mod is built on: there is no web to draw around them.")
+        started = time.monotonic()
+        out = modweb.web(m, mod, body.get("deep") is True)
+        row = self._source_row(m, mod.name) if mod.kind == "mod" else None
+        out["source"] = None
+        if row is not None and row.get("host"):
+            page = updates_mod.home_of(row)
+            host = row["host"] if row["host"] != "url" else (urllib.parse.urlsplit(page).hostname or "a web address")
+            out["source"] = {"host": host, "page": page, "id": str(row.get("mod_id") or row.get("repo") or ""), "version": row.get("version", ""),
+                             "picture": bool(self.settings().get("mod_pictures", True)) and row["host"] in ("nexus", "github")}
+        if out["deep"]:
+            log.info("the web of “%s”: %d link(s) (%s), %.1f s%s", mod.name, len(out["links"]),
+                     ", ".join("%d %s" % (n, k) for k, n in out["counts"].items()), time.monotonic() - started, ", cut short" if out["cut"] else "")
+        return out
+
+    def mod_picture(self, body: dict) -> dict:
+        """The one picture a mod's page opens with (MT62), from the mod's site or from ModTrap's own keep of it:
+        {"type", "data" (base64)}, or {"none": why}. Fetched only when the pop-up asks, and kept for a month."""
+        m = self._need()
+        name = body.get("mod")
+        if not isinstance(name, str) or len(name) > 300 or m.instance.mod(name) is None:
+            raise Bad("which mod was not said")
+        if not self.settings().get("mod_pictures", True):
+            return {"none": "pictures are switched off in the settings"}
+        row = self._source_row(m, name)
+        if row is None or row.get("host") not in ("nexus", "github"):
+            return {"none": "no site is known for this mod that gives a picture"}
+        key = "nexus/%s/%s" % (row.get("game"), row.get("mod_id")) if row["host"] == "nexus" else "github/%s" % row.get("repo")
+        keep = paths.home() / "cache" / "pictures" / hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+        note = keep.with_suffix(".json")
+        try:
+            said = json.loads(note.read_text(encoding="utf-8"))
+            if time.time() - float(said.get("when", 0)) < 30 * 86400:
+                if said.get("none"):
+                    return {"none": said["none"]}
+                return {"type": said["type"], "data": base64.b64encode(keep.read_bytes()).decode("ascii")}
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        try:
+            url = updates_mod.picture_address(row, self.updating.net)
+            if not url:
+                raise updates_mod.Refused("the mod's site names no picture for it")
+            data, kind = self.updating.net.picture(url)
+        except updates_mod.Refused as e:
+            why = str(e)
+            log.info("no picture for “%s”: %s", name, why)
+            try:                                                # a site that has none is not asked again for a day
+                paths.write_atomic(note, json.dumps({"none": why, "when": time.time() - 29 * 86400}).encode("utf-8"))
+            except OSError:
+                pass
+            return {"none": why}
+        try:
+            paths.write_atomic(keep, data)
+            paths.write_atomic(note, json.dumps({"type": kind, "when": time.time()}).encode("utf-8"))
+        except OSError:
+            pass
+        log.info("the picture of “%s” was fetched from its site (%s, %s bytes)", name, kind, format(len(data), ","))
+        return {"type": kind, "data": base64.b64encode(data).decode("ascii")}
+
+    # --- ModTrap updates itself from a release file (MT58) -----------------------------------------------------------
+
+    def _self_root(self) -> Path | None:
+        return selfupdate.package_root()
+
+    def _self_busy(self) -> str:
+        if self._busy() or (self.changes is not None and self.changes.busy()):
+            return "ModTrap is in the middle of a job; let it end first"
+        if any(r.get("state") == "going" for r in self.updater.runs.values()):
+            return "a mod's update is going; let it end first"
+        return ""
+
+    def self_state(self) -> dict:
+        root = self._self_root()
+        return {"version": VERSION, "can": root is not None, "name": selfupdate.NAME,
+                "why": "" if root is not None else "This ModTrap runs from its source folder, not from a release package: it is updated there, not here."}
+
+    def self_upload(self, name: str, length: int, stream) -> dict:
+        """A release file, as its bytes: kept in ModTrap's own folder and read. Nothing is changed yet."""
+        if self._self_root() is None:
+            raise Bad(self.self_state()["why"])
+        if length <= 0:
+            raise Bad("the file is empty")
+        base = paths.home() / "updates" / "incoming"
+        shutil.rmtree(base, ignore_errors=True)                 # one at a time: an earlier file is not kept
+        base.mkdir(parents=True, exist_ok=True)
+        sid = secrets.token_hex(6)
+        target = base / (sid + ".zip")
+        left = length
+        try:
+            with open(target, "wb") as f:
+                while left > 0:
+                    block = stream.read(min(1024 * 1024, left))
+                    if not block:
+                        break
+                    f.write(block)
+                    left -= len(block)
+        except OSError as e:
+            raise Bad("the file could not be kept: %s" % logbook.why(e)) from None
+        if left:
+            target.unlink(missing_ok=True)
+            raise Bad("the file did not arrive whole")
+        try:
+            info = selfupdate.read(target)
+        except selfupdate.Refused as e:
+            target.unlink(missing_ok=True)
+            raise Bad(str(e)) from None
+        log.info("a release file was handed over: ModTrap %s (%d files); this is %s", info["version"], info["files"], VERSION)
+        return dict(info, id=sid, current=VERSION, order=selfupdate.newer(info["version"], VERSION))
+
+    def self_apply(self, body: dict) -> tuple[dict, Callable[[], None] | None]:
+        """Updates ModTrap's own files from the release file handed over, and starts ModTrap again."""
+        root = self._self_root()
+        if root is None:
+            raise Bad(self.self_state()["why"])
+        sid = body.get("id")
+        if not isinstance(sid, str) or not re.fullmatch(r"[0-9a-f]{12}", sid):
+            raise Bad("which file was not said")
+        path = paths.home() / "updates" / "incoming" / (sid + ".zip")
+        if not path.is_file():
+            raise Bad("that file is no longer here: hand it over again")
+        if self._self_busy():
+            raise Bad(self._self_busy())
+        try:
+            done = selfupdate.apply(path, root)
+        except selfupdate.Refused as e:
+            log.error("%s", e)
+            raise Bad(str(e)) from None
+        path.unlink(missing_ok=True)
+        self.save_log()
+
+        def again() -> None:
+            try:
+                argv, skip = [], False
+                for a in self.argv:                         # the same port, so that the open page finds the new start
+                    if skip or a.startswith("--port="):
+                        skip = False
+                        continue
+                    if a == "--port":
+                        skip = True
+                        continue
+                    argv.append(a)
+                if self.port:
+                    argv += ["--port", str(self.port)]
+                selfupdate.restart(root, argv)
+                log.info("ModTrap %s is starting; this one (%s) closes when it asks", done["version"], VERSION)
+            except OSError as e:
+                log.error("ModTrap could not start itself again: %s. Quit it and start it again by hand.", logbook.why(e))
+        return dict(done, restart=True), again
+
     def list_state(self) -> dict:
         """The changes made on the Modlist page in this session (MT56), newest first, and the one "Undo" would turn
         back: the newest that still stands."""
@@ -466,6 +642,18 @@ class Api:
         """The scanner of the Modlist page (MT56): for one mod, whether its plugins stand safely in the load order
         and what they overwrite there, and which files it shares with the mods below and above it. Reading only."""
         m = self._need()
+        one = body.get("plugin")
+        if isinstance(one, str) and 0 < len(one) <= 300:
+            # One plugin, for the Plugins tab: its place, its masters, the records it overwrites and loses.
+            r = m.row(one)
+            if r is None:
+                raise Bad("that is not a plugin of this modlist")
+            started = time.monotonic()
+            out = loadcheck.overrides(m, m.instance.mods[0], only=[r])
+            out["mod"] = r.source or ""
+            log.info("scanned what %s overwrites: %d other plugin(s) looked through, %.1f s%s", r.name, out["looked"],
+                     time.monotonic() - started, ", cut short" if out["cut"] else "")
+            return out
         name = body.get("mod")
         if not isinstance(name, str) or len(name) > 300:
             raise Bad("which mod was not said")
@@ -1315,7 +1503,8 @@ class Api:
                 rec.update(state="ready", note="" if lay["sure"] else
                            "ModTrap did not find the usual game folders in this archive and took it as it is. If it "
                            "is not a mod for the game's Data folder, it does not belong in MO2's mod list.")
-            log.info("add: unpacked “%s” (%s, %d files): %s", rec["archive"], got["kind"], got["files"], rec["state"])
+            log.info("add: unpacked “%s” (%s, %d files%s): %s", rec["archive"], got["kind"], got["files"],
+                     "" if got["kind"] == "zip" else ", by " + got.get("by", "7-Zip"), rec["state"])
         except unpack.Refused as e:
             rec.update(state="failed", note=str(e))
             log.warn("add: “%s” was not taken in: %s", rec["archive"], e)
@@ -1852,6 +2041,8 @@ class Api:
         except OSError as e:
             raise Bad("the setting could not be kept: %s" % logbook.why(e)) from None
         log.info("setting “%s” is now %s", name, "on" if value else "off")
+        if name == "console_window" and self.own_console:           # at once, not at the next start (MT63)
+            console.show(console.MINIMISED if value else console.HIDE)
         return now
 
     def tools_made(self) -> dict:
@@ -1931,10 +2122,13 @@ class Api:
         rows = []
         for f in m.order:
             r = m.plugins[f]
+            # Masters this plugin loads before: the game would not find them in time (shown on its row, MT58).
+            early = [x for x in r.masters if r.position is not None and r.active and (xr := m.plugins.get(instance.fold(x))) is not None
+                     and xr.source is not None and xr.position is not None and xr.position > r.position]
             rows.append({"name": r.name, "position": r.position, "active": r.active, "kind": r.kind,
                          "mod": r.source or "", "mod_priority": r.source_priority, "primary": r.primary,
                          "masters": len(r.masters), "dependants": len(r.dependants),
-                         "missing": r.missing_masters, "inactive": r.inactive_masters,
+                         "missing": r.missing_masters, "inactive": r.inactive_masters, "early": early,
                          "unreadable": r.unreadable, "also_in": list(r.also_in)})
         return {"plugins": rows}
 
@@ -1992,6 +2186,8 @@ class Api:
             return 200, self.installed()
         if path == "/api/list":
             return 200, self.list_state()
+        if path == "/api/selfupdate":
+            return 200, self.self_state()
         if path == "/api/downloads":
             m = self.model
             return 200, {"rows": downloads.rows(self._updates_for()[0] if m is not None else "", m.instance.downloads_dir if m is not None else None),
@@ -2024,6 +2220,13 @@ class Api:
             return 200, self.updater_do(path[len("/api/"):], body), None
         if path == "/api/list/scan":
             return 200, self.list_scan(body), None
+        if path == "/api/mod/web":
+            return 200, self.mod_web(body), None
+        if path == "/api/mod/picture":
+            return 200, self.mod_picture(body), None
+        if path == "/api/selfupdate/apply":
+            answer, after = self.self_apply(body)
+            return 200, answer, after
         if path in NEEDS_SAME_VERSION:
             log.info("%s %s is asked for: %s", NAME, VERSION, path[len("/api/"):].replace("/", " "))
         if path == "/api/open":

@@ -1,7 +1,7 @@
 /* ModTrap's launcher for Windows (MT51).
 
-   Starts Python with ModTrap ("-m modtrap") in a console of its own, minimised, and hands on whatever was given on
-   its own command line. It has no window itself. ModTrap lies in the "app" folder beside this program.
+   Starts Python with ModTrap ("-m modtrap") in a console of its own, hidden (MT63), and hands on whatever was given
+   on its own command line. It has no window itself. ModTrap lies in the "app" folder beside this program.
 
    Which Python: the one in a "python" folder beside this program, where the package has one (it finds ModTrap
    through python\python313._pth and takes nothing else of the PC into its path); else the Python installed on the
@@ -88,24 +88,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR line, int show
             return say(L"ModTrap needs Python 3.10 or newer, and found none on this PC.\n\nInstall Python from python.org (tick \"Add python.exe to PATH\"), then start ModTrap again.");
         }
     }
-    if (wcslen(python) + wcslen(EXTRA_ARGS) + wcslen(rest) + 40 > LONGEST) return say(L"The command line is too long.");
-    _snwprintf(command, LONGEST, L"\"%ls\"%ls -m modtrap%ls%ls%ls", python, first, EXTRA_ARGS, *rest ? L" " : L"", rest);
+    if (wcslen(python) + wcslen(EXTRA_ARGS) + wcslen(rest) + 64 > LONGEST) return say(L"The command line is too long.");
+    /* Started plainly, the console made below is ModTrap's own, and ModTrap is told so: it may then hide it or show it. */
+    _snwprintf(command, LONGEST, L"\"%ls\"%ls -m modtrap%ls%ls%ls%ls", python, first, EXTRA_ARGS, *rest ? L"" : L" --own-console", *rest ? L" " : L"", rest);
     command[LONGEST] = 0;
 
     (void)instance; (void)previous; (void)line; (void)show;
 
-    /* Python gets a console of its own, where ModTrap writes what it does; it starts minimised, out of the way,
-       since the same lines are on ModTrap's page (History, Log). Started with words on the command line, the
-       console is shown, for whoever asked to read the answer. */
+    /* Python gets a console of its own, where ModTrap writes what it does; it starts hidden, since the same lines
+       are on ModTrap's page (History, Log) and nothing needs the window (MT63). The console itself has to be there:
+       the console programs ModTrap starts write to it, and would each open a window of their own without it.
+       ModTrap shows it, minimised, where its setting says so, and shows it when its start fails. Started with
+       words on the command line, the console is shown, for whoever asked to read the answer. */
     ZeroMemory(&si, sizeof si);
     si.cb = sizeof si;
     si.lpTitle = title;
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = (WORD)(*rest ? SW_SHOWNORMAL : SW_SHOWMINNOACTIVE);
+    si.wShowWindow = (WORD)(*rest ? SW_SHOWNORMAL : SW_HIDE);
     ZeroMemory(&pi, sizeof pi);
     if (!CreateProcessW(python, command, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
         return say(L"Python could not be started.");
-    /* Should it end at once with an error, nobody would see why in a minimised console: say so. */
+    /* Should it end at once with an error, nobody would see why in a hidden console: say so. (ModTrap itself shows
+       the console and waits for a key where its start fails; this is for a Python that does not get that far.) */
     if (WaitForSingleObject(pi.hProcess, 4000) == WAIT_OBJECT_0) {
         GetExitCodeProcess(pi.hProcess, &result);
         if (result != 0 && !*rest)

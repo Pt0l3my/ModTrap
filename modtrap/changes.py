@@ -22,6 +22,7 @@ import shutil
 from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, probejob, profile, safe
 from . import process
 from .instance import fold
+from .instance import fold as instance_fold
 from .server import Bad
 
 log = logbook.get("add")
@@ -29,7 +30,7 @@ TOOL_KEEP_FILES = 5000                 # a tool's output is kept for Revert up t
 TOOL_KEEP_BYTES = 1024 * 1024 * 1024   # and this much in all; a larger one is to be made again after a Revert
 
 PATHS = ("/api/add/plan", "/api/add/run", "/api/add/revert", "/api/separator/add",
-         "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo",
+         "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo", "/api/list/plugins/set", "/api/list/plugins/move",
          "/api/demaster/plan", "/api/demaster/start", "/api/demaster/install", "/api/demaster/revert",
          "/api/demaster/drop", "/api/demaster/retire", "/api/jobs/clear",
          "/api/probe/start", "/api/probe/stop", "/api/probe/cleanup")
@@ -383,6 +384,89 @@ class Changes:
                 raise Bad(str(e)) from None
         api.open(api.folder, api.profile or None, session=api.session)
         return {"done": True, "name": new + "_separator", **done}
+
+    def plugins_set(self, body: dict) -> dict:
+        """Activates or deactivates plugins on the Plugins tab (MT58), as their tick in MO2 does. Nothing is asked:
+        what follows from it (plugins that now lack a master) is told, and shows on the rows."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        names, on = self._names(body, "plugins"), body.get("on")
+        if not isinstance(on, bool):
+            raise Bad("activate or deactivate was not said")
+        with self._lock:
+            m, job = self._list_job()
+            rows, new = [], []
+            for name in names:
+                r = m.row(name)
+                if r is None:
+                    raise Bad("%s is not a plugin of this modlist" % name)
+                if r.primary:
+                    raise Bad("%s is one of the game's own plugins: it is always active" % r.name)
+                if on and r.source is None:
+                    raise Bad("%s has no file in an enabled mod: enable its mod first" % r.name)
+                if r.active == on or any(x["name"] == r.name for x in rows):
+                    continue
+                rows.append({"name": r.name, "kind": r.kind, "mod": r.source or "", "listed": r.position is not None, "before": ""})
+                if on and r.position is None:
+                    new.append({"name": r.name, "master": loadcheck._is_master(r), "masters": r.masters, "listed": False})
+            if not rows:
+                return {"done": False, "nothing": True}
+            if new:                                         # not in the load order yet: placed by MO2's rule (MO03§2 to §4)
+                order = [(x["name"], x["master"]) for x in loadcheck.load_order(m)]
+                after, _followed = loadcheck.place(order, new)
+                at = {instance_fold(n): i for i, n in enumerate(after)}
+                for x in rows:
+                    i = at.get(instance_fold(x["name"]))
+                    if not x["listed"] and i is not None:
+                        x["before"] = after[i + 1] if i + 1 < len(after) else ""
+                rows.sort(key=lambda x: -at.get(instance_fold(x["name"]), 0))
+            # What follows from it, told and not asked: the active plugins that lack a master once these are off.
+            lack = []
+            if not on:
+                off = {instance_fold(x["name"]) for x in rows}
+                for x in rows:
+                    for d in m.row(x["name"]).dependants:
+                        dr = m.row(d)
+                        if dr is not None and dr.active and instance_fold(d) not in off and d not in lack:
+                            lack.append(d)
+            try:
+                done = job.plugin_set(rows, on)
+            except listjob.Refused as e:
+                log.error("%s", e)
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, "lack": lack[:50], "lacking": len(lack), **done}
+
+    def plugins_move(self, body: dict) -> dict:
+        """Moves a plugin in the load order (MT58), within the limits MO2 keeps (MO03§3, §4): the answer says where
+        it stands and, when that is not the place asked for, why."""
+        self.api.wait_mo2_gone()
+        api = self.api
+        name, before = body.get("plugin"), body.get("before")
+        if not isinstance(name, str) or not isinstance(before, str) or not 0 < len(name) <= 300 or len(before) > 300:
+            raise Bad("which plugin, and where to, was not said")
+        with self._lock:
+            m, job = self._list_job()
+            r = m.row(name)
+            if r is None or r.position is None:
+                raise Bad("%s is not in this profile's load order" % name)
+            order = loadcheck.load_order(m)
+            try:
+                final, why = loadcheck.place_moved(order, r.name, before)
+            except loadcheck.Refused as e:
+                raise Bad(str(e)) from None
+            names = [x["name"] for x in order]
+            i = names.index(r.name)
+            was_before = names[i + 1] if i + 1 < len(names) else ""
+            if instance_fold(final) == instance_fold(was_before):
+                return {"done": False, "nothing": True, "why": why}
+            try:
+                done = job.plugin_move(r.name, final, was_before, r.kind, r.source or "")
+            except listjob.Refused as e:
+                log.error("%s", e)
+                raise Bad(str(e)) from None
+        api.open(api.folder, api.profile or None, session=api.session)
+        return {"done": True, "before": final, "why": why, **done}
 
     def list_jobs(self) -> list[dict]:
         """The changes made on the Modlist page in this session, newest first."""
@@ -1162,6 +1246,10 @@ class Changes:
             return self.list_rename(body)
         if path == "/api/list/undo":
             return self.list_undo(body)
+        if path == "/api/list/plugins/set":
+            return self.plugins_set(body)
+        if path == "/api/list/plugins/move":
+            return self.plugins_move(body)
         if path == "/api/add/run":
             return self.run(body)
         return self.revert(body)
