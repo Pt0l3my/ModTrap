@@ -1176,7 +1176,9 @@ function renderUpdates(listOnly) {
     b.addEventListener("click", () => upFilter(key, value));
     return b;
   };
-  const search = el("input", { type: "search", placeholder: "Search by mod or note", value: f.text, size: "26" });
+  const search = el("input", { type: "search", placeholder: "Search by mod or note, or *138 for priority 138", value: f.text, size: "42",
+    title: "Type a part of a mod's name or of your note on it. A star and a number, like *138, goes to the mod with that priority; Enter goes there again." });
+  search.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { state.upJumped = ""; renderUpdates(true); } });
   search.addEventListener("input", () => { state.upFilter = Object.assign({}, f, { text: search.value }); clearTimeout(state.upTimer); state.upTimer = setTimeout(() => { renderUpdates(true); const again = document.querySelector("#updates-list input[type=search]"); if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); } }, 300); });
   const onlyOn = el("input", { type: "checkbox", id: "up-on" });
   onlyOn.checked = !!f.on;
@@ -1194,7 +1196,8 @@ function renderUpdates(listOnly) {
       pick("origin", "modtrap", "Installed by ModTrap", d.origins.modtrap),
       known ? null : el("span", { class: "dim small", text: "Give the modlist's Wabbajack file above to tell the list's own mods from the ones added afterwards." })),
     el("div", { class: "chips" }, search, el("label", { for: "up-on" }, onlyOn, " enabled mods only"), foldAll, unfoldAll)];
-  const text = (f.text || "").trim().toLowerCase();
+  const star = starNumber(f.text || "");                   // *138: the mod with priority 138, the list not narrowed (MT60)
+  const text = star === null ? (f.text || "").trim().toLowerCase() : "";
   const filtering = !!(f.state || f.origin || f.on || f.fav || text);
   const fits = (r) => (!f.state || r.state === f.state) && (!f.origin || r.origin === f.origin) && (!f.on || r.enabled) && (!f.fav || r.fav)
     && (!text || r.mod.toLowerCase().includes(text) || (r.comments || "").toLowerCase().includes(text) || (r.notes || "").toLowerCase().includes(text));
@@ -1227,6 +1230,10 @@ function renderUpdates(listOnly) {
   const body = el("tbody", {});
   let shown = 0;
   const seps = [];
+  // What the search found glows (MT60): the rows found by words, when they are not too many; and the one row a
+  // star and a number names, whose group is unfolded for it.
+  const glow = !!text && d.rows.filter(fits).length <= FOUND_MAX;
+  if (Number.isFinite(star)) { const g = groups.find((x) => x.sep && x.rows.some((r) => r.priority === star)); if (g) state.upCollapsed.delete(g.sep.name); }
   for (const g of groups) {
     const rows = g.rows.filter(fits);
     if (g.sep) {
@@ -1243,7 +1250,7 @@ function renderUpdates(listOnly) {
     } else if (!rows.length) continue;
     for (const r of rows) {
       shown++;
-      body.append(el("tr", { class: r.enabled ? "" : "off", "data-mod": r.mod, title: "Right-click for more: add a source link, get the newer file, ask about this mod now" },
+      body.append(el("tr", { class: (r.enabled ? "" : "off") + (r.priority === star ? " found jump" : glow ? " found" : ""), "data-mod": r.mod, title: "Right-click for more: add a source link, get the newer file, ask about this mod now" },
         el("td", { class: "c-num", text: r.priority < 0 ? "" : r.priority }),
         el("td", { class: "modname" }, r.fav ? el("span", { class: "upfav", title: "A favourite of yours", text: "★ " }) : null, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
         el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null,
@@ -1266,7 +1273,13 @@ function renderUpdates(listOnly) {
     : "sorted by " + { mod: "name", from: "where they come from", version: "installed version", update: "update state" }[sort.key] + (sort.desc ? ", descending" : ", ascending") + "; click “Priority” for the modlist's own order";
   box.replaceChildren(el("div", { class: "card" }, ...bar,
     el("p", { class: "dim small", text: num(shown) + " of " + num(d.rows.length) + " mods shown, " + how + "." }),
+    star !== null ? el("p", { class: "dim small", text: !Number.isFinite(star) ? "A star and a number, like *138, goes to the mod with that priority."
+      : body.querySelector("tr.jump") ? "Priority " + star + ": “" + body.querySelector("tr.jump").dataset.mod + "”."
+      : "No mod shown here has priority " + star + (d.rows.some((r) => r.priority === star) ? ": the filters hide it." : " (a separator, or a mod without a source to ask).") }) : null,
     shown || seps.length ? table : el("p", { class: "dim", text: "No mod matches." })));
+  const went = body.querySelector("tr.jump");
+  if (!went) state.upJumped = "";
+  else if (state.upJumped !== "*" + star) { state.upJumped = "*" + star; went.scrollIntoView({ block: "center" }); }
 }
 
 function renderState(s) {
@@ -2248,9 +2261,43 @@ function layoutMods() {
   filterMods();
 }
 
+// A search box takes a star and a number, like *138 (MT60): the list is not narrowed then; the entry with that
+// number (a mod's priority, a plugin's position) is brought into view. `starNumber` is that number, null for a
+// search by words, and NaN while only the star, or something that is no number, stands there.
+function starNumber(text) {
+  const t = text.trim();
+  if (!t.startsWith("*")) return null;
+  const m = /^\*\s*(\d{1,7})$/.exec(t);
+  return m ? Number(m[1]) : NaN;
+}
+// The rows a search found glow (MT60): `rows` take the mark, the ones marked before lose it. `jump` is the one row
+// a star and a number went to: it is brought to the middle of its list, once for each number typed.
+const FOUND_MAX = 100;                          // more rows than this found by words: none glows, the list is the result
+function markFound(key, rows, jump, jumpKey) {
+  state.found = state.found || {};
+  for (const r of state.found[key] || []) r.classList.remove("found", "jump");
+  state.found[key] = rows.length <= FOUND_MAX || jump ? rows : [];
+  for (const r of state.found[key]) r.classList.add("found");
+  state.jumped = state.jumped || {};
+  if (!jump) { state.jumped[key] = ""; return; }
+  jump.classList.add("found", "jump");
+  if (!state.found[key].includes(jump)) state.found[key] = state.found[key].concat(jump);
+  if (state.jumped[key] !== jumpKey && jump.offsetParent !== null) { state.jumped[key] = jumpKey; jump.scrollIntoView({ block: "center" }); }
+}
+
 function filterMods() {
-  const q = fold($("mods-search").value.trim());
+  const typed = $("mods-search").value.trim();
+  const star = starNumber(typed);
+  const q = star === null ? fold(typed) : "";
   const en = $("f-enabled").checked, pl = $("f-plugins").checked, dp = $("f-deps").checked;
+  // The entry a star and a number names: a mod, or a separator. A folded group that holds it is unfolded.
+  let target = null, targetRow = null;
+  if (Number.isFinite(star)) for (const g of state.groups) {
+    if (g.sep && g.sep.priority === star) { target = g.sep; targetRow = g.row; }
+    const m = g.mods.find((x) => x.priority === star && x.kind !== "game" && x.kind !== "overwrite");
+    if (m) { target = m; targetRow = m.row; if (g.sep) state.collapsed.delete(g.sep.name); }
+  }
+  const found = [];
   const rel = state.onlyRelated && state.focus ? relatedTo(state.focus) : null;
   const filtering = !!(q || en || pl || dp || rel);
   let shown = 0, total = 0;
@@ -2262,6 +2309,7 @@ function filterMods() {
       const ok = (!q || m.hay.includes(q)) && (!en || m.enabled) && (!pl || m.plugins.length > 0) && (!dp || m.dependants > 0) &&
         (!rel || rel.has(m.name)) && (state.grouped || state.flat.has(m));
       if (ok) { match++; shown++; }
+      if (ok && q && !folded) found.push(m.row);
       if (state.picked.has(m.name)) ticked++;
       m.row.hidden = !ok || folded;
     }
@@ -2276,6 +2324,12 @@ function filterMods() {
   saveUi();
   $("mods-shown").textContent = filtering || !state.grouped ? shown + " of " + total + " shown" : total + " entries in " + plural(state.groups.filter((g) => g.sep).length, "group");
   $("mods-empty").hidden = shown > 0;
+  const there = targetRow && !targetRow.hidden ? targetRow : null;
+  markFound("mods", found, there, "*" + star);
+  if (star !== null) $("mods-shown").textContent = !Number.isFinite(star) ? "a star and a number, like *138, goes to that priority"
+    : there ? "priority " + star + ": “" + bare(target.name) + "”" + (target.kind === "separator" ? ", a separator" : "")
+    : target ? "priority " + star + " (“" + bare(target.name) + "”) is not shown: " + (target.kind === "separator" ? "separators show only in the order by priority" : "the filters hide it")
+    : "no entry has priority " + star;
 }
 
 function clearModFilters() {
@@ -3245,16 +3299,25 @@ window.addEventListener("blur", pdragEnd);
 $("plugins-undo").addEventListener("click", listUndo);
 
 function filterPlugins() {
-  const q = fold($("plugins-search").value.trim());
+  const typed = $("plugins-search").value.trim();
+  const star = starNumber(typed);                        // *138: the plugin at position 138 of the load order (MT60)
+  const q = star === null ? fold(typed) : "";
   const pr = $("p-problems").checked, dp = $("p-deps").checked;
-  let shown = 0;
+  let shown = 0, target = null;
+  const found = [];
   for (const p of state.plugins) {
     const ok = (!q || p.hay.includes(q)) && (!pr || p.issues.length || p.unreadable) && (!dp || p.dependants > 0);
     p.row.hidden = !ok;
     if (ok) shown++;
+    if (ok && q) found.push(p.row);
+    if (Number.isFinite(star) && p.position === star) target = p;
   }
   $("plugins-shown").textContent = (q || pr || dp) ? shown + " of " + state.plugins.length + " shown" : state.plugins.length + " plugins";
   $("plugins-empty").hidden = shown > 0;
+  const there = target && !target.row.hidden ? target.row : null;
+  markFound("plugins", found, there, "*" + star);
+  if (star !== null) $("plugins-shown").textContent = !Number.isFinite(star) ? "a star and a number, like *138, goes to that position"
+    : there ? "position " + star + ": " + target.name : target ? "position " + star + " (" + target.name + ") is not shown: the filters hide it" : "no plugin is at position " + star;
   saveUi();
 }
 
@@ -5008,10 +5071,12 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !$("session-panel").hidden) { $("session-panel").hidden = true; $("session-btn").setAttribute("aria-expanded", "false"); $("session-btn").focus(); }
   if (ev.key === "Escape" && document.activeElement === box && box.value) { box.value = ""; (state.tab === "plugins" ? filterPlugins : filterMods)(); }
 });
-let debounce;
-const later = (fn) => () => { clearTimeout(debounce); debounce = setTimeout(fn, 120); };
+const later = (fn) => { let timer; return () => { clearTimeout(timer); timer = setTimeout(fn, 120); }; };      // each box its own wait: the split view shows two
 $("mods-search").addEventListener("input", later(filterMods));
 $("plugins-search").addEventListener("input", later(filterPlugins));
+// Enter in a search box goes to its star-number again, after the list was scrolled away from it.
+$("mods-search").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { (state.jumped || {}).mods = ""; filterMods(); } });
+$("plugins-search").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { (state.jumped || {}).plugins = ""; filterPlugins(); } });
 for (const id of ["f-enabled", "f-plugins", "f-deps"]) $(id).addEventListener("change", filterMods);
 for (const id of ["p-problems", "p-deps"]) $(id).addEventListener("change", filterPlugins);
 paneWatch("log"); paneWatch("job-log");

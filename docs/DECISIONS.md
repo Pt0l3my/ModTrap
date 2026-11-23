@@ -61,6 +61,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   itself; ModTrap updates itself from a release file, behind the version at the top).
   MT59 (a split view in the Modlist section: the mods and the plugins side by side, parted by a line that is
   dragged sideways).
+  MT60 (a star and a number in a search box goes to the row with that priority or position; the rows a search
+  finds glow).
 - **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
   package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
@@ -1458,4 +1460,26 @@ area shown"
 arrangement of plugin and modlist split, this will swap sides." Settled: "⇄ Swap sides" stands at the right end of
 the tab row, on the split view only. It puts the plugins on the left and the mods on the right, or back; each list
 keeps the room it had, so the line moves to the mirrored place. Kept with the session.
+
+## MT60
+
+**A star and a number goes to that row; what a search finds glows** · *2026-11-23 · The owner's request*
+
+**Owner's words.** "for the search boxes on mods and plugins page (and other pages where this could be applicable)
+allow the user to enter a number which would be accepted as priority number as long as it's entered with a * at the
+start, e.g. *138, this will jump to priority 138 row on the list. Makes this part of the grey text in the search
+boxes. Also when a mod or priority number is searched, make the resulting row also gain glow effect around its
+borders."
+
+**Settled** (WHY§126; the owner may overrule any of it):
+
+- **Where.** The search boxes of the mods' list (Modlist › Mods, Demaster › Pick mods, the split view's left side),
+  of the plugins' list (there the number is the position in the load order), and of the Updater list.
+- **A star and a number.** `*138` does not narrow the list: the entry with that number is brought to the middle of
+  its list and glows. A folded group that holds it is unfolded. A separator has a priority too, and is gone to as
+  any entry. Enter in the box goes there again after the list was scrolled away. Beside the box a line says what
+  the number is ("priority 138: …"), or that nothing has it, or that the filters hide it.
+- **The grey text** of each box names it: "…, or *138 for priority 138" (for plugins: "position 138").
+- **The glow.** The row a number went to glows, with a border all round. The rows a search by words found glow
+  too, as long as they are a hundred or fewer; with more, the narrowed list is the answer and nothing glows.
 

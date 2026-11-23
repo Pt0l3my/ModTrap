@@ -106,5 +106,16 @@ class PageTests(unittest.TestCase):
         self.assertIn("swap: !!state.splitSwap", self.js)
 
 
+    def test_a_star_and_a_number_in_a_search_box_goes_to_that_row_and_what_is_found_glows(self):
+        """MT60: *138 in the Mods, Plugins and Updater list's search boxes; the boxes' grey text says so."""
+        self.assertIn('placeholder="Search mods and plugins, or *138 for priority 138   ( / )"', self.html)
+        self.assertIn('placeholder="Search plugins and their mods, or *138 for position 138   ( / )"', self.html)
+        self.assertIn('placeholder: "Search by mod or note, or *138 for priority 138"', self.js)
+        self.assertEqual(self.js.count("starNumber("), 4)                 # its own function, and the three lists
+        self.assertIn('markFound("mods", found, there, "*" + star);', self.js)
+        self.assertIn('markFound("plugins", found, there, "*" + star);', self.js)
+        self.assertIn("tbody tr.found td { box-shadow:", self.css)
+
+
 if __name__ == "__main__":
     unittest.main()

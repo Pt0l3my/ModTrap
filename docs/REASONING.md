@@ -148,6 +148,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 123 | 2026-11-23 | ModTrap reads .7z itself; what its reader does not read goes to 7-Zip or to Windows' own unpacker | METHOD | #adding #safety #licence |
 | 124 | 2026-11-23 | The Plugins tab changes the load order within MO2's limits and marks rows instead of asking; ModTrap replaces its own files from a release package and starts again | DECIDED | #page #mo2 #release #safety |
 | 125 | 2026-11-23 | The split view shows the two sections that exist, side by side, and builds nothing twice | METHOD | #page |
+| 126 | 2026-11-23 | A star-number is a place to go to, not a filter; a found row is brought into view once per number; each search box waits on its own | METHOD | #page |
 
 ## Entries
 
@@ -3358,4 +3359,24 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 - **Later (2026-11-23).** "Swap sides" turns the row of the two sections round and nothing else; the share that is
   kept is the mods' side's, so that dragging the line and the arrow keys mean the same on either arrangement. The
   button first stayed hidden: it was set before the tab's name was, and the browser check showed it.
+
+### 126. A star-number is a place to go to, not a filter; a found row is brought into view once per number; each search box waits on its own
+
+`2026-11-23` · METHOD · `#page` · refs: MT60, MT59, MT56, WHY§122, WHY§125
+
+- A number names one row, and its neighbours are what the owner wants to see with it: so `*138` leaves the list
+  whole and goes there. Narrowing the list to one row would show the row without its place.
+- The lists are filtered again for many reasons (a tick, a fold, the page saving its view). Going to the row at
+  each of them would pull the list back while the owner scrolls. METHOD: the row is brought into view once for each
+  number typed; Enter asks for it again.
+- The glow is capped at a hundred rows found by words: a single letter finds thousands, and a glow on all of them
+  marks nothing.
+- FACT (found by the browser check of the split view): the Mods and the Plugins box shared one short wait before
+  filtering, so typing in one within that wait dropped the other's search. Never met while one box was shown at a
+  time; each box now has its own.
+- METHOD (a note on checking): the stand-in server puts the page together once, at its start. A fix to the page is
+  only tried once that server is started again; one run here checked the old page and showed the old fault.
+- Checked in a browser on stand-in lists of 3,500 mods and 2,000 plugins: a number inside a folded group, a
+  separator's number, a number nobody has, the star alone, words that find ten rows and words that find
+  thousands, Enter after scrolling away, both boxes of the split view at once, and the Updater list.
 

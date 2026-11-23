@@ -48,7 +48,7 @@ nav button.on { color: var(--text); border-bottom-color: var(--accent); }
 main { flex: 1; min-height: 0; display: flex; }
 .tab { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 9px 16px; border-bottom: 1px solid var(--line); }
-.tools input[type=search] { flex: 0 1 340px; }
+.tools input[type=search] { flex: 0 1 430px; }
 .tools label { color: var(--dim); white-space: nowrap; }
 .scroll { flex: 1; min-height: 0; overflow: auto; }
 .pad { padding: 14px 16px; }
@@ -484,3 +484,9 @@ main.sidebyside .modinfo { max-height: 34%; overflow: auto; }
 #tabs .tabtool:hover, #tabs .tabtool:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 #tabs .tabtool[aria-pressed=true] { border-color: var(--accent); }
 main.sidebyside.swapped { flex-direction: row-reverse; }
+tbody tr.found { outline: 1px solid var(--accent); outline-offset: -1px; }
+tbody tr.found td { box-shadow: inset 0 10px 10px -9px var(--accent), inset 0 -10px 10px -9px var(--accent); }
+tbody tr.found td:first-child { box-shadow: inset 0 10px 10px -9px var(--accent), inset 0 -10px 10px -9px var(--accent), inset 10px 0 10px -9px var(--accent); }
+tbody tr.found td:last-child { box-shadow: inset 0 10px 10px -9px var(--accent), inset 0 -10px 10px -9px var(--accent), inset -10px 0 10px -9px var(--accent); }
+tbody tr.found.jump { outline-width: 2px; outline-offset: -2px; }
+tbody tr.found.jump td { background: rgba(185, 163, 255, .10); }

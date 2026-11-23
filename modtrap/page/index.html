@@ -115,7 +115,7 @@
 
   <section id="tab-mods" class="tab" hidden>
     <div class="tools">
-      <input id="mods-search" type="search" placeholder="Search mods and plugins   ( / )" spellcheck="false" aria-label="Search mods and plugins">
+      <input id="mods-search" type="search" placeholder="Search mods and plugins, or *138 for priority 138   ( / )" spellcheck="false" aria-label="Search mods and plugins, or a star and a number to go to that priority" title="Type a part of a mod's or a plugin's name. A star and a number, like *138, goes to the entry with that priority; Enter goes there again.">
       <label title="Hide mods that are disabled in MO2"><input type="checkbox" id="f-enabled"> Enabled only</label>
       <label title="Hide mods that provide no plugin: there is nothing to demaster in those"><input type="checkbox" id="f-plugins"> Has plugins</label>
       <label title="Show only mods that other plugins depend on: the ones that cannot simply be disabled"><input type="checkbox" id="f-deps"> Has dependants</label>
@@ -153,7 +153,7 @@
 
   <section id="tab-plugins" class="tab" hidden>
     <div class="tools">
-      <input id="plugins-search" type="search" placeholder="Search plugins and their mods   ( / )" spellcheck="false" aria-label="Search plugins">
+      <input id="plugins-search" type="search" placeholder="Search plugins and their mods, or *138 for position 138   ( / )" spellcheck="false" aria-label="Search plugins, or a star and a number to go to that position" title="Type a part of a plugin's or a mod's name. A star and a number, like *138, goes to the plugin at that position of the load order; Enter goes there again.">
       <label title="Plugins with a missing or inactive master, or that could not be read"><input type="checkbox" id="p-problems"> With problems</label>
       <label title="Plugins that other plugins list as a master"><input type="checkbox" id="p-deps"> Needed by others</label>
       <span id="plugins-shown" class="dim"></span>
