@@ -108,6 +108,7 @@ SETTINGS = {
     "site_window_closes": True,    # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT48, WHY§111)
     "downloads_move": True,    # a mod's download in the browser's folder is moved into ModTrap's own downloads folder, not copied (MT50)
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
+    "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
 }
 
 NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
@@ -450,6 +451,23 @@ class Api:
         self._save_staged(rec)
         threading.Thread(target=self._unpack, args=(rec, Path(path)), name="unpack", daemon=True).start()
         return self._staged_public(rec)
+
+    def installed(self) -> dict:
+        """The mods installed through ModTrap that still stand (MT53), newest first: each with the install it came
+        by, so that the page can show it as the modlist does and take it out again."""
+        m = self._need()
+        rows = []
+        if self.changes is not None:
+            for j in self.changes.jobs():
+                if j["state"] != "added":
+                    continue
+                for name in j["mods"]:
+                    mod = m.instance.mod(name)
+                    rows.append({"mod": name, "job": j["job"], "when": j["when"], "archive": (j.get("archives") or {}).get(name, ""),
+                                 "updates": (j.get("updates") or {}).get(name, ""), "with": [x for x in j["mods"] if x != name],
+                                 "there": mod is not None, "enabled": bool(mod is not None and mod.enabled),
+                                 "priority": mod.priority if mod is not None else None, "plugins": list(mod.plugins) if mod is not None else []})
+        return {"rows": rows, "changes": self.changes is not None}
 
     def updater_do(self, what: str, body: dict) -> dict:
         """The Updater's presses (MT50), and the naming of ModTrap's downloads folder."""
@@ -1191,6 +1209,23 @@ class Api:
             pass
         return {k: v for k, v in out.items() if v}
 
+    def _source_said(self, said: dict) -> dict:
+        """A new mod's source as its download's name tells it (MT53): the mod's number at Nexus and the version, with
+        MO2's own name for the game as the modlist's other mods carry it. So a mod installed from a file fetched at
+        Nexus can be asked about for updates afterwards."""
+        if not said.get("mod_id"):
+            return {}
+        m = self.model
+        game = ""
+        if m is not None:
+            from . import sources
+            for mod in m.instance.mods[:400]:
+                if mod.kind == "mod" and mod.folder is not None:
+                    game = sources._ini(mod.folder / "meta.ini").get("general", {}).get("gamename", "")
+                    if game:
+                        break
+        return {k: v for k, v in {"game": game, "mod_id": said["mod_id"], "version": said.get("version", "")}.items() if v} if game else {}
+
     def _new_staged(self, archive: str, source: str, updates: str = "", version: str = "") -> dict:
         """`updates`: the mod of the modlist this archive is a newer version of (MT40); the new mod is then named
         after it, with the version."""
@@ -1203,7 +1238,8 @@ class Api:
         taken |= {instance.fold(r["name"]) for r in self._staged.values()}
         if updates and m is not None and m.instance.mod(updates) is None:
             updates = ""
-        stem = adding.NEXUS_TAIL.sub("", adding.ARCHIVE.sub("", archive)).strip(" .") or "New mod"
+        said = adding.from_archive_name(archive)          # what a site wrote into the file's name (TL01§31)
+        stem = said["stem"] or "New mod"
         stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", stem).strip(" .")[:120] or "New mod"
         name, n = stem, 2
         if updates:
@@ -1214,7 +1250,7 @@ class Api:
             name, n = "%s (%d)" % (stem, n), n + 1
         rec = {"id": sid, "archive": archive, "name": name, "state": "copying", "note": "", "root": "", "files": 0,
                "kind": "", "source": source, "dir": str(d), "installer": "", "options": [], "raw": "", "picks": {},
-               "updates": updates, "meta": self._source_for(updates, name) if updates else {}}
+               "updates": updates, "meta": self._source_for(updates, name) if updates else self._source_said(said)}
         self._staged[sid] = rec
         self._save_staged(rec)
         return rec
@@ -1464,6 +1500,13 @@ class Api:
                     "added": self.changes.jobs() if self.changes is not None else []}
         # Which of the mods are newer versions of a mod of the modlist (MT49): the ones still unpacked say so
         # themselves; of the ones added, the add's own record says so, for as long as that add stands.
+        before = body.get("before") or ""
+        if not isinstance(before, str) or len(before) > 300:
+            raise Bad("the place did not arrive")
+        if before and before != adding.LAST:
+            target = m.instance.mod(before)
+            if target is None or target.kind not in ("mod", "separator", "foreign"):
+                raise Bad("that is not an entry of MO2's mod list a mod can be put before")
         newer = {r["name"]: r["updates"] for r in ready if r.get("updates")}
         if self.changes is not None and mods:
             for j in self.changes.jobs():
@@ -1471,7 +1514,7 @@ class Api:
                     for new_name, old_name in (j.get("updates") or {}).items():
                         if new_name in mods:
                             newer.setdefault(new_name, old_name)
-        key = (id(m), tuple(mods), tuple(r["id"] for r in ready), tuple(sorted(newer.items())))
+        key = (id(m), tuple(mods), tuple(r["id"] for r in ready), tuple(sorted(newer.items())), before)
         with self._lock:
             started = key in self._adding
             if not started:
@@ -1482,7 +1525,7 @@ class Api:
 
             def work() -> None:
                 try:
-                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None, updates=newer)
+                    found = adding.analyse(m, mods, read=self._cache.read, staged=extra, auto=self.changes is not None, updates=newer, before=before)
                     log.info("add: analysed %d mod(s): %s", len(found["mods"]), found["summary"])
                 except Exception as e:
                     log.warn("analysing the mods to add failed: %s", logbook.why(e))
@@ -1909,6 +1952,8 @@ class Api:
             return 200, self.updates_state()
         if path == "/api/updater":
             return 200, self.updater.state()
+        if path == "/api/installed":
+            return 200, self.installed()
         if path == "/api/downloads":
             m = self.model
             return 200, {"rows": downloads.rows(self._updates_for()[0] if m is not None else "", m.instance.downloads_dir if m is not None else None),

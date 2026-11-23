@@ -318,7 +318,7 @@ class Updating:
             newer = [n for n in holds.get((r.get("game"), r["mod_id"], v.get("file_id")), []) if n != r["mod"]] \
                 if v["state"] == "update" and r["host"] == "nexus" and v.get("file_id") else []
             if newer:
-                v = dict(v, state="replaced", text="Its newer file%s is installed as “%s”, which is enabled.%s" % (
+                v = dict(v, state="replaced", newer_mod=newer[0], text="Its newer file%s is installed as “%s”, which is enabled.%s" % (
                     " (%s)" % v["newest"] if v.get("newest") else "", newer[0],
                     " This older one is enabled too: disable it in MO2" if r["enabled"] else " This older version is disabled and kept"))
             counts[v["state"]] = counts.get(v["state"], 0) + 1
@@ -328,12 +328,14 @@ class Updating:
                              "archive": r["archive"], "origin": r["origin"], "by": r["by"], "given": r.get("given", ""), "state": v["state"], "text": v["text"],
                              "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r),
                              "get": updates.get_of(r, v) or (updates.page_of(r) if r["host"] in ("loverslab", "url") else ""), "fetches": "fetch" in updates.how_to_get(r, v, self.store, key_kept, self.premium)
-                             if v["state"] == "update" else False, "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", "")})
+                             if v["state"] == "update" else False, "priority": r.get("priority", 0), "comments": r.get("comments", ""), "notes": r.get("notes", ""), "newer_mod": v.get("newer_mod", "")})
         place = self._place(modlist_key)
         given = sources.given_load()
         favs = set(given["favourites"].get(modlist_key, []))
         for r in out_rows:
-            r["fav"] = sources.fold(r["mod"]) in favs
+            # An older version whose newer one is a favourite is not shown as one itself (MT53): the mark went on to
+            # the newer version. Taken out again, the older one shows its mark as before.
+            r["fav"] = sources.fold(r["mod"]) in favs and not (r["newer_mod"] and sources.fold(r["newer_mod"]) in favs)
         counts["fav"] = sum(1 for r in out_rows if r["fav"])
         return {"rows": out_rows, "counts": counts, "origins": origins, "hosts": hosts, "key": secret.kept(KEY),
                 "given": {"links": len(given["links"].get(modlist_key, {})), "archives": len(given["archives"]), "mods": len(given["mods"].get(modlist_key, {}))},

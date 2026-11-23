@@ -140,6 +140,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 115 | 2026-11-23 | The add did not go by itself because an entry left on Install mods' list stood in its way; the update is now carried through on the server, in an Updater of its own, with ModTrap's downloads folder and nothing downloaded twice | DECIDED | #updates #add #page |
 | 116 | 2026-11-23 | A package for Windows: CPython from NuGet, a launcher of our own built with MinGW-w64, the path set by a ._pth file; built here, and not run here, since Wine does not start in this container | METHOD | #release #windows |
 | 117 | 2026-11-23 | The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program | DECIDED | #updates #page #release #windows |
+| 118 | 2026-11-23 | The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press | DECIDED | #add #updates #page #release |
 
 ## Entries
 
@@ -3100,3 +3101,50 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   to come back; a key given while an update waits is found to be a Premium account's, and the update goes on by
   itself and ends, fetched by ModTrap. Not checked, and not checkable here: the key press itself on Windows, in
   Firefox; a real fetch from Nexus with a real key.
+
+### 118. The whole update works on the owner's PC, the tab return too; the first press took half a minute and a second press began a second update; a new mod's steps named tools that had nothing to do with it: tools are now judged by the kinds of records, and a new mod is installed with one press
+
+`2026-11-23` · DECIDED · `#add #updates #page #release` · refs: MT53, MT52, MT50, MT49, MT21, DESIGN§16, TL01§31, WHY§114, WHY§115, WHY§117
+
+- FACT (the owner's session file at 0.3.44, started from `ModTrap.exe`): the update of a mod went through from
+  the press to the end, the file taken from the browser's folder where an earlier download had left it, moved
+  into ModTrap's downloads folder, unpacked and installed. And "a site's page was opened in a new tab; back on
+  ModTrap's tab: yes": the key press of WHY§117 works in the owner's Firefox.
+- FACT (same file): the first press was answered only after 32 seconds. Before the answer, the look for the file
+  read, in MO2's downloads folder, the record beside every one of several thousand archives. The owner, seeing
+  nothing, pressed again after 20 seconds; that second press found no update begun yet, began its own, and by
+  then the first had moved the file, so the second opened Nexus's page. The owner stopped it.
+  Mended twice over: a file is now looked for by its size as the folder lists it, and MO2's records are read only
+  where the site gave no size; and a second press for a mod whose update is still being begun starts nothing.
+- FACT (the owner's picture): a new mod with one plugin, scripts and a script extender's files was given steps to
+  run four tools "again", among them two that build plugins from the load order. The old reason was only that the
+  mod brings a plugin. DECIDED: a plugin's top groups name the kinds of records it holds, and reading them costs
+  a few seeks whatever the plugin's size. A tool that builds a plugin from plugins is named only where its output
+  and the new plugin hold records of a common kind. Where either cannot be read, the tool is named, to be on the
+  safe side. LIKELY good enough, not proven: a tool may read a kind of record it writes none of.
+- The owner asks whether a new mod can simply go last, and where else if not. A new mod placed last (before the
+  tools' outputs) wins every file it shares with an ordinary mod; that is what MO2 does with a new mod too. What
+  can be told from files is which files and whose; which mod ought to win one cannot. So ModTrap installs it
+  last, tells what it overwrites there, and leaves any other place to the owner's hand. Rejected: choosing by
+  itself a lower place where the new mod overwrites nothing; its own files would then be the ones overwritten,
+  and it would be ModTrap's guess that it should lose.
+- Manual placement is a mode of the Mods tab, not a list of its own: the owner knows that list. While it is on,
+  the list is in MO2's order with its filters off and its groups unfolded, a click on a row means the place and
+  nothing else, and leaving the tab ends it. The place is named to the server as the entry the mod goes before
+  (or "last of all"); the analysis is the Installer tool's own, made for that place, and the add job takes the
+  place from it.
+- One press: the plan that was shown first is gone for a new mod as it was for an update (WHY§115). What stood
+  in it is in the steps, and the install can be taken out again as before.
+- The favourite's mark: nothing is written when a mod is updated. An older version whose newer one carries the
+  mark is not shown as a favourite; so the list is right for updates made before this, and after an uninstall.
+- The mod the owner dropped was named after its whole file name, in the form of TL01§31. What the site added is
+  now taken off, and the number and version in it are kept as the mod's source; the time of upload in such a
+  name is read for the update check (to the minute: the end of that minute is taken).
+- One program in the package (MT53): the owner asks what the look-only program is for, and it has tripped them
+  once (WHY§117). It is dropped from the package; the command line without the switch stays as it is.
+- Checked: tests (a place chosen by hand judged there and used by the add job; "last of all"; the tools named by
+  kinds of records; names of both forms; a favourite's mark; the Installed list; a second press), and in a
+  browser against a stand-in modlist: a dropped archive named in Nexus's newer way becomes a mod of its plain
+  name with its source; no step is to be ticked; the line follows the pointer; the box tells; OK installs at the
+  place; Installed mods lists it; Uninstall takes it out; one press installs it last, before the outputs.
+  Not checked: on the owner's modlist.

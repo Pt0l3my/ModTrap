@@ -343,6 +343,31 @@ def _pointer_like(data: bytes, k: int, r: Records) -> bool:
     return ident >= 0x800 or (ident > 0 and data[k] == 0)
 
 
+def groups(path: Path) -> frozenset[str]:
+    """The kinds of records a plugin holds ("NPC_", "WRLD", "QUST"…): the names of its top groups, read from the
+    groups' own headers; what is inside them is passed over, so a large plugin costs no more than a small one."""
+    out = set()
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+            if len(head) < 24 or head[:4] != b"TES4":
+                raise Unreadable("it does not begin as a plugin does")
+            f.seek(int.from_bytes(head[4:8], "little"), 1)
+            while True:
+                h = f.read(24)
+                if len(h) < 24 or h[:4] != b"GRUP":
+                    break
+                size = int.from_bytes(h[4:8], "little")
+                if int.from_bytes(h[12:16], "little") == 0:              # a top group: named after its records' kind
+                    out.add(h[8:12].decode("ascii", "replace"))
+                if size < 24:
+                    break
+                f.seek(size - 24, 1)
+    except OSError as e:
+        raise Unreadable(str(e)) from None
+    return frozenset(out)
+
+
 def record_ids(path: Path, seconds: float = 8.0) -> tuple[set[tuple[str, int]], bool]:
     """The records a plugin holds, by their keys (see Records), and whether the reading was cut short."""
     with Records(path, seconds) as r:
@@ -350,9 +375,10 @@ def record_ids(path: Path, seconds: float = 8.0) -> tuple[set[tuple[str, int]], 
 
 
 def build(masters: tuple[str, ...] | list[str] = (), *, flags: int = 0, author: str = "",
-          description: str = "", version: float = 1.7) -> bytes:
-    """A minimal plugin of our own: a header and no records. For ModTrap's probe (DESIGN§9) and its tests: every
-    fixture is written by this function, never taken from a real mod."""
+          description: str = "", version: float = 1.7, kinds: tuple[str, ...] = ()) -> bytes:
+    """A minimal plugin of our own: a header and no records; `kinds` adds an empty top group for each kind of
+    record named ("NPC_"). For ModTrap's probe (DESIGN§9) and its tests: every fixture is written by this function,
+    never taken from a real mod."""
     def fld(ftype: bytes, body: bytes) -> bytes:
         if len(body) > 0xFFFF:
             return b"XXXX" + struct.pack("<HI", 4, len(body)) + ftype + struct.pack("<H", 0) + body
@@ -364,4 +390,5 @@ def build(masters: tuple[str, ...] | list[str] = (), *, flags: int = 0, author: 
         body += fld(b"SNAM", description.encode("utf-8") + b"\x00")
     for m in masters:
         body += fld(b"MAST", m.encode("utf-8") + b"\x00") + fld(b"DATA", b"\x00" * 8)
-    return b"TES4" + struct.pack("<IIIIHH", len(body), flags, 0, 0, 44, 0) + body
+    tail = b"".join(b"GRUP" + struct.pack("<I", 24) + k.encode("ascii")[:4].ljust(4, b"_") + struct.pack("<iHHHH", 0, 0, 0, 0, 0) for k in kinds)
+    return b"TES4" + struct.pack("<IIIIHH", len(body), flags, 0, 0, 44, 0) + body + tail

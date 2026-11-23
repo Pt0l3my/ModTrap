@@ -559,8 +559,8 @@ class Tools(unittest.TestCase):
             if not got["looking"]:
                 break
             time.sleep(0.02)
-        st = next(s for s in got["steps"] if s["key"] == "tool:Invented Patcher")
-        self.assertEqual([i.get("start") for i in st["items"]], ["Invented Patcher"])
+        st = next(s for s in got["steps"] if s["key"] == "tools")                       # one step names the tools, and asks nothing (MT53)
+        self.assertEqual([i.get("start") for i in st["items"] if i.get("start")], ["Invented Patcher"])
 
 
 if __name__ == "__main__":

@@ -88,6 +88,10 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual((r["host"], r["mod_id"], r["file_id"], r["version"], r["for_mod"], r["installed_as"]), ("nexus", 4321, 113, "1.4", "Quill", "Quill (1.4)"))
         self.assertEqual(r["page"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
         self.assertTrue((downloads.folder() / r["file"]).is_file())
+        # Installed mods: the newer version, with the install it came by.
+        inst_rows = self.api.get("/api/installed", {})[1]["rows"]
+        self.assertEqual([(x["mod"], x["updates"], x["job"], x["enabled"], x["archive"]) for x in inst_rows],
+                         [("Quill (1.4)", "Quill", run["job"], True, "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip")])
         # The Updates list: the older version as such, the newer one up to date.
         st = self.api.get("/api/updates", {})[1]
         self.assertEqual({x["mod"]: x["state"] for x in st["rows"] if x["mod"].startswith("Quill")}, {"Quill": "replaced", "Quill (1.4)": "current"})
@@ -151,6 +155,13 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual((run["state"], self.stages(run)[1]), ("done", ("download", "done")), run["summary"])
         r = self.api.get("/api/downloads", {})[1]["rows"][0]
         self.assertEqual((r["how"], r["where"], r["installed_as"]), ("fetched by ModTrap from Nexus, with your key", "ModTrap's downloads folder", "Quill (1.4)"))
+
+    def test_a_second_press_while_the_first_is_being_begun_starts_nothing_more(self):
+        """WHY§118: the owner pressed twice while the first press was still looking for the file, and got two updates."""
+        self.api.updater._starting.add("Quill")
+        self.assertEqual(self.api.post("/api/updater/start", {"mod": "Quill"})[1], {"run": "", "open": "", "again": True})
+        self.assertEqual(self.api.get("/api/updater", {})[1]["runs"], [])
+        self.api.updater._starting.discard("Quill")
 
     def test_stopping_and_what_cannot_be_updated(self):
         got = self.api.post("/api/updater/start", {"mod": "Quill"})[1]

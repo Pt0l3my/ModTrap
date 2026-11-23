@@ -535,6 +535,15 @@ rules for known incompatibilities (its licence is to be read first); proposing a
 the log written during a run ModTrap started is read once the tool has closed: what shows in it is said on the
 tool's card and in ModTrap's log, and a copy is kept with the session and packed into a saved session file.
 
+**Installing a new mod, as amended (MT53, WHY§118).** "Install mods" has two tabs: the "Installer tool" and
+"Installed mods". "Install mod" does everything with one press: the mod goes last, before what the tools made, unless
+the owner chose its place by hand on the Mods tab ("Manual placement": a line between two rows follows the pointer, a
+click is the place, a box tells what the mod overwrites there and what overwrites it, OK installs it there). The
+steps hold nothing to tick: what the mod overwrites and what overwrites it, and the tools that have to do with it,
+are told. A tool that builds a plugin from plugins is named only where its output and the new plugin hold records of
+a common kind. "Installed mods" lists what ModTrap installed that still stands, as the modlist lists mods, each with
+its update and "Uninstall" (the add's Revert).
+
 ## 17. Versions, and one ModTrap at a time (MT22)
 
 1. **The version** is `0.3.n`, kept in `modtrap/version.json` with a mark of the contents of ModTrap's own files.
@@ -556,10 +565,9 @@ tool's card and in ModTrap's log, and a copy is kept with the session and packed
 5. **A page of the one that closed** is refused by the new one and loads itself again.
 6. ModTrap does not fetch updates. The owner replaces the folder; the steps above make sure the new one is what runs.
 
-**The package for Windows (MT51, MT52, WHY§116, WHY§117).** `tools/build_exe.py` builds `ModTrap-<version>-win64.zip`,
-holding one folder named `ModTrap`: ModTrap's files and ModTrap's own launcher, built twice: `ModTrap.exe`, which
-passes the switch for changes, and `ModTrap (look only).exe`, which does not. Both carry the version for Windows'
-Properties. The launcher starts the Python that lies beside it where the package was built with one (CPython
+**The package for Windows (MT51, MT52, MT53, WHY§116, WHY§117).** `tools/build_exe.py` builds
+`ModTrap-<version>-win64.zip`, holding one folder named `ModTrap`: ModTrap's files and ModTrap's own launcher,
+`ModTrap.exe`, which passes the switch for changes and carries the version for Windows' Properties. The launcher starts the Python that lies beside it where the package was built with one (CPython
 as published, with a `._pth` file that keeps the rest of the PC out of its path), else the Python installed on the
 PC. The package is never committed.
 

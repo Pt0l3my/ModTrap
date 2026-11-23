@@ -1073,6 +1073,19 @@ class AnOlderVersionReplaced(unittest.TestCase):
         self.assertEqual(rows["Quill"]["text"], "Its newer file (1.4) is installed as “Quill (1.4)”, which is enabled. This older version is disabled and kept")
         self.assertEqual((rows["Quill (1.4)"]["state"], rows["Quill (1.4)"]["version"]), ("current", "1.4"))
         self.assertEqual((st["counts"]["update"], st["counts"]["replaced"]), (0, 1))
+        # A favourite's mark goes on to the newer version (MT53): where both carry it, only the newer one shows it.
+        self.api.post("/api/updates/favourite", {"mod": "Quill", "on": True})
+        self.api.post("/api/updates/favourite", {"mod": "Quill (1.4)", "on": True})
+        st = self.api.get("/api/updates", {})[1]
+        self.assertEqual(({r["mod"]: r["fav"] for r in st["rows"] if r["mod"].startswith("Quill")}, st["counts"]["fav"]), ({"Quill": False, "Quill (1.4)": True}, 1))
+        self.api.post("/api/updates/favourite", {"mod": "Quill (1.4)", "on": False})
+        self.assertTrue(next(r for r in self.api.get("/api/updates", {})[1]["rows"] if r["mod"] == "Quill")["fav"])      # the older one alone keeps its own
+
+    def test_the_time_of_upload_in_a_newer_file_name(self):
+        self.assertEqual(updates.archive_time("Quill-4321-6-0-1774355307.zip"), 1774355307)
+        self.assertEqual(updates.archive_time("Quill Main 4321 6.0 2026-11-14T12-13Z Ab1InventedX.zip"), 1794658439)      # the end of that minute
+        self.assertEqual(updates.archive_time("Quill Main 4321 6.0 2026-11-14T12-13Z Ab1InventedX(1).zip"), 1794658439)
+        self.assertEqual(updates.archive_time("Quill.zip"), 0)
 
 
 class Favourites(Sources):

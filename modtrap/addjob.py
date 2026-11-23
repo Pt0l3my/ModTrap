@@ -361,7 +361,8 @@ class AddJob:
         return {"job": work.name, "when": data.get("when", ""), "state": state,
                 "mods": [x["name"] for x in data.get("mods", [])], "plugins": [x["name"] for x in data.get("plugins", [])],
                 # the mods of this job that are newer versions, each with the mod it is a newer version of (MT49)
-                "updates": {x["name"]: x["updates"] for x in data.get("mods", []) if x.get("updates")}}
+                "updates": {x["name"]: x["updates"] for x in data.get("mods", []) if x.get("updates")},
+                "archives": {x["name"]: x.get("archive", "") for x in data.get("mods", []) if x.get("archive")}}
 
 
 __all__ = ["AddJob", "Plan", "plan", "Refused"]

@@ -9,8 +9,8 @@ Without Python inside, the package is ModTrap-<version>-win64.zip and its launch
 PC; with it, ModTrap-<version>-win64-with-python.zip. Inside either, the one folder is named ModTrap.
 
 What goes in, in a folder named ModTrap (the version is in the archive's name and in the programs' properties):
-    ModTrap.exe, ModTrap (look only).exe           ModTrap's own launcher (tools/exe/launcher.c), built here with
-                                                   the MinGW-w64 cross compiler; the first passes --allow-changes
+    ModTrap.exe    ModTrap's own launcher (tools/exe/launcher.c), built here with the MinGW-w64 cross compiler;
+                   it starts ModTrap with --allow-changes: the one program, able to do all of ModTrap's work (MT53)
     python/        CPython for Windows as the Python Software Foundation publishes it on NuGet, unchanged, with the
                    parts ModTrap never uses left out (pip, the headers, tkinter's and the tests' files)
     app/modtrap/   ModTrap itself, as it is in this repository
@@ -102,8 +102,7 @@ READ_ME = """ModTrap %(version)s for Windows
 
 Unpack this whole folder somewhere of your own (not inside the game's folder, not inside a modlist), and start:
 
-  ModTrap.exe                 ModTrap, able to do its work: demaster, install mods, update mods.
-  ModTrap (look only).exe     The same, without its switch for changes: it reads and reports, and changes nothing.
+  ModTrap.exe
 
 A console window opens and says where ModTrap's page is; your browser opens it. Closing the window, or Quit on the
 page, ends ModTrap.
@@ -116,7 +115,7 @@ the archive's name and in the programs' Properties.
 Windows may warn about a program it does not know, the first time: "More info", then "Run anyway". Or, before
 unpacking: right-click the zip file, Properties, tick "Unblock".
 
-Should a .exe not start, the two .cmd files of the same names do the same thing.
+Should ModTrap.exe not start, ModTrap.cmd does the same thing.
 
 To give ModTrap further switches, start it from a command prompt: ModTrap.exe --help
 
@@ -166,11 +165,11 @@ def main() -> int:
     out = work / FOLDER
     out.mkdir(parents=True)
 
-    # The launcher, twice, each with its version for Windows' Properties.
+    # The launcher, with its version for Windows' Properties.
     src = ROOT / "tools" / "exe" / "launcher.c"
     numbers = [int(x) for x in ver.split(".")[:4] if x.isdigit()]
     commas = ",".join(str(x) for x in (numbers + [0, 0, 0, 0])[:4])
-    for exe, extra, what in (("ModTrap.exe", " --allow-changes", "ModTrap"), ("ModTrap (look only).exe", None, "ModTrap (look only: changes nothing in a modlist)")):
+    for exe, extra, what in (("ModTrap.exe", " --allow-changes", "ModTrap"),):
         rc = work / "version.rc"
         rc.write_text(VERSION_RC % {"commas": commas, "version": ver, "what": what, "file": exe}, encoding="ascii")
         res = work / "version.o"
@@ -203,7 +202,7 @@ def main() -> int:
     for f in ("LICENSE", "NOTICE"):
         shutil.copyfile(ROOT / f, out / f)
     # A second way in, should Windows not let the launcher run: the same start, as a command file.
-    for cmd_name, extra in (("ModTrap.cmd", " --allow-changes"), ("ModTrap (look only).cmd", "")):
+    for cmd_name, extra in (("ModTrap.cmd", " --allow-changes"),):
         (out / cmd_name).write_text(CMD.replace("EXTRA", extra).replace("\n", "\r\n"), encoding="ascii", newline="")
     (out / "READ ME FIRST.txt").write_text(READ_ME % {"version": ver, "python": WITH_PYTHON % PY_VERSION if nupkg is not None else WITHOUT_PYTHON},
                                              encoding="utf-8", newline="\r\n")

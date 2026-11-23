@@ -73,7 +73,8 @@
   <button data-group="demaster" data-tab="job">Dry run <span id="job-badge" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="process" title="The demaster as it goes: each stage a box, its tasks inside, coloured as they are carried out">Process <span id="process-dot" class="live-dot" hidden></span></button>
-  <button data-group="add" data-tab="add" title="Install a new mod into the modlist safely: what it needs, where it goes, what it replaces, and the steps">Install mods <span id="add-count" class="count" hidden></span></button>
+  <button data-group="add" data-tab="add" title="Install a new mod: what it needs, where it goes, what it overwrites, and the tools that have to do with it">Installer tool <span id="add-count" class="count" hidden></span></button>
+  <button data-group="add" data-tab="installed" title="The mods installed through ModTrap, as the modlist lists them, each with its update and its uninstall">Installed mods <span id="installed-count" class="count" hidden></span></button>
   <button data-group="update" data-tab="updates" title="Where each mod came from, and whether a newer file of it is out">Updater list <span id="updates-count" class="count" hidden></span></button>
   <button data-group="update" data-tab="updater" title="The update of a mod as it goes: each stage a box, its tasks inside, coloured as they are carried out">Updater tool <span id="updater-dot" class="live-dot" hidden></span></button>
   <button data-group="downloads" data-tab="downloads" title="The mod files ModTrap has downloaded or taken over, each with where it came from">Downloads</button>
@@ -126,6 +127,7 @@
       <button id="expand-all" type="button" title="Unfold every group">Unfold all</button>
       <span id="mods-shown" class="dim"></span>
     </div>
+    <div id="place-banner" class="card placebanner" hidden></div>
     <div id="mod-info" class="card modinfo" hidden></div>
     <div class="scroll"><table id="mods-table">
       <thead><tr><th class="c-tick"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
@@ -225,6 +227,13 @@
     <div class="scroll">
       <div id="updates-head" class="pad"></div>
       <div id="updates-list" class="pad"></div>
+    </div>
+  </section>
+
+  <section id="tab-installed" class="tab" hidden>
+    <div class="scroll pad">
+      <div id="installed-head"></div>
+      <div id="installed-list"></div>
     </div>
   </section>
 

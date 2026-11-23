@@ -208,10 +208,24 @@ def _day(seconds) -> str:
         return ""
 
 
+ARCHIVE_DAY = re.compile(r" (\d{4})-(\d\d)-(\d\d)T(\d\d)-(\d\d)Z [0-9A-Za-z]{6,16}(?: ?\(\d+\))?\.(?:zip|7z|rar)$", re.IGNORECASE)
+
+
 def archive_time(name: str) -> int:
-    """The time of upload that Nexus writes into a file's name ("Name-12604-6-0-1774355307.zip"), or 0."""
+    """The time of upload that Nexus writes into a file's name, or 0: the seconds in its older names
+    ("Name-12604-6-0-1774355307.zip"), the day and minute in its newer ones ("Name 12604 6.0 2026-11-14T12-13Z
+    code.zip", TL01§31), for which the end of that minute is given, so that the file never counts as older than it is."""
     m = ARCHIVE_TIME.search(name or "")
-    return int(m.group(1)) if m else 0
+    if m:
+        return int(m.group(1))
+    m = ARCHIVE_DAY.search(name or "")
+    if m:
+        import calendar
+        try:
+            return calendar.timegm((int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)), 59))
+        except (ValueError, OverflowError):
+            return 0
+    return 0
 
 
 def _iso_time(text: str) -> int:
