@@ -158,6 +158,9 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 133 | 2026-11-23 | A name is a title and a version from the most trustworthy source that has one; it is asked while the archive unpacks; a side of the web grows the sheet, not the boxes | METHOD | #adding #page #updates |
 | 134 | 2026-11-23 | On the owner's list nearly every "same plugin twice" was a patch; a double is a title, and what is said of it depends on whether it is in the game | FACT | #model #page |
 | 135 | 2026-11-23 | What fits is reckoned on the sheet before it is drawn, at the smallest size a box can be read at | METHOD | #page |
+| 136 | 2026-11-23 | MO2's Conflicts column is a property of the whole list, so the whole list is listed once and kept; a new plugin goes before the tools' outputs whatever it changes | METHOD | #model #page #adding |
+| 137 | 2026-11-23 | The page greys what the server already refuses; a re-read keeps the page; a run of the load order is not a separator's group; two saves at once shared one temporary file | METHOD | #page #safety #sessions |
+| 138 | 2026-11-23 | A progress symbol is not decoration: it moves even where the PC asks for less motion | FACT | #page |
 
 ## Entries
 
@@ -3668,3 +3671,83 @@ them; the addresses were read by a session that can), and the time the second pa
 - A side that fits has no "Show fewer": there is nothing to gain by folding it. A side opened by hand keeps it.
 - Checked in a browser at three window sizes on the stand-in list: at the two larger ones all 32 mods are boxes,
   nothing scrolls and nothing overlaps; at the small one the sides keep their "+ N more".
+
+### 136. MO2's Conflicts column is a property of the whole list, so the whole list is listed once and kept; a new plugin goes before the tools' outputs whatever it changes
+
+`2026-11-23` · METHOD · `#model #page #adding` · refs: MT70, MT65, MT62, DESIGN§29, DESIGN§16.3, MO04§2, WHY§130, WHY§134
+
+- FACT (MO04§2): a mod's state in MO2's Conflicts column depends on every enabled mod's files: MO2 has them all
+  in one tree. There is no way to tell it for one mod from that mod's folder. ModTrap lists every enabled mod's
+  files once, highest priority first: a mod's files then meet only the files of the mods above it, which says at
+  once what it loses, and marks those mods as winning.
+- The listing here follows MO2's tree (MO04§2), not ModTrap's own idea of a mod's files: no limit on a mod's
+  size, hidden files left out, the three things MO2 takes out at a mod's top left out. Papers elsewhere in a mod
+  count, as they do in MO2.
+- LIKELY (the owner's log: the look at the mods' own records took 34 s on a cold disk, 1.7 s after): the first
+  listing of a large list takes tens of seconds to minutes; later ones seconds. So it runs off the page, and each
+  mod's list is kept while the folder looks the same from above. A change deep inside a mod that leaves its top
+  entries' times alone is not seen until "Rescan": said in the design.
+- The marks are ModTrap's own (a sign and words in the tooltip), in MO2's four states. MO2's icons are part of
+  MO2 and are not copied.
+- The plugins' groups follow the mods' separators because that is what the owner's MO2 shows. The load order is
+  not sorted by separator, so a group is a run, and a name can come again. A plugin whose mod is disabled has no
+  separator to go by and stays in the run it stands in, or every such plugin would break a group in two.
+- **The owner's question, how a new plugin is placed.** FACT (`adding.tail_start`, and the owner's log: the
+  plugin went to position 3733, directly before the first tool-made plugin): last among the plugins installed by
+  hand, before the run of plugins the modlist's tools made; a master at the end of the masters; never before its
+  own masters. It does not weigh conflicts. Why not: a tool's output is made from the load order before it, and
+  a plugin after an output overrides what the tool built without the tool knowing of it; "before the outputs,
+  then run the tools again" is right whatever the plugin changes. Where a plugin should stand among the hand-
+  installed ones is a question of what it is meant to win over, which no file says; the owner drags it there.
+- Checked in a browser on a stand-in list: the three columns, the marks against the mods' files, a press on a
+  mark opening the web with the conflict kinds alone, the list sorted by a new column, the plugins' groups
+  folded, unfolded and searched. **Not checked:** the time of the first listing on the owner's list, and the
+  states against the owner's MO2 mod by mod (the screenshot shows MO2's marks, not which state each is).
+
+### 137. The page greys what the server already refuses; a re-read keeps the page; a run of the load order is not a separator's group; two saves at once shared one temporary file
+
+`2026-11-23` · METHOD · `#page #safety #sessions` · refs: MT71, MT70, MT14, DESIGN§30, DESIGN§8, WHY§121, WHY§136
+
+- FACT (`listjob._begin`, `addjob`, `changes`): every job that changes MO2's lists begins by seeing MO2 closed
+  and refuses otherwise. Nothing could be written under an open MO2 before this change. What was wrong was the
+  page: a tick with MO2 open asked to close MO2, or closed it without asking where the setting said so. A tick is
+  not a reason to close a program the owner is working in.
+- So the page now says no and does nothing, for the changes that are made at once. Flows that take many steps and
+  name the closing of MO2 in their plan (the demaster) keep it.
+- One rule on the page for all of them: a path of the API that changes the lists is not sent while MO2 is open,
+  and the buttons are marked by their words as the busy-gate marks its own (WHY§100), so a new button of that
+  kind is caught without being listed.
+- FACT (`renderState`): every change set the page to "reading", which hid the summary, the tabs and every tab's
+  content and showed the first-opening page, then drew everything again. The lists kept their scroll place only
+  because it was put back after. The page now knows a modlist it has shown before, and leaves it on show.
+- FACT (the owner's screenshot at 0.3.61): grouped by runs of the load order, "Outputs", "Demaster" and others
+  headed many groups, because the load order goes back and forth between the mods of different separators. One
+  group for each separator has no doubles; the price is that a group's plugins are then not always neighbours in
+  the load order, which its line says.
+- FACT (MO2's source at the commit of MO01, searched for it): MO2 itself has no groups in its plugins' list. The
+  owner's MO2 shows groups with names that are not the mods' separators, as runs of the load order. Where they
+  are kept is not known; the session's pack now carries the names of the files in the profile's folder.
+- FACT (the owner's log at 0.3.61): "the session's log could not be saved: PermissionError" once, as the logs
+  were packed. `write_atomic` named its temporary file by the program's number alone, so two threads saving the
+  same file at once wrote and swapped one temporary file between them; and Windows refuses a swap while the old
+  file is held open by a reader. Nothing was lost (the log is in memory and saved again), but both are closed:
+  a name for every write, and the swap tried again.
+- FACT (same log): MO2's columns on the owner's list: 3,716 entries' dates and notes in 1.6 s; 593,153 files of
+  3,487 enabled mods listed in 5.7 s; 672 mixed, 489 overwriting, 632 overwritten, 87 redundant.
+- Checked in a browser with a stand-in MO2 "open": ticks greyed and stopped with a word, the menu's changing
+  entries off, nothing changed; then closed: a tick works, and on the 3,500-mod list nothing was hidden while it
+  was read anew and the bar was on show.
+
+### 138. A progress symbol is not decoration: it moves even where the PC asks for less motion
+
+`2026-11-23` · FACT · `#page` · refs: MT72, MT71, WHY§61
+
+- FACT (the page's styles): three rules switched animations off where the browser reports that the PC asks for
+  less motion (Windows' "show animations" set to off): for the turning circle, for a going step's mark and a live
+  run's dot, and for the bar of MT71. All the circles are one style, used in 25 places of the page.
+- FACT (the owner's screenshot): on the owner's PC the circle stood still everywhere, which means that setting is
+  off there. A still circle beside "Reading your modlist…" says the opposite of what it is there to say.
+- The wish for less motion is about movement that is for show or that sweeps across the screen. A small symbol
+  turning in its place is the message itself. So those four keep moving; the flash of a row gone to stays off.
+- Checked in a browser set to ask for less motion: the circle's animation is in force and its angle changes
+  between two looks; the dot and the bar likewise.

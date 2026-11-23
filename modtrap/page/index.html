@@ -7,6 +7,7 @@
 <style nonce="__NONCE__">/*__CSS__*/</style>
 </head>
 <body data-token="__TOKEN__">
+  <div id="refresh-bar" role="status" aria-live="polite" hidden><span class="bar"></span><span class="pill"><span class="spinner small" aria-hidden="true"></span> <b id="refresh-text"></b></span></div>
 <header>
   <div class="top">
     <div class="brand"><span class="mark">ModTrap</span><button id="version" type="button" class="verbtn" title="This ModTrap's version. Press to update ModTrap from a release file."></button></div>
@@ -48,6 +49,7 @@
   </div>
   <p id="updated" class="message bad" role="alert" hidden></p>
   <p id="locked" class="locked" hidden></p>
+  <p id="mo2-note" class="mo2note" hidden>MO2 is open on this modlist. ModTrap shows everything and reads everything, but changes nothing in MO2's lists until MO2 is closed: ticks, moves, renames, installs, uninstalls and undos are greyed. The chip “MO2 is open” above closes it.</p>
   <p id="message" class="message" role="status" hidden></p>
   <ul id="notes" class="notes" hidden></ul>
 </header>
@@ -131,6 +133,12 @@
           <option value="name-desc">By name, Z to A</option>
           <option value="plugins">Fewest plugins first</option>
           <option value="plugins-desc">Most plugins first</option>
+          <option value="conflict">By conflicts, the most tangled first</option>
+          <option value="conflict-asc">By conflicts, the least tangled first</option>
+          <option value="made">Installed last first</option>
+          <option value="made-asc">Installed first first</option>
+          <option value="notes">By notes, A to Z</option>
+          <option value="notes-desc">By notes, Z to A</option>
         </select>
       </label>
       <button id="collapse-all" type="button" title="Fold every group">Fold all</button>
@@ -144,6 +152,9 @@
     <div class="scroll"><table id="mods-table">
       <thead><tr><th class="c-tick" id="mods-tick-head"></th><th class="c-num" title="The mod's place in MO2's list: a higher number wins a conflict">Priority</th><th>Mod</th>
         <th title="The plugins this mod provides, as MO2 would use them">Plugins</th>
+        <th class="c-conf" title="As MO2's Conflicts column: whether loose files of the mod win over other mods' files (⚡+), lose to them (⚡−), both (⚡±), or all lose (⚡∅). Press a mark for the mods it is in conflict with">Conflicts</th>
+        <th class="c-made" title="As MO2's Installation column: when the mod's folder was made">Installation</th>
+        <th class="c-notes" title="As MO2's Notes column: the comments kept with the mod">Notes</th>
         <th class="c-num" title="Plugins of other mods that list one of this mod's plugins as a master. While there are any, disabling the mod gives missing-master errors.">Dependants</th></tr></thead>
       <tbody></tbody>
     </table>
@@ -158,6 +169,8 @@
       <input id="plugins-search" type="search" placeholder="Search plugins and their mods, or *138 for position 138   ( / )" spellcheck="false" aria-label="Search plugins, or a star and a number to go to that position" title="Type a part of a plugin's or a mod's name. A star and a number, like *138, goes to the plugin at that position of the load order; Enter goes there again.">
       <label title="Plugins with a missing or inactive master, or that could not be read"><input type="checkbox" id="p-problems"> With problems</label>
       <label title="Plugins that other plugins list as a master"><input type="checkbox" id="p-deps"> Needed by others</label>
+      <button id="plugins-fold" type="button" title="Fold every group of plugins">Fold all</button>
+      <button id="plugins-unfold" type="button" title="Unfold every group of plugins">Unfold all</button>
       <span id="plugins-shown" class="dim"></span>
       <button id="plugins-undo" type="button" hidden></button>
       <span id="plugins-hint" class="dim"></span>

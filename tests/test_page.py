@@ -36,7 +36,7 @@ class PageTests(unittest.TestCase):
         self.assertTrue(any('id="demaster"' in a for a, _t in named))
         for attrs, text in named:
             self.assertRegex(attrs, r'class="[^"]*\bgated\b', text)
-        self.assertIn('document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); });', self.js)
+        self.assertIn('document.querySelectorAll("button").forEach((b) => { if (GATED.test(b.textContent.trim())) b.classList.add("gated"); if (MO2_GATED.test(b.textContent.trim())) b.classList.add("mo2gate"); });', self.js)
 
     def test_every_tab_button_has_its_section(self):
         tabs = re.findall(r'<button data-group="[^"]+" data-tab="([^"]+)"', self.html)
@@ -56,7 +56,7 @@ class PageTests(unittest.TestCase):
         for path in ("/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/undo", "/api/list/scan"):
             self.assertIn('"%s"' % path, self.js)
         # What changes MO2's lists is begun only with MO2 closed.
-        closed = re.search(r"const NEEDS_MO2_CLOSED = new Set\(\[(.+?)\]\);", self.js, re.S).group(1)
+        closed = re.search(r"const NEEDS_MO2_FREE = new Set\(\[(.+?)\]\);", self.js, re.S).group(1)      # MT71: not begun while MO2 is open
         for path in ("/api/list/move", "/api/list/rename", "/api/list/undo", "/api/separator/add"):
             self.assertIn('"%s"' % path, closed)
 
@@ -212,8 +212,8 @@ class PageTests(unittest.TestCase):
     def test_any_mod_is_uninstalled_and_renamed_from_its_menu_and_every_list_change_is_in_the_history(self):
         """MT66: asked once, and a second time for a mod that came with the modlist; the History lists every change
         of the mod list with its Revert."""
-        self.assertIn('{ text: "Uninstall…", off: !state.changes || !m.listed,', self.js)
-        self.assertIn('{ text: "Rename…", off: !state.changes || !m.listed,', self.js)
+        self.assertIn('{ text: "Uninstall…", off: !canChange() || !m.listed,', self.js)
+        self.assertIn('{ text: "Rename…", off: !canChange() || !m.listed,', self.js)
         self.assertIn('const got = await api("/api/list/uninstall", { mods: [name] });', self.js)
         self.assertIn('if (got.original.length && !await modalBox("“" + name + "” is an original part of this modlist.', self.js)
         self.assertIn('Uninstall?", { yes: "Uninstall", no: "Keep it" })) return false;', self.js)
@@ -238,6 +238,56 @@ class PageTests(unittest.TestCase):
         self.assertIn("return g.w * WEB_SMALLEST <= room.w && g.h * WEB_SMALLEST <= room.h;", self.js)
         self.assertIn("else if (whole && all.length > WEB_CAP[side] && !(quiet && quiet.has(side))) items[side].push({ fewer: true, side });", self.js)
         self.assertIn('window.addEventListener("resize", () => { clearTimeout(state.webResize);', self.js)
+
+    def test_the_mods_list_has_mo2s_columns_and_the_plugins_list_its_groups(self):
+        """MT70."""
+        heads = re.findall(r"<th[^>]*>([^<]*)</th>", self.html[self.html.index('id="mods-table"'):self.html.index('id="mods-table"') + 2500])
+        self.assertEqual(heads[:8], ["", "Priority", "Mod", "Plugins", "Conflicts", "Installation", "Notes", "Dependants"])
+        self.assertIn('sortHeads($("mods-table"), [null, "priority", "name", "plugins", "conflict", "made", "notes", "deps"], sort, setModSort);', self.js)
+        for state in ("overwrite", "overwritten", "mixed", "redundant"):            # the four states MO2's Conflicts column has for loose files
+            self.assertRegex(self.js, r"\n  %s: \[\"⚡" % state)
+            self.assertIn(".confbtn.cf-%s { color:" % state, self.css)
+        self.assertIn('if (!state.placing) webOpen(m.name, { conflicts: true });', self.js)
+        self.assertIn('if (o.conflicts) w.hidden = new Set(["needs", "needed", "patch", "output", "loses", "wins"]);', self.js)
+        self.assertIn('if (table.id) return table.id + (table.id === "mods-table" ? ":" + table.tHead.rows[0].cells.length : "");', self.js)
+        for option in ("conflict", "conflict-asc", "made", "made-asc", "notes", "notes-desc"):
+            self.assertIn('<option value="%s">' % option, self.html)
+        # The plugins' list: groups by the mods' separators, folded and unfolded, and open while a search narrows it.
+        self.assertIn('g.row = el("tr", { class: "sep pgroup" }, el("td", { colSpan: 9 }, g.btn, g.info));', self.js)
+        self.assertIn('const shut = !filtering && p.group && folded.has(p.group.key);', self.js)
+        self.assertIn('ev.target.closest("#plugins-table tbody tr[data-plugin]")', self.js)
+        self.assertIn('id="plugins-fold"', self.html)
+
+    def test_nothing_that_changes_the_lists_is_begun_while_mo2_is_open_and_the_page_stays_while_it_reads(self):
+        """MT71."""
+        free = re.search(r"const NEEDS_MO2_FREE = new Set\(\[(.*?)\]\);", self.js, re.S).group(1)
+        for path in ("/api/separator/add", "/api/list/set", "/api/list/move", "/api/list/rename", "/api/list/uninstall", "/api/list/undo",
+                     "/api/list/plugins/set", "/api/list/plugins/move", "/api/add/run", "/api/add/revert"):
+            self.assertIn('"%s"' % path, free)
+        self.assertIn('if (mo2Open()) throw new Error("MO2 is open on this modlist: close it first. Nothing was changed.");', self.js)
+        self.assertNotIn("if (!await mo2Closed()) { put(!on)", self.js)                 # a tick no longer closes MO2 by itself
+        self.assertIn('ev.target.closest("button.mo2gate, #list-undo, #plugins-undo, #mods-table input.onbox, #plugins-table td.c-tick input")', self.js)
+        for word in ("Install mod$", "Uninstall", "Revert$", "Enable$", "Disable$"):
+            self.assertIn(word, re.search(r"const MO2_GATED = /\^\((.*?)\)/;", self.js).group(1))
+        self.assertNotIn("off: !state.changes", self.js)
+        self.assertIn("if (mo2Blocks()) return;                       // nothing is taken in", self.js)
+        self.assertIn('id="mo2-note"', self.html)
+        # The same modlist read anew: nothing is hidden, a bar says so.
+        self.assertIn('const refreshing = s.status === "reading" && !!state.everReady && state.everReady === s.folder;', self.js)
+        self.assertIn('if (refreshing) { $("refresh-text").textContent = "Reading the modlist anew…"; return; }', self.js)
+        self.assertIn('id="refresh-bar"', self.html)
+        # MT71: each separator's name heads the plugins' list once.
+        self.assertIn("let group = byName.get(gname);", self.js)
+        self.assertNotIn('" #" + n', self.js)
+
+    def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):
+        """MT72: a spinner that stands still reads as stuck. Only what is for show stands still."""
+        still = " ".join(re.findall(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\}\s*\}", self.css, re.S))
+        for moving in (".spinner", ".live-dot", ".t-going", "#refresh-bar"):
+            self.assertNotIn(moving, still)
+        self.assertIn("tbody tr.flash td", still)
+        self.assertRegex(self.css, r"\.spinner \{[^}]*animation: spin \.9s linear infinite")
+        self.assertIn("@keyframes spin { to { transform: rotate(360deg); } }", self.css)
 
 if __name__ == "__main__":
     unittest.main()
