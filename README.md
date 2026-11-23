@@ -73,8 +73,9 @@ ModTrap updates itself: the version at the top of the page is a button, and a re
 checked, put in place (the version in use is kept aside), tried, and started.
 
 To try it on Windows from the package (`ModTrap-<version>-win64.zip`, built by `tools/build_exe.py`): unpack it and
-start `ModTrap.exe`, which starts it with `--allow-changes`. It runs on the Python
-installed on the PC (3.10 or newer), or on its own where the package was built with Python inside.
+start `ModTrap.exe`, which starts it with `--allow-changes`. **It needs Python 3.10 or newer installed on the PC**
+(python.org, with "Add python.exe to PATH" ticked): the package holds no Python of its own, and nothing else needs
+installing.
 
 To try it from this repository (Windows, Python 3.10 or newer): download it, then double-click `ModTrap.cmd`, or run
 

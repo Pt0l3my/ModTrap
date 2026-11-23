@@ -91,8 +91,7 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   there is no conflict; a demaster's Revert puts plugins back in their groups).
   MT75 (closed by MT76). MT76 (ModTrap warns only of what breaks the game; conflicts are not told: the record
   kinds of a mod's web, the scan after enabling and its marks are removed).
-- **Open.** MT51 in part (whether the e-mail addresses of Python's own authors are allowed in the sweep, so that the
-  package with Python inside can be handed over); MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
+- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
   tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -1192,6 +1191,11 @@ you are done, so github repo upload or download doesn't fail."
 - `ModTrap.exe` starts ModTrap as it comes, changing nothing in a modlist; `ModTrap (changes allowed).exe` starts it
   with its switch for changes. The switch stays a thing the owner chooses, by which program they start.
 - The package is built by `tools/build_exe.py` and is never committed. The launcher is ModTrap's own code.
+
+*2026-11-23, later.* **Owner's words:** "we ship without python, and make it dependency". Settled: the package holds
+no Python and there is no build with Python inside; Python 3.10 or newer on the PC is what ModTrap needs, said in the
+package's read-me and by the launcher where none is found. The open point about the sweep falls away with it. The
+second bullet above no longer holds; the build script, the launcher and `NOTICE` no longer know a `python` folder.
 
 ## MT52
 

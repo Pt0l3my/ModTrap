@@ -3082,6 +3082,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
   (the "py" launcher, else "python", with ModTrap's folder given to it); and with Python inside, which is built
   the same way and waits for the owner's word on the sweep. The launcher is the same program in both: it takes
   the Python beside it where there is one.
+- Later (2026-11-23, MT51's note): the owner chose the package without Python, with Python as what ModTrap needs
+  on the PC. The build with Python inside, and the launcher's look for a Python beside it, are taken out.
 
 ### 117. The update never began because the owner started the look-only program; the browser can be taken back to ModTrap's tab by ModTrap's program, not by its page; the press at Nexus goes only with a Premium account's key, and is not pressed by a program
 
