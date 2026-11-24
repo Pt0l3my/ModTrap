@@ -26,6 +26,10 @@ needs, where it should go among the mods and in the load order, which files of w
 tools must run again, and the steps in order. From the steps it can start your xEdit, read-only, to list the records
 the new plugin takes from other plugins, and start the modlist's tools through MO2 for you to work.
 
+Many mods at once go through the "Bulk install" tab: drop any number of archives, or folders of them; ModTrap takes
+each in, names it, shows an installer's questions where a mod has them and turns duplicates away; then one press takes
+you to the Mods tab for the place, and the mods go in from there in the list's order.
+
 When mods are taken out (a demaster), the steps say which tools must run again. Where reading a tool's plugin cannot
 say whether it holds something of the mod, the tool's step offers a check through xEdit (read-only, the whole load order loaded) that compares by what the fields mean; and a tool's step can be
 left by you until the tool's next run.

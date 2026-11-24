@@ -72,6 +72,24 @@ class Intake(unittest.TestCase):
             time.sleep(0.02)
         self.fail("it never settled")
 
+    def test_the_bulk_installer_asks_how_any_number_of_archives_stand(self) -> None:
+        """MT78: no limit of twenty, and no analysis."""
+        ids = []
+        for i in range(25):
+            rec = self.drop("Sprig %d-%d-1-0-17000000%02d.zip" % (i, 7000 + i, i), zipped({"Sprig%d.esp" % i: plugin.build((SKY,))}))
+            ids.append(rec["id"])
+        for _ in range(400):
+            got = self.api.post("/api/add/status", {"staged": ids + ["0000000000"]})[1]
+            if all(r["state"] == "ready" for r in got["staged"]):
+                break
+            time.sleep(0.02)
+        self.assertEqual((len(got["staged"]), got["gone"]), (25, ["0000000000"]))
+        self.assertEqual((got["staged"][3]["name"], got["staged"][3]["title"], got["staged"][3]["version"], got["staged"][3]["state"]), ("Sprig 3 1.0", "Sprig 3", "1.0", "ready"))
+        with self.assertRaises(Bad):
+            self.api.post("/api/add/status", {"staged": "all"})
+        with self.assertRaises(Bad):
+            self.api.post("/api/add", {"mods": [], "staged": ids})          # the Installer tool's own analysis keeps its limit
+
     def test_a_dropped_archive_is_unpacked_and_analysed_where_it_lies(self) -> None:
         rec = self.drop("Heather-4711-2-1-1700000000.zip", zipped(NEW_MOD))
         self.assertEqual((rec["name"], rec["state"]), ("Heather 2.1", "unpacking"))

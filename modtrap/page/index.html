@@ -80,6 +80,7 @@
   <button data-group="demaster" data-tab="steps">Steps <span id="steps-count" class="count" hidden></span></button>
   <button data-group="demaster" data-tab="process" title="The demaster as it goes: each stage a box, its tasks inside, coloured as they are carried out">Process <span id="process-dot" class="live-dot" hidden></span></button>
   <button data-group="add" data-tab="add" title="Install a new mod: what it needs, where it goes, what it overwrites, and the tools that have to do with it">Installer tool <span id="add-count" class="count" hidden></span></button>
+  <button data-group="add" data-tab="bulk" title="Take in many mods at once, name them, answer their installers, then install them all from one place of the list onwards">Bulk install <span id="bulk-count" class="count" hidden></span></button>
   <button data-group="add" data-tab="installed" title="The mods installed through ModTrap, as the modlist lists them, each with its update and its uninstall">Installed mods <span id="installed-count" class="count" hidden></span></button>
   <button data-group="update" data-tab="updates" title="Where each mod came from, and whether a newer file of it is out">Updater list <span id="updates-count" class="count" hidden></span></button>
   <button data-group="update" data-tab="updater" title="The update of a mod as it goes: each stage a box, its tasks inside, coloured as they are carried out">Updater tool <span id="updater-dot" class="live-dot" hidden></span></button>
@@ -238,9 +239,33 @@
       <strong id="add-summary"></strong>
       <button id="add-go" type="button" class="primary gated" hidden title="One press: ModTrap copies the mod in, puts it in its place, enables it, activates its plugins and checks the result">Install mod</button>
       <button id="add-rescan" type="button" title="Read the modlist again, to see which steps its files now show as done">Rescan to check</button>
+      <button id="add-clear" type="button" title="Takes every mod off this page: the ones installed and the ones left over. ModTrap removes its own unpacked copies; nothing in MO2 changes." hidden>Clear all</button>
     </div>
     <div id="add-picked" class="chips" hidden></div>
     <div id="add-report" class="scroll pad"></div>
+  </section>
+
+  <section id="tab-bulk" class="tab" hidden>
+    <div class="tools">
+      <strong id="bulk-summary"></strong>
+      <button id="bulk-warn" type="button" class="chip link warn" hidden></button>
+      <span class="spacer"></span>
+      <button id="bulk-clear-done" type="button" title="Takes the mods that are now in MO2 off this list" hidden>Clear the installed</button>
+      <button id="bulk-clear" type="button" title="Takes every mod off this list. ModTrap removes its own unpacked copies; nothing in MO2 changes." hidden>Clear all</button>
+      <button id="bulk-go" type="button" class="primary" disabled>Bulk install</button>
+    </div>
+    <div class="scroll pad">
+      <div id="bulk-drop" class="bulkdrop">
+        <p class="bulkdrop-title">Drop mods here: archives (.zip, .7z, .rar), any number, or folders of them</p>
+        <p><button id="bulk-files" type="button" class="primary">Add files…</button> <button id="bulk-folder" type="button">Add a folder…</button></p>
+        <p class="dim small">ModTrap takes each one in, unpacks it in its own work folder and names it. A mod whose installer asks which parts you want shows its questions here. Nothing in MO2 changes until you press “Bulk install” and choose the place.</p>
+        <input id="bulk-pick-files" type="file" multiple accept=".zip,.7z,.rar" hidden>
+        <input id="bulk-pick-folder" type="file" webkitdirectory hidden>
+      </div>
+      <div id="bulk-run"></div>
+      <div id="bulk-notes"></div>
+      <div id="bulk-list"></div>
+    </div>
   </section>
 
   <section id="tab-health" class="tab" hidden>

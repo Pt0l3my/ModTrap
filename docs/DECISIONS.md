@@ -95,6 +95,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   and left to the owner's choice).
   MT77 (groups are created from picked plugins, a plugin dropped on a group's line joins it, and a greyed menu says
   why and offers to close MO2).
+  MT78 (a bulk installer for any number of mods; the Installer tool cleared of what is done; several mods picked
+  with Ctrl and Shift; a drag that follows the list as it scrolls).
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -2082,3 +2084,61 @@ entry greyed.
   New: let go on a group's line, the plugin goes directly before that group's first plugin and joins the group.
   Between two plugins of one group it joins as before; at the edge of a group it does not, unless it was let go on
   the group's line.
+
+## MT78
+
+**A bulk installer; the Installer tool cleared of what is done; several mods picked with Ctrl and Shift; a drag that follows the list** · *2026-11-24 · The owner's request*
+
+**Owner's words.** "can you implement bulk install (which would not have any limit)? add a third sub tab to install
+mods tab (as second one) and here add a color drop zone with add files or folder button in middle. Here Modtrap will
+take in every mods with automatically suggested names, and the ones requiring fomod install with selections will be
+shown the same way as the installer tool shows it. This page will reject any duplicates, it will warn at the header
+if it collected any warnings or error when adding mods to install, but it will not stop processing because of that
+(it will still add the non problematic mods). Once every added mods have been processed and confirmed (and fomod
+installers completed) the bulk installer will allow to click on Bulk install button (which is greyed out until
+every mods are ready to install), that will bring the user to modlist page to manually place where to install mods
+(they will all install from that priority slot in descending order). Also allow the user to edit mod titles on bulk
+installer page.
+
+Can you also add clear button to each mods on Installer tool page (so user can clear this page of remnants mods
+that have been either installed or not relevant anymore). And also a clear all button to the header.
+
+also I still can't freely drag plugins on plugin list, I couldn't drag [a plugin] to the bottom of the list."
+
+And, while that was being built: "also add shift + click and ctrl + click function to modlist, and updater pages so
+user can select more than one rows."
+
+(The plugin's name stands as a placeholder.)
+
+**Settled** (DESIGN§36, WHY§144; the owner may overrule any of it):
+
+- **"Bulk install", the second tab of Install mods.** A coloured place to drop archives and folders of them, with
+  "Add files…" and "Add a folder…" in its middle. Any number: each file is taken in as the Installer tool takes one
+  in, unpacked in ModTrap's own work folder and named by its title and version, one after another. Nothing in MO2
+  changes there.
+  - *Each mod is a line:* its state, its name in a box to type over, the file it came from, and "Clear". A mod
+    whose installer asks which parts to install shows the installer's questions under its line, as the Installer
+    tool shows them, until they are answered; "Change its answers" brings them back.
+  - *Duplicates are turned away:* a file that is on the list already, a file MO2 has installed, and a mod that
+    ModTrap finds in the modlist or on the list under the same title and version. Each is said.
+  - *Nothing holds up the rest:* a file that is no archive is passed over, one that cannot be read is marked; both
+    are said. The header shows how many warnings and errors there are, and a press goes to them.
+  - *"Bulk install"* is greyed until at least one mod is ready and none is still being taken in or waiting for
+    its installer's answers; a mod that could not be taken in is left out. A press goes to the Mods tab for the
+    place, as "Manual placement" does for one mod. After a yes, the mods go into MO2's list from that place in the
+    order of the bulk list, the first at the place and each next one right after it, and their plugins into the
+    load order by the rule for a new plugin.
+  - *They are installed in lots of eight:* each lot is one job with its safe copies, on "Installed mods" and in
+    the History with its Uninstall. A lot that is refused is tried mod by mod, so that one mod's fault costs only
+    that mod; what failed is tried once more at the end, for a mod that needed one installed after it. What could
+    not be installed is said.
+- **The Installer tool is cleared** by "Clear" on a mod's card and "Clear all" at its top: the mods leave the
+  page, ModTrap's own unpacked copies are removed, and nothing in MO2 changes.
+- **Several mods are picked** on the Mods tab and the Updater list as in MO2: a click picks one, Ctrl-click adds
+  or takes one, Shift-click picks from the last one to this one. A right-click on a picked row is about all of
+  them: enable, disable, uninstall (one change, one Revert), ask for newer files, favourites, copy the names.
+  Dragging one of the picked mods moves them all, as one block.
+- **The drag was at fault, not MO2's limits.** A dragged row was aimed only when the pointer moved. Held still at
+  the list's edge while the list scrolled under it, it kept the place from before the scrolling: the plugin landed
+  one row on instead of at the end. The place is now worked out from where the pointer is at every step of the
+  scrolling too, for plugins and for mods; and below the last plugin is the end of the load order.

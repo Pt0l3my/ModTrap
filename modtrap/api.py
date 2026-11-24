@@ -2096,7 +2096,18 @@ class Api:
         out["picks"] = rec.get("picks") or {}
         out["already"] = rec.get("already") or []
         out["version"] = rec.get("version", "")
+        out["title"] = rec.get("title", "")
         return out
+
+    def add_status(self, body: dict) -> dict:
+        """How the archives taken in stand, for the bulk installer (MT78): any number of them, and no analysis.
+        {"staged": [as `_staged_public`], "gone": [ids no longer there]}"""
+        self._need()
+        ids = body.get("staged", [])
+        if not isinstance(ids, list) or len(ids) > 5000 or not all(isinstance(x, str) for x in ids):
+            raise Bad("which archives did not arrive")
+        return {"staged": [self._staged_public(self._staged[i]) for i in ids if i in self._staged],
+                "gone": [i for i in ids if i not in self._staged]}
 
     def add(self, body: dict) -> dict:
         """The analysis for the mods to add (DESIGN§16). It lists file names in many folders, which takes
@@ -2674,6 +2685,8 @@ class Api:
             return 200, self.add_name(body), None
         if path == "/api/add/propose":
             return 200, self.add_propose(body), None
+        if path == "/api/add/status":
+            return 200, self.add_status(body), None
         if path == "/api/add/installer":
             return 200, self.add_installer(body), None
         if path == "/api/add/choose":

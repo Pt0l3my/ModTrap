@@ -1262,3 +1262,34 @@ MO2 is open says so; and a group's line is a place to let go on. The move then a
 the group's first plugin and names the group (`group` of `/api/list/plugins/move`). The job takes that group only
 where the plugin then stands beside a plugin of it; otherwise §31's rule for a moved plugin decides. A plugin that
 already stands there is only given the group.
+
+## 36. The bulk installer; clearing the Installer tool; picking several mods; a drag's aim (MT78)
+
+**Bulk install** is the second tab of Install mods. Its list is the page's own: the ids of archives taken in,
+kept with the page's state for the session.
+
+| Stage | What happens | Routes |
+|---|---|---|
+| A file is added (dropped, or chosen as files or a folder) | not an archive: passed over; its name on the list already: turned away | none |
+| Its turn in the queue | MO2 has installed this file: turned away. Else it is read where it lies in MO2's Downloads or sent, unpacked and named (§16.1, MT67) | `/api/add/resolve`, `/api/add/take` or `/api/add/upload` |
+| Taken in | the same mod in the modlist, or the same title and version on the list: forgotten again, turned away | `/api/add/forget` |
+| On the list | its state is asked for all lines at once, without any analysis; its name is typed over; its installer's questions are answered as on the Installer tool | `/api/add/status`, `/api/add/name`, `/api/add/installer`, `/api/add/choose` |
+| "Bulk install" | greyed until a mod is ready and none is being taken in or waits for answers; then the place is chosen on the Mods tab (as §16.8's "Manual placement") and confirmed | none |
+| The run | lots of eight in the list's order, each analysed at that place and installed as one job (§16.8); a refused lot mod by mod; the failed once more at the end | `/api/add`, `/api/add/run` |
+
+`/api/add/status` takes up to 5,000 ids and answers each archive's state as the Installer tool's answer does,
+with the mod's title; it starts nothing. The Installer tool's own analysis keeps its limit of twenty.
+
+What was turned away or failed is listed above the lines; the header counts warnings and errors. A run that
+cannot go on at all (MO2 open) stops and says so; what was installed stays.
+
+**Clearing the Installer tool:** "Clear" on a mod's card and "Clear all" in the header take mods off the page; an
+unpacked copy in ModTrap's work folder is removed (`/api/add/forget`), a mod of MO2 only leaves the page.
+
+**Picking several mods** (Mods tab, Updater list): click, Ctrl-click, Shift-click, as §35 has it for plugins; the
+picked mods are one set for both lists. A right-click on a picked row gives the menu for all of them; a drag of a
+picked row moves all picked mods as one block (`/api/list/move` takes them so).
+
+**A drag's aim** (mods and plugins): the place is worked out from the element under the pointer's last position,
+at every move of the pointer and after every step by which the list scrolls at its edge. For a plugin, the room
+of the list's pane below the last row is the end of the load order.

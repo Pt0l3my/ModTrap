@@ -494,9 +494,92 @@ async function sourceLink(mod, now) {
     await loadUpdates();
   } catch (e) { toast(e.message); }
 }
+// Several mods picked (MT78), on the Mods tab and on the Updater list, as in MO2's list: a click picks one,
+// Ctrl-click adds or takes one, Shift-click picks every shown mod from the last one to this one. The picked rows are
+// marked on both lists. A right-click on a picked row is about all of them; dragging one of them moves them all.
+function modPick(name, ev, where) {
+  state.msel = state.msel || new Set();
+  const rows = [...document.querySelectorAll(where === "updates" ? "#updates-table tbody tr[data-mod]" : "#mods-table tbody tr[data-name]")].filter((r) => !r.hidden);
+  const nameOf = (r) => r.dataset.mod || r.dataset.name;
+  const isMod = (n) => { const m = findMod(n); return !!m && m.kind === "mod"; };
+  if (ev.shiftKey && state.mselLast) {
+    const a = rows.findIndex((r) => nameOf(r) === state.mselLast), b = rows.findIndex((r) => nameOf(r) === name);
+    if (a >= 0 && b >= 0) for (const r of rows.slice(Math.min(a, b), Math.max(a, b) + 1)) if (isMod(nameOf(r))) state.msel.add(nameOf(r));
+  } else if (ev.ctrlKey || ev.metaKey) {
+    if (state.msel.has(name)) state.msel.delete(name); else state.msel.add(name);
+    state.mselLast = name;
+  } else {
+    state.msel = new Set([name]);
+    state.mselLast = name;
+  }
+  paintModSel();
+  return !(ev.shiftKey || ev.ctrlKey || ev.metaKey);            // a plain click also does what a click did before
+}
+function paintModSel() {
+  const sel = state.msel || new Set();
+  for (const r of document.querySelectorAll("#mods-table tbody tr[data-name]")) r.classList.toggle("msel", sel.size > 0 && sel.has(r.dataset.name) && !picking());
+  for (const r of document.querySelectorAll("#updates-table tbody tr[data-mod]")) r.classList.toggle("msel", sel.has(r.dataset.mod));
+}
+// The picked mods that are still in the list, in the list's own order (lowest priority first).
+function pickedMods() {
+  return state.mods.filter((m) => m.kind === "mod" && (state.msel || new Set()).has(m.name)).sort((a, b) => a.priority - b.priority);
+}
+function uninstallMods(names) {
+  if (names.length === 1) return uninstallMod(names[0]);
+  if (!state.changes) { toast(NO_CHANGES); return Promise.resolve(false); }
+  return listDo(async () => {
+    try {
+      if (mo2Blocks()) return false;
+      const got = await api("/api/list/uninstall", { mods: names });
+      const some = names.slice(0, 12).map((n) => "“" + n + "”").join(", ") + (names.length > 12 ? " and " + (names.length - 12) + " more" : "");
+      const text = "Uninstall these " + names.length + " mods?\n\n" + some + "\n\nModTrap takes them out of MO2's mod list, in every profile, and moves their folders, whole, out of MO2's mods folder into a folder of its own beside it (“ModTrap - removed mods”). The plugins only they give leave the load order. It is one change in the History, and its Revert puts everything back."
+        + (got.unknown.length ? "\n\nWhether " + (got.unknown.length === names.length ? "they" : got.unknown.length + " of them") + " came with the modlist ModTrap cannot tell: for that, give the list's own file (.wabbajack) on the Updater list." : "")
+        + (got.ask ? "\n\nNot everything about it is safe:" : "");
+      if (!await modalBox(text, { nodes: got.ask ? [findings(got.plan)].filter(Boolean) : [], wide: true, yes: "Uninstall them", no: "Keep them" })) return false;
+      if (got.original.length && !await modalBox(plural(got.original.length, "of them is an original part", "of them are original parts") + " of this modlist: " + got.original.slice(0, 12).map((n) => "“" + n + "”").join(", ") + (got.original.length > 12 ? " and more" : "")
+        + ".\n\nThey came with the list, which was put together and tested with them: other mods, patches and the tools' outputs may count on them, in ways no file shows.\n\nUninstall all the same?", { yes: "Uninstall", no: "Keep them" })) return false;
+      const done = await api("/api/list/uninstall", { mods: names, sure: true });
+      state.msel = new Set();
+      state.historyText = "";
+      listChanged(done.text + ". It is in the History, with its Revert.");
+      return true;
+    } catch (e) { toast(e.message); return false; }
+  });
+}
+async function modsMenu(ev, mods) {
+  const x = ev.clientX, y = ev.clientY;
+  if (!state.updates || state.updatesFor !== state.loaded) { try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { /* the menu still serves */ } }
+  const names = mods.map((m) => m.name);
+  const ups = state.updates ? state.updates.rows.filter((u) => names.includes(u.mod)) : [];
+  const askable = ups.filter((u) => u.host === "nexus" || u.host === "github").map((u) => u.mod);
+  const listed = mods.filter((m) => m.listed), off = !canChange();
+  const on = listed.filter((m) => !m.enabled).map((m) => m.name), offs = listed.filter((m) => m.enabled).map((m) => m.name);
+  const favs = ups.filter((u) => u.fav).map((u) => u.mod), plain = ups.filter((u) => !u.fav).map((u) => u.mod);
+  const each = async (list, fn, said) => { for (const n of list) { try { await fn(n); } catch (e) { toast(e.message); return; } } toast(said); state.upSig = ""; await loadUpdates(); };
+  const head = canChange() || !onMods() ? [] : [{ info: whyNot() }, ...(mo2Open() ? [{ text: "Close MO2…", note: "Asks MO2 to close, as a click on its X does", run: toggleMo2 }] : []), null];
+  const rows = [...head,
+    ...(onMods() ? [
+      on.length ? { text: "Enable " + (on.length === names.length ? "them" : on.length === 1 ? "the one that is disabled" : "the " + on.length + " that are disabled"), off, note: "As their ticks do, in one change", run: () => listSet(on, true) } : undefined,
+      offs.length ? { text: "Disable " + (offs.length === names.length ? "them" : offs.length === 1 ? "the one that is enabled" : "the " + offs.length + " that are enabled"), off, note: "As their ticks do, in one change", run: () => listSet(offs, false) } : undefined,
+      { text: "Uninstall them…", off: off || !listed.length, note: "Out of MO2's list and its mods folder, kept whole by ModTrap; one change in the History, with its Revert", run: () => uninstallMods(listed.map((m) => m.name)) },
+      null] : []),
+    askable.length ? { text: "Ask about " + (askable.length === names.length ? "them" : askable.length === 1 ? "the one with a known source" : "the " + askable.length + " with a known source") + " now", note: "Whether a newer file of each is out", run: async () => { try { await api("/api/updates/scan", { mods: askable }); toast("Asking about " + plural(askable.length, "mod") + "…"); state.upSig = ""; await loadUpdates(); } catch (e) { toast(e.message); } } } : undefined,
+    plain.length ? { text: "Mark as favourites", run: () => each(plain, (n) => api("/api/updates/favourite", { mod: n, on: true }), plural(plain.length, "mod") + " marked as favourites.") } : undefined,
+    favs.length ? { text: "Remove from favourites", run: () => each(favs, (n) => api("/api/updates/favourite", { mod: n, on: false }), plural(favs.length, "mod") + " no longer favourites.") } : undefined,
+    null,
+    { text: "Copy their names", run: () => navigator.clipboard.writeText(names.join("\n")).then(() => toast("The names are copied."), () => toast("The names could not be copied.")) },
+    { text: "Pick none", run: () => { state.msel = new Set(); paintModSel(); } },
+  ].filter((v) => v !== undefined);
+  menuAt(x, y, plural(names.length, "mod") + " picked", rows);
+}
 async function modMenu(ev, mod) {
   ev.preventDefault();
   const x = ev.clientX, y = ev.clientY;
+  state.msel = state.msel || new Set();
+  if (!picking()) {
+    if (state.msel.has(mod) && state.msel.size > 1) { const many = pickedMods(); if (many.length > 1) { modsMenu(ev, many); return; } }
+    state.msel = new Set([mod]); state.mselLast = mod; paintModSel();
+  }
   if (!state.updates || state.updatesFor !== state.loaded) { try { state.updates = await api("/api/updates"); state.updatesFor = state.loaded; } catch (e) { /* the menu still serves */ } }
   const r = state.updates ? state.updates.rows.find((u) => u.mod === mod) : null;
   const m = findMod(mod);
@@ -1335,6 +1418,9 @@ function renderUpdates(listOnly) {
     el("th", { title: "What you wrote of the mod in MO2: its Notes column, and a longer note where there is one", text: "Notes" }), el("th", { title: "Whether a newer file of the mod is out, by the last asking", text: "Update" }),
     el("th", { class: "c-get", title: "Get the newer file: opens the mod's page for it", text: "" }), el("th", { text: "What is known" }))), body);
   table.addEventListener("contextmenu", (ev) => { const tr = ev.target.closest("tr[data-mod]"); if (tr) modMenu(ev, tr.dataset.mod); });
+  table.addEventListener("click", (ev) => { const tr = ev.target.closest("tr[data-mod]"); if (tr && !ev.target.closest("input, button, a")) modPick(tr.dataset.mod, ev, "updates"); });
+  table.addEventListener("mousedown", (ev) => { if (ev.shiftKey && ev.target.closest("tr[data-mod]") && !ev.target.closest("input, button, a")) ev.preventDefault(); });      // a Shift-click picks rows, not text
+  for (const tr of body.querySelectorAll("tr[data-mod]")) if ((state.msel || new Set()).has(tr.dataset.mod)) tr.classList.add("msel");
   sortHeads(table, ["priority", "mod", "from", "version", null, "update", null, null], sort, (key) => { state.upSort = nextSort(sort, key); renderUpdates(true); });
   colSetup(table);                                          // its kept widths and order, before it is shown
   const how = sort.key === "priority" ? (sort.desc ? "highest priority first, under their separators" : "in the modlist's own order: lowest priority first, under their separators")
@@ -1548,6 +1634,7 @@ function currentUi() {
     collapsed: [...(state.collapsed || [])], pcollapsed: [...(state.pcollapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
     ticksJob: state.ticksJob === undefined ? null : state.ticksJob,
     adding: [...(state.adding || [])], staged: [...(state.staged || [])],
+    bulk: ((state.bulk || {}).items || []).filter((x) => x.id && !x.reject).map((x) => x.id),
   };
 }
 
@@ -1585,6 +1672,13 @@ function applyUi(ui) {
     state.adding = (Array.isArray(ui.adding) ? ui.adding : []).filter((n) => { const m = findMod(n); return m && m.kind === "mod"; });
     state.staged = (Array.isArray(ui.staged) ? ui.staged : []).filter((x) => typeof x === "string").slice(0, 20);
     state.stagedInfo = {};
+    // The bulk list (MT78): what was taken in before is still in ModTrap's work folder; its lines come back as they stand.
+    // A reading anew of the same session leaves the list as it is, with its notes and a bulk install that is going.
+    if (!state.bulk || state.bulkSession !== state.sessionApplied) {
+      state.bulkSession = state.sessionApplied;
+      state.bulk = { items: (Array.isArray(ui.bulk) ? ui.bulk : []).filter((x) => typeof x === "string").slice(0, 5000)
+        .map((id) => ({ key: ++bulkSeq, file: null, fname: "", size: 0, state: "unpacking", pct: null, id, info: null })), notes: [], run: null, open: {}, text: "" };
+    }
     state.uploads = [];
     state.addNotes = [];
     state.addText = "";
@@ -2413,8 +2507,10 @@ function modRow(m) {
   // A click on the row only shows the mod and what is tied to it; ticking is the box's alone (WHY§59).
   tr.addEventListener("click", (ev) => {
     if (ev.target.closest("input, button, a")) return;
+    if (m.kind === "mod" && !picking() && !state.placing && !modPick(m.name, ev, "mods")) return;     // Ctrl or Shift: picked, and no more
     focusMod(m.name);
   });
+  if (m.kind === "mod" && (state.msel || new Set()).has(m.name) && !picking()) tr.classList.add("msel");
   tr.dataset.name = m.name;
   if (m.kind === "mod") tr.addEventListener("contextmenu", (ev) => modMenu(ev, m.name));
   else if (m.kind === "foreign") tr.addEventListener("contextmenu", (ev) => { if (picking()) return; ev.preventDefault(); menuAt(ev.clientX, ev.clientY, m.name, [
@@ -2943,7 +3039,9 @@ function dragWhat(tr) {
     return { names: [tr.dataset.sep, ...along], label: bare(tr.dataset.sep) + (along.length ? " and its " + plural(along.length, "mod") : " (the separator alone: fold it to take its mods along)") };
   }
   const m = findMod(tr.dataset.name || "");
-  return m && m.kind === "mod" && m.listed ? { names: [m.name], label: m.name } : null;
+  if (!m || m.kind !== "mod" || !m.listed) return null;
+  const many = (state.msel || new Set()).has(m.name) ? pickedMods().filter((x) => x.listed) : [];
+  return many.length > 1 ? { names: many.map((x) => x.name), label: plural(many.length, "mod") + " (as one block, in their order)" } : { names: [m.name], label: m.name };
 }
 function dragEnd() {
   if (!drag) return;
@@ -2954,6 +3052,8 @@ function dragEnd() {
   placeLine(null);
   drag = null;
 }
+// A Shift-click picks rows, not text.
+for (const id of ["mods-table", "plugins-table"]) $(id).addEventListener("mousedown", (ev) => { if (ev.shiftKey && ev.button === 0 && !ev.target.closest("input, button, a")) ev.preventDefault(); });
 $("mods-table").addEventListener("mousedown", (ev) => {
   if (ev.button !== 0 || picking() || state.placing || !canChange() || ev.target.closest("input")) return;
   const tr = ev.target.closest("#mods-table tbody tr");
@@ -2977,20 +3077,26 @@ document.addEventListener("mousemove", (ev) => {
       if (!drag || !pane || drag.py == null) return;
       const r = pane.getBoundingClientRect();
       const d = drag.py < r.top + 36 ? -1 : drag.py > r.bottom - 36 ? 1 : 0;
-      if (d) pane.scrollTop += d * 26;
+      if (d) { pane.scrollTop += d * 26; dragAim(drag.px, drag.py); }       // the list moved under a still pointer: the place is another now
     }, 40);
   }
   ev.preventDefault();
-  drag.py = ev.clientY;
+  drag.px = ev.clientX; drag.py = ev.clientY;
   drag.ghost.style.left = (ev.clientX + 14) + "px";
   drag.ghost.style.top = (ev.clientY + 12) + "px";
-  const at = exactPlace(placeAt(ev), drag.listed);
+  dragAim(ev.clientX, ev.clientY);
+});
+// Where a dragged mod would go, from where the pointer is now. Asked at every move of the pointer and at every
+// step the list scrolls by itself (MT78): a place kept from before the list moved is not the one pointed at.
+function dragAim(x, y) {
+  if (!drag || !drag.going) return;
+  const at = exactPlace(placeAt({ target: document.elementFromPoint(x, y) || document.body, clientX: x, clientY: y }), drag.listed);
   // No place: on itself, or where it already stands.
   const last = drag.names[drag.names.length - 1], after = drag.listed.indexOf(last) + 1;
   const mine = at && (drag.names.includes(at.before) || at.before === (after < drag.listed.length ? drag.listed[after] : "*last*"));
   drag.at = at && !mine ? at : null;
   placeLine(drag.at ? drag.at.tr : null, drag.at && drag.at.below);
-});
+}
 document.addEventListener("mouseup", () => {
   if (!drag) return;
   const d = drag, went = drag.going;
@@ -4428,31 +4534,46 @@ document.addEventListener("mousemove", (ev) => {
       if (!pdrag || !pane || pdrag.py == null) return;
       const r = pane.getBoundingClientRect();
       const d = pdrag.py < r.top + 36 ? -1 : pdrag.py > r.bottom - 36 ? 1 : 0;
-      if (d) pane.scrollTop += d * 26;
+      if (d) { pane.scrollTop += d * 26; pdragAim(pdrag.px, pdrag.py); }     // the list moved under a still pointer: the place is another now
     }, 40);
   }
   ev.preventDefault();
-  pdrag.py = ev.clientY;
+  pdrag.px = ev.clientX; pdrag.py = ev.clientY;
   pdrag.ghost.style.left = (ev.clientX + 14) + "px";
   pdrag.ghost.style.top = (ev.clientY + 12) + "px";
-  const tr = ev.target.closest ? ev.target.closest("#plugins-table tbody tr[data-plugin]") : null;
+  pdragAim(ev.clientX, ev.clientY);
+});
+// Where a dragged plugin would go, from where the pointer is now: asked at every move of the pointer and at every
+// step the list scrolls by itself (MT78). Over a row: before or after it. Over a group's line: before the group's
+// first plugin and into the group (MT77). Under the last row, or over the list's own room below it: the very end.
+function pdragAim(x, y) {
+  if (!pdrag || !pdrag.going) return;
+  const under = document.elementFromPoint(x, y);
+  const mine = pdrag.listed.indexOf(pdrag.name);
+  const stands = (before) => before === pdrag.name || before === (mine + 1 < pdrag.listed.length ? pdrag.listed[mine + 1] : "");
   let at = null;
+  const tr = under && under.closest ? under.closest("#plugins-table tbody tr[data-plugin]") : null;
   if (tr && !tr.hidden) {
-    const r = tr.getBoundingClientRect(), below = ev.clientY > r.top + r.height / 2;
+    const r = tr.getBoundingClientRect(), below = y > r.top + r.height / 2;
     const i = pdrag.listed.indexOf(tr.dataset.plugin);
     if (i >= 0) {                                          // below a row: right after it in the load order, whatever is filtered away
       const before = below ? (i + 1 < pdrag.listed.length ? pdrag.listed[i + 1] : "") : pdrag.listed[i];
-      const mine = pdrag.listed.indexOf(pdrag.name);
-      if (before !== pdrag.name && before !== (mine + 1 < pdrag.listed.length ? pdrag.listed[mine + 1] : "")) at = { tr, below, before };
+      if (!stands(before)) at = { tr, below, before };
     }
   }
-  // On a group's line: before the group's first plugin, and into the group (MT77).
-  const head = !at && ev.target.closest ? ev.target.closest("#plugins-table tbody tr.pgroup[data-pgroup]") : null;
+  const head = !at && under && under.closest ? under.closest("#plugins-table tbody tr.pgroup[data-pgroup]") : null;
   const g = head ? (state.pgroups || []).find((x) => x.key === head.dataset.pgroup) : null;
   if (g && !g.loose && g.plugins.length && !g.plugins.some((x) => x.name === pdrag.name && g.plugins[0] !== x)) at = { tr: head, below: true, before: g.plugins[0].name === pdrag.name ? (g.plugins[1] || {}).name || "" : g.plugins[0].name, group: g.mo2 };
+  if (!at && !tr && !head) {                               // past the last row, inside the list's pane: the end of the load order
+    const pane = $("plugins-table").closest(".scroll"), pr = pane ? pane.getBoundingClientRect() : null;
+    const rows = [...$("plugins-table").tBodies[0].rows].filter((r) => !r.hidden && r.dataset.plugin);
+    const lastRow = rows[rows.length - 1];
+    if (pr && lastRow && x >= pr.left && x <= pr.right && y <= pr.bottom + 40 && y > lastRow.getBoundingClientRect().bottom - 1
+        && lastRow.dataset.plugin === pdrag.listed[pdrag.listed.length - 1] && !stands("")) at = { tr: lastRow, below: true, before: "" };
+  }
   pdrag.at = at;
   placeLine(at ? at.tr : null, at && at.below);
-});
+}
 document.addEventListener("mouseup", () => { state.pdragBlocked = null; }, true);
 document.addEventListener("mouseup", () => {
   if (!pdrag) return;
@@ -5189,6 +5310,331 @@ async function pollSteps(force) {
   } catch (e) { /* the next round tries again */ }
 }
 
+// --- the bulk installer (MT78, DESIGN§36) -----------------------------------------------------------------------------
+// Any number of mods at once. Each file is taken in as the Installer tool takes one in (unpacked in ModTrap's own
+// work folder, named by its title and version), but nothing is analysed and nothing is installed until "Bulk
+// install": then the place is chosen on the Mods tab, and the mods go in from there in the order of this list, in
+// small lots. A duplicate is turned away and said; a file that fails is said and does not hold up the others.
+const BULK_LOT = 8;                                         // mods installed as one job: one reading of the modlist for each lot
+const BULK_BUSY = new Set(["queued", "copying", "unpacking"]);
+let bulkSeq = 0;
+function bulk() { state.bulk = state.bulk || { items: [], notes: [], run: null, open: {}, text: "" }; return state.bulk; }
+function bulkNote(name, text, bad) { bulk().notes.push({ name, text, bad: !!bad }); }
+function bulkAdd(files, fromFolder) {
+  const b = bulk();
+  let added = 0, other = 0;
+  for (const f of files) {
+    if (!f || !ARCHIVE_NAME.test(f.name)) { other++; continue; }
+    if (b.items.some((x) => fold(x.fname) === fold(f.name))) { bulkNote(f.name, "A duplicate: this file is on the list already. Not added a second time."); continue; }
+    b.items.push({ key: ++bulkSeq, file: f, fname: f.name, size: f.size, state: "queued", pct: null, id: "", info: null });
+    added++;
+  }
+  if (other && !fromFolder) bulkNote(plural(other, "file"), "ModTrap takes in .zip, .7z and .rar archives. " + (other === 1 ? "This one is none" : "These are none") + ", and " + (other === 1 ? "was" : "were") + " passed over.");
+  if (!added && !other) toast("Nothing was added.");
+  else if (!added && fromFolder) bulkNote("The folder", "It holds no .zip, .7z or .rar archive.");
+  renderBulk();
+  bulkPump();
+}
+function bulkSend(it) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "/api/add/upload?name=" + encodeURIComponent(it.fname));
+    x.setRequestHeader("X-ModTrap-Token", TOKEN);
+    x.setRequestHeader("Content-Type", "application/octet-stream");
+    let shown = -1;
+    x.upload.onprogress = (ev) => { if (ev.lengthComputable) { it.pct = Math.floor(100 * ev.loaded / ev.total); if (it.pct !== shown) { shown = it.pct; renderBulk(); } } };
+    x.onload = () => {
+      let data = {};
+      try { data = JSON.parse(x.responseText); } catch (e) { /* no answer to read */ }
+      if (x.status === 200) resolve(data); else reject(new Error(data.error || (x.status === 413 ? "that file is larger than ModTrap takes in" : "the file was not accepted (" + x.status + ")")));
+    };
+    x.onerror = () => reject(new Error("the file did not reach ModTrap"));
+    x.send(it.file);
+  });
+}
+// One file: is it a mod MO2 has already? Then it is turned away. Else it is taken in (read where it lies in MO2's
+// Downloads, or sent), and turned away after all where ModTrap finds the same mod in the modlist or on this list.
+async function bulkTake(it) {
+  const b = bulk();
+  const away = (text) => { bulkNote(it.fname, text); b.items = b.items.filter((x) => x !== it); };
+  try {
+    const hit = (await api("/api/add/resolve", { items: [{ name: it.fname }] })).items[0] || { mods: [] };
+    if (hit.mods.length && hit.sure) return away("A duplicate: MO2 has this file installed already, as “" + hit.mods.join("”, “") + "”. Not added.");
+    it.state = "copying";
+    renderBulk();
+    let rec = null;
+    if (hit.downloaded) { try { rec = await api("/api/add/take", { name: it.fname, size: it.size }); } catch (e) { rec = null; } }
+    if (!rec) rec = await bulkSend(it);
+    it.id = rec.id; it.info = rec; it.state = rec.state; it.file = null;
+    state.stagedInfo = Object.assign({}, state.stagedInfo, { [rec.id]: rec });
+    const twin = (rec.already || [])[0];
+    const same = b.items.find((x) => x !== it && x.info && x.info.title && fold(x.info.title) === fold(rec.title || "") && (x.info.version || "") === (rec.version || ""));
+    if (twin) it.reject = "A duplicate: it is in the modlist already as “" + twin.mod + "”" + (twin.version ? ", version " + twin.version : "") + " (" + twin.how + "). Not added.";
+    else if (same) it.reject = "A duplicate of “" + same.fname + "” on this list: the same mod and version. Not added.";
+  } catch (e) { it.state = "failed"; it.error = e.message; it.noted = true; bulkNote(it.fname, "Not taken in: " + e.message + ".", true); }
+}
+async function bulkPump() {
+  const b = bulk();
+  if (b.pumping) return;
+  b.pumping = true;
+  try {
+    for (;;) {
+      const it = b.items.find((x) => x.state === "queued");
+      if (!it) break;
+      await bulkTake(it);
+      renderBulk();
+      saveUi();
+      pollBulk(true);
+    }
+  } finally { b.pumping = false; }
+  renderBulk();
+}
+async function pollBulk(force) {
+  const b = bulk();
+  const ids = b.items.filter((x) => x.id).map((x) => x.id);
+  if (!ids.length || state.status !== "ready" || b.polling) return;
+  if (!force && state.tab !== "bulk" && !b.run && !b.items.some((x) => BULK_BUSY.has(x.state) || x.reject)) return;
+  b.polling = true;
+  try {
+    const d = await api("/api/add/status", { staged: ids });
+    const by = new Map(d.staged.map((r) => [r.id, r]));
+    for (const it of b.items) {
+      if (!it.id) continue;
+      const r = by.get(it.id);
+      if (!r) { it.state = "failed"; it.error = it.error || "its unpacked copy is no longer in ModTrap's work folder"; it.id = ""; continue; }
+      it.info = r;
+      if (!(b.run && it.state === "installed")) it.state = r.state;
+      it.fname = it.fname || r.archive;
+      state.stagedInfo = Object.assign({}, state.stagedInfo, { [r.id]: r });
+      if (r.note && !it.noted) { it.noted = true; bulkNote(it.fname, r.state === "failed" ? "Not taken in: " + r.note : r.note, r.state === "failed"); }
+    }
+    for (const it of b.items.filter((x) => x.reject && x.id && !["copying", "unpacking"].includes(x.state))) {
+      try { await api("/api/add/forget", { id: it.id }); } catch (e) { continue; }
+      bulkNote(it.fname, it.reject);
+      b.items = b.items.filter((x) => x !== it);
+    }
+  } catch (e) { /* the next round asks again */ }
+  b.polling = false;
+  const text = JSON.stringify([b.items.map((x) => [x.key, x.state, x.pct, x.info && x.info.name, x.info && x.info.picks, !!x.reject]), b.notes.length, b.run, state.changes, mo2Open()]);
+  if (text !== b.text) { b.text = text; renderBulk(); saveUi(); }
+}
+async function bulkRename(it, input) {
+  const to = input.value.replace(/\s+/g, " ").trim();
+  if (!it.id || !to || to === it.info.name) { input.value = it.info.name; return; }
+  try {
+    const got = await api("/api/add/name", { id: it.id, name: to });
+    it.info = got;
+    state.stagedInfo = Object.assign({}, state.stagedInfo, { [got.id]: got });
+    input.value = got.name;
+    if (got.name !== to) toast("Named “" + got.name + "”: the name you gave is taken.");
+  } catch (e) { toast(e.message); input.value = it.info.name; }
+}
+async function bulkClear(items) {
+  const b = bulk();
+  let busy = 0;
+  for (const it of items) {
+    if (it.state === "copying" || it.state === "unpacking") { busy++; continue; }
+    if (it.id) { try { await api("/api/add/forget", { id: it.id }); } catch (e) { if (!/not on the list/.test(e.message)) { busy++; continue; } } }
+    b.items = b.items.filter((x) => x !== it);
+    delete b.open[it.id];
+  }
+  if (busy) toast(plural(busy, "mod") + " still being taken in " + (busy === 1 ? "stays" : "stay") + " until that has ended.");
+  renderBulk();
+  saveUi();
+}
+function bulkCounts() {
+  const c = { all: 0, ready: 0, busy: 0, asks: 0, failed: 0, installed: 0 };
+  for (const it of bulk().items) {
+    if (it.reject) continue;
+    c.all++;
+    if (BULK_BUSY.has(it.state)) c.busy++;
+    else if (it.state === "installer") c.asks++;
+    else if (it.state === "failed") c.failed++;
+    else if (it.state === "installed") c.installed++;
+    else if (it.state === "ready") c.ready++;
+  }
+  return c;
+}
+function bulkRow(it) {
+  const b = bulk(), info = it.info || {}, st = it.state;
+  const [word, cls] = st === "queued" ? ["waits its turn", ""] : st === "copying" ? [it.pct == null || it.pct >= 100 ? "taking it in…" : "copying " + it.pct + "%", "warn"] : STAGED_WORDS[st] || [st, ""];
+  const cells = [el("span", {}, el("span", { class: "tag " + cls, text: word }))];
+  if (it.id && info.name) {
+    const name = el("input", { type: "text", class: "bulkname", value: info.name, spellcheck: false, disabled: !["ready", "installer"].includes(st) || !!b.run,
+      "aria-label": "The name of the mod from " + it.fname, title: "The name the mod gets in MO2: its title and its version, as ModTrap reads them. Type another one; Enter, or leaving the box, keeps it." });
+    name.addEventListener("change", () => bulkRename(it, name));
+    name.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); name.blur(); } else if (ev.key === "Escape") { name.value = it.info.name; name.blur(); } });
+    name.addEventListener("blur", () => { if (b.pending) { b.pending = false; renderBulk(); } });
+    cells.push(name);
+  } else cells.push(el("span", { text: it.fname }));
+  cells.push(el("span", { class: "from", title: it.fname, text: "from " + it.fname + (info.version ? " · version " + info.version : "") + (info.files ? " · " + plural(info.files, "file") : "") }));
+  const acts = [];
+  // An installer's questions show by themselves while they wait for answers; once answered they fold away.
+  const shown = !!(it.id && info.installer && (st === "installer" ? b.open[it.id] !== false : st === "ready" && b.open[it.id]));
+  if (info.installer && it.id && (st === "installer" || st === "ready")) {
+    const q = el("button", { type: "button", text: shown ? "Hide its questions" : st === "installer" ? "Answer its installer…" : "Change its answers", disabled: !!b.run });
+    if (st === "installer" && !shown) q.classList.add("primary");
+    q.addEventListener("click", () => {
+      b.open[it.id] = !shown;
+      if (!shown && st === "ready") { state.installers = state.installers || {}; state.installers[it.id] = { picks: null, open: true }; loadInstaller(it.id); }
+      renderBulk();
+    });
+    acts.push(q);
+  }
+  const x = el("button", { type: "button", text: "Clear", title: "Takes it off this list. ModTrap removes its own unpacked copy; nothing in MO2 changes.", disabled: st === "copying" || st === "unpacking" || !!b.run });
+  x.addEventListener("click", () => bulkClear([it]));
+  acts.push(x);
+  cells.push(el("span", { class: "acts" }, ...acts));
+  if (shown) cells.push(el("div", { class: "wide" }, installerCard(info)));
+  if (st === "failed") cells.push(el("div", { class: "wide would-needs", text: it.error || info.note || "The archive could not be read." }));
+  return el("div", { class: "bulkrow" + (st === "failed" ? " bad" : st === "installer" ? " asks" : "") }, ...cells);
+}
+function bulkRefresh() { if (state.bulk && state.bulk.items.length && state.tab === "bulk") renderBulk(); }
+function renderBulk() {
+  const b = bulk();
+  const typing = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("bulkname");
+  const c = bulkCounts();
+  const badge = $("bulk-count");
+  badge.hidden = !c.all;
+  badge.textContent = c.all;
+  const bits = [c.ready ? c.ready + " ready" : "", c.busy ? c.busy + " being taken in" : "", c.asks ? c.asks + " waiting for your answers" : "", c.failed ? c.failed + " not taken in" : "", c.installed ? c.installed + " now in MO2" : ""].filter(Boolean);
+  $("bulk-summary").textContent = b.run ? "Installing " + Math.min(b.run.done + 1, b.run.total) + " of " + b.run.total + "…" : c.all ? plural(c.all, "mod") + ": " + bits.join(", ") : "";
+  const warns = b.notes.filter((n) => !n.bad).length, errs = b.notes.filter((n) => n.bad).length;
+  const chip = $("bulk-warn");
+  chip.hidden = !(warns + errs);
+  chip.className = "chip link " + (errs ? "bad" : "warn");
+  chip.textContent = [errs ? plural(errs, "error") : "", warns ? plural(warns, "warning") : ""].filter(Boolean).join(" · ") + " · see below";
+  chip.title = "What ModTrap turned away or could not take in. The other mods are not held up by it.";
+  $("bulk-clear").hidden = !b.items.length || !!b.run;
+  $("bulk-clear-done").hidden = !c.installed || !!b.run;
+  const go = $("bulk-go");
+  const why = b.run ? "The bulk install is going." : !state.changes ? NO_CHANGES : !c.ready ? "Nothing is ready to install yet: add mods above."
+    : c.busy ? plural(c.busy, "mod is", "mods are") + " still being taken in." : c.asks ? plural(c.asks, "mod waits", "mods wait") + " for your answers to its installer: answer them, or clear the mod."
+    : mo2Open() ? MO2_OPEN : probeReason() ? "Not yet: " + probeReason() + "." : "";
+  go.disabled = !!why;
+  go.textContent = c.ready > 1 && !why ? "Bulk install " + c.ready + " mods…" : "Bulk install";
+  go.title = why || "Takes you to the Mods tab to choose the place. The mods go in from there in the order of this list" + (c.failed ? "; the " + plural(c.failed, "mod") + " not taken in " + (c.failed === 1 ? "is" : "are") + " left out" : "") + ".";
+  if (typing) { b.pending = true; return; }             // a name is being typed: the list is drawn anew when the box is left
+  const r = b.run;
+  $("bulk-run").replaceChildren(...(r ? [el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Installing " + r.total + " mods: " + r.done + " done"),
+    el("div", { class: "bulkbar" }, (() => { const i = el("i"); i.style.width = Math.round(100 * r.done / Math.max(1, r.total)) + "%"; return i; })()),
+    el("p", { class: "dim", text: (r.now ? "Now: " + r.now + ". " : "") + "Each lot is copied into MO2's mods folder, put in its place, enabled, and checked; then the modlist is read again. Keep MO2 closed and this tab open until it has ended." }))] : []));
+  $("bulk-notes").replaceChildren(...(b.notes.length ? [el("div", { class: "card add-notes bulknotes" }, el("h2", { text: "Turned away, or not taken in" }),
+    el("ul", {}, ...b.notes.map((n) => el("li", { class: n.bad ? "bad" : "" }, el("span", { class: "mono", text: n.name }), ": " + n.text))),
+    (() => { const x = el("button", { type: "button", text: "Clear these notes" }); x.addEventListener("click", () => { b.notes = []; renderBulk(); }); return el("p", {}, x); })())] : []));
+  $("bulk-list").replaceChildren(...b.items.filter((it) => !it.reject).map(bulkRow));
+}
+// "Bulk install": the place is chosen on the Mods tab, as for one mod placed by hand; then the lots go in.
+function bulkPlace() {
+  const c = bulkCounts();
+  if (!c.ready || bulk().run) return;
+  startPlacement({ bulk: true, label: plural(c.ready, "mod") });
+}
+async function bulkPlaceChosen(before, words) {
+  const p = state.placing;
+  if (!p || p.asking) return;
+  p.asking = true;
+  const n = bulkCounts().ready;
+  const yes = await modalBox("Install " + plural(n, "mod") + " " + words + "?\n\nThey go into MO2's list in the order of the bulk list: the first at this place, each next one right after it. Their plugins go into the load order by ModTrap's rule: before what the tools made, each after its masters."
+    + "\n\nModTrap installs them in lots of " + BULK_LOT + ". Each lot is on “Installed mods” and in the History, with its Uninstall. A mod that cannot be installed is passed over and said; the others go in. Keep MO2 closed until it has ended.",
+    { yes: "Install them here", no: "Choose another place", wide: true });
+  p.asking = false;
+  if (!yes || !state.placing) return;
+  endPlacement();
+  showTab("bulk");
+  bulkRun(before);
+}
+async function bulkSettled() {
+  for (let i = 0; i < 900; i++) {
+    let s;
+    try { s = await call("/api/state"); } catch (e) { await sleep(500); continue; }
+    if (s.status === "ready" && !(s.working || []).length) return;
+    await sleep(300);
+  }
+}
+async function bulkLot(ids, before) {
+  const body = { mods: [], staged: ids, before };
+  await bulkSettled();
+  let d = null;
+  for (let i = 0; i < 1500; i++) {
+    d = await api("/api/add", body);
+    if (!d.looking && !d.unpacking) break;
+    await sleep(400);
+  }
+  if (!d || d.looking || d.unpacking) throw new Error("reading the mods against the modlist took too long");
+  if (d.failed) throw new Error(d.failed);
+  const needs = (d.steps || []).find((s) => s.key === "needs");
+  if (needs && needs.state !== "done") throw new Error("something it needs is not there: " + needs.items.map((i) => i.text).slice(0, 2).join(" "));
+  await api("/api/add/run", body);
+  await bulkSettled();
+}
+async function bulkRun(before) {
+  const b = bulk();
+  const todo = b.items.filter((x) => x.state === "ready" && x.id && !x.reject);
+  if (!todo.length || b.run) return;
+  b.run = { total: todo.length, done: 0, now: "" };
+  renderBulk();
+  const failed = [];
+  const fatal = (e) => /MO2 is open|MO2 must be closed|MO2 is still open|probe|no modlist is open|was started again/.test(e.message);
+  const lot = async (items) => {
+    b.run.now = items.map((x) => x.info.name).join(", ");
+    renderBulk();
+    await bulkLot(items.map((x) => x.id), before);
+    for (const x of items) x.state = "installed";
+    b.run.done += items.length;
+    renderBulk();
+  };
+  const one = async (x) => { try { await lot([x]); } catch (e) { if (fatal(e)) throw e; failed.push([x, e.message]); } };
+  try {
+    for (let i = 0; i < todo.length; i += BULK_LOT) {
+      const items = todo.slice(i, i + BULK_LOT);
+      try { await lot(items); }
+      catch (e) {
+        if (fatal(e)) throw e;
+        if (items.length === 1) failed.push([items[0], e.message]); else for (const x of items) await one(x);     // which of the lot it was: each by itself
+      }
+    }
+    // What failed may have needed a mod that went in after it: once more, each by itself.
+    if (b.run.done) for (const [x] of failed.splice(0)) await one(x);
+  } catch (e) { bulkNote("Bulk install", "Stopped: " + e.message + " What was installed before that stays, and is in the History.", true); }
+  for (const [x, why] of failed) bulkNote(x.info.name, "Not installed: " + why + ".", true);
+  const done = b.run.done, total = b.run.total;
+  b.run = null;
+  toast(done === total ? plural(done, "mod") + " installed." : done + " of " + plural(total, "mod") + " installed. What was left out is said at the top of the bulk list.");
+  state.addText = ""; state.historyText = "";
+  state.gen = (state.gen || 0) + 1;
+  renderBulk();
+  tick();
+}
+// What is dropped on the bulk tab: files, and folders with everything in them.
+async function bulkDropped(ev) {
+  const dt = ev.dataTransfer;
+  if (!dt) return;
+  const items = dt.items ? Array.from(dt.items).filter((i) => i.kind === "file") : [];
+  const entries = items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null));      // taken while the drop is still being handled
+  const flat = Array.from(dt.files || []);
+  const out = [];
+  let folders = false;
+  const walk = async (entry) => {
+    if (entry.isFile) { const f = await new Promise((res) => entry.file(res, () => res(null))); if (f) out.push(f); return; }
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((res) => reader.readEntries(res, () => res([])));
+      if (!batch.length) break;
+      for (const e of batch) await walk(e);
+    }
+  };
+  if (entries.some(Boolean)) {
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      if (e && e.isDirectory) { folders = true; await walk(e); }
+      else if (flat[i]) out.push(flat[i]);
+      else if (e) await walk(e);
+    }
+  } else out.push(...flat);
+  bulkAdd(out, folders);
+}
+
 // --- the Install mods tab (MT21, DESIGN§16) ------------------------------------------------------------------------------
 
 function addKey(k) { return "add::" + (state.adding || []).slice().sort().join("|") + "::" + k; }
@@ -5207,12 +5653,33 @@ function addCandidate(name) {
 const STAGED_WORDS = { copying: ["copying…", "warn"], unpacking: ["unpacking…", "warn"], ready: ["unpacked", "good"], installed: ["now in MO2", "good"],
   installer: ["waiting for your answers", "warn"], failed: ["not taken in", "bad"] };
 
+// Taking mods off the Installer tool's page (MT78): the ones installed and the ones left over. A mod found in MO2
+// only leaves the page; one ModTrap unpacked loses its unpacked copy in ModTrap's work folder. Nothing in MO2 changes.
+async function addClear(names, ids) {
+  let busy = 0;
+  for (const id of ids) {
+    try { await api("/api/add/forget", { id }); }
+    catch (e) { if (!/not on the list/.test(e.message)) { busy++; continue; } }
+    state.staged = (state.staged || []).filter((y) => y !== id);
+  }
+  const gone = new Set(names.map(fold));
+  state.adding = (state.adding || []).filter((n) => !gone.has(fold(n)));
+  if (!(state.adding || []).length && !(state.staged || []).length) { state.addNotes = []; state.addPlace = null; state.autoInstall = null; state.addPlanError = ""; }
+  if (busy) toast(plural(busy, "mod") + " still being unpacked " + (busy === 1 ? "stays" : "stay") + " until that has ended.");
+  renderAddPicked();
+  saveUi();
+  state.addText = "";
+  pollAdd(true);
+}
+function addClearAll() { state.addNotes = []; return addClear((state.adding || []).slice(), (state.staged || []).slice()); }
+
 function renderAddPicked() {
   const box = $("add-picked");
   const list = state.adding || [];
   const staged = state.staged || [];
   const ups = state.uploads || [];
   const n = list.length + staged.length + ups.length;
+  $("add-clear").hidden = !(list.length + staged.length) && !(state.addNotes || []).length;
   box.hidden = !n;
   const badge = $("add-count");
   badge.hidden = !n;
@@ -5385,7 +5852,12 @@ function addModCard(x, place, built) {
         const b = el("button", { type: "button", text: "Change the installer's answers", title: "Show this mod's installer questions again" });
         b.addEventListener("click", () => { state.installers = state.installers || {}; state.installers[built.id] = { picks: null, open: true }; loadInstaller(built.id); });
         return b;
-      })() : null),
+      })() : null,
+      (() => {
+        const c = el("button", { type: "button", text: "Clear", title: "Takes this mod off this page" + (x.enabled ? ": it is in MO2 and stays there" : x.staged ? ". ModTrap removes its own unpacked copy; nothing in MO2 changes" : "") + "." });
+        c.addEventListener("click", () => addClear([x.name], Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id) && r.name === x.name).map((r) => r.id)));
+        return c;
+      })()),
     el("p", { class: "dim", text: "Brings " + carries + (x.cut ? " (the listing was cut short: it is a very large mod)" : "") + "." }),
     x.enabled ? null : el("p", {}, "Its place among the mods: " + where + "."),
     ...plugs,
@@ -5407,6 +5879,7 @@ async function loadInstaller(id) {
   catch (e) { cur.error = e.message; }
   state.addText = "";
   pollAdd(true);
+  bulkRefresh();
 }
 
 function installerCard(info) {
@@ -5438,10 +5911,11 @@ function installerCard(info) {
   const go = el("button", { type: "button", class: "primary", text: info.state === "ready" ? "Build it again with these answers" : "Use these answers", disabled: v.problems.length > 0 });
   go.addEventListener("click", async () => {
     go.disabled = true;
-    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; toast("Built “" + info.name + "” from your answers."); }
+    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; if (state.bulk) state.bulk.open[info.id] = false; toast("Built “" + info.name + "” from your answers."); }
     catch (e) { cur.error = e.message; }
     state.addText = "";
     pollAdd(true);
+    pollBulk(true);
   });
   return el("div", { class: "card installer" }, el("h2", {}, v.name || info.name, el("span", { class: "tag warn", text: "asks which parts to install" })),
     el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder and analyses it." }),
@@ -5566,9 +6040,10 @@ function addActionCard(d) {
 // --- Manual placement (MT53) ---------------------------------------------------------------------------------------
 // The owner chooses the new mod's place on the Mods tab: a line shows between two rows as the pointer moves, a click
 // is the place. ModTrap then says what the mod overwrites there and what overwrites it, and installs it there on OK.
-function startPlacement() {
+function startPlacement(opts) {
+  const many = opts && opts.bulk === true ? opts : null;                    // the bulk list (MT78); else the Installer tool's mods
   const names = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id)).map((r) => r.name).concat(state.adding || []);
-  state.placing = { body: addBody(), label: names.join(", ") || "the mod" };
+  state.placing = many ? { bulk: true, label: many.label, back: "bulk" } : { body: addBody(), label: names.join(", ") || "the mod", back: "add" };
   $("mods-order").value = "mo2";
   $("mods-search").value = "";
   for (const id of ["f-enabled", "f-plugins", "f-deps"]) $(id).checked = false;
@@ -5576,12 +6051,13 @@ function startPlacement() {
   showTab("mods");
   layoutMods();
   const cancel = el("button", { type: "button", text: "Cancel" });
-  cancel.addEventListener("click", () => { endPlacement(); showTab("add"); });
+  cancel.addEventListener("click", () => { const back = (state.placing || {}).back || "add"; endPlacement(); showTab(back); });
   const last = el("button", { type: "button", text: "Put it last of all" });
   last.addEventListener("click", () => placementChosen("*last*", "last of all in MO2's list, after what the tools made too"));
   const banner = $("place-banner");
-  banner.replaceChildren(el("b", { text: "Placing “" + state.placing.label + "”. " }),
-    el("span", { text: "Move the pointer over the list: the line shows where the mod would go. Click to choose that place; ModTrap then tells you what it overwrites there, and asks before installing. Esc cancels.  " }), last, " ", cancel);
+  banner.replaceChildren(el("b", { text: many ? "Placing " + many.label + ". " : "Placing “" + state.placing.label + "”. " }),
+    el("span", { text: many ? "Move the pointer over the list: the line shows where the first mod would go, and the others follow it in the order of the bulk list. Click to choose that place; ModTrap asks before installing. Esc cancels.  "
+      : "Move the pointer over the list: the line shows where the mod would go. Click to choose that place; ModTrap then tells you what it overwrites there, and asks before installing. Esc cancels.  " }), last, " ", cancel);
   banner.hidden = false;
   document.body.classList.add("placing");
 }
@@ -5630,6 +6106,7 @@ function placeLines(d) {
 async function placementChosen(before, words) {
   const p = state.placing;
   if (!p || p.asking) return;
+  if (p.bulk) { bulkPlaceChosen(before, words); return; }
   p.asking = true;
   const body = Object.assign({}, p.body, { before });
   let d;
@@ -5671,7 +6148,7 @@ $("mods-table").addEventListener("click", (ev) => {
   if (!at) return;
   placementChosen(at.before, at.before === "*last*" ? "last of all in MO2's list" : "right before “" + at.before.replace(/_separator$/i, "") + "”" + (at.after ? ", after “" + at.after.replace(/_separator$/i, "") + "”" : ""));
 }, true);
-document.addEventListener("keydown", (ev) => { if (state.placing && ev.key === "Escape" && !document.querySelector(".modal-back")) { endPlacement(); showTab("add"); } });
+document.addEventListener("keydown", (ev) => { if (state.placing && ev.key === "Escape" && !document.querySelector(".modal-back")) { const back = state.placing.back || "add"; endPlacement(); showTab(back); } });
 
 // --- Installed mods (MT53) -------------------------------------------------------------------------------------------
 // The mods installed through ModTrap, laid out as the modlist's rows are: priority, mod, source, version, how it was
@@ -6103,6 +6580,7 @@ async function tick() {
   await pollJob();
   await pollSteps(false);
   await pollAdd(false);
+  await pollBulk(false);
   renderDemaster(false);
   updateDemasterButton();
   renderProbe();
@@ -6250,7 +6728,7 @@ function dropped(ev) {
 let dragDepth = 0;
 const dragOn = (yes) => {
   document.body.classList.toggle("dragging", yes);
-  $("drop-words").textContent = state.status === "ready" ? "Drop a mod's archive here to add it, or another modlist's folder to open that" : "Drop your modlist folder here";
+  $("drop-words").textContent = state.status === "ready" ? (state.tab === "bulk" ? "Drop the mods here: archives, or folders of them" : "Drop a mod's archive here to add it, or another modlist's folder to open that") : "Drop your modlist folder here";
 };
 document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dragOn(true); });
 document.addEventListener("dragover", (e) => {
@@ -6277,7 +6755,8 @@ document.addEventListener("drop", (e) => {
   dragDepth = 0; dragOn(false);
   fileOver(null);
   if (at) dropAtPlace(e, at);
-  else if (state.tab === "updates" && state.status === "ready") updatesDropped(e); else dropped(e);
+  else if (state.tab === "updates" && state.status === "ready") updatesDropped(e);
+  else if (state.tab === "bulk" && state.status === "ready") bulkDropped(e); else dropped(e);
 });
 
 $("profile").addEventListener("change", () => $("open-form").requestSubmit());
@@ -6304,6 +6783,14 @@ $("plugins-fold").addEventListener("click", () => pluginsFold(true));
 $("plugins-unfold").addEventListener("click", () => pluginsFold(false));
 $("s-scan").addEventListener("click", () => showTab("health"));
 $("add-rescan").addEventListener("click", () => $("rescan").click());
+$("add-clear").addEventListener("click", addClearAll);
+$("bulk-go").addEventListener("click", bulkPlace);
+$("bulk-clear").addEventListener("click", () => bulkClear(bulk().items.slice()));
+$("bulk-clear-done").addEventListener("click", () => bulkClear(bulk().items.filter((x) => x.state === "installed")));
+$("bulk-warn").addEventListener("click", () => $("bulk-notes").scrollIntoView({ block: "start" }));
+$("bulk-files").addEventListener("click", () => $("bulk-pick-files").click());
+$("bulk-folder").addEventListener("click", () => $("bulk-pick-folder").click());
+for (const id of ["bulk-pick-files", "bulk-pick-folder"]) $(id).addEventListener("change", (ev) => { const files = Array.from(ev.target.files || []); ev.target.value = ""; if (files.length) bulkAdd(files, id === "bulk-pick-folder"); });
 $("add-go").addEventListener("click", () => { if (chosenPlace()) installNow(chosenPlace().before); else if ((state.settings || {}).manual_placement && !((state.addData || {}).update)) startPlacement(); else installNow(""); });
 $("updater-clear").addEventListener("click", async () => { try { await api("/api/updater/clear", {}); } catch (e) { toast(e.message); } pollUpdater(true); });
 $("add-search").addEventListener("input", () => addMatches());
