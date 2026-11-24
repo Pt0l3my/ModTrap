@@ -164,6 +164,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 139 | 2026-11-23 | MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands | FACT | #model #page #safety |
 | 140 | 2026-11-23 | A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed | METHOD | #model #page #safety |
 | 141 | 2026-11-23 | Which records two plugins both change predicts no fault, so it is told as none | DECIDED | #model #page |
+| 142 | 2026-11-24 | xEdit settles what bytes could not, when asked; a leftover in a tool's plugin is the owner's to leave | DECIDED | #tools #steps #xedit #page |
 
 ## Entries
 
@@ -3858,3 +3859,34 @@ them; the addresses were read by a session that can), and the time the second pa
   crash behind it is a skeleton that wins with fewer bones, and it is a warning only where the sizes say so.
 - Later readers: the web's record pass is in the history of this file's repository at 0.3.65, if a way to read
   inside records ever makes it worth having again (MT23 is the open question nearest to it).
+
+### 142. xEdit settles what bytes could not, when asked; a leftover in a tool's plugin is the owner's to leave
+
+`2026-11-24` · DECIDED · `#tools #steps #xedit #page` · refs: MT23, MT24, DESIGN§34, DESIGN§16.5, TL01§13, XE01§18, XE01§19, WHY§73, WHY§77, WHY§78
+
+- The owner, asked what MT23 and MT24 are and given the recommendations: "as recommended". So MT23 (a), a check of
+  its own started from the tool's step, and MT24 (b), the values shown and the choice left to the owner.
+- METHOD: the comparison by meaning already runs on the owner's PC: the dry run's script turns a part of a record
+  into text of its names and values (`Shape`), leaving out unused bytes, and compares texts (XE01§18, WHY§77). The
+  new script uses that same function on three versions of a record instead of two. It calls nothing the dry
+  run's and the record check's scripts do not call; a test holds it to that, and to balanced blocks and declared
+  names, because no xEdit runs where ModTrap is written.
+- METHOD: which versions. The dry run's stake (XE01§19) was told from the plugins it loaded, and narrowed
+  afterwards with ModTrap's own reader over the whole load order (WHY§77). With the whole load order in xEdit,
+  the script finds for itself, among the plugins no tool made, the last leaving plugin and the last that stays;
+  only where a leaving plugin has the last word can a tool's copy owe anything to it.
+- FACT (what the three answers mean): "as the mod" is proof by meaning, where bytes gave proof only for tools
+  that write as xEdit does. "As the next in line" clears a plugin, a patcher's too: that is the gain TL01§13
+  named. "Neither" stays open: a value worked out by the tool, from which of the two nothing shows; it is said
+  as it is, with the records and values, and the tool is still told to run "to be sure".
+- DECIDED: one run for all tools' plugins. Loading the load order is the cost (minutes on the owner's list);
+  reading a few more plugins adds little, and one result serves every tool's step.
+- DECIDED: a check counts for a plugin only while the plugin is the same file. The tool's own run writes it anew,
+  and the old check says nothing of the new file.
+- DECIDED (MT24): the choice is the owner's and is kept on ModTrap's side, not as a tick in the browser, because
+  ModTrap's run of the tools one after another must pass a left tool over. The step's state for everything that
+  counts open steps is "not needed"; the page words it "left by you until its next run".
+- Limit: the check needs the mods enabled. After a demaster is in place it cannot be made without a Revert; the
+  step says so. A check made before stays valid across the demaster, since the tools' plugins do not change by it.
+- Not checked on the owner's PC: the script itself. Its first real run is the owner's; a failure shows as the
+  check failing with xEdit's own message, and changes nothing.

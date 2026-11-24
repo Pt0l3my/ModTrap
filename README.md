@@ -26,6 +26,10 @@ needs, where it should go among the mods and in the load order, which files of w
 tools must run again, and the steps in order. From the steps it can start your xEdit, read-only, to list the records
 the new plugin takes from other plugins, and start the modlist's tools through MO2 for you to work.
 
+When mods are taken out (a demaster), the steps say which tools must run again. Where reading a tool's plugin cannot
+say whether it holds something of the mod, the tool's step offers a check through xEdit (read-only, the whole load order loaded) that compares by what the fields mean; and a tool's step can be
+left by you until the tool's next run.
+
 Putting the mod into MO2 for you ("Add it for me", with "Take it out again") is built but switched off: it exists
 only when ModTrap is started with `--allow-changes`, and that is meant for once it has been proven on a real modlist.
 

@@ -91,8 +91,9 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   there is no conflict; a demaster's Revert puts plugins back in their groups).
   MT75 (closed by MT76). MT76 (ModTrap warns only of what breaks the game; conflicts are not told: the record
   kinds of a mod's web, the scan after enabling and its marks are removed).
-- **Open.** MT23 (a tool check through xEdit, with the whole load order loaded); MT24 (ModTrap puts a leftover in a
-  tool's plugin right itself). Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
+  MT23 and MT24, answered 2026-11-24 (a tool check through xEdit on request; a tool's leftover shown with its values
+  and left to the owner's choice).
+- **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
 ## MT1
@@ -569,6 +570,10 @@ framework, (c) is what the owner would mostly do anyway; (a) earns its keep for 
 
 **Until decided.** (c) is what ModTrap does.
 
+*2026-11-24.* **Owner's words:** "as recommended". Settled: (a). Built as DESIGN§34 (WHY§142): "Check through
+xEdit…" on a tool's step, one read-only run for every tool's plugin, its verdict standing in place of the one from
+bytes while the plugin is the same file.
+
 ## MT24
 
 **A leftover of the mod in a tool's plugin: run the tool, or let ModTrap put it right** · *Open*
@@ -592,6 +597,10 @@ from the mod (MT4, case C)?
 bytes that mean nothing, or my own slip, WHY§77, WHY§78).
 
 **Until decided.** (c), with the values shown.
+
+*2026-11-24.* **Owner's words:** "as recommended". Settled: (b). The step shows the values (as xEdit reads them,
+where the check of MT23 was made) and leaves the choice: run the tool, or "Leave it until the tool's next run"
+(DESIGN§34, WHY§142). (a) is not built; it waits for a leftover that matters.
 
 ## MT25
 

@@ -4823,6 +4823,65 @@ function stepItem(it) {
   return li;
 }
 
+// A tool's step (MT23, MT24): what the tool's plugin holds of the mod, value by value where xEdit has told them;
+// a check through xEdit where reading bytes could not settle it; and the owner's choice to leave it as it is until
+// the tool's next run.
+const CHECK_GOING = (c) => !!c && !["done", "failed", "stopped"].includes(c.state);
+const CHECK_WORD = { preparing: "getting ready", starting: "starting xEdit through MO2", loading: "xEdit is loading the whole load order (this takes minutes)", reading: "xEdit is reading the tools' plugins", checking: "checking that nothing was changed" };
+async function toolCheckStart() {
+  const mods = [...state.picked];
+  if (!await modalBox("Check the tools' plugins through xEdit\n\nModTrap starts your xEdit through MO2 with a script of its own that only reads. xEdit loads the whole load order, which takes several minutes and much memory on a large modlist, then compares each plugin a tool made with the mod's own records and with the version next in line, by what the fields mean. Nothing is changed: the plugins are checked against their checksums afterwards.\n\nWhat it settles: whether a tool's plugin holds a value it has from the mod (run the tool again), a value of its own, or nothing of the mod at all (no new run needed).",
+    { yes: "Start the check", no: "Not now", wide: true })) return;
+  try {
+    await api("/api/toolcheck/start", { mods });
+    toast("The check through xEdit has started. This tab shows how far it is.");
+    state.stepsText = ""; state.stepsKey = "";
+    pollSteps(true);
+  } catch (e) { toast(e.message); }
+}
+async function toolLeave(tool, leave) {
+  const mods = [...state.picked];
+  if (leave && !await modalBox("Leave “" + tool + "” as it is until its next run?\n\nWhat the tool made keeps what it has from the mod until the tool runs again, for whatever reason. The game loads it as it is: a value the mod set stays in force in those records. ModTrap then does not run this tool for this demaster, and counts the step as settled by you. You can take this back at any time.",
+    { yes: "Leave it", no: "Keep the step" })) return;
+  try {
+    await api("/api/steps/tool/leave", { mods, tool, leave });
+    state.stepsText = ""; state.stepsKey = "";
+    pollSteps(true);
+  } catch (e) { toast(e.message); }
+}
+function toolStepParts(st, d) {
+  const out = [];
+  const c = d.toolcheck;
+  if ((st.values || []).length) out.push(el("div", { class: "toolvalues" },
+    el("p", {}, el("b", { text: "What it holds of the mod, as xEdit reads it:" })),
+    el("table", { class: "plain" }, el("thead", {}, el("tr", {}, ...["Plugin", "Record", "Field", "This plugin has", "The mod has", "Next in line has"].map((t) => el("th", { text: t })))),
+      el("tbody", {}, ...st.values.map((v) => el("tr", {}, el("td", { class: "mono", text: v.plugin }), el("td", { class: "mono", text: v.form }), el("td", { text: v.part }),
+        el("td", { class: "mono", text: v.tool }), el("td", { class: "mono", text: v.mod }), el("td", { class: "mono", text: v.next })))))));
+  if (CHECK_GOING(c)) {
+    const stop = el("button", { type: "button", text: "Stop waiting" });
+    stop.title = "ModTrap stops waiting for xEdit; xEdit itself is left for you to close. It has changed nothing.";
+    stop.addEventListener("click", async () => { try { await api("/api/toolcheck/stop", {}); } catch (e) { toast(e.message); } pollSteps(true); });
+    if (st.check === "offer") out.push(el("p", {}, el("span", { class: "spinner small" }), " The check through xEdit is going: " + (CHECK_WORD[c.state] || c.state) + " · " + Math.floor(c.seconds / 60) + " min " + (c.seconds % 60) + " s  ", stop));
+  } else if (st.check === "offer") {
+    const go = el("button", { type: "button", text: "Check through xEdit…" });
+    go.title = "A run of xEdit that only reads: it compares the tools' plugins with the mod's records by what the fields mean";
+    go.addEventListener("click", toolCheckStart);
+    out.push(el("p", {}, go, el("span", { class: "dim", text: "  Reading the plugin's bytes could not settle this. xEdit can, before the mod is taken out: several minutes, nothing is changed." })));
+    if (c && c.state === "failed") out.push(el("p", { class: "would-needs", text: "The last check did not finish: " + c.message }));
+  } else if (st.check === "needs the mod") {
+    out.push(el("p", { class: "dim", text: "A check through xEdit could say more than reading bytes did, but it compares with the mod's own records and so needs the mod in the load order: it is for before the demaster is put in place." }));
+  } else if (st.check === "done") {
+    out.push(el("p", { class: "dim", text: "Checked through xEdit, by what the fields mean: the evidence below is xEdit's." }));
+  }
+  if (st.leave && st.tool) {
+    const b = el("button", { type: "button", text: st.left ? "Take that back: it is to run again" : "Leave it until the tool's next run" });
+    b.title = st.left ? "The step is yours or ModTrap's to do again" : "The tool's output keeps what it has from the mod until the tool runs again; ModTrap does not run it for this demaster";
+    b.addEventListener("click", () => toolLeave(st.tool, !st.left));
+    out.push(el("p", {}, b, st.left ? null : el("span", { class: "dim", text: "  Your choice: run it, or leave what it holds of the mod until its next run." })));
+  }
+  return out;
+}
+
 function renderSteps2(d) {
   const done = state.stepsDone || {};
   let open = 0;
@@ -4831,7 +4890,7 @@ function renderSteps2(d) {
     const isDone = ticked || st.state === "done" || st.state === "not needed";
     const waiting = !isDone && st.state.startsWith("waiting");
     if (!isDone) open++;
-    const [word, cls] = ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
+    const [word, cls] = st.left ? ["left by you until its next run", ""] : ticked ? ["ticked off by you", "good"] : STEP_STATE[st.state] || [st.state, ""];
     const body = el("div", {},
       el("h3", {}, st.title, whoTag(st.who),
         el("span", { class: "tag " + cls, text: word })),
@@ -4845,7 +4904,8 @@ function renderSteps2(d) {
       go.addEventListener("click", demasterGo);
       body.append(el("p", {}, go, el("span", { class: "dim", text: "  ModTrap does this step for you: it shows its plan first and asks before changing anything." })));
     }
-    if (st.manual) {
+    if (st.key.startsWith("tool:") && st.tool) body.append(...toolStepParts(st, d));
+    if (st.manual && !st.left) {
       const box = el("input", { type: "checkbox", checked: ticked });
       box.addEventListener("change", () => {
         state.stepsDone = state.stepsDone || {};
@@ -5063,7 +5123,7 @@ async function pollSteps(force) {
   const mods = [...state.picked];
   const key = mods.slice().sort().join("|") + "#" + state.loaded + "#" + (state.job ? state.job.id + state.job.state : "") +
     "#" + (state.demaster ? state.demaster.state : "");
-  if (!force && key === state.stepsKey && !state.stepsLooking && state.tab !== "steps") return;
+  if (!force && key === state.stepsKey && !state.stepsLooking && state.tab !== "steps" && !CHECK_GOING((state.stepsData || {}).toolcheck)) return;
   try {
     const d = await api("/api/steps", { mods: mods });
     state.stepsKey = key;

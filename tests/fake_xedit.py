@@ -91,6 +91,52 @@ def records(job, loaded, mode):
     return 0
 
 
+def tools(job, loaded, mode):
+    """The stand-in for ModTrapTools.pas. What it finds is invented, by the plugin's name: one with "Gameplay" in it
+    says in its one record what the next in line says; one with "Bashed" has a value of its own; any other holds the
+    leaving plugin's value in one record, and another record on which a plugin that stays has the last word."""
+    progress, said = Path(job["progress"]), []
+
+    def say(s):
+        said.append(s)
+        progress.write_text("\r\n".join(said) + "\r\n")
+
+    time.sleep(0.05)
+    say("started")
+    say("xEdit has loaded %d files" % (len(loaded) + 5))
+    if mode == "crash":
+        return 3
+    gone = [job["gone.%d" % i] for i in range(int(job["gone.count"]))]
+    out = ["H\tmodtrap-tools/1\ttools\t67175680", "P\tC:\\Game\\Data\\\t%d" % (len(loaded) + 5)]
+    out += ["N\t" + g for g in gone if g not in loaded]
+    for i in range(int(job["tool.count"])):
+        n = job["tool.%d" % i]
+        if n not in loaded:
+            out.append("M\t" + n)
+            continue
+        out.append("F\t%s\t2" % n)
+        say("reading %s (2 records)" % n)
+        if "Gameplay" in n:
+            out.append("S\t%s\t1\t0\t0\t0\t1\t0" % n)
+        elif "Bashed" in n:
+            out.append("K\t%s\t00000C00\tGLOB\tCore.esp\t%s\tCore.esp\t\t\tFLTV" % (n, gone[-1]))
+            out.append("Y\t%s\t00000C00\town\tFLTV - Value\t8.000000\t9.000000\t1.000000" % n)
+            out.append("S\t%s\t1\t0\t0\t1\t0\t0" % n)
+        else:
+            out.append("K\t%s\t00000A00\tGLOB\tCore.esp\t%s\tCore.esp\tFLTV\t\t" % (n, gone[0]))
+            out.append("Y\t%s\t00000A00\tmod\tFLTV - Value\t7.000000\t7.000000\t1.000000" % n)
+            out.append("S\t%s\t2\t1\t1\t0\t0\t0" % n)
+        say("done " + n)
+    if mode == "touch":
+        import sys as _s
+        target = next(Path(p) for p in _s.argv if p.endswith(".esp") and Path(p).exists())
+        target.write_bytes(target.read_bytes() + b"x")
+    out.append("X\tok\t")
+    Path(job["out"]).write_text("\r\n".join(out) + "\r\n")
+    say("finished")
+    return 0
+
+
 def main(argv):
     args = argv[argv.index("-a") + 1]
     mode = argv[argv.index("-a") + 2]   # the tool's title; the tests use it to choose a behaviour
@@ -100,6 +146,8 @@ def main(argv):
     loaded = [ln[1:] for ln in plugins.read_text(encoding="cp1252").splitlines() if ln.startswith("*")]
     if job.get("mode") == "records":
         return records(job, loaded, mode)
+    if job.get("mode") == "tools":
+        return tools(job, loaded, mode)
     trap = [job["trap.%d" % i] for i in range(int(job["trap.count"]))]
     deps = [job["dep.%d" % i] for i in range(int(job["dep.count"]))]
     progress, out = Path(job["progress"]), []

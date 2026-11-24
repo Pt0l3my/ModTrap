@@ -188,7 +188,11 @@ def parse_report(text: str, m: model.Model | None = None) -> dict:
 # --- running ----------------------------------------------------------------------------------------------------------
 
 class Job:
-    """One record check. Its state is read by the page; its lines go to the log."""
+    """One record check. Its state is read by the page; its lines go to the log. The tool check (MT23,
+    `toolcheck.Job`) is the same run with another script: what differs is in the five methods below `_run`."""
+
+    WHAT = "record check"
+    THREAD = "records"
 
     def __init__(self, m: model.Model, p: Plan, job_dir: Path, *, launcher: Callable = dryrun.launch,
                  running: Callable[[str], bool | None] = dryrun.image_running, poll: float = 1.0,
@@ -208,7 +212,7 @@ class Job:
         self.on_end: Callable[[], None] | None = None
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, name="records", daemon=True)
+        self._thread = threading.Thread(target=self._run, name=self.THREAD, daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -227,10 +231,10 @@ class Job:
             self._do()
         except (Refused, dryrun.Refused) as e:
             self.state, self.message = "failed", logbook.mask(str(e))
-            log.error("the record check failed: %s", e)
+            log.error("the %s failed: %s", self.WHAT, e)
         except Exception as e:
             self.state, self.message = "failed", "an error inside ModTrap: " + logbook.why(e)
-            log.error("the record check failed: %s", logbook.why(e))
+            log.error("the %s failed: %s", self.WHAT, logbook.why(e))
         self.ended = self.ended or time.time()
         try:
             paths.write_atomic(self.dir / "job.json", (json.dumps(self.public(), indent=1) + "\n").encode("utf-8"))
@@ -240,24 +244,43 @@ class Job:
             try:
                 self.on_end()
             except Exception as e:
-                log.warn("after the record check: %s", logbook.why(e))
+                log.warn("after the %s: %s", self.WHAT, logbook.why(e))
+
+    # What a run with another script says differently.
+
+    def _prepare(self) -> dict:
+        return prepare(self.model, self.plan, self.dir)
+
+    def _command(self) -> list[str]:
+        return command(self.plan, self.dir)
+
+    def _parse(self, text: str) -> dict:
+        return parse_report(text, self.model)
+
+    def _does(self) -> str:
+        return "with ModTrap's script that reports overriding records"
+
+    def _told(self) -> None:
+        for f in self.result["files"]:
+            log.info("  %s: %d of its own, %d overriding: %d alone, %d taken from others, %d lost to later plugins, "
+                     "%d that change nothing -> %s", f["name"], f["own"], f["overrides"], f["alone"],
+                     f["takes_count"], f["loses_count"], f["same"], f["reading"])
 
     def _do(self) -> None:
         p = self.plan
-        log.info("record check %s: %d plugin(s) to look at, %d for xEdit to load (the whole active load order)",
-                 self.id, len(p.new), len(p.load))
-        manifest = prepare(self.model, p, self.dir)
+        log.info("%s %s: %d plugin(s) to look at, %d for xEdit to load (the whole active load order)",
+                 self.WHAT, self.id, len(p.new), len(p.load))
+        manifest = self._prepare()
         if not Path(p.mo2).is_file():
             raise Refused("ModOrganizer.exe was not found in the modlist's folder")
         image = Path(p.tool_binary.replace("\\", "/")).name
         if self._running(image):
             raise Refused("%s is already running: close it first, so that ModTrap can tell its own run from yours" % image)
         mo2_was_running = self._running(dryrun.MO2_EXE)
-        log.info("starting %s through MO2 (profile '%s'), with ModTrap's script that reports overriding records",
-                 p.tool, p.profile)
+        log.info("starting %s through MO2 (profile '%s'), %s", p.tool, p.profile, self._does())
         self.state = "starting"
         try:
-            proc = self._launcher(command(p, self.dir), str(Path(p.mo2).parent))
+            proc = self._launcher(self._command(), str(Path(p.mo2).parent))
         except OSError as e:
             raise Refused("MO2 could not be started: " + logbook.why(e)) from None
         progress, report = self.dir / "progress.txt", self.dir / "report.tsv"
@@ -268,7 +291,7 @@ class Job:
         while True:
             if self._stop.wait(self._poll):
                 self.state, self.message, self.ended = "stopped", "stopped at your request", time.time()
-                log.warn("the record check was stopped; xEdit is left for you to close (it has changed nothing)")
+                log.warn("the %s was stopped; xEdit is left for you to close (it has changed nothing)", self.WHAT)
                 return
             if seen == 0:
                 ok.look()
@@ -291,10 +314,10 @@ class Job:
             if seen == 0 and elapsed > dryrun.START_LIMIT * 2:
                 raise Refused("xEdit did not start the script within %d minutes" % (dryrun.START_LIMIT * 2 // 60))
             if elapsed > dryrun.TIME_LIMIT * 2:
-                raise Refused("the record check took longer than %d minutes; ModTrap stopped waiting"
-                              % (dryrun.TIME_LIMIT * 2 // 60))
+                raise Refused("the %s took longer than %d minutes; ModTrap stopped waiting"
+                              % (self.WHAT, dryrun.TIME_LIMIT * 2 // 60))
         self.state = "checking"
-        self.result = parse_report(dryrun._read(report), self.model)
+        self.result = self._parse(dryrun._read(report))
         dryrun.close_xedit(image, self._running, self._closer, self._poll, mo2_was_running=mo2_was_running)
         changed = []
         for name, digest in manifest["sha256"].items():
@@ -314,17 +337,14 @@ class Job:
                 ", ".join(self.result["missing"][:6]), self.result.get("data_path") or "the folder it reads"))
         paths.write_atomic(self.dir / "result.json", (json.dumps(self.result, indent=1) + "\n").encode("utf-8"))
         self.state = "done"
-        for f in self.result["files"]:
-            log.info("  %s: %d of its own, %d overriding: %d alone, %d taken from others, %d lost to later plugins, "
-                     "%d that change nothing -> %s", f["name"], f["own"], f["overrides"], f["alone"],
-                     f["takes_count"], f["loses_count"], f["same"], f["reading"])
+        self._told()
 
 
-def new_job_dir(base: Path) -> Path:
+def new_job_dir(base: Path, kind: str = "records") -> Path:
     base.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     for n in range(100):
-        d = base / ("records-%s%s" % (stamp, "-%d" % n if n else ""))
+        d = base / ("%s-%s%s" % (kind, stamp, "-%d" % n if n else ""))
         try:
             d.mkdir()
             return d

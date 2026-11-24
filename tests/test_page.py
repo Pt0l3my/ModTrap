@@ -170,6 +170,22 @@ class PageTests(unittest.TestCase):
         # ModTrap's own mod says what its copies stand for.
         self.assertIn('if (d.mod.modtrap) said.push(el("p", {}, el("b", { text: "ModTrap\'s own mod: " })', self.js)
 
+    def test_a_tools_step_offers_the_check_through_xedit_and_the_owners_choice(self):
+        """MT23, MT24."""
+        self.assertIn('if (st.key.startsWith("tool:") && st.tool) body.append(...toolStepParts(st, d));', self.js)
+        # The check: offered where bytes could not settle it, asked about first, shown while it goes, never started unasked.
+        self.assertIn('await api("/api/toolcheck/start", { mods });', self.js)
+        self.assertIn('const go = el("button", { type: "button", text: "Check through xEdit…" });', self.js)
+        self.assertRegex(self.js, r"const GATED = /\^\([^/]*Check through xEdit")
+        self.assertIn('if (!await modalBox("Check the tools\' plugins through xEdit', self.js)
+        self.assertIn('!CHECK_GOING((state.stepsData || {}).toolcheck)) return;', self.js)
+        self.assertEqual(self.js.count('"/api/toolcheck/start"'), 1)
+        # The values, as xEdit reads them, and the choice: run it, or leave it until its next run, taken back at will.
+        self.assertIn('["Plugin", "Record", "Field", "This plugin has", "The mod has", "Next in line has"]', self.js)
+        self.assertIn('await api("/api/steps/tool/leave", { mods, tool, leave });', self.js)
+        self.assertIn('st.left ? ["left by you until its next run", ""]', self.js)
+        self.assertIn('if (st.manual && !st.left) {', self.js)
+
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
         the server read; the mod's page is a link that opens a new tab; the picture comes through the server."""

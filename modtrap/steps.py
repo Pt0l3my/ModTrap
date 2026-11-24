@@ -439,14 +439,18 @@ def mentions(inst: Instance, plugin_names: list[str], skip: set[str], scanned: d
 # --- compiling the steps ------------------------------------------------------------------------------------------
 
 def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None, deep: dict | None = None,
-                  auto: bool = False, going: bool = False, tools_run: dict | None = None, self_run: bool = True) -> dict:
+                  auto: bool = False, going: bool = False, tools_run: dict | None = None, self_run: bool = True,
+                  checked: dict | None = None, left: dict | None = None) -> dict:
     """The steps for taking `mod_names` out. `job` is the dry run's public state for the same mods, if there is
     one; `deep` is what `look_deeper` found (it takes seconds on a large list, so it is worked out once). `auto`
     says that ModTrap may change the modlist (it was started with the switch): the steps that "Demaster Selected"
     carries out are then ModTrap's, not the owner's (WHY§57). `tools_run` names the tools ModTrap has started, with
     their output written, since the demaster in place was put in place ({title: {"when", "files"}}): that record
     is what makes a tool's step done (WHY§91); None when ModTrap may not change anything, and so starts no tool.
-    `self_run` is the owner's setting that lets ModTrap run a tool by itself where the tool allows it (WHY§97)."""
+    `self_run` is the owner's setting that lets ModTrap run a tool by itself where the tool allows it (WHY§97).
+    `checked` is a finished tool check through xEdit for these mods (`toolcheck.read_result`, MT23): where it looked
+    at a plugin that is still the same file, its verdict stands in place of the one from reading bytes. `left` names
+    the tools whose step the owner chose to leave until the tool's next run ({tool: when}, MT24)."""
     inst = m.instance
     mods = [x for x in (inst.mod(n) for n in mod_names) if x is not None and x.kind == "mod"]
     trapped = sorted({p for x in mods for p in x.plugins}, key=fold)            # by file, enabled or not
@@ -728,6 +732,48 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             e["details"].append({"summary": "%s (%s): the mod's plugin was left out when it was made" % (o["plugin"], o["how"]),
                                  "lines": about})
             continue
+        # Checked through xEdit (MT23)? Then what xEdit found, by what the fields mean, is the verdict for this
+        # plugin, as long as the plugin is still the file that was checked.
+        xe = (checked or {}).get("files", {}).get(fold(o["plugin"]))
+        if xe is not None:
+            row_now = m.plugins.get(fold(o["plugin"]))
+            try:
+                st_now = os.stat(row_now.path) if row_now is not None and row_now.path is not None else None
+            except OSError:
+                st_now = None
+            if st_now is None or [st_now.st_size, st_now.st_mtime_ns] != list(xe.get("stamp", [])):
+                xe = None                               # written anew since (the tool ran): that check is of another file
+        if xe is not None:
+            e["checked"] = e.get("checked", 0) + 1
+            mine = xe["held"] - xe["last_else"]
+            xlines = ["%s %s of %s · %s has the last word, next in line is %s · as the mod: %s · of its own: %s · as the next in line: %s" % (
+                r_["kind"], r_["form"], r_["owner"], r_["by"], r_["next_by"] or "no other plugin", ", ".join(r_["mod"][:8]) or "nothing",
+                ", ".join(r_["own"][:8]) or "nothing", ", ".join(r_["next"][:8]) or "nothing") for r_ in xe["rows"][:DETAILS]]
+            if xe.get("rows_more") or len(xe["rows"]) > DETAILS:
+                xlines.append("… and %d more record(s)" % (xe.get("rows_more", 0) + max(0, len(xe["rows"]) - DETAILS)))
+            xlines += ["    %s %s (%s) · this plugin: %s · the mod: %s · next in line: %s" % (
+                v["form"], v["part"], "the mod's value" if v["what"] == "mod" else "a value of its own", v["tool"], v["mod"], v["next"])
+                for v in xe["values"][:2 * DETAILS]]
+            if xe["verdict"] == "mod":
+                e["run"].append("%s holds, in %d record(s), what the mod says where the next in line says something else: "
+                                "xEdit compared them by what the fields mean, so it has that from the mod" % (o["plugin"], xe["mod"]))
+                e.setdefault("values", []).extend(dict(v, plugin=o["plugin"]) for v in xe["values"] if v["what"] == "mod")
+            elif xe["verdict"] == "own":
+                e["run"].append("%s holds %d record(s) on which the mod has the last word with a value that is neither the mod's "
+                                "nor the next in line's (xEdit compared them by what the fields mean). The tool worked that value "
+                                "out, and nothing shows from which of the two" % (o["plugin"], xe["own"]))
+                e["unsure"] = e.get("unsure", 0) + 1
+            else:
+                e["clear"].append("%s, compared through xEdit by what the fields mean: %s" % (o["plugin"], (
+                    "it holds no record on which the mod has the last word" if not mine else
+                    "in each of the %d record(s) on which the mod has the last word it says what the next in line says, or the two say the same" % mine)))
+            e["details"].append({"summary": "%s (%s), checked through xEdit (%s): of %d record(s) the mod's plugins hold too, the mod has "
+                                            "the last word on %d; %d with the mod's value, %d with a value of the tool's own" % (
+                                     o["plugin"], o["how"], (checked or {}).get("when", "").replace("T", " "), xe["held"], mine, xe["mod"], xe["own"]),
+                                 "lines": about + (xlines or ["No record of it holds anything to tell the mod's version from the next in line's."])})
+            continue
+        if o["shared"] or o["cut"]:
+            e["by_bytes"] = e.get("by_bytes", 0) + 1         # judged by reading bytes: xEdit could say more (MT23)
         lines = ["%s %s of %s · %s has a stake in %s · %s" % (
             d["kind"], d["id"], d["owner"], ", ".join(d["by"]), ", ".join(d["changed"][:8]),
             ("this plugin holds the same " + ", ".join(d["carried"][:8])) if d["carried"]
@@ -806,15 +852,19 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
             # Who does it, as it is (WHY§97): ModTrap alone where it runs the tool by the tool's own switches or
             # button; ModTrap and the owner where it can only start it; the owner where it is not in MO2's list.
             by_modtrap = bool(names) and tools_run is not None and self_run and isinstance(known.get(tool, {}).get("self_run"), dict)
+            is_left = tool in (left or {}) and not ran
             step("tool:" + tool, "ModTrap" if by_modtrap else "both" if names else "you", "Run %s again%s" % (tool, ", to be sure" if to_be_sure else ""),
                  (does + " " if does else "") + "Why for this mod: " + "; ".join(e["run"]) + "." + also + (
                      " A run of a patcher is short and changes nothing but its own output: when in doubt, run it."
                      if to_be_sure else "") + (
                      " A new run matters " + when + "; the evidence below shows which records these are."
                      if when else ""),
-                 "done" if ran else "to do", [{"tool": n} for n in names] + evidence,
+                 "done" if ran else "not needed" if is_left else "to do", [{"tool": n} for n in names] + evidence,
                  note=("It ran after this demaster was put in place: “%s”, %s, %d file(s) of its output written." % (
                            ran[0][0], ran[0][1].get("when", "").replace("T", " "), ran[0][1].get("files", 0))) if ran else
+                 ("Left by you (%s) until the tool's next run: what it made keeps what it has from the mod until then. The game "
+                  "loads it as it is; ModTrap does not run the tool for this. Take that back to have it run." % (left or {})[tool].replace("T", " "))
+                 if is_left else
                  ("ModTrap runs it by itself after the demaster (%s), and the step is done when it has written its "
                   "output. A Revert, or a new demaster, asks for a new run." % (
                       "by pressing its own run button and closing it when its log says the run is over"
@@ -828,6 +878,13 @@ def compile_steps(m: model.Model, mod_names: list[str], job: dict | None = None,
                   "It is not in this MO2's list of tools; run it the way the modlist's own guide says, and tick it off."))
             if names and tools_run is not None:
                 seen_by_run.add("tool:" + tool)
+            # For the page (MT23, MT24): the tool's name, whether the owner left it, the values it holds of the mod as
+            # xEdit told them, and whether a check through xEdit could say more than reading bytes did.
+            mods_in = all(x.enabled for x in mods)
+            steps[-1].update(tool=tool, left=is_left, leave=not ran,
+                             values=[{k: v[k] for k in ("plugin", "form", "part", "tool", "mod", "next")} for v in e.get("values", [])[:12]],
+                             check=("" if ran else "offer" if e.get("by_bytes") and mods_in else "needs the mod" if e.get("by_bytes")
+                                    else "done" if e.get("checked") else ""))
         else:
             clear_items.append({"text": "%s: %s.%s" % (tool, "; ".join(e["clear"]), (" (" + does + ")") if does else ""),
                                 "evidence": e["details"]})

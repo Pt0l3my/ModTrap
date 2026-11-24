@@ -224,6 +224,8 @@ body.dragging .welcome-box { outline: none; }
 .step .who.both { border-color: var(--warn); color: var(--warn); }
 .step p { margin: 4px 0; }
 .step ul { margin: 6px 0 2px; padding-left: 20px; }
+.toolvalues { margin: 8px 0; overflow-x: auto; }
+.toolvalues td { font-size: 12.5px; vertical-align: top; max-width: 320px; overflow-wrap: anywhere; }
 .step label.tickoff { display: inline-flex; gap: 6px; align-items: center; margin-top: 6px; color: var(--text); }
 .count.todo { background: var(--accent); color: var(--accent-ink); }
 
