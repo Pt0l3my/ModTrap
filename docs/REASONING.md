@@ -164,6 +164,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 139 | 2026-11-23 | MO2's plugin groups are an extension's file; a group is a run, so a new plugin's group follows from where it stands | FACT | #model #page #safety |
 | 140 | 2026-11-23 | A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed | METHOD | #model #page #safety |
 | 141 | 2026-11-23 | Which records two plugins both change predicts no fault, so it is told as none | DECIDED | #model #page |
+| 142 | 2026-11-24 | xEdit settles what bytes could not, when asked; a leftover in a tool's plugin is the owner's to leave | DECIDED | #tools #steps #xedit #page |
+| 143 | 2026-11-24 | A greyed control must say why where it is pressed; a group is made of picked plugins, and a drop on its line is the one way to join at its edge | METHOD | #page #model |
 
 ## Entries
 
@@ -3858,3 +3860,61 @@ them; the addresses were read by a session that can), and the time the second pa
   crash behind it is a skeleton that wins with fewer bones, and it is a warning only where the sizes say so.
 - Later readers: the web's record pass is in the history of this file's repository at 0.3.65, if a way to read
   inside records ever makes it worth having again (MT23 is the open question nearest to it).
+
+### 142. xEdit settles what bytes could not, when asked; a leftover in a tool's plugin is the owner's to leave
+
+`2026-11-24` · DECIDED · `#tools #steps #xedit #page` · refs: MT23, MT24, DESIGN§34, DESIGN§16.5, TL01§13, XE01§18, XE01§19, WHY§73, WHY§77, WHY§78
+
+- The owner, asked what MT23 and MT24 are and given the recommendations: "as recommended". So MT23 (a), a check of
+  its own started from the tool's step, and MT24 (b), the values shown and the choice left to the owner.
+- METHOD: the comparison by meaning already runs on the owner's PC: the dry run's script turns a part of a record
+  into text of its names and values (`Shape`), leaving out unused bytes, and compares texts (XE01§18, WHY§77). The
+  new script uses that same function on three versions of a record instead of two. It calls nothing the dry
+  run's and the record check's scripts do not call; a test holds it to that, and to balanced blocks and declared
+  names, because no xEdit runs where ModTrap is written.
+- METHOD: which versions. The dry run's stake (XE01§19) was told from the plugins it loaded, and narrowed
+  afterwards with ModTrap's own reader over the whole load order (WHY§77). With the whole load order in xEdit,
+  the script finds for itself, among the plugins no tool made, the last leaving plugin and the last that stays;
+  only where a leaving plugin has the last word can a tool's copy owe anything to it.
+- FACT (what the three answers mean): "as the mod" is proof by meaning, where bytes gave proof only for tools
+  that write as xEdit does. "As the next in line" clears a plugin, a patcher's too: that is the gain TL01§13
+  named. "Neither" stays open: a value worked out by the tool, from which of the two nothing shows; it is said
+  as it is, with the records and values, and the tool is still told to run "to be sure".
+- DECIDED: one run for all tools' plugins. Loading the load order is the cost (minutes on the owner's list);
+  reading a few more plugins adds little, and one result serves every tool's step.
+- DECIDED: a check counts for a plugin only while the plugin is the same file. The tool's own run writes it anew,
+  and the old check says nothing of the new file.
+- DECIDED (MT24): the choice is the owner's and is kept on ModTrap's side, not as a tick in the browser, because
+  ModTrap's run of the tools one after another must pass a left tool over. The step's state for everything that
+  counts open steps is "not needed"; the page words it "left by you until its next run".
+- Limit: the check needs the mods enabled. After a demaster is in place it cannot be made without a Revert; the
+  step says so. A check made before stays valid across the demaster, since the tools' plugins do not change by it.
+- Not checked on the owner's PC: the script itself. Its first real run is the owner's; a failure shows as the
+  check failing with xEdit's own message, and changes nothing.
+
+### 143. A greyed control must say why where it is pressed; a group is made of picked plugins, and a drop on its line is the one way to join at its edge
+
+`2026-11-24` · METHOD · `#page #model` · refs: MT77, MT73, MT71, MT58, DESIGN§35, DESIGN§31, DESIGN§30, MO05§3, MO05§4, WHY§137, WHY§139
+
+- FACT (the owner's pictures): MO2 was open beside ModTrap. By MT71 the menu's entry was greyed and the drag did
+  not begin. The reason was in the entry's tooltip, which a browser does not show for a disabled button, and in
+  the line under the header, far from the pointer. The owner took the features to be missing and asked for them.
+- METHOD: the reason belongs where the press is. A menu gets a line of words and, as its first entry, the one
+  thing that helps ("Close MO2…", which asks first). A drag that cannot begin tells it once the pointer has
+  moved far enough to be a drag. The greying itself stays: MT71 is the owner's own rule, and the server refuses
+  the change in any case.
+- Rejected: letting the entries stay live and closing MO2 as part of them. That is what MT71 took away ("ModTrap
+  no longer closes MO2 for these by itself").
+- METHOD (creating a group): MO2 makes a group of the rows that are picked. ModTrap's list had no picking, so a
+  group could only be given plugin by plugin. Picking is the browser's usual one (click, Ctrl, Shift); a plain
+  click still opens the plugin's details, so nothing that worked before changes.
+- FACT (MO05§3): a group is a run of neighbours. Picked plugins that stand apart become several groups of one
+  name. That is not refused, because the owner may be about to drag them together; it is said in the question.
+- METHOD (the edge): WHY§139's rule for a move joins a group only between two of its plugins, as the extension's
+  own rule does (MO05§4), so a plugin could not be put first or last in a group by dragging. The group's line is
+  a place no plugin has, and letting go on it has one plain meaning: before the first plugin, and into the group.
+  The move's job takes the group named only where the plugin then stands beside that group; where MO2's limits
+  put it elsewhere, the ordinary rule decides. Where the plugin already stands directly before the group, nothing
+  moves and only its group is written.
+- Checked in a browser on an invented list: the menu with MO2 open and closed, the drag's word, two plugins
+  picked and made a group, a drop on a group's line. Not checked on the owner's PC.

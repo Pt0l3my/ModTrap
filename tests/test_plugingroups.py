@@ -217,6 +217,33 @@ class TheGroupsInTheJobs(unittest.TestCase):
         self.assertNotIn("group", got)
         self.assertEqual(self.file.read_bytes(), same)
 
+    def test_a_plugin_let_go_on_a_groups_line_joins_that_group(self):
+        """MT77."""
+        # Moved to the edge of another group, a plugin does not join it; let go on that group's line, it does.
+        plain = self.post("/api/list/plugins/move", {"plugin": "Lantern.esp", "before": ""})
+        self.assertEqual((plain["group"], plain["group_was"], self.order_names()[-2:]), ("", "Things", ["Generated.esp", "Lantern.esp"]))
+        self.post("/api/list/undo", {})
+        self.assertEqual(self.file.read_bytes(), FILE)
+        got = self.post("/api/list/plugins/move", {"plugin": "Lantern.esp", "before": "", "group": "Outputs"})
+        self.assertEqual((got["group"], got["group_was"]), ("Outputs", "Things"))
+        self.assertTrue(got["text"].endswith("into the group “Outputs”"))
+        self.post("/api/list/undo", {})
+        self.assertEqual(self.file.read_bytes(), FILE)
+        # It stands directly before the group's first plugin already: nothing moves, and it joins.
+        got = self.post("/api/list/plugins/move", {"plugin": "Lantern.esp", "before": "Generated.esp", "group": "Outputs"})
+        self.assertEqual((got["done"], got["text"]), (True, "Put Lantern.esp in the group “Outputs”"))
+        self.assertEqual((self.groups()["Lantern.esp"], self.order_names()[-2:]), ("Outputs", ["Lantern.esp", "Generated.esp"]))
+        self.post("/api/list/undo", {})
+        # Where MO2's limits put it elsewhere than beside that group, the group named does not count.
+        got = self.post("/api/list/plugins/move", {"plugin": "Generated.esp", "before": CORE, "group": "Base"})
+        self.assertTrue(got["why"])
+        self.assertEqual(self.groups()["Generated.esp"], "Things")              # it landed between Quill and Lantern
+        with self.assertRaises(api.Bad):
+            self.post("/api/list/plugins/move", {"plugin": "Lantern.esp", "before": "", "group": "a|b"})
+
+    def order_names(self):
+        return [r["name"] for r in self.api.get("/api/plugins", {})[1]["plugins"]]
+
     def test_an_uninstalled_mods_plugin_is_in_its_group_again_when_it_is_put_back(self):
         got = self.post("/api/list/uninstall", {"mods": ["Lantern"], "sure": True})
         self.assertEqual(self.file.read_bytes(), FILE)                          # its line stays: MO2 drops it when it next writes

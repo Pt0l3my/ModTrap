@@ -1196,3 +1196,69 @@ plugins hold the same records before and after a plugin.
 records, §31's and §32's rules about them, the scan after enabling (§18) with its note and its row marks, and the
 setting for it are gone. A mod's web (§23) has six kinds: it needs, needs it, a patch for it, a tool's output,
 overwrites its files, files it overwrites; its second pass looks through the files only.
+
+## 34. The tool check through xEdit, and the owner's choice on a tool's step (MT23, MT24)
+
+**Why.** Whether a tool's plugin holds something of the mod is judged by reading bytes (§13, §14), which cannot
+settle it for a patcher that writes records in a form of its own (TL01§13): such a tool is told to run again "to
+be sure". xEdit knows what every field means. So the owner can have xEdit say it, before the mod is taken out.
+
+**The run** (`toolcheck`, the script `xedit/ModTrapTools.pas`) is the record check's (§16.5) with another script:
+the owner's xEdit, started through MO2, the whole active load order loaded, a script of ModTrap's own that only
+reads, the plugins looked at hashed before and after. It is started only by the owner, from a tool's step
+("Check through xEdit…", asked about first), and is one run for every tool's plugin at once. The mods must be
+enabled: xEdit compares with their records.
+
+**What the script compares.** The job names the tools' plugins to look through, the leaving plugins (the mods'
+own and, where a dry run told them, the patches made for them) and every plugin a tool made. For each record a
+tool's plugin holds that is not its own:
+
+1. Among the plugins no tool made, the last leaving plugin that holds the record, the last plugin that stays (the
+   next in line), and which of all has the last word. No leaving plugin holds it: passed over. A plugin that
+   stays has the last word: counted, and nothing more (the tool built on that one).
+2. Otherwise, part by part (the record's direct elements, each as text of what it means, unused bytes left out, as
+   the dry run's script reads them): where the leaving plugin and the next in line say the same, nothing can be
+   told. Else the tool's copy says what the leaving plugin says, or what the next in line says, or neither. Parts
+   the leaving plugin has and the tool's copy lacks are weighed the same way.
+
+**The report** (`modtrap-tools/1`): for each plugin, the records with a part of the mod's or of the tool's own
+(with the parts' signatures, the leaving plugin and the next in line), up to 80 of those parts with the three
+values, and the counts. **The verdict for a plugin:** it holds the mod's value (a record with a part that says
+what the leaving plugin says): the tool is to run again, as proof; a value of its own where the mod has the last
+word, and none of the mod's: it cannot be ruled out, "to be sure" as before, now with the records named; neither:
+nothing of the mod is in it, and the plugin is cleared, a patcher's too.
+
+**In the steps.** A finished check of this session for the same mods stands in place of the verdict from bytes for
+each plugin it looked at, as long as the plugin is still the same file (its size and time of writing): a tool that
+has run since is judged anew. The tool's step shows the values xEdit told, says that it was checked, and offers
+the check where a plugin of the tool was judged by bytes with a stake of the mod's in it. With the mods disabled
+it says that the check needs them in the load order.
+
+**The owner's choice (MT24).** On a tool's step that is not yet done: "Leave it until the tool's next run". The
+step then counts as settled by the owner (it is shown as left, ModTrap's run of the tools passes it over), and the
+note says what follows: the tool's output keeps what it has of the mod until then. Kept in the session, for these
+mods; "Take that back" undoes it. ModTrap does not change a tool's plugin to put such a value right (MT24's
+option (a) is not built).
+
+## 35. The plugins' list: picking, creating groups, and a drop on a group's line (MT77)
+
+**Picking.** On the Plugins tab a click picks a plugin (and shows its details, as before), Ctrl-click adds or
+takes one, Shift-click picks every shown plugin from the last one to this one. The picked rows are marked. A
+right-click on a picked row is about all picked plugins; on another row it picks that one alone.
+
+**The menus**, where MO2 keeps plugin groups (§31):
+
+| On | Entries |
+|---|---|
+| a plugin, or the picked plugins | "Create group…" (one without a group), "Create group of these N…", "Change its group…"; "Take it out of its group" / "Take them out of their groups" |
+| a group's line | "Rename the group…", "Dissolve the group" |
+| the line of a run without a group | the button "Create group…", for the run |
+
+Each writes MO2's groups file as one job (§31). While nothing may be changed, the entries are greyed and the menu
+begins with the reason in words and, where MO2 is open, the entry "Close MO2…" (§30).
+
+**Dragging a plugin** (§18, MO03§3 and §4) is unchanged in its limits. Added: a drag that cannot begin because
+MO2 is open says so; and a group's line is a place to let go on. The move then asks for the place directly before
+the group's first plugin and names the group (`group` of `/api/list/plugins/move`). The job takes that group only
+where the plugin then stands beside a plugin of it; otherwise §31's rule for a moved plugin decides. A plugin that
+already stands there is only given the group.

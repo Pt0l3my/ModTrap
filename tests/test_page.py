@@ -149,15 +149,32 @@ class PageTests(unittest.TestCase):
         self.assertIn('group = last && last.mo2 === gname ? last : null;', self.js)
         self.assertIn('name: gname || "No group"', self.js)
         self.assertIn('give.addEventListener("click", () => groupPlugins(names(), ""));', self.js)
+        self.assertIn('class: "ggive", text: "Create group…"', self.js)
         self.assertIn('id="plugins-groups"', self.html)
         self.assertIn('"Groups: MO2\'s own" : "Groups: by the mods\' separators"', self.js)
         # A group is given by name, with the groups there are to choose from, as a change of its own; never with MO2 open.
-        self.assertIn('const got = await api("/api/list/plugins/group", { plugins: names, group: to.trim() });', self.js)
+        self.assertIn('const got = await api("/api/list/plugins/group", { plugins: names, group });', self.js)
         self.assertIn('if (choices) input.setAttribute("list", "modal-list");', self.js)
         self.assertRegex(self.js, r'const NEEDS_MO2_FREE = new Set\(\[[^\]]*"/api/list/plugins/group"')
-        self.assertRegex(self.js, r"const MO2_GATED = /\^\([^/]*Give a group…")
+        self.assertRegex(self.js, r"const MO2_GATED = /\^\([^/]*Create group…")
         self.assertIn('"plugin grouped": "Plugin\'s group"', self.js)
         self.assertIn('"plugin group": "plugin\'s group"', self.js)
+
+    def test_groups_are_created_from_picked_plugins_and_a_greyed_menu_says_why(self):
+        """MT77."""
+        # Picking as in MO2's list: a click, Ctrl-click, Shift-click; a right-click on a picked row is about all of them.
+        self.assertIn('tr.addEventListener("click", (ev) => { if (pluginPick(p, ev)) { showPlugin(p.name, tr); linkMod(p.name, true); } });', self.js)
+        self.assertIn('if (mo2) tr.addEventListener("contextmenu", (ev) => pluginMenu(ev, p));', self.js)
+        self.assertIn('many ? "Create group of these " + names.length + "…" : "Create group…"', self.js)
+        self.assertIn('{ text: "Dissolve the group", off,', self.js)
+        # With MO2 open the entries stay greyed (MT71), and the menu itself says why and offers to close MO2.
+        self.assertIn('if (r.info) { box.append(el("div", { class: "ctx-info", text: r.info })); continue; }', self.js)
+        self.assertIn('{ text: "Close MO2…", note:', self.js)
+        self.assertIn('menuAt(ev.clientX, ev.clientY, many ? plural(names.length, "plugin") + " picked" : p.name, [...pluginMenuHead(),', self.js)
+        # A drag that cannot begin says why; a drop on a group's line puts the plugin in that group.
+        self.assertIn('if (held && Math.abs(ev.clientX - held.x) + Math.abs(ev.clientY - held.y) >= 7) { state.pdragBlocked = null; toast(whyNot()); }', self.js)
+        self.assertIn('ev.target.closest("#plugins-table tbody tr.pgroup[data-pgroup]")', self.js)
+        self.assertIn('{ plugin: d.name, before: d.at.before, group: d.at.group || "" }', self.js)
 
     def test_the_web_says_what_it_needs_means_and_tells_no_conflicts(self):
         """MT73, MT76."""
@@ -169,6 +186,22 @@ class PageTests(unittest.TestCase):
             self.assertNotIn(gone, self.js)
         # ModTrap's own mod says what its copies stand for.
         self.assertIn('if (d.mod.modtrap) said.push(el("p", {}, el("b", { text: "ModTrap\'s own mod: " })', self.js)
+
+    def test_a_tools_step_offers_the_check_through_xedit_and_the_owners_choice(self):
+        """MT23, MT24."""
+        self.assertIn('if (st.key.startsWith("tool:") && st.tool) body.append(...toolStepParts(st, d));', self.js)
+        # The check: offered where bytes could not settle it, asked about first, shown while it goes, never started unasked.
+        self.assertIn('await api("/api/toolcheck/start", { mods });', self.js)
+        self.assertIn('const go = el("button", { type: "button", text: "Check through xEdit…" });', self.js)
+        self.assertRegex(self.js, r"const GATED = /\^\([^/]*Check through xEdit")
+        self.assertIn('if (!await modalBox("Check the tools\' plugins through xEdit', self.js)
+        self.assertIn('!CHECK_GOING((state.stepsData || {}).toolcheck)) return;', self.js)
+        self.assertEqual(self.js.count('"/api/toolcheck/start"'), 1)
+        # The values, as xEdit reads them, and the choice: run it, or leave it until its next run, taken back at will.
+        self.assertIn('["Plugin", "Record", "Field", "This plugin has", "The mod has", "Next in line has"]', self.js)
+        self.assertIn('await api("/api/steps/tool/leave", { mods, tool, leave });', self.js)
+        self.assertIn('st.left ? ["left by you until its next run", ""]', self.js)
+        self.assertIn('if (st.manual && !st.left) {', self.js)
 
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what

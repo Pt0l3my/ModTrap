@@ -20,7 +20,7 @@ import urllib.parse
 
 from . import (NAME, VERSION, adding, browse, dryrun, fomod, instance, locate, logbook, model, paths, plugin, records,
                savelog, sessions, steps, toolrun, tools, unpack)
-from . import console, downloads, dupes, evaluate, loadcheck, modcols, modweb, plugingroups, process, selfupdate, startlink, tabback, updater, updating, version
+from . import console, downloads, dupes, evaluate, loadcheck, modcols, modweb, plugingroups, process, toolcheck, selfupdate, startlink, tabback, updater, updating, version
 from . import updates as updates_mod
 from .server import Bad
 
@@ -86,7 +86,7 @@ class HeaderCache:
 
 # What starts something through MO2's command line. MO2 hands such a command to a MO2 that is already open,
 # whichever modlist that one is for (MO01§9): with another modlist's MO2 open it would go to the wrong one (WHY§77).
-LAUNCHES_MO2 = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
+LAUNCHES_MO2 = frozenset(("/api/dryrun/start", "/api/records/start", "/api/toolcheck/start", "/api/tool/start", "/api/demaster/start",
                           "/api/probe/start", "/api/mo2/open"))
 OTHER_MO2 = ("Another Mod Organizer is open, for another modlist. MO2 hands every command to the MO2 that is already "
              "open, so ModTrap's would go to the wrong modlist. Close that MO2: ModTrap then goes on.")
@@ -119,7 +119,7 @@ SETTINGS = {
     "mod_pictures": True,      # a mod's pop-up shows the picture its page opens with, fetched from its site (MT62)
 }
 
-NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/tool/start", "/api/demaster/start",
+NEEDS_SAME_VERSION = frozenset(("/api/dryrun/start", "/api/records/start", "/api/toolcheck/start", "/api/tool/start", "/api/demaster/start",
                                 "/api/demaster/install", "/api/add/run", "/api/probe/start", "/api/updater/start"))
 
 
@@ -144,6 +144,7 @@ class Api:
         self._run = 0
         self._lists: dict[str, tuple[object, dict]] = {}
         self._deep: dict[tuple, dict | None] = {}     # steps.look_deeper by (reading, mods); None while going
+        self._check_memo: dict[str, dict] = {}        # finished tool checks as read from their folders, by folder name
         self._adding: dict[tuple, dict | None] = {}   # adding.analyse by (reading, mods); None while going
         self._making_tools = 0                        # readings of what the tools made that are going (WHY§92)
         self._scanning = 0                            # looks through the modlist's settings files that are going (WHY§98)
@@ -175,6 +176,7 @@ class Api:
         self.changes = None                    # the endpoints that change a modlist; None: switched off (WHY§44)
         self.tooljob: toolrun.ToolJob | None = None
         self.recjob: records.Job | None = None
+        self.checkjob: toolcheck.Job | None = None      # the tool check through xEdit (MT23)
         self.saver = savelog.SaveJob()         # "Save this session" (WHY§48)
         self.closer = dryrun.close_program     # asks xEdit to close after a script (XE01§11); replaced in tests
         self.dismiss = dryrun.winauto.close_message   # closes a message MO2 stops at after a run (MO01§9); replaced in tests
@@ -1065,6 +1067,8 @@ class Api:
             return True
         if self.recjob is not None and self.recjob.state not in ("done", "failed", "stopped"):
             return True
+        if self.checkjob is not None and self.checkjob.state not in ("done", "failed", "stopped"):
+            return True
         if self.changes is not None and self.changes.busy():
             return True
         return self.job is not None and self.job.state not in ("done", "failed", "stopped")
@@ -1338,6 +1342,114 @@ class Api:
         self.recjob.stop()
         return self.recjob.public()
 
+    # --- the tool check (MT23, DESIGN§34): xEdit, read-only, when the owner asks for it ----------------------------
+
+    def toolcheck_start(self, body: dict) -> dict:
+        m = self._need()
+        mods = body.get("mods")
+        if not isinstance(mods, list) or not mods or len(mods) > 50 or not all(isinstance(x, str) and x for x in mods):
+            raise Bad("which mods the tools are to be checked for did not arrive")
+        touched, _told_by = self._touched_for(mods)
+        with self._lock:
+            if self._busy():
+                raise Bad("something else is going; wait for it to end")
+            if self.unsettled():
+                raise Bad(self.unsettled() + "; try again in a moment")
+            if self._locked():
+                raise Bad(self._locked())
+            s = self.session
+            try:
+                p = toolcheck.plan(m, mods, touched)
+                base = (self.store.dir(s.id) if s is not None else paths.home()) / "jobs"
+                job = toolcheck.Job(m, p, records.new_job_dir(base, "toolcheck"), launcher=self._launch, running=self.running,
+                                    poll=self.poll, closer=self.closer, presser=self.presser)
+            except (records.Refused, dryrun.Refused) as e:
+                raise Bad(str(e)) from None
+            job.on_end = self.save_log
+            self.checkjob = job
+        logbook.set_masks({"<modlist>": self.folder, "<game>": str(m.instance.game_dir) if m.instance.game_dir else None,
+                           "<mods>": str(m.instance.mods_dir), "<job>": str(job.dir), "<modtrap>": str(paths.home())})
+        job.start()
+        return self._check_public()
+
+    def toolcheck_stop(self) -> dict:
+        if self.checkjob is None:
+            raise Bad("no tool check is going")
+        self.checkjob.stop()
+        return self._check_public()
+
+    def _check_public(self) -> dict | None:
+        """The tool check's state for the page, without its findings (the steps carry those)."""
+        if self.checkjob is None:
+            return None
+        pub = self.checkjob.public()
+        return {k: pub[k] for k in ("id", "state", "message", "seconds")} | {"mods": pub["plan"].get("mods", []), "plugins": len(pub["plan"].get("new", []))}
+
+    def _checked_for(self, mods: list[str]) -> dict | None:
+        """The newest finished tool check of this session for these mods (`toolcheck.read_result`), or None."""
+        s = self.session
+        if s is None:
+            return None
+        want = sorted(mods)
+        try:
+            folders = sorted((p for p in (self.store.dir(s.id) / "jobs").iterdir() if p.is_dir() and p.name.startswith("toolcheck-")), reverse=True)[:12]
+        except OSError:
+            return None
+        for d in folders:
+            if self.checkjob is not None and self.checkjob.dir == d and self.checkjob.state != "done":
+                continue                                # still going, or it failed: its files say nothing yet
+            hit = self._check_memo.get(d.name)
+            if hit is None:
+                hit = self._check_memo[d.name] = toolcheck.read_result(d) or {}
+            if hit and hit["mods"] == want:
+                return hit
+        return None
+
+    # The owner's word on a tool's step (MT24): leave what the tool holds of the mod until the tool's next run.
+
+    def _left_path(self) -> Path | None:
+        s = self.session
+        return self.store.dir(s.id) / "tools-left.json" if s is not None else None
+
+    def _tools_left(self, mods: list[str]) -> dict[str, str]:
+        path = self._left_path()
+        try:
+            with open(path, "rb") as f:
+                data = json.loads(f.read(1024 * 1024).decode("utf-8"))
+            got = data.get("\x1f".join(sorted(mods)), {})
+            return {str(k): str(v) for k, v in got.items()} if isinstance(got, dict) else {}
+        except (OSError, ValueError, TypeError, AttributeError):
+            return {}
+
+    def tool_leave(self, body: dict) -> dict:
+        self._need()
+        mods, tool, leave = body.get("mods"), body.get("tool"), body.get("leave")
+        if (not isinstance(mods, list) or not mods or len(mods) > 50 or not all(isinstance(x, str) and x for x in mods)
+                or not isinstance(tool, str) or not 0 < len(tool) <= 200 or not isinstance(leave, bool)):
+            raise Bad("which tool, and for which mods, did not arrive")
+        path = self._left_path()
+        if path is None:
+            raise Bad("there is no session to keep that in")
+        with self._lock:
+            try:
+                with open(path, "rb") as f:
+                    data = json.loads(f.read(1024 * 1024).decode("utf-8"))
+                if not isinstance(data, dict):
+                    data = {}
+            except (OSError, ValueError):
+                data = {}
+            key = "\x1f".join(sorted(mods))
+            mine = data.get(key) if isinstance(data.get(key), dict) else {}
+            if leave:
+                mine[tool] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                mine.pop(tool, None)
+            data[key] = mine
+            paths.write_atomic(path, (json.dumps(data, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+        log.info("%s: %s", tool, "left by the owner as it is until the tool's next run (for %s)" % ", ".join(sorted(mods)) if leave
+                 else "the owner took back leaving it: it is to run again")
+        return {"tool": tool, "left": leave}
+
     # --- "Save this session" (WHY§48): the session's logs, cleaned, in one .7z to download -------------------------
 
     def save_start(self) -> dict:
@@ -1524,8 +1636,10 @@ class Api:
         out = steps.compile_steps(m, mods, job, deep, auto=self.changes is not None,
                                   going=self.changes is not None and self.changes.dm_state in ("working", "verified"),
                                   tools_run=self.changes.tools_run() if self.changes is not None else None,
-                                  self_run=self.settings().get("tools_self") is not False)
+                                  self_run=self.settings().get("tools_self") is not False,
+                                  checked=self._checked_for(mods) if mods else None, left=self._tools_left(mods) if mods else None)
         out["looking"] = bool(mods) and deep is None
+        out["toolcheck"] = self._check_public()
         return out
 
     # --- adding mods (MT21, DESIGN§16): read-only ------------------------------------------------------------------
@@ -2570,6 +2684,12 @@ class Api:
             return 200, self.records_start(body), None
         if path == "/api/records/stop":
             return 200, self.records_stop(), None
+        if path == "/api/toolcheck/start":
+            return 200, self.toolcheck_start(body), None
+        if path == "/api/toolcheck/stop":
+            return 200, self.toolcheck_stop(), None
+        if path == "/api/steps/tool/leave":
+            return 200, self.tool_leave(body), None
         if path == "/api/tool/start":
             return 200, self.tool_start(body), None
         if path == "/api/tool/stop":

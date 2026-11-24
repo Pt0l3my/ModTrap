@@ -311,8 +311,9 @@ class ListJob:
         text = "%s %s" % ("Activated" if on else "Deactivated", rows[0]["name"] + (" and %d more" % (len(rows) - 1) if len(rows) > 1 else ""))
         return self._done(text)
 
-    def plugin_move(self, name: str, before: str, was_before: str, kind: str = "", mod: str = "") -> dict:
-        """Moves one plugin to directly before `before` in the load order ("" for the end). Its state stays."""
+    def plugin_move(self, name: str, before: str, was_before: str, kind: str = "", mod: str = "", into: str = "") -> dict:
+        """Moves one plugin to directly before `before` in the load order ("" for the end). Its state stays. `into`
+        names the group the owner let it go on (MT77): it joins that group where it then stands beside it."""
         self._begin("plugin move", self._lists("plugins.txt", "loadorder.txt"), plugin=name, before=before, was_before=was_before,
                     kind=kind, mod=mod)
         was = self._now()
@@ -333,6 +334,9 @@ class ListJob:
             groups, moved = plugingroups.read(self.pdir), {}
             if groups is not None:
                 g_was, g_now = groups.get(f, ""), plugingroups.after_move(was[1], order, groups, name)
+                beside = {groups.get(fold(n), "") for n in (order[i - 1] if i > 0 else "", order[i + 1] if i + 1 < len(order) else "") if n}
+                if into and into in beside:
+                    g_now = into                        # let go on a group's line, and it stands at that group's edge
                 if g_now != g_was:
                     self._group({name: g_now})
                     if plugingroups.read(self.pdir).get(f, "") != g_now:
