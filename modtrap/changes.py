@@ -501,9 +501,11 @@ class Changes:
         it stands and, when that is not the place asked for, why."""
         self.api.wait_mo2_gone()
         api = self.api
-        name, before = body.get("plugin"), body.get("before")
+        name, before, into = body.get("plugin"), body.get("before"), body.get("group", "")
         if not isinstance(name, str) or not isinstance(before, str) or not 0 < len(name) <= 300 or len(before) > 300:
             raise Bad("which plugin, and where to, was not said")
+        if not isinstance(into, str) or into != plugingroups.clean(into):
+            raise Bad("which group was not said")
         with self._lock:
             m, job = self._list_job()
             r = m.row(name)
@@ -518,9 +520,20 @@ class Changes:
             i = names.index(r.name)
             was_before = names[i + 1] if i + 1 < len(names) else ""
             if instance_fold(final) == instance_fold(was_before):
+                # It stands there already. Let go on a group's line whose first plugin it stands before: it joins it.
+                pdir = m.instance.profiles_dir / m.instance.profile
+                groups = plugingroups.read(pdir) or {}
+                if into and not why and groups.get(instance_fold(final), "") == into and groups.get(instance_fold(r.name), "") != into:
+                    try:
+                        done = job.plugin_group([{"name": r.name, "group": into, "was": groups.get(instance_fold(r.name), ""), "kind": r.kind, "mod": r.source or ""}])
+                    except listjob.Refused as e:
+                        log.error("%s", e)
+                        raise Bad(str(e)) from None
+                    api.open(api.folder, api.profile or None, session=api.session)
+                    return {"done": True, "before": final, "why": "", **done}
                 return {"done": False, "nothing": True, "why": why}
             try:
-                done = job.plugin_move(r.name, final, was_before, r.kind, r.source or "")
+                done = job.plugin_move(r.name, final, was_before, r.kind, r.source or "", into=into)
             except listjob.Refused as e:
                 log.error("%s", e)
                 raise Bad(str(e)) from None

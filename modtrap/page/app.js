@@ -199,7 +199,7 @@ function showWork() {
   chip.title = busy ? "Until this has finished, the buttons that change the modlist or start a program are greyed." : "ModTrap has finished reading and scanning: everything can be started.";
 }
 // The buttons that change MO2's lists at once: stopped, with a word, while this modlist's MO2 is open (MT71).
-const MO2_GATED = /^(Install mod$|Give a group…|Uninstall|Undo\b|Revert$|Enable$|Disable$|OK, install it there|Manual placement|Take it out again)/;
+const MO2_GATED = /^(Install mod$|Create group…|Uninstall|Undo\b|Revert$|Enable$|Disable$|OK, install it there|Manual placement|Take it out again)/;
 document.addEventListener("click", (ev) => {
   const b = ev.target && ev.target.closest ? ev.target.closest("button.mo2gate, #list-undo, #plugins-undo, #mods-table input.onbox, #plugins-table td.c-tick input") : null;
   if (!b || !mo2Open()) return;
@@ -452,6 +452,7 @@ function menuAt(x, y, title, rows) {
   const box = el("div", { class: "ctx", role: "menu" }, title ? el("div", { class: "ctx-title", text: title }) : null);
   for (const r of rows) {
     if (!r) { box.append(el("div", { class: "ctx-line" })); continue; }
+    if (r.info) { box.append(el("div", { class: "ctx-info", text: r.info })); continue; }
     const b = el("button", { type: "button", role: "menuitem", text: r.text, disabled: !!r.off, title: r.note || "" });
     b.addEventListener("click", () => { closeMenu(); r.run(); });
     box.append(b);
@@ -2787,7 +2788,7 @@ function renderUndo() {
     b.textContent = "Undo: " + u.text;
     b.title = "Turns back the last change made on the Modlist section's lists (Ctrl+Z): " + u.text + ". MO2 must be closed.";
   }
-  $("plugins-hint").textContent = state.changes ? "Tick to activate or deactivate · drag a row to move it · ⚠ and ⇄ on a row: press for what they stand for" : "";
+  $("plugins-hint").textContent = state.changes ? "Tick to activate or deactivate · drag a row to move it, onto a group's line to put it in that group · Ctrl- or Shift-click picks several · right-click for groups · ⚠ on a row: press for what it stands for" : "";
 }
 function listUndo() {
   if (!state.changes || !(state.listState && state.listState.undo)) return;
@@ -4195,15 +4196,70 @@ function pluginGroupRow(g) {
   g.row = el("tr", { class: "sep pgroup" + (g.loose ? " loose" : "") }, el("td", { colSpan: 9 }, g.btn, g.info));
   if (g.mo2 === undefined) return;
   const names = () => g.plugins.map((p) => p.name);
+  g.row.dataset.pgroup = g.key;
   if (g.loose) {
-    const give = el("button", { type: "button", class: "ggive", text: "Give a group…", title: "Puts " + (g.plugins.length === 1 ? "this plugin" : "these plugins") + " in a group of MO2's plugin list. MO2 must be closed." });
+    const give = el("button", { type: "button", class: "ggive", text: "Create group…", title: "Makes a group of MO2's plugin list of " + (g.plugins.length === 1 ? "this plugin" : "these " + g.plugins.length + " plugins") + ", as “Create Group…” in MO2 does. MO2 must be closed." });
     give.addEventListener("click", () => groupPlugins(names(), ""));
     g.row.firstChild.append(give);
   } else g.row.addEventListener("contextmenu", (ev) => {
     ev.preventDefault();
-    menuAt(ev.clientX, ev.clientY, g.name, [{ text: "Rename the group…", off: !canChange(), note: canChange() ? "Gives every plugin of this group the new name" : whyNot(), run: () => groupPlugins(names(), g.name, true) }]);
+    const off = !canChange();
+    menuAt(ev.clientX, ev.clientY, g.name + " · " + plural(g.plugins.length, "plugin"), [...pluginMenuHead(),
+      { text: "Rename the group…", off, note: "Gives every plugin of this group the new name", run: () => groupPlugins(names(), g.name, true) },
+      { text: "Dissolve the group", off, note: "Its plugins stay where they are in the load order, without a group", run: () => setPluginGroup(names(), "") }]);
   });
 }
+// Why a plugin's menu is greyed, said in the menu itself, with the way out (MT77): MO2 open, and a press that closes it.
+function pluginMenuHead() {
+  if (canChange()) return [];
+  if (!state.changes) return [{ info: NO_CHANGES }, null];
+  return [{ info: "MO2 is open on this modlist. It keeps its plugin list and its groups in memory and writes its own back, so ModTrap changes neither until MO2 is closed." },
+    { text: "Close MO2…", note: "Asks MO2 to close, as a click on its X does. Then these are yours to press.", run: toggleMo2 }, null];
+}
+function setPluginGroup(names, group) {
+  return listDo(async () => {
+    try {
+      const got = await api("/api/list/plugins/group", { plugins: names, group });
+      if (got.nothing) { toast("The group is the one " + (names.length === 1 ? "it has." : "they have.")); return; }
+      state.historyText = "";
+      state.psel = new Set();
+      listChanged(got.text + ".");
+    } catch (e) { toast(e.message); }
+  });
+}
+// The plugins picked on the Plugins tab (MT77), as in MO2's list: a click picks one, Ctrl-click adds or takes one,
+// Shift-click picks from the last one to this one. A right-click on a picked row is about all of them.
+function pluginPick(p, ev) {
+  state.psel = state.psel || new Set();
+  if (ev.shiftKey && state.pselLast) {
+    const shown = state.plugins.filter((x) => x.row && !x.row.hidden);
+    const a = shown.findIndex((x) => x.name === state.pselLast), b = shown.indexOf(p);
+    if (a >= 0 && b >= 0) for (const x of shown.slice(Math.min(a, b), Math.max(a, b) + 1)) state.psel.add(x.name);
+  } else if (ev.ctrlKey || ev.metaKey) {
+    if (state.psel.has(p.name)) state.psel.delete(p.name); else state.psel.add(p.name);
+    state.pselLast = p.name;
+  } else {
+    state.psel = new Set([p.name]);
+    state.pselLast = p.name;
+  }
+  for (const x of state.plugins) if (x.row) x.row.classList.toggle("psel", state.psel.has(x.name));
+  return !(ev.shiftKey || ev.ctrlKey || ev.metaKey);            // a plain click also shows the plugin
+}
+function pluginMenu(ev, p) {
+  ev.preventDefault();
+  state.psel = state.psel || new Set();
+  if (!state.psel.has(p.name)) { state.psel = new Set([p.name]); state.pselLast = p.name; for (const x of state.plugins) if (x.row) x.row.classList.toggle("psel", x.name === p.name); }
+  const picked = state.plugins.filter((x) => state.psel.has(x.name) && x.position != null);
+  const names = picked.map((x) => x.name), off = !canChange();
+  const groups = [...new Set(picked.map((x) => x.mo2_group || ""))];
+  const many = names.length > 1, grouped = picked.some((x) => x.mo2_group);
+  menuAt(ev.clientX, ev.clientY, many ? plural(names.length, "plugin") + " picked" : p.name, [...pluginMenuHead(),
+    { text: grouped && !many ? "Change its group…" : many ? "Create group of these " + names.length + "…" : "Create group…", off,
+      note: "As “Create Group…” in MO2: a new group by a name you give, or one there is already. MO2 shows as one group the plugins that stand together in the load order under one name.",
+      run: () => groupPlugins(names, groups.length === 1 ? groups[0] : "") },
+    ...(grouped ? [{ text: many ? "Take them out of their groups" : "Take it out of its group", off, note: "", run: () => setPluginGroup(names, "") }] : [])]);
+}
+// A plugin's group in MO2's plugin list (MT73)}
 // A plugin's group in MO2's plugin list (MT73): asked for by name, with the groups there are to choose from, and
 // written to MO2's own file as a change of its own, with its Revert in the History. Empty is no group.
 async function groupPlugins(names, now, renaming) {
@@ -4213,18 +4269,13 @@ async function groupPlugins(names, now, renaming) {
   const sepOf = pluginGroupOf(true);
   const wanted = [...new Set(names.map((n) => sepOf(state.plugins.find((p) => p.name === n) || {})))];
   const have = [...new Set(state.plugins.map((p) => p.mo2_group).filter(Boolean))];
+  const apart = names.length > 1 && (() => { const at = names.map((n) => (state.plugins.find((p) => p.name === n) || {}).position).sort((a, b) => a - b); return at[at.length - 1] - at[0] !== at.length - 1; })();
   const text = renaming ? "Rename the group “" + now + "”\n\nIts new name, for the " + plural(names.length, "plugin") + " standing in it. MO2 must be closed. The History has it, with its Revert."
-    : "The group of " + one + " in MO2's plugin list\n\nThe name of its group: one there is already, or a new one. Empty is no group. MO2 shows as one group the plugins that stand together in the load order under the same name, so a plugin belongs in the group of a neighbour, or in a new one. MO2 must be closed. The History has it, with its Revert.";
-  const to = await modalBox(text, { input: now || (wanted.length === 1 ? wanted[0] : ""), list: have, yes: "OK", no: "Cancel" });
+    : (now ? "The group of " + one : "Create a group of " + one) + "\n\nThe group's name: a new one, or one there is already. Empty is no group. MO2 shows as one group the plugins that stand together in the load order under the same name"
+      + (apart ? "; the plugins you picked do not all stand together, so MO2 will show them as several groups of this name until they do" : "") + ". MO2 must be closed. The History has it, with its Revert.";
+  const to = await modalBox(text, { input: now || (wanted.length === 1 ? wanted[0] : ""), list: have, yes: now ? "OK" : "Create group", no: "Cancel" });
   if (to === null || to.trim() === (now || "")) return;
-  listDo(async () => {
-    try {
-      const got = await api("/api/list/plugins/group", { plugins: names, group: to.trim() });
-      if (got.nothing) { toast("The group is the one it has."); return; }
-      state.historyText = "";
-      listChanged(got.text + ".");
-    } catch (e) { toast(e.message); }
-  });
+  setPluginGroup(names, to.trim());
 }
 function pluginsFold(all) {
   state.pcollapsed = new Set(all ? (state.pgroups || []).map((g) => g.key) : []);
@@ -4287,15 +4338,9 @@ function renderPlugins() {
       el("td", { class: "c-tick" }, on), el("td", { class: "c-num", text: p.position == null ? "" : p.position }), p.marks, name, el("td", { text: p.kind }),
       el("td", { text: mod }), el("td", { class: "c-num", text: p.mod_priority == null || p.mod_priority < 0 ? "" : p.mod_priority }),
       el("td", { class: "c-num", text: p.masters }), el("td", { class: "c-num" + (p.dependants ? " badnum" : ""), text: p.dependants }));
-    tr.addEventListener("click", () => { showPlugin(p.name, tr); linkMod(p.name, true); });
-    if (mo2) tr.addEventListener("contextmenu", (ev) => {
-      ev.preventDefault();
-      menuAt(ev.clientX, ev.clientY, p.name, [
-        { text: p.mo2_group ? "Change its group…" : "Give it a group…", off: !canChange(), note: canChange() ? "Its group in MO2's plugin list" : whyNot(), run: () => groupPlugins([p.name], p.mo2_group || "") },
-        p.mo2_group ? { text: "Take it out of its group", off: !canChange(), note: canChange() ? "" : whyNot(), run: () => listDo(async () => {
-          try { const got = await api("/api/list/plugins/group", { plugins: [p.name], group: "" }); state.historyText = ""; listChanged(got.text + "."); } catch (e) { toast(e.message); }
-        }) } : null].filter(Boolean));
-    });
+    tr.addEventListener("click", (ev) => { if (pluginPick(p, ev)) { showPlugin(p.name, tr); linkMod(p.name, true); } });
+    if (mo2) tr.addEventListener("contextmenu", (ev) => pluginMenu(ev, p));
+    if ((state.psel || new Set()).has(p.name)) tr.classList.add("psel");
     tr.dataset.plugin = p.name;
     p.row = tr;
     p.hay = fold(p.name + " " + p.mod);
@@ -4355,13 +4400,19 @@ function pdragEnd() {
   pdrag = null;
 }
 $("plugins-table").addEventListener("mousedown", (ev) => {
-  if (ev.button !== 0 || !canChange() || ev.target.closest("input, button")) return;
+  if (ev.button !== 0 || ev.target.closest("input, button")) return;
   const tr = ev.target.closest("#plugins-table tbody tr[data-plugin]");
   const p = tr ? state.plugins.find((x) => x.name === tr.dataset.plugin) : null;
+  if (!canChange()) {                                        // a drag that cannot begin says why, once it is one (MT77)
+    if (state.changes && p && p.position != null && !p.primary) state.pdragBlocked = { x: ev.clientX, y: ev.clientY };
+    return;
+  }
   if (p && p.position != null && !p.primary) pdrag = { tr, name: p.name, x: ev.clientX, y: ev.clientY, going: false, at: null,
     listed: state.plugins.filter((x) => x.position != null).map((x) => x.name) };
 });
 document.addEventListener("mousemove", (ev) => {
+  const held = state.pdragBlocked;
+  if (held && Math.abs(ev.clientX - held.x) + Math.abs(ev.clientY - held.y) >= 7) { state.pdragBlocked = null; toast(whyNot()); }
   if (!pdrag) return;
   if (!pdrag.going) {
     if (Math.abs(ev.clientX - pdrag.x) + Math.abs(ev.clientY - pdrag.y) < 7) return;
@@ -4395,9 +4446,14 @@ document.addEventListener("mousemove", (ev) => {
       if (before !== pdrag.name && before !== (mine + 1 < pdrag.listed.length ? pdrag.listed[mine + 1] : "")) at = { tr, below, before };
     }
   }
+  // On a group's line: before the group's first plugin, and into the group (MT77).
+  const head = !at && ev.target.closest ? ev.target.closest("#plugins-table tbody tr.pgroup[data-pgroup]") : null;
+  const g = head ? (state.pgroups || []).find((x) => x.key === head.dataset.pgroup) : null;
+  if (g && !g.loose && g.plugins.length && !g.plugins.some((x) => x.name === pdrag.name && g.plugins[0] !== x)) at = { tr: head, below: true, before: g.plugins[0].name === pdrag.name ? (g.plugins[1] || {}).name || "" : g.plugins[0].name, group: g.mo2 };
   pdrag.at = at;
   placeLine(at ? at.tr : null, at && at.below);
 });
+document.addEventListener("mouseup", () => { state.pdragBlocked = null; }, true);
 document.addEventListener("mouseup", () => {
   if (!pdrag) return;
   const d = pdrag, went = pdrag.going;
@@ -4407,7 +4463,7 @@ document.addEventListener("mouseup", () => {
   if (!d.at) return;
   listDo(async () => {
     try {
-      const got = await api("/api/list/plugins/move", { plugin: d.name, before: d.at.before });
+      const got = await api("/api/list/plugins/move", { plugin: d.name, before: d.at.before, group: d.at.group || "" });
       if (got.nothing) { toast(got.why ? d.name + " stays where it is: " + got.why + "." : d.name + " is there already."); return; }
       listChanged(got.text + "." + (got.why ? " Not where you let go: " + got.why + "." : ""));
     } catch (e) { toast(e.message); }

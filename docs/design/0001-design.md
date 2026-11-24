@@ -1239,3 +1239,26 @@ step then counts as settled by the owner (it is shown as left, ModTrap's run of 
 note says what follows: the tool's output keeps what it has of the mod until then. Kept in the session, for these
 mods; "Take that back" undoes it. ModTrap does not change a tool's plugin to put such a value right (MT24's
 option (a) is not built).
+
+## 35. The plugins' list: picking, creating groups, and a drop on a group's line (MT77)
+
+**Picking.** On the Plugins tab a click picks a plugin (and shows its details, as before), Ctrl-click adds or
+takes one, Shift-click picks every shown plugin from the last one to this one. The picked rows are marked. A
+right-click on a picked row is about all picked plugins; on another row it picks that one alone.
+
+**The menus**, where MO2 keeps plugin groups (§31):
+
+| On | Entries |
+|---|---|
+| a plugin, or the picked plugins | "Create group…" (one without a group), "Create group of these N…", "Change its group…"; "Take it out of its group" / "Take them out of their groups" |
+| a group's line | "Rename the group…", "Dissolve the group" |
+| the line of a run without a group | the button "Create group…", for the run |
+
+Each writes MO2's groups file as one job (§31). While nothing may be changed, the entries are greyed and the menu
+begins with the reason in words and, where MO2 is open, the entry "Close MO2…" (§30).
+
+**Dragging a plugin** (§18, MO03§3 and §4) is unchanged in its limits. Added: a drag that cannot begin because
+MO2 is open says so; and a group's line is a place to let go on. The move then asks for the place directly before
+the group's first plugin and names the group (`group` of `/api/list/plugins/move`). The job takes that group only
+where the plugin then stands beside a plugin of it; otherwise §31's rule for a moved plugin decides. A plugin that
+already stands there is only given the group.

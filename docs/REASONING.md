@@ -165,6 +165,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 140 | 2026-11-23 | A demastered copy inherits its plugin's place among the others; the rule of MT73 looked at who made the plugin, not at what the demaster changed | METHOD | #model #page #safety |
 | 141 | 2026-11-23 | Which records two plugins both change predicts no fault, so it is told as none | DECIDED | #model #page |
 | 142 | 2026-11-24 | xEdit settles what bytes could not, when asked; a leftover in a tool's plugin is the owner's to leave | DECIDED | #tools #steps #xedit #page |
+| 143 | 2026-11-24 | A greyed control must say why where it is pressed; a group is made of picked plugins, and a drop on its line is the one way to join at its edge | METHOD | #page #model |
 
 ## Entries
 
@@ -3890,3 +3891,30 @@ them; the addresses were read by a session that can), and the time the second pa
   step says so. A check made before stays valid across the demaster, since the tools' plugins do not change by it.
 - Not checked on the owner's PC: the script itself. Its first real run is the owner's; a failure shows as the
   check failing with xEdit's own message, and changes nothing.
+
+### 143. A greyed control must say why where it is pressed; a group is made of picked plugins, and a drop on its line is the one way to join at its edge
+
+`2026-11-24` · METHOD · `#page #model` · refs: MT77, MT73, MT71, MT58, DESIGN§35, DESIGN§31, DESIGN§30, MO05§3, MO05§4, WHY§137, WHY§139
+
+- FACT (the owner's pictures): MO2 was open beside ModTrap. By MT71 the menu's entry was greyed and the drag did
+  not begin. The reason was in the entry's tooltip, which a browser does not show for a disabled button, and in
+  the line under the header, far from the pointer. The owner took the features to be missing and asked for them.
+- METHOD: the reason belongs where the press is. A menu gets a line of words and, as its first entry, the one
+  thing that helps ("Close MO2…", which asks first). A drag that cannot begin tells it once the pointer has
+  moved far enough to be a drag. The greying itself stays: MT71 is the owner's own rule, and the server refuses
+  the change in any case.
+- Rejected: letting the entries stay live and closing MO2 as part of them. That is what MT71 took away ("ModTrap
+  no longer closes MO2 for these by itself").
+- METHOD (creating a group): MO2 makes a group of the rows that are picked. ModTrap's list had no picking, so a
+  group could only be given plugin by plugin. Picking is the browser's usual one (click, Ctrl, Shift); a plain
+  click still opens the plugin's details, so nothing that worked before changes.
+- FACT (MO05§3): a group is a run of neighbours. Picked plugins that stand apart become several groups of one
+  name. That is not refused, because the owner may be about to drag them together; it is said in the question.
+- METHOD (the edge): WHY§139's rule for a move joins a group only between two of its plugins, as the extension's
+  own rule does (MO05§4), so a plugin could not be put first or last in a group by dragging. The group's line is
+  a place no plugin has, and letting go on it has one plain meaning: before the first plugin, and into the group.
+  The move's job takes the group named only where the plugin then stands beside that group; where MO2's limits
+  put it elsewhere, the ordinary rule decides. Where the plugin already stands directly before the group, nothing
+  moves and only its group is written.
+- Checked in a browser on an invented list: the menu with MO2 open and closed, the drag's word, two plugins
+  picked and made a group, a drop on a group's line. Not checked on the owner's PC.
