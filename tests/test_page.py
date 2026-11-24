@@ -173,7 +173,7 @@ class PageTests(unittest.TestCase):
         self.assertIn('menuAt(ev.clientX, ev.clientY, many ? plural(names.length, "plugin") + " picked" : p.name, [...pluginMenuHead(),', self.js)
         # A drag that cannot begin says why; a drop on a group's line puts the plugin in that group.
         self.assertIn('if (held && Math.abs(ev.clientX - held.x) + Math.abs(ev.clientY - held.y) >= 7) { state.pdragBlocked = null; toast(whyNot()); }', self.js)
-        self.assertIn('ev.target.closest("#plugins-table tbody tr.pgroup[data-pgroup]")', self.js)
+        self.assertIn('under.closest("#plugins-table tbody tr.pgroup[data-pgroup]")', self.js)
         self.assertIn('{ plugin: d.name, before: d.at.before, group: d.at.group || "" }', self.js)
 
     def test_the_web_says_what_it_needs_means_and_tells_no_conflicts(self):
@@ -202,6 +202,73 @@ class PageTests(unittest.TestCase):
         self.assertIn('await api("/api/steps/tool/leave", { mods, tool, leave });', self.js)
         self.assertIn('st.left ? ["left by you until its next run", ""]', self.js)
         self.assertIn('if (st.manual && !st.left) {', self.js)
+
+    def test_the_bulk_installer_has_its_tab_its_drop_zone_and_its_one_button(self):
+        """MT78."""
+        tabs = re.findall(r'<button data-group="add" data-tab="(\w+)"', self.html)
+        self.assertEqual(tabs, ["add", "bulk", "installed"])                        # the second of the section's three
+        for needle in ('id="bulk-drop" class="bulkdrop"', 'id="bulk-files"', 'id="bulk-folder"', 'id="bulk-pick-files" type="file" multiple', 'id="bulk-pick-folder" type="file" webkitdirectory',
+                       'id="bulk-go" type="button" class="primary" disabled', 'id="bulk-warn"', 'id="bulk-clear"'):
+            self.assertIn(needle, self.html)
+        self.assertIn(".bulkdrop { border: 2px dashed var(--accent);", self.css)
+        # Any number: no count stops a file; a duplicate is turned away, and a file that fails does not hold up the rest.
+        bulk = self.js.split("// --- the bulk installer (MT78")[1].split("// --- the Install mods tab")[0]
+        self.assertNotIn("Twenty", bulk)
+        self.assertIn('if (b.items.some((x) => fold(x.fname) === fold(f.name))) { bulkNote(f.name, "A duplicate: this file is on the list already.', bulk)
+        self.assertIn('if (hit.mods.length && hit.sure) return away("A duplicate: MO2 has this file installed already', bulk)
+        self.assertIn('if (twin) it.reject = "A duplicate: it is in the modlist already as', bulk)
+        self.assertIn('} catch (e) { it.state = "failed"; it.error = e.message; it.noted = true; bulkNote(it.fname, "Not taken in: " + e.message + ".", true); }', bulk)
+        self.assertIn('const d = await api("/api/add/status", { staged: ids });', bulk)
+        # Names are typed over in place; an installer's questions show as on the Installer tool.
+        self.assertIn('name.addEventListener("change", () => bulkRename(it, name));', bulk)
+        self.assertIn('if (shown) cells.push(el("div", { class: "wide" }, installerCard(info)));', bulk)
+        # The button is greyed until every mod stands ready, then the place is chosen on the Mods tab, and the lots go in.
+        self.assertIn(': c.busy ? plural(c.busy, "mod is", "mods are") + " still being taken in."', bulk)
+        self.assertIn('startPlacement({ bulk: true, label: plural(c.ready, "mod") });', bulk)
+        self.assertIn('if (p.bulk) { bulkPlaceChosen(before, words); return; }', self.js)
+        self.assertIn("const BULK_LOT = 8;", bulk)
+        self.assertIn('if (items.length === 1) failed.push([items[0], e.message]); else for (const x of items) await one(x);', bulk)
+        self.assertIn('if (!state.bulk || state.bulkSession !== state.sessionApplied) {', self.js)
+
+    def test_the_installer_tool_clears_one_mod_or_all(self):
+        """MT78."""
+        self.assertIn('id="add-clear"', self.html)
+        self.assertIn('$("add-clear").addEventListener("click", addClearAll);', self.js)
+        self.assertIn('c.addEventListener("click", () => addClear([x.name],', self.js)
+
+    def test_several_mods_are_picked_with_ctrl_and_shift_on_the_mods_tab_and_the_updater_list(self):
+        """MT78."""
+        self.assertIn('if (m.kind === "mod" && !picking() && !state.placing && !modPick(m.name, ev, "mods")) return;', self.js)
+        self.assertIn('if (tr && !ev.target.closest("input, button, a")) modPick(tr.dataset.mod, ev, "updates"); });', self.js)
+        self.assertIn('if (state.msel.has(mod) && state.msel.size > 1) { const many = pickedMods(); if (many.length > 1) { modsMenu(ev, many); return; } }', self.js)
+        self.assertIn('return many.length > 1 ? { names: many.map((x) => x.name), label: plural(many.length, "mod") + " (as one block, in their order)" }', self.js)
+        self.assertIn("#mods-table tbody tr.msel td, #updates-table tbody tr.msel td {", self.css)
+
+    def test_a_drag_aims_from_where_the_pointer_is_also_while_the_list_scrolls(self):
+        """MT78: a place kept from before the list moved under a still pointer is not the one pointed at."""
+        self.assertIn("if (d) { pane.scrollTop += d * 26; pdragAim(pdrag.px, pdrag.py); }", self.js)
+        self.assertIn("if (d) { pane.scrollTop += d * 26; dragAim(drag.px, drag.py); }", self.js)
+        self.assertIn("const under = document.elementFromPoint(x, y);", self.js)
+        self.assertIn('&& lastRow.dataset.plugin === pdrag.listed[pdrag.listed.length - 1] && !stands("")) at = { tr: lastRow, below: true, before: "" };', self.js)
+
+    def test_the_lists_have_arrows_to_their_top_and_bottom_and_begin_at_the_bottom(self):
+        """MT79."""
+        for which in ("mods", "plugins", "updates"):
+            for to in ("top", "bottom"):
+                self.assertIn('class="navbtn" data-list="%s" data-to="%s"' % (which, to), self.html)
+        self.assertIn('for (const b of document.querySelectorAll(".navbtn")) b.addEventListener("click", () => listGo(b.dataset.list, b.dataset.to));', self.js)
+        # The bottom at a start, for another session and after Rescan; a list read again after a change keeps its place.
+        self.assertIn("const anew = fresh || !!state.toBottom;", self.js)
+        self.assertIn("if (anew) listsToBottom();", self.js)
+        self.assertIn('state.status = "reading"; state.toBottom = true; }', self.js)
+        self.assertEqual(self.js.count("state.toBottom = true"), 1)                 # the Rescan button alone asks for it
+        self.assertIn("  restoreScroll();\n  bottomIfDue();\n", self.js)             # a list first shown later goes there then
+
+    def test_a_number_in_a_mods_name_that_nothing_calls_for_comes_off_with_one_press(self):
+        """MT79."""
+        self.assertIn("if (!hit || have.has(fold(hit[1])) || given.has(fold(hit[1])) || hit[1].startsWith(\"ModTrap - \")) continue;", self.js)
+        self.assertIn('await api("/api/list/rename", { name: from, to }); return true;', self.js)
+        self.assertIn("...[numbers, scan].filter(Boolean));", self.js)
 
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
@@ -258,7 +325,7 @@ class PageTests(unittest.TestCase):
     def test_the_scan_is_in_the_header_and_its_findings_on_the_health_tab(self):
         self.assertIn('id="scan-list"', self.html)
         self.assertIn('$("scan-list").addEventListener("click", () => { showTab("health"); listScan(true); });', self.js)
-        self.assertIn('$("health-count").textContent = s.issue_count + sc.found;', self.js)
+        self.assertIn('$("health-count").textContent = s.issue_count + sc.found + (state.status === "ready" ? wrongNumbers().length : 0);', self.js)
         for level in ("bad", "warn", "info", "good"):
             self.assertRegex(self.js, r"\b%s: \[\"" % level)
 

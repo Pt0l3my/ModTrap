@@ -619,3 +619,25 @@ body.mo2-open #mods-table input.onbox, body.mo2-open #plugins-table td.c-tick in
 #refresh-bar .pill { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent); border-radius: 999px; padding: 4px 14px; font-size: 13px; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); }
 @keyframes refresh-slide { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 body.refreshing #mods-table tbody, body.refreshing #plugins-table tbody { opacity: .7; transition: opacity .15s; }
+
+/* The bulk installer (MT78): a coloured place to drop mods, and one line for each mod taken in. */
+.bulkdrop { border: 2px dashed var(--accent); border-radius: 12px; padding: 22px 18px 14px; margin-bottom: 14px; text-align: center; background: rgba(185, 163, 255, .10); }
+.bulkdrop.over, body.dragging .bulkdrop { background: rgba(185, 163, 255, .22); border-style: solid; }
+.bulkdrop-title { font-size: 17px; font-weight: 600; color: var(--accent); margin: 0 0 10px; }
+.bulkdrop button { padding: 7px 18px; font-size: 15px; }
+.bulkrow { display: grid; grid-template-columns: 150px minmax(220px, 1fr) minmax(160px, 1.1fr) auto; gap: 4px 12px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: var(--panel); }
+.bulkrow.bad { border-color: var(--bad); }
+.bulkrow.asks { border-color: var(--warn); }
+.bulkrow input.bulkname { width: 100%; font: inherit; padding: 4px 8px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 5px; }
+.bulkrow input.bulkname:focus { border-color: var(--accent); outline: none; }
+.bulkrow .from { color: var(--dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bulkrow .acts { display: flex; gap: 6px; justify-content: flex-end; }
+.bulkrow .wide { grid-column: 1 / -1; }
+.bulknotes li.bad { color: var(--bad); }
+.bulkbar { height: 8px; border-radius: 4px; background: var(--panel2); overflow: hidden; margin: 8px 0; }
+.bulkbar > i { display: block; height: 100%; background: var(--accent); }
+.card-head h2 { flex: 1 1 auto; }
+#mods-table tbody tr.msel td, #updates-table tbody tr.msel td { background: rgba(185, 163, 255, .14); }
+.listnav { display: inline-flex; gap: 2px; }
+.listnav .navbtn { padding: 3px 9px; font-size: 12px; line-height: 1.4; }
+.tools.slim { padding-top: 5px; padding-bottom: 5px; }

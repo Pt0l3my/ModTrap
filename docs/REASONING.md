@@ -166,6 +166,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 141 | 2026-11-23 | Which records two plugins both change predicts no fault, so it is told as none | DECIDED | #model #page |
 | 142 | 2026-11-24 | xEdit settles what bytes could not, when asked; a leftover in a tool's plugin is the owner's to leave | DECIDED | #tools #steps #xedit #page |
 | 143 | 2026-11-24 | A greyed control must say why where it is pressed; a group is made of picked plugins, and a drop on its line is the one way to join at its edge | METHOD | #page #model |
+| 144 | 2026-11-24 | A bulk list is a queue and a run of small jobs, not one big analysis; a drag's aim must follow the list as well as the pointer | METHOD | #page #model #safety |
+| 145 | 2026-11-24 | A record of something done is not a claim on its name; where "refresh" ends and a change begins | FACT | #model #page |
 
 ## Entries
 
@@ -3918,3 +3920,69 @@ them; the addresses were read by a session that can), and the time the second pa
   moves and only its group is written.
 - Checked in a browser on an invented list: the menu with MO2 open and closed, the drag's word, two plugins
   picked and made a group, a drop on a group's line. Not checked on the owner's PC.
+
+### 144. A bulk list is a queue and a run of small jobs, not one big analysis; a drag's aim must follow the list as well as the pointer
+
+`2026-11-24` · METHOD · `#page #model #safety` · refs: MT78, MT67, MT65, MT57, MT54, MT53, DESIGN§36, DESIGN§16, DESIGN§18, WHY§143
+
+- FACT (the owner's session): about twenty archives were dropped on the Installer tool, ten at a time. That page
+  reads every mod on it against the whole modlist and against each other at every change (DESIGN§16), which is
+  why it stops at twenty; its mods also stay on it after they are installed. Both are right for one mod looked at
+  closely and wrong for many put in at once.
+- METHOD: the bulk list keeps the two things apart. Taking in (copy, unpack, name, installer's answers) needs no
+  analysis and no limit: a queue, one file at a time, and a route that tells how any number of unpacked archives
+  stand without reading them against the modlist. Installing needs the analysis, because the plan rests on it
+  (what a mod needs, where its plugins go): it is made for a lot of eight at a time, at the place chosen, with the
+  same two routes the Installer tool uses. So nothing new decides where a plugin goes or whether a mod can go in.
+- METHOD (order): every lot is placed directly before the same entry of MO2's list, so each lot comes to stand
+  after the one before it and the bulk list's order is the order in MO2. Eight is a balance: one reading of the
+  modlist for each lot instead of each mod, and a lot small enough that its Uninstall is not a blunt tool.
+- METHOD (faults): a refused lot says only that something in it is wrong. Each of its mods is then tried by
+  itself, and a mod that fails for want of a master is tried once more at the end, after the others are in. A
+  fault that would stop every lot (MO2 open, the probe) ends the run instead of being counted eight times.
+- METHOD (duplicates): three tests, cheapest first: the file's name on the list; MO2's own record of having
+  installed that file; and, once it is taken in, ModTrap's test for the same mod in the modlist (MT65, MT68) and
+  the same title and version on the list. The last needs the file taken in first, so its line shows briefly and
+  is then taken away with a note.
+- FACT (the page): the list must outlive a reading anew of the modlist, which every lot causes. The page's kept
+  state is applied again at each reading; the bulk list is rebuilt from it only for another session.
+- FACT (the drag, from the session's log and the code): the move the owner made was carried out as asked: before
+  the first plugin of the last group. The page had sent that place. A drag's target was set on the pointer's
+  move, and the list's own scrolling at its edge moved the rows without any move of the pointer. MO2's limits
+  were never in play. Fixed by asking for the row under the pointer's last place after every step of scrolling,
+  for both lists; and by taking the room below the last plugin for the end of the load order.
+- METHOD (picking): one set of picked mods serves both lists, since both show the same mods; a plain click still
+  does what it did (shows the mod), so only Ctrl and Shift are new. What a menu offers for several is what the
+  server already takes for several: the ticks, an uninstall, a move, an asking.
+- Checked in a browser on an invented list: fifteen files of which twelve went in, in order, from a chosen place;
+  the three kinds of duplicate, a file that is no archive and a broken one; an installer's answers; a name typed
+  over; picking with Ctrl and Shift on both lists and a menu for three; the clears; a drag held at the edge. Not
+  checked on the owner's PC, and not with archives of real size or by the hundred.
+
+### 145. A record of something done is not a claim on its name; where "refresh" ends and a change begins
+
+`2026-11-24` · FACT · `#model #page` · refs: MT79, MT78, MT71, MT67, DESIGN§37, DESIGN§16.1, WHY§122, WHY§137, WHY§144
+
+- FACT (the owner's session): ModTrap's work folder held 53 records of archives taken in, every one in the state
+  "installed". Nine of the mods in the bulk list had such a record from an install some hours earlier; those nine
+  mods were no longer in the modlist. Each of the nine was named with "(2)", and the log shows the plain name
+  given to the first install and "(2)" to the second, with nothing else of that name anywhere.
+- FACT (the code): the names a new mod could not have were the modlist's mods and every record in the work
+  folder, whatever its state. A record is kept after its mod is installed so that an Uninstall can put the mod
+  back on the Installer tool's list; nothing removes it when the mod leaves the modlist another way.
+- So the fault was in what counts as taken, not in the bulk installer: the Installer tool would have done the
+  same. A record whose mod is installed says nothing the modlist does not say (the mod is there under that
+  name, or it is gone); only an archive still waiting to be installed needs its name kept from the next one.
+- Not done: removing such records. Each holds an unpacked copy, which an Uninstall of that install puts back on
+  the list; the owner's "Clear" buttons (MT78) remove them. They cost disk room, and no longer anything else.
+- METHOD (the numbers already given): they cannot be told from a name the owner chose, except by this: the name
+  ends in a number in brackets and no mod has the name without it. That is told on the Health tab, and renaming
+  is the owner's press, through the rename that exists (MT66's job, one for each mod, each with its Revert).
+- METHOD ("every refresh"): the owner asked for the bottom of the list "after launch and every refresh". MT71,
+  also the owner's, says that a list read again after a change stays where it is. Both hold if "refresh" is what
+  the owner does to see the list afresh (starting ModTrap, loading the page, opening a modlist, "Rescan") and not
+  what ModTrap does by itself after each change. The second would move a row just ticked out of sight.
+- METHOD: a list that is not shown has no height to scroll. So the bottom is owed to each of the three lists and
+  paid when the list is first shown (its tab opened, the Updater list drawn).
+- Checked in a browser on an invented list of seventy mods: the three lists at their bottom at the start, the
+  arrows, the place kept after a tick at the top, the bottom after Rescan, and two wrong numbers taken off.

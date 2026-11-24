@@ -1262,3 +1262,53 @@ MO2 is open says so; and a group's line is a place to let go on. The move then a
 the group's first plugin and names the group (`group` of `/api/list/plugins/move`). The job takes that group only
 where the plugin then stands beside a plugin of it; otherwise §31's rule for a moved plugin decides. A plugin that
 already stands there is only given the group.
+
+## 36. The bulk installer; clearing the Installer tool; picking several mods; a drag's aim (MT78)
+
+**Bulk install** is the second tab of Install mods. Its list is the page's own: the ids of archives taken in,
+kept with the page's state for the session.
+
+| Stage | What happens | Routes |
+|---|---|---|
+| A file is added (dropped, or chosen as files or a folder) | not an archive: passed over; its name on the list already: turned away | none |
+| Its turn in the queue | MO2 has installed this file: turned away. Else it is read where it lies in MO2's Downloads or sent, unpacked and named (§16.1, MT67) | `/api/add/resolve`, `/api/add/take` or `/api/add/upload` |
+| Taken in | the same mod in the modlist, or the same title and version on the list: forgotten again, turned away | `/api/add/forget` |
+| On the list | its state is asked for all lines at once, without any analysis; its name is typed over; its installer's questions are answered as on the Installer tool | `/api/add/status`, `/api/add/name`, `/api/add/installer`, `/api/add/choose` |
+| "Bulk install" | greyed until a mod is ready and none is being taken in or waits for answers; then the place is chosen on the Mods tab (as §16.8's "Manual placement") and confirmed | none |
+| The run | lots of eight in the list's order, each analysed at that place and installed as one job (§16.8); a refused lot mod by mod; the failed once more at the end | `/api/add`, `/api/add/run` |
+
+`/api/add/status` takes up to 5,000 ids and answers each archive's state as the Installer tool's answer does,
+with the mod's title; it starts nothing. The Installer tool's own analysis keeps its limit of twenty.
+
+What was turned away or failed is listed above the lines; the header counts warnings and errors. A run that
+cannot go on at all (MO2 open) stops and says so; what was installed stays.
+
+**Clearing the Installer tool:** "Clear" on a mod's card and "Clear all" in the header take mods off the page; an
+unpacked copy in ModTrap's work folder is removed (`/api/add/forget`), a mod of MO2 only leaves the page.
+
+**Picking several mods** (Mods tab, Updater list): click, Ctrl-click, Shift-click, as §35 has it for plugins; the
+picked mods are one set for both lists. A right-click on a picked row gives the menu for all of them; a drag of a
+picked row moves all picked mods as one block (`/api/list/move` takes them so).
+
+**A drag's aim** (mods and plugins): the place is worked out from the element under the pointer's last position,
+at every move of the pointer and after every step by which the list scrolls at its edge. For a plugin, the room
+of the list's pane below the last row is the end of the load order.
+
+## 37. Names in use; the lists' arrows and where a list begins (MT79)
+
+**A name in use** (`Api._names_taken`), for naming a mod about to be installed (§16.1, MT67): the names of every
+mod and folder of the modlist, and of every archive taken in whose state is still copying, unpacking, ready or
+waiting for its installer's answers. Records in the states "installed" and "failed" hold no name.
+
+**Numbers nothing calls for.** The Health tab lists each mod whose name ends in a number in brackets (up to two
+digits) where no entry of the modlist has the name without it; of several with one plain name the first gets it.
+"Take the numbers off…" asks, then renames them one after another with `/api/list/rename` (§27), each a job with
+its Revert. ModTrap's own demaster mods are left out.
+
+**Arrows.** ▲ and ▼ stand in the header of the mods' list, the plugins' list and the Updater list, and scroll
+that list's pane to its top or its bottom.
+
+**Where a list begins.** When the lists are drawn for a session for the first time in a page (a start, a page
+loaded anew, another modlist), and when they are drawn after "Rescan", each of the three lists is owed its
+bottom: the ones shown go there at once, the others when they are first shown. In every other reading anew the
+lists keep their places (§30).
