@@ -1293,3 +1293,22 @@ picked row moves all picked mods as one block (`/api/list/move` takes them so).
 **A drag's aim** (mods and plugins): the place is worked out from the element under the pointer's last position,
 at every move of the pointer and after every step by which the list scrolls at its edge. For a plugin, the room
 of the list's pane below the last row is the end of the load order.
+
+## 37. Names in use; the lists' arrows and where a list begins (MT79)
+
+**A name in use** (`Api._names_taken`), for naming a mod about to be installed (§16.1, MT67): the names of every
+mod and folder of the modlist, and of every archive taken in whose state is still copying, unpacking, ready or
+waiting for its installer's answers. Records in the states "installed" and "failed" hold no name.
+
+**Numbers nothing calls for.** The Health tab lists each mod whose name ends in a number in brackets (up to two
+digits) where no entry of the modlist has the name without it; of several with one plain name the first gets it.
+"Take the numbers off…" asks, then renames them one after another with `/api/list/rename` (§27), each a job with
+its Revert. ModTrap's own demaster mods are left out.
+
+**Arrows.** ▲ and ▼ stand in the header of the mods' list, the plugins' list and the Updater list, and scroll
+that list's pane to its top or its bottom.
+
+**Where a list begins.** When the lists are drawn for a session for the first time in a page (a start, a page
+loaded anew, another modlist), and when they are drawn after "Rescan", each of the three lists is owed its
+bottom: the ones shown go there at once, the others when they are first shown. In every other reading anew the
+lists keep their places (§30).

@@ -1434,6 +1434,7 @@ function renderUpdates(listOnly) {
   const went = body.querySelector("tr.jump");
   if (!went) state.upJumped = "";
   else if (state.upJumped !== "*" + star) { state.upJumped = "*" + star; went.scrollIntoView({ block: "center" }); }
+  bottomIfDue();
 }
 
 function renderState(s) {
@@ -1483,7 +1484,7 @@ function renderState(s) {
   h.textContent = s.issue_count ? plural(s.issue_count, "master problem") : "No missing or inactive masters";
   h.className = "chip link " + (s.issue_count ? "bad" : "good");
   const sc = s.scan || { found: 0, bad: 0, going: false };
-  $("health-count").textContent = s.issue_count + sc.found;
+  $("health-count").textContent = s.issue_count + sc.found + (state.status === "ready" ? wrongNumbers().length : 0);
   $("health-count").classList.toggle("bad", s.issue_count + sc.bad > 0);
   const chip = $("s-scan");
   chip.hidden = !sc.found && !sc.going;
@@ -1588,10 +1589,51 @@ function scanCard() {
   return card;
 }
 
+// Mods whose name ends in a number in brackets, like "(2)", while no mod has the name without it (MT79): ModTrap
+// gave such a number by mistake to a mod installed a second time after the first had left the modlist. Each with
+// the name it should have; of several with one plain name, the lowest number gets it.
+function wrongNumbers() {
+  const have = new Set(state.mods.map((m) => fold(m.name)));
+  const out = [], given = new Set();
+  for (const m of state.mods.filter((x) => x.kind === "mod" && x.listed).sort((a, b) => naturally(a.name, b.name))) {
+    const hit = /^(.*\S) \((\d{1,2})\)$/.exec(m.name);
+    if (!hit || have.has(fold(hit[1])) || given.has(fold(hit[1])) || hit[1].startsWith("ModTrap - ")) continue;
+    given.add(fold(hit[1]));
+    out.push([m.name, hit[1]]);
+  }
+  return out;
+}
+async function numbersOff(pairs) {
+  if (!state.changes) { toast(NO_CHANGES); return; }
+  if (mo2Blocks()) return;
+  if (!await modalBox("Take the number off " + plural(pairs.length, "mod") + "?\n\n" + pairs.slice(0, 14).map(([a, b]) => "“" + a + "” becomes “" + b + "”").join("; ") + (pairs.length > 14 ? "; and " + (pairs.length - 14) + " more" : "")
+    + ".\n\nEach is renamed as MO2 renames a mod: its folder, and its line in every profile's list. Each rename is in the History, with its Revert. MO2 must be closed.", { yes: "Rename them", no: "Leave them", wide: true })) return;
+  let done = 0;
+  for (const [from, to] of pairs) {
+    const ok = await listDo(async () => { try { await api("/api/list/rename", { name: from, to }); return true; } catch (e) { toast("“" + from + "”: " + e.message); return false; } });
+    if (!ok) break;
+    done++;
+    listChanged("");
+    await sleep(250);
+  }
+  state.historyText = "";
+  toast(done === pairs.length ? plural(done, "mod") + " renamed." : done + " of " + plural(pairs.length, "mod") + " renamed.");
+}
+function numbersCard() {
+  const pairs = state.status === "ready" ? wrongNumbers() : [];
+  if (!pairs.length) return null;
+  const go = el("button", { type: "button", text: "Take the numbers off…", title: canChange() ? "Renames each to the name without the number, as MO2 renames a mod; each rename has its Revert" : whyNot(), disabled: !state.changes });
+  go.addEventListener("click", () => numbersOff(pairs));
+  return el("div", { class: "card" }, el("h2", { text: plural(pairs.length, "mod has", "mods have") + " a number in the name that nothing calls for" }),
+    el("p", { class: "dim", text: "No mod has the name without the number. ModTrap gave such a number, up to version 0.3.69, to a mod installed a second time after the first copy had left the modlist. The number does no harm; it is only a wrong name." }),
+    moreList(pairs.map(([a, b]) => el("li", {}, modLink(a), " would be “" + b + "”")), 12, 0, "numbers"),
+    el("p", {}, go));
+}
 function renderHealth(s) {
   const box = $("health");
   if (s.issue_count !== undefined) state.last = s;
-  const key = JSON.stringify([state.status, s.issue_count, s.issues, state.listScan, state.listScanFor === state.loaded]);
+  const numbers = numbersCard();
+  const key = JSON.stringify([state.status, s.issue_count, s.issues, state.listScan, state.listScanFor === state.loaded, state.status === "ready" ? wrongNumbers() : [], canChange()]);
   if (key === state.healthKey && box.firstChild) return;
   state.healthKey = key;
   if (state.status === "ready" && state.listScanFor !== state.loaded && !state.listScanAsking) {
@@ -1601,7 +1643,7 @@ function renderHealth(s) {
   const scan = state.status === "ready" ? scanCard() : null;
   if (!s.issue_count) {
     box.replaceChildren(el("div", { class: "card" }, el("h2", { text: "The load order is clean" }),
-      el("p", { class: "dim", text: "No active plugin lists a master that is missing or not active. This is what MO2's own warning checks." })), scan);
+      el("p", { class: "dim", text: "No active plugin lists a master that is missing or not active. This is what MO2's own warning checks." })), ...[numbers, scan].filter(Boolean));
     return;
   }
   const by = new Map();
@@ -1619,7 +1661,7 @@ function renderHealth(s) {
   }
   card.append(ul);
   if (s.issue_count > s.issues.length) card.append(el("p", { class: "dim", text: "Showing the first " + s.issues.length + "." }));
-  box.replaceChildren(card, scan);
+  box.replaceChildren(...[card, numbers, scan].filter(Boolean));
 }
 
 // --- sessions, and what the page remembers (MT20) -------------------------------------------------------------------
@@ -6418,6 +6460,27 @@ function restoreScroll() {
   for (const [pane, top] of scrollTops) if (pane.offsetParent !== null && pane.scrollTop !== top) pane.scrollTop = top;
   state.restoring = false;
 }
+// The lists' own arrows (MT79): to the top, or to the bottom. And the bottom is where a list begins: when ModTrap is
+// started, when the page is loaded anew, when another modlist is opened, and after "Rescan". What ModTrap installs
+// and what the tools made stand there. A list that is read again after a change keeps its place (MT71).
+const listPane = (which) => { const t = $(which === "mods" ? "mods-table" : which === "plugins" ? "plugins-table" : "updates-list"); return t ? t.closest(".scroll") : null; };
+function listGo(which, to) {
+  const pane = listPane(which);
+  if (!pane || pane.offsetParent === null) return false;
+  pane.scrollTop = to === "top" ? 0 : pane.scrollHeight;
+  scrollTops.set(pane, pane.scrollTop);
+  return true;
+}
+function listsToBottom() { state.bottomDue = new Set(["mods", "plugins", "updates"]); bottomIfDue(); }
+function bottomIfDue() {
+  const due = state.bottomDue;
+  if (!due || !due.size || state.status !== "ready") return;
+  for (const which of [...due]) {
+    if (which === "updates" && !document.querySelector("#updates-table")) continue;       // not drawn yet
+    if (listGo(which, "bottom")) due.delete(which);
+  }
+}
+for (const b of document.querySelectorAll(".navbtn")) b.addEventListener("click", () => listGo(b.dataset.list, b.dataset.to));
 
 function showTab(name) {
   // Two rows (DESIGN§4): the section the tab belongs to, and that section's tabs.
@@ -6445,6 +6508,7 @@ function showTab(name) {
   if (!split) for (const r of document.querySelectorAll("tr.linked")) r.classList.remove("linked");
   else { linkPlugins(state.focus || "", false); linkMod(state.plugin || "", false); }
   restoreScroll();
+  bottomIfDue();
   colSetupAll(true);                                             // the split view hides some columns: the widths are fitted again
   if (pane === "mods" || split) modsMode();
   updateTray();
@@ -6518,9 +6582,12 @@ async function loadLists(key, s) {
   const sid = s.session ? s.session.id : "";
   const fresh = sid !== state.sessionApplied;
   state.sessionApplied = sid;
-  if (fresh) scrollTops.clear();                  // another session's lists begin at their top
+  const anew = fresh || !!state.toBottom;         // a start, another session, or "Rescan": the lists begin at their bottom (MT79)
+  state.toBottom = false;
+  if (anew) scrollTops.clear();
   applyUi(fresh ? (s.session && s.session.ui) || {} : keep);
   restoreScroll();
+  if (anew) listsToBottom();
   loadListState();
 }
 
@@ -6761,7 +6828,7 @@ document.addEventListener("drop", (e) => {
 
 $("profile").addEventListener("change", () => $("open-form").requestSubmit());
 $("rescan").addEventListener("click", async () => {
-  try { state.gen = (state.gen || 0) + 1; await api("/api/rescan", {}); state.status = "reading"; } catch (e) { problem(e.message); }
+  try { state.gen = (state.gen || 0) + 1; await api("/api/rescan", {}); state.status = "reading"; state.toBottom = true; } catch (e) { problem(e.message); }
   tick();
 });
 document.querySelectorAll("#tabs button[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));

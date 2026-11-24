@@ -72,6 +72,30 @@ class Intake(unittest.TestCase):
             time.sleep(0.02)
         self.fail("it never settled")
 
+    def test_a_name_is_taken_only_by_a_mod_of_the_modlist_or_one_still_to_be_installed(self) -> None:
+        """MT79: a mod installed through ModTrap and since taken out of the modlist left its record in ModTrap's
+        work folder; the record held the name, and the mod installed again was called "(2)"."""
+        first = self.drop("Heather-4711-2-1-1700000000.zip", zipped(NEW_MOD))
+        self.settled([], [first["id"]])
+        self.assertEqual(first["name"], "Heather 2.1")
+        twin = self.drop("Heather-4711-2-1-1700000000.zip", zipped(NEW_MOD))       # while the first still waits: two cannot have one name
+        self.assertEqual(twin["name"], "Heather 2.1 (2)")
+        self.settled([], [twin["id"]])
+        self.api.post("/api/add/forget", {"id": twin["id"]})
+        self.api._staged[first["id"]]["state"] = "installed"                        # it went into MO2, and was taken out of MO2 again since
+        again = self.drop("Heather-4711-2-1-1700000000.zip", zipped(NEW_MOD))
+        self.assertEqual(again["name"], "Heather 2.1")                              # no mod of that name anywhere: the name is free
+        self.settled([], [again["id"]])
+        self.assertEqual(self.api.post("/api/add/name", {"id": again["id"], "name": "Heather"})[1]["name"], "Heather")
+        failed = self.drop("Heather-4711-2-1-1700000001.zip", b"PK\x03\x04 not a whole zip")
+        for _ in range(200):
+            if self.api._staged[failed["id"]]["state"] == "failed":
+                break
+            time.sleep(0.02)
+        other = self.drop("Heather-4711-2-1-1700000002.zip", zipped(NEW_MOD))       # a record that failed holds no name either
+        self.assertEqual(other["name"], "Heather 2.1")
+        self.settled([], [other["id"]])
+
     def test_the_bulk_installer_asks_how_any_number_of_archives_stand(self) -> None:
         """MT78: no limit of twenty, and no analysis."""
         ids = []

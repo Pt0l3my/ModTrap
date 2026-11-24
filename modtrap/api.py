@@ -1754,8 +1754,7 @@ class Api:
         d = base / sid
         d.mkdir(parents=True, exist_ok=False)
         m = self.model
-        taken = {instance.fold(x.name) for x in m.instance.mods} if m is not None else set()
-        taken |= {instance.fold(r["name"]) for r in self._staged.values()}
+        taken = self._names_taken()
         if updates and m is not None and m.instance.mod(updates) is None:
             updates = ""
         said = adding.from_archive_name(archive)          # what a site wrote into the file's name (TL01§31)
@@ -1816,7 +1815,7 @@ class Api:
         rec = self._staged.get(body.get("id")) if isinstance(body.get("id"), str) else None
         if rec is None:
             raise Bad("that is not on the list")
-        taken |= {instance.fold(r["name"]) for r in self._staged.values() if r is not rec}
+        taken = self._names_taken(rec)
         if instance.fold(new) in taken:
             raise Bad("MO2 already has a mod called “%s”, or one is about to be installed under that name" % new)
         if new != rec["name"]:
@@ -1843,6 +1842,18 @@ class Api:
         taken = {instance.fold(x.name) for x in m.instance.mods}
         return {"name": self._free_name(name if version else "%s (new)" % name, taken), "version": version, "was": row.get("version") or ""}
 
+    WAITING = ("copying", "unpacking", "ready", "installer")     # an archive taken in whose mod is still to be installed
+
+    def _names_taken(self, but: dict | None = None) -> set[str]:
+        """The names a mod about to be installed cannot have (folded): every mod and folder of the modlist, and
+        every archive taken in that is still to be installed. A record of an archive whose mod was installed, or
+        that could not be taken in, holds no name (MT79): its mod is in the modlist under that name, and is found
+        there; or the mod has left the modlist since, and the name is free again. Counting such a record gave a
+        mod installed a second time "(2)" with no other mod of that name anywhere."""
+        m = self.model
+        taken = {instance.fold(x.name) for x in m.instance.mods} if m is not None else set()
+        return taken | {instance.fold(r["name"]) for r in self._staged.values() if r is not but and r.get("state") in self.WAITING}
+
     @staticmethod
     def _free_name(name: str, taken: set[str]) -> str:
         out, n = name, 2
@@ -1856,9 +1867,7 @@ class Api:
         version = adding.clean_version(version)
         if not version or rec.get("version"):
             return
-        m = self.model
-        taken = {instance.fold(x.name) for x in m.instance.mods} if m is not None else set()
-        taken |= {instance.fold(r["name"]) for r in self._staged.values() if r is not rec}
+        taken = self._names_taken(rec)
         was = rec["name"]
         rec["version"] = version
         if not rec.get("named"):                          # a name the owner gave stays as given

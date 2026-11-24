@@ -251,6 +251,25 @@ class PageTests(unittest.TestCase):
         self.assertIn("const under = document.elementFromPoint(x, y);", self.js)
         self.assertIn('&& lastRow.dataset.plugin === pdrag.listed[pdrag.listed.length - 1] && !stands("")) at = { tr: lastRow, below: true, before: "" };', self.js)
 
+    def test_the_lists_have_arrows_to_their_top_and_bottom_and_begin_at_the_bottom(self):
+        """MT79."""
+        for which in ("mods", "plugins", "updates"):
+            for to in ("top", "bottom"):
+                self.assertIn('class="navbtn" data-list="%s" data-to="%s"' % (which, to), self.html)
+        self.assertIn('for (const b of document.querySelectorAll(".navbtn")) b.addEventListener("click", () => listGo(b.dataset.list, b.dataset.to));', self.js)
+        # The bottom at a start, for another session and after Rescan; a list read again after a change keeps its place.
+        self.assertIn("const anew = fresh || !!state.toBottom;", self.js)
+        self.assertIn("if (anew) listsToBottom();", self.js)
+        self.assertIn('state.status = "reading"; state.toBottom = true; }', self.js)
+        self.assertEqual(self.js.count("state.toBottom = true"), 1)                 # the Rescan button alone asks for it
+        self.assertIn("  restoreScroll();\n  bottomIfDue();\n", self.js)             # a list first shown later goes there then
+
+    def test_a_number_in_a_mods_name_that_nothing_calls_for_comes_off_with_one_press(self):
+        """MT79."""
+        self.assertIn("if (!hit || have.has(fold(hit[1])) || given.has(fold(hit[1])) || hit[1].startsWith(\"ModTrap - \")) continue;", self.js)
+        self.assertIn('await api("/api/list/rename", { name: from, to }); return true;', self.js)
+        self.assertIn("...[numbers, scan].filter(Boolean));", self.js)
+
     def test_a_mods_name_opens_its_web_with_its_page_and_its_picture(self):
         """MT62: the name is a button of its own and glows under the mouse; the web is drawn by the page from what
         the server read; the mod's page is a link that opens a new tab; the picture comes through the server."""
@@ -306,7 +325,7 @@ class PageTests(unittest.TestCase):
     def test_the_scan_is_in_the_header_and_its_findings_on_the_health_tab(self):
         self.assertIn('id="scan-list"', self.html)
         self.assertIn('$("scan-list").addEventListener("click", () => { showTab("health"); listScan(true); });', self.js)
-        self.assertIn('$("health-count").textContent = s.issue_count + sc.found;', self.js)
+        self.assertIn('$("health-count").textContent = s.issue_count + sc.found + (state.status === "ready" ? wrongNumbers().length : 0);', self.js)
         for level in ("bad", "warn", "info", "good"):
             self.assertRegex(self.js, r"\b%s: \[\"" % level)
 

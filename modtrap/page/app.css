@@ -638,3 +638,6 @@ body.refreshing #mods-table tbody, body.refreshing #plugins-table tbody { opacit
 .bulkbar > i { display: block; height: 100%; background: var(--accent); }
 .card-head h2 { flex: 1 1 auto; }
 #mods-table tbody tr.msel td, #updates-table tbody tr.msel td { background: rgba(185, 163, 255, .14); }
+.listnav { display: inline-flex; gap: 2px; }
+.listnav .navbtn { padding: 3px 9px; font-size: 12px; line-height: 1.4; }
+.tools.slim { padding-top: 5px; padding-bottom: 5px; }

@@ -97,6 +97,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   why and offers to close MO2).
   MT78 (a bulk installer for any number of mods; the Installer tool cleared of what is done; several mods picked
   with Ctrl and Shift; a drag that follows the list as it scrolls).
+  MT79 (a name is taken only by a mod that is there: no "(2)" for a mod installed again; the lists have arrows to
+  their top and bottom and begin at the bottom).
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -2142,3 +2144,33 @@ user can select more than one rows."
   the list's edge while the list scrolled under it, it kept the place from before the scrolling: the plugin landed
   one row on instead of at the end. The place is now worked out from where the pointer is at every step of the
   scrolling too, for plugins and for mods; and below the last plugin is the end of the load order.
+
+## MT79
+
+**A name is taken only by a mod that is there; the lists have arrows and begin at their bottom** · *2026-11-24 · The owner's report and request*
+
+**Owner's words.** "I done the bulk install but some mods ended up getting a (2), I don't understand why, it doesn't
+seem there are any duplicates in modlist. if you find the root cause then please fix it, because it makes no sense
+to me.
+
+Also can you add navigation button to pages that show modlist/plugin list (including updater list) to the header:
+an upwards arrow button (bring to top of list) and a downwards arrow button (bring to bottom of list). and make sure
+after launch and every refresh the bottom of the list is shown be default."
+
+**Settled** (DESIGN§37, WHY§145; the owner may overrule any of it):
+
+- **The "(2)" was ModTrap's fault.** Nine of the mods had been installed through ModTrap once before and had left
+  the modlist since. ModTrap's work folder still held its record of each, and a name was counted as taken by any
+  record there. So the mod installed again got "(2)", with no other mod of that name anywhere. Now a name is taken
+  only by a mod or folder of the modlist, or by an archive taken in that is still to be installed. A record of a
+  mod that was installed, or of an archive that could not be taken in, holds no name.
+- **The numbers already given come off with one press.** The Health tab lists the mods whose name ends in a
+  number in brackets while no mod has the name without it, and "Take the numbers off…" renames each as MO2
+  renames a mod, after a question; each rename is in the History with its Revert. Left alone, the number does no
+  harm.
+- **Arrows.** The Mods tab, the Plugins tab (and so the split view and Pick mods) and the Updater list each have
+  ▲ and ▼ in their header: to the top of the list, and to its bottom.
+- **A list begins at its bottom:** when ModTrap is started, when the page is loaded anew, when another modlist is
+  opened, and after "Rescan". That is where what was installed last and what the tools made stand. A list read
+  again after a change (a tick, a move, an install) keeps the place it has, as MT71 settled: jumping to the bottom
+  after a change made further up would take the changed row out of sight.
