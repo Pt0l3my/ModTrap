@@ -1312,3 +1312,41 @@ that list's pane to its top or its bottom.
 loaded anew, another modlist), and when they are drawn after "Rescan", each of the three lists is owed its
 bottom: the ones shown go there at once, the others when they are first shown. In every other reading anew the
 lists keep their places (§30).
+
+## 38. Source links by any page, asked at once; a fix for a plugin the game does not load (MT80)
+
+**An address the owner gives** (`sources.parse_link`, WHY§147). A mod's page at Nexus is known by its game and
+number, with whatever follows (a tab, a file's number, a mark in the page), under `www.`, `next.` or neither, with
+`games/` before the game or not, and as a "mod manager download" link. A repository at GitHub is known by its
+owner and name from any page of it, and from GitHub's hosts for code and for programs; the page of one release, a
+file of one release, or the packed code of a tag also names the release installed. GitHub's own pages (an
+organisation's, the settings) and an account's page are not repositories. An address without `https://` gets it.
+Anything else is kept as a plain address. The answer to the page says what was made of it.
+
+**Asked at once** (`Updating.ask_soon`). A link to Nexus or GitHub, once kept, starts a scan of that one mod, as
+"Ask about this mod now" does. While a scan is going the mod is noted and asked about when that scan ends.
+
+**The installed version** (`sources.gather`). The mod's own record first, then the list's file, then the version
+the mod's name ends with, then the one its archive's name ends with; the last two are marked "by its name" on the
+Updater list. `addjob` writes that version into the record of a mod it installs.
+
+**GitHub** (`updates.github_releases`, `github_verdict`). One question for a repository: its ten newest
+releases. Kept: the newest full release with its files; a pre-release that came after it; or, with no full
+release, the newest pre-release in its place. The verdict, in this order: the release named by a link or a record;
+the version (the same as the newest: current; both numbers and the newest higher: update; lower: current, said
+so); the newest release's version found whole in the mod's or the archive's name: current; else unclear.
+
+**A script extender plugin for another version of the game** (§25, §33; `evaluate.plugin_use`, `pex.py`,
+WHY§146). Judged only where the game loads that copy. Then the mod's compiled scripts are read, up to 600 of
+them, the mod's own copies and the copies the game loads:
+
+| what the scripts say | what is told |
+| --- | --- |
+| no script declares functions that this plugin names | a likely fault, as before |
+| scripts the game loads still call those functions | a likely fault, naming the scripts and the mods above that replace other files |
+| the scripts that called them are replaced, and none calls them now | a note, naming the mod that replaced them |
+| the declaring script is replaced by one that declares none of them | a note, naming that mod |
+
+The same holds in a mod's own weighing (§25), which also says where a mod above replaces the plugin itself. An
+archive in the older game's format is named only where the game loads that copy. The scan of every mod lists a
+mod's files up to two million and for up to a minute, within its own limit of time.

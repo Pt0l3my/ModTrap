@@ -9,6 +9,7 @@ from pathlib import Path
 
 from modtrap import api, dupes, evaluate, instance, logbook, model, probe
 from tests import _fixtures as fx
+from tests._pex import script
 from tests.test_modweb import CORE, pf
 from tests.test_updates import FakeNet, meta
 
@@ -137,8 +138,59 @@ class AModWeighed(unittest.TestCase):
         self.assertEqual(by["does-nothing"]["mods"], ["Shadowed"])
         self.assertIn("overwritten by “Newcomer” (1), “Quill” (1)", by["does-nothing"]["items"][0])
         self.assertEqual(by["archive-format"]["items"], ["“Newcomer”: Old.bsa"])
-        self.assertEqual(by["extender-version"]["items"], ["“Newcomer”: skse/plugins/thing.dll, built for game version 1.5"])
+        self.assertEqual(by["extender-version"]["items"], ["“Newcomer”: skse/plugins/thing.dll, built for game version 1.5; “Tool Output” replaces 1 of this mod's files, "
+                                                           "this plugin not among them"])
         self.assertEqual((got["mods"], got["cut"], seen[-1]), (7, False, (7, 7)))
+
+
+class AFixForAPlugin(unittest.TestCase):
+    """WHY§146: a script extender plugin the game does not load, and the mod above that makes it matter no more."""
+    DLL = b"MZ..SKSEPlugin_Query\0....\0FrostUtil\0ReadIni\0...."
+    FROST = {"skse/plugins/FrostUtil.dll": DLL, "scripts/FrostUtil.pex": script("FrostUtil", natives=("ReadIni",)),
+             "scripts/FrostQuest.pex": script("FrostQuest", calls=(("FrostUtil", "ReadIni"),)), "meshes/frost/a.nif": nif(100)}
+
+    def listed(self, fix: dict) -> model.Model:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        fx.make_instance(root, [("+", "Frost Fixes", fix), ("+", "Frost", self.FROST), ("+", "Core", {CORE: pf(())})], load_order=[CORE])
+        fx.write(root / "Game" / "SkyrimSE.exe", exe(1, 6, 1170))
+        return model.build(instance.load(root))
+
+    def both(self, fix: dict) -> tuple[dict, dict]:
+        m = self.listed(fix)
+        deep = {f["key"]: f for f in dupes.deep(m)["findings"]}
+        one = {f["key"]: f for f in evaluate.mod(m, m.instance.mod("Frost"))["findings"]}
+        return deep, one
+
+    def test_a_fix_that_replaces_the_scripts_that_called_it(self):
+        deep, one = self.both({"Scripts/frostquest.pex": script("FrostQuest", calls=(("Utility", "Wait"),))})       # written in another case, as mods are
+        self.assertNotIn("extender-version", deep)
+        self.assertEqual((deep["extender-unused"]["level"], deep["extender-unused"]["mods"]), ("info", ["Frost"]))
+        self.assertEqual(deep["extender-unused"]["items"], ["“Frost”: skse/plugins/FrostUtil.dll, built for game version 1.5; the script that called it (frostquest) "
+                                                            "is replaced by “Frost Fixes”, and does not call it now"])
+        self.assertNotIn("extender-version", one)
+        self.assertEqual(one["extender-unused"]["level"], "info")
+        self.assertIn("is replaced by “Frost Fixes”", one["extender-unused"]["items"][0])
+
+    def test_a_fix_that_replaces_other_files_is_no_fix_for_it(self):
+        deep, one = self.both({"meshes/frost/a.nif": nif(100) + b"fixed"})
+        self.assertNotIn("extender-unused", deep)
+        self.assertEqual(deep["extender-version"]["level"], "bad")
+        self.assertEqual(deep["extender-version"]["items"], ["“Frost”: skse/plugins/FrostUtil.dll, built for game version 1.5; still called by 1 script: frostquest; "
+                                                             "“Frost Fixes” replaces 1 of this mod's files, this plugin not among them"])
+        self.assertEqual(one["extender-version"]["items"], ["skse/plugins/FrostUtil.dll: built for game version 1.5, this game is 1.6.1170; still called by 1 script: frostquest"])
+
+    def test_a_fix_that_replaces_the_plugin_itself(self):
+        deep, one = self.both({"SKSE/Plugins/FrostUtil.dll": b"MZ..SKSEPlugin_Version\0..SKSEPlugin_Query\0"})
+        self.assertFalse({"extender-version", "extender-unused"} & set(deep))
+        self.assertNotIn("extender-version", one)
+        self.assertEqual(one["extender-replaced"]["items"], ["skse/plugins/FrostUtil.dll: built for game version 1.5, but “Frost Fixes” above replaces it"])
+
+    def test_an_older_archive_that_a_mod_above_replaces_is_not_named(self):
+        m = self.listed({"Frost.bsa": SE_BSA})
+        fx.write(m.instance.mod("Frost").folder / "Frost.bsa", LE_BSA)
+        self.assertNotIn("archive-format", {f["key"] for f in dupes.deep(m)["findings"]})
 
 
 class AModsName(unittest.TestCase):

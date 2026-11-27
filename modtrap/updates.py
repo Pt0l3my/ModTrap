@@ -64,6 +64,8 @@ GITHUB_PER_SCAN = 40
 GITHUB_RESERVE = 5
 ASK_AGAIN = 28 * 86400               # a mod not in the month's list is asked about again after this long
 GITHUB_AGAIN = 12 * 3600
+GITHUB_RELEASES = 10                  # the newest releases of a repository that are asked for
+GITHUB_KEPT = 2                       # what is kept of a repository is of this making; an older record is asked for anew
 STORE = "updates.json"
 
 
@@ -349,22 +351,65 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
     return {"state": "current", "text": "no newer file replaced the installed one (%s)" % how, "newest": "", "file": "", "when": "", "asked": asked}
 
 
+def github_releases(body: list) -> dict:
+    """What is kept of a repository's newest releases, from GitHub's list of them (newest first): {"tag",
+    "published", "assets"} of the newest full release, "pre" where a pre-release is newer than it, "only_pre" where
+    there is no full release and the newest pre-release stands in, or {"gone"} where there is none at all."""
+    def of(r: dict) -> dict:
+        assets = []
+        for a in (r.get("assets") or [])[:60]:
+            if isinstance(a, dict) and a.get("name") and a.get("browser_download_url"):
+                assets.append([str(a["name"]), str(a["browser_download_url"]), int(a.get("size") or 0)])
+        return {"tag": str(r["tag_name"]), "published": str(r.get("published_at") or r.get("created_at") or ""), "assets": assets}
+    listed = [r for r in body if isinstance(r, dict) and r.get("tag_name") and not r.get("draft")]
+    if not listed:
+        return {"gone": "it has no release"}
+    full = next((r for r in listed if not r.get("prerelease")), None)
+    if full is None:
+        return dict(of(listed[0]), only_pre=True)
+    out = of(full)
+    if listed[0] is not full:                           # a pre-release came after the newest full release
+        first = of(listed[0])
+        out["pre"] = {"tag": first["tag"], "published": first["published"]}
+    return out
+
+
 def github_verdict(row: dict, kept: dict | None) -> dict:
+    """What a repository's releases say of the mod installed (WHY§147). The release installed is known by the link
+    or the record that names it; failing that by the mod's version, which may be read from its name."""
     if kept is None:
         return {"state": "not asked", "text": "GitHub has not been asked about this repository yet", "newest": "", "file": "", "when": "", "asked": ""}
     asked = _day(kept.get("asked", 0))
     if kept.get("gone"):
         return {"state": "gone", "text": "GitHub shows no release for this repository (%s)" % kept["gone"], "newest": "", "file": "", "when": "", "asked": asked}
     tag, when = kept.get("tag", ""), kept.get("published", "")[:10]
-    if row.get("tag"):
-        if row["tag"] == tag:
-            return {"state": "current", "text": "the installed archive is of the newest release (%s)" % tag, "newest": tag, "file": "", "when": when, "asked": asked}
-        return {"state": "update", "text": "the newest release is %s, of %s; the installed archive is of release %s" % (tag, when, row["tag"]),
-                "newest": tag, "file": "", "when": when, "asked": asked}
-    if row.get("version") and same_version(row["version"], tag):
-        return {"state": "current", "text": "the installed version is the newest release (%s)" % tag, "newest": tag, "file": "", "when": when, "asked": asked}
-    return {"state": "maybe", "text": "the newest release is %s, of %s; which release is installed is not recorded (the version reads %s)" % (
-        tag, when, row.get("version") or "(none given)"), "newest": tag, "file": "", "when": when, "asked": asked}
+    pre = kept.get("pre") or {}
+    early = "; a pre-release, %s of %s, is out too" % (pre["tag"], pre.get("published", "")[:10]) if pre.get("tag") else ""
+    out = {"newest": tag, "file": "", "when": when, "asked": asked}
+    only = " (a pre-release: the repository has no full release)" if kept.get("only_pre") else ""
+    mine, version = row.get("tag") or "", row.get("version") or ""
+    by_name = " (read from the mod's name)" if row.get("version_by") == "name" else ""
+    if mine:
+        if mine == tag:
+            return dict(out, state="current", text="the installed archive is of the newest release (%s)%s%s" % (tag, only, early))
+        if pre.get("tag") and mine == pre["tag"]:
+            return dict(out, state="current", text="the installed archive is of the newest pre-release (%s); the newest full release is %s, of %s" % (mine, tag, when))
+        return dict(out, state="update", text="the newest release is %s, of %s%s; the installed archive is of release %s%s" % (tag, when, only, mine, early))
+    if version:
+        if same_version(version, tag):
+            return dict(out, state="current", text="the installed version%s is the newest release (%s)%s%s" % (by_name, tag, only, early))
+        if pre.get("tag") and same_version(version, pre["tag"]):
+            return dict(out, state="current", text="the installed version%s is the newest pre-release (%s); the newest full release is %s, of %s" % (by_name, pre["tag"], tag, when))
+        a, b = _parts(version), _parts(tag)
+        if a is not None and b is not None:
+            if a > b:
+                return dict(out, state="current", text="the installed version, %s%s, is newer than the newest release (%s, of %s)%s" % (version, by_name, tag, when, early))
+            return dict(out, state="update", text="the newest release is %s, of %s%s; the installed version is %s%s%s" % (tag, when, only, version, by_name, early))
+    for name, what in ((tag, "release"), (pre.get("tag", ""), "pre-release")):
+        if name and sources.names_version(name, row.get("mod", ""), row.get("archive", "")):
+            return dict(out, state="current", text="the mod's name carries the version of the newest %s (%s)%s" % (what, name, early if what == "release" else ""))
+    return dict(out, state="maybe", text="the newest release is %s, of %s%s; which release is installed is not recorded (the version reads %s)%s" % (
+        tag, when, only, version or "(none given)", early))
 
 
 def verdict(row: dict, store: dict) -> dict:
@@ -681,7 +726,7 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
     gh["repos"] = len(repos)
     for n, repo in enumerate(repos):
         prev = store["github"].get(repo)
-        if prev is not None and prev.get("asked", 0) > now - GITHUB_AGAIN and not force:
+        if prev is not None and prev.get("v") == GITHUB_KEPT and prev.get("asked", 0) > now - GITHUB_AGAIN and not force:
             continue
         if halted():
             gh["why_stopped"] = "stopped"
@@ -690,13 +735,16 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
         elif gh["left_this_hour"] is not None and gh["left_this_hour"] <= GITHUB_RESERVE:
             gh["why_stopped"] = "GitHub allows a program without an account few questions an hour; the rest follow later"
         if gh["why_stopped"]:
-            gh["left"] = sum(1 for x in repos[n:] if store["github"].get(x) is None or store["github"][x].get("asked", 0) <= now - GITHUB_AGAIN)
+            gh["left"] = sum(1 for x in repos[n:] if store["github"].get(x) is None or store["github"][x].get("v") != GITHUB_KEPT
+                             or store["github"][x].get("asked", 0) <= now - GITHUB_AGAIN)
             break
         say("asking GitHub about repository %d of %d" % (n + 1, len(repos)))
         h_req = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-        if prev and prev.get("etag"):
+        if prev and prev.get("etag") and prev.get("v") == GITHUB_KEPT:
             h_req["If-None-Match"] = prev["etag"]
-        status, h, body = net.get("%s/repos/%s/releases/latest" % (GITHUB, repo), h_req)
+        # The newest releases, pre-releases among them (WHY§147): "the latest release" alone says nothing of a
+        # repository that has only pre-releases, and nothing of a pre-release that is installed.
+        status, h, body = net.get("%s/repos/%s/releases?per_page=%d" % (GITHUB, repo, GITHUB_RELEASES), h_req)
         try:
             gh["left_this_hour"] = int(h["x-ratelimit-remaining"])
         except (KeyError, ValueError):
@@ -704,14 +752,9 @@ def scan(rows: list[dict], key: str, net: Net, store: dict | None = None, now: f
         if status == 304 and prev:
             prev["asked"] = int(now)
         elif status == 404:
-            store["github"][repo] = {"asked": int(now), "gone": "no release, or no such repository"}
-        elif status == 200 and isinstance(body, dict) and body.get("tag_name"):
-            assets = []
-            for a in (body.get("assets") or [])[:60]:
-                if isinstance(a, dict) and a.get("name") and a.get("browser_download_url"):
-                    assets.append([str(a["name"]), str(a["browser_download_url"]), int(a.get("size") or 0)])
-            store["github"][repo] = {"asked": int(now), "tag": str(body["tag_name"]), "published": str(body.get("published_at") or ""),
-                                     "etag": h.get("etag", ""), "assets": assets}
+            store["github"][repo] = {"v": GITHUB_KEPT, "asked": int(now), "gone": "no such repository, or it is private"}
+        elif status == 200 and isinstance(body, list):
+            store["github"][repo] = dict(github_releases(body), v=GITHUB_KEPT, asked=int(now), etag=h.get("etag", ""))
         else:
             gh["why_stopped"] = ("GitHub could not be reached (%s)" % h.get("why", "no answer") if status == 0 else
                                  "GitHub's allowance of questions for this hour is used up" if status in (403, 429) else

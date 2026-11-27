@@ -19,13 +19,14 @@ import struct
 import time
 from pathlib import Path
 
-from . import adding, logbook, model, plugin, steps
+from . import adding, logbook, model, pex, plugin, steps
 from .instance import Mod, fold
 
 log = logbook.get("evaluate")
 SECONDS = 15.0
 ITEMS = 40                      # lines kept for one finding
 COMPARE_ONE = 64 * 1024 * 1024  # a larger file is not compared byte for byte
+SCRIPTS = 600                   # compiled scripts of one mod read at most, for what calls a script extender plugin
 COMPARE_ALL = 768 * 1024 * 1024
 HEADERS = 600                   # files of one kind whose first bytes are read
 PLUGIN_BYTES = 300 * 1024 * 1024
@@ -104,9 +105,110 @@ def _n(n: int, one: str, many: str | None = None) -> str:
     return "%s %s" % (format(n, ","), one if n == 1 else (many or one + "s"))
 
 
-def own_files(inst, mod_name: str, folder: Path, mine: list[str], stop: float) -> tuple[list[dict], bool]:
+def extender_wrong(game: tuple[int, int, int] | None, data: bytes) -> str:
+    """The game version a script extender plugin was built for, where this game's script extender does not load
+    it: "1.5" or "1.6". "" where it loads, or cannot be told. A plugin that carries both ways of naming itself
+    loads in either game."""
+    newer, older = b"SKSEPlugin_Version\0" in data, b"SKSEPlugin_Query\0" in data
+    if game is None:
+        return ""
+    if game >= (1, 6, 0) and older and not newer:
+        return "1.5"
+    if game < (1, 6, 0) and newer and not older:
+        return "1.6"
+    return ""
+
+
+def _read_script(path: Path) -> dict | None:
+    try:
+        if path.stat().st_size > pex.BYTES:
+            return None
+        return pex.read(path.read_bytes())
+    except OSError:
+        return None
+
+
+def plugin_use(dll: bytes, scripts: list[tuple[str, Path, Path, str]]) -> dict | None:
+    """Whether the scripts beside a script extender plugin still call it (WHY§146). `scripts`: the mod's own
+    compiled scripts, each as (its file in lower case, the mod's own copy, the copy the game loads, the mod that
+    copy is from or "" for the mod's own).
+
+    A plugin gives scripts functions that a script only declares ("native"). Such a script is the plugin's where
+    the plugin's bytes hold the script's name and the name of one of those functions. A script calls the plugin
+    where it calls such a function by the script's name. Returns {"scripts": the scripts that declare its
+    functions, "own": the mod's own scripts that call them, "now": the ones that still do as the game loads them,
+    "by": the mods whose copies took the calls out, "taken_over": the
+    declaring script itself is replaced by one that declares none of them}; None where the scripts do not say what the plugin is for."""
+    low = dll.lower()
+
+    def held(name: str) -> bool:
+        return bool(name) and re.search(rb"(?<![a-z0-9_])" + re.escape(name.lower().encode("utf-8", "replace")) + rb"\x00", low) is not None
+
+    own = {f: _read_script(mine) for f, mine, _now, _by in scripts}
+    faces: dict[str, set[str]] = {}                       # a script's name -> the plugin's functions it declares
+    for f, got in own.items():
+        if got and got["natives"] and held(got["name"]):
+            named = {n for n in got["natives"] if held(n)}
+            if named:
+                faces[got["name"].lower()] = set(got["natives"])
+    if not faces:
+        return None
+    now: dict[str, dict | None] = {}
+    for f, mine, loaded, by in scripts:
+        now[f] = own[f] if not by else _read_script(loaded)
+    # A script that declared the plugin's functions may itself be replaced by one that does the work in Papyrus.
+    still = {name: set() for name in faces}
+    for f, got in now.items():
+        was = own.get(f)
+        if was and was["name"].lower() in faces:
+            still[was["name"].lower()] = set(faces[was["name"].lower()]) if got is None else set(got["natives"]) & faces[was["name"].lower()]
+
+    def calls(got: dict | None, table: dict[str, set[str]]) -> bool:
+        if got is None:
+            return False
+        me = got["name"].lower()
+        return any((s, fn) in got["calls"] or (fn in got["methods"] and s in got["names"]) for s, fns in table.items() if s != me for fn in fns)
+
+    callers = sorted(f for f, got in own.items() if calls(got, faces))
+    out = {"scripts": sorted(faces), "own": [_script(f) for f in callers], "now": [], "by": []}
+    by_mod = {f: by for f, _mine, _now, by in scripts}
+    for f in callers:
+        # A copy that cannot be read is taken as calling still: nothing is called fixed on a guess.
+        if now[f] is None or calls(now[f], still):
+            out["now"].append(_script(f))
+        elif by_mod[f] and by_mod[f] not in out["by"]:
+            out["by"].append(by_mod[f])
+    out["taken_over"] = not any(still.values())
+    if out["taken_over"]:
+        out["by"] = sorted({by_mod[f] for f, got in own.items() if got and got["name"].lower() in faces and by_mod[f]})
+    return out
+
+
+def _script(file: str) -> str:
+    return file.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+
+
+def _some(names: list[str], n: int = 6) -> str:
+    return ", ".join(names[:n]) + (" and %d more" % (len(names) - n) if len(names) > n else "")
+
+
+def use_told(use: dict) -> str:
+    """One line of what `plugin_use` found, for a finding."""
+    by = " and ".join("“%s”" % b for b in use["by"]) or "a mod above"
+    if use["now"]:
+        return "still called by %s: %s" % (_n(len(use["now"]), "script"), _some(use["now"]))
+    if use["taken_over"]:
+        return "its functions were declared in %s, which %s replaces with a script that does the work itself" % (_some(use["scripts"]), by)
+    if len(use["own"]) == 1:
+        return "the script that called it (%s) is replaced by %s, and does not call it now" % (use["own"][0], by)
+    return "the %d scripts that called it (%s) are replaced by %s, and none calls it now" % (len(use["own"]), _some(use["own"]), by)
+
+
+def own_files(inst, mod_name: str, folder: Path, mine: list[str], stop: float, won=None) -> tuple[list[dict], bool]:
     """The mod's own files, looked at for what they are: formats of the older game, a script extender plugin built
-    for another version of the game, deleted records, and files that lie where the game does not look."""
+    for another version of the game, deleted records, and files that lie where the game does not look.
+    `won(files)`: of these files of the mod, the ones a mod above replaces, as {file in lower case: (the copy the
+    game loads, that mod's name)}; without it every file is taken as the one the game loads."""
     out: list[dict] = []
     cut = False
     low = [(f, f.lower()) for f in mine]
@@ -207,27 +309,45 @@ def own_files(inst, mod_name: str, folder: Path, mine: list[str], stop: float) -
                             "%s in the older Skyrim's format. Many show as they should; some show wrongly or crash the game where they load. "
                             "A mesh optimiser converts them." % _n(len(old_nif), "mesh is", "meshes are"), sorted(old_nif, key=str.lower)))
 
-    # Script extender plugins built for another version of the game.
+    # Script extender plugins built for another version of the game (WHY§146): only the copy the game loads is
+    # judged, and where the scripts say what the plugin is for, whether anything still calls it.
     game = game_version(inst.game_dir)
-    wrong = []
-    for f, lf in low:
-        if not (lf.startswith("skse/plugins/") and lf.endswith(".dll") and lf.count("/") == 2):
-            continue
+    dlls = [f for f, lf in low if lf.startswith("skse/plugins/") and lf.endswith(".dll") and lf.count("/") == 2]
+    wrong, quiet, replaced = [], [], []
+    scripts = [f for f, lf in low if lf.startswith("scripts/") and lf.endswith(".pex") and lf.count("/") == 1][:SCRIPTS]
+    above: dict = {}
+    for f in dlls if game is not None else []:
         try:
             if (folder / f).stat().st_size > COMPARE_ONE:
                 continue
             data = (folder / f).read_bytes()
         except OSError:
             continue
-        newer, older = b"SKSEPlugin_Version\0" in data, b"SKSEPlugin_Query\0" in data
-        if game is not None and game >= (1, 6, 0) and older and not newer:
-            wrong.append("%s: built for game version 1.5, this game is %d.%d.%d" % (f, *game))
-        elif game is not None and game < (1, 6, 0) and newer and not older:
-            wrong.append("%s: built for game version 1.6, this game is %d.%d.%d" % (f, *game))
+        built = extender_wrong(game, data)
+        if not built:
+            continue
+        if won is not None and not above:
+            above = won(dlls + scripts)
+        if f.lower() in above:
+            replaced.append("%s: built for game version %s, but “%s” above replaces it" % (f, built, above[f.lower()][1]))
+            continue
+        use = plugin_use(data, [(s.lower(), folder / s, *above.get(s.lower(), (folder / s, ""))) for s in scripts])
+        line = "%s: built for game version %s, this game is %d.%d.%d" % (f, built, *game)
+        if use is not None and not use["now"] and (use["own"] or use["taken_over"]):
+            quiet.append(line + "; " + use_told(use))
+        else:
+            wrong.append(line + ("; " + use_told(use) if use is not None and use["now"] else ""))
     if wrong:
         out.append(_finding("extender-version", "bad", "A script extender plugin for another version of the game",
                             "The script extender does not load a plugin built for another version of the game, and says so when the game starts; what the mod "
                             "does through it is then missing. The mod's page has the file for this game's version.", wrong))
+    if quiet:
+        out.append(_finding("extender-unused", "info", "A script extender plugin for another version of the game, which nothing calls now",
+                            "The script extender does not load it, but the scripts that called it are replaced: as the game loads this mod's scripts, none of them "
+                            "calls the plugin any more. The scripts of other mods were not read.", quiet))
+    if replaced:
+        out.append(_finding("extender-replaced", "info", "A script extender plugin of this mod is replaced by a mod above",
+                            "The game loads the other mod's copy, so this one's does not count.", replaced))
     return out, cut
 
 
@@ -376,7 +496,22 @@ def mod(m: model.Model, target: Mod, seconds: float = SECONDS, duplicates: list[
                                  "have the same name only one is loaded. Keep the newer one."
                                  % (d["mod"], "version %s, " % d["version"] if d.get("version") else "", "enabled" if d.get("enabled") else "disabled", d.get("priority", 0),
                                     " (%s)" % d["how"] if d.get("how") else "", "version %s" % d["mine"] if d.get("mine") else "of no known version"), [d["mod"]]))
-    own, c1 = own_files(m.instance, target.name, target.folder, mine, stop)
+    def won(files: list[str]) -> dict:
+        """Of these files of the mod, the ones an enabled mod above it has too: the copy the game loads."""
+        trie = adding._trie(files)
+        best: dict[str, tuple] = {}
+        for o in m.instance.mods:
+            if o.kind not in ("mod", "overwrite") or o.folder is None or not o.enabled or o.name == target.name or not trie:
+                continue
+            rank = o.priority if o.kind == "mod" else 1 << 30
+            if rank < target.priority:
+                continue
+            for f in adding.shared_files(o.folder, trie, stop)[0]:
+                if f.lower() not in best or rank > best[f.lower()][2]:
+                    best[f.lower()] = (o.folder / f, "Overwrite" if o.kind == "overwrite" else o.name, rank)
+        return {k: v[:2] for k, v in best.items()}
+
+    own, c1 = own_files(m.instance, target.name, target.folder, mine, stop, won if target.enabled else None)
     findings += own
     counts: dict = {"wins": 0, "loses": 0, "same": 0, "papers": 0, "mods": 0}
     c2 = False

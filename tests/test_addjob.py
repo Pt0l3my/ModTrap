@@ -153,6 +153,11 @@ class Adding(unittest.TestCase):
         record = (self.root / "mods" / "Quill (1.4)" / "meta.ini").read_bytes()
         for line in (b"installationFile=Quill-4321-1-4.7z", b"gameName=SkyrimSE", b"modid=4321", b"1\\fileid=113"):
             self.assertIn(line, record)
+        # Its version too, by the record or by the name the mod got (WHY§147): MO2 shows it, and the Updater compares it.
+        self.assertIn(b'version="1.4"', record)
+        self.assertEqual(addjob._with_version({"meta": {}, "archive": "Reed-v0.3.1.zip"}, "Reed"), {"version": "0.3.1"})
+        self.assertEqual(addjob._with_version({"meta": {"version": "9"}, "archive": "Reed-v0.3.1.zip"}, "Reed 0.3.1"), {"version": "9"})
+        self.assertEqual(addjob._with_version({"archive": "Reed.zip"}, "Reed"), {})
         kinds = [(e["kind"], e.get("mod")) for e in history.History(self.work).all()]
         self.assertEqual(kinds[:2], [("mod added", "Quill (1.4)"), ("mod disabled", "Quill")])
         # Revert: file for file as before, the old version enabled again, the new one gone.

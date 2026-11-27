@@ -482,14 +482,17 @@ document.addEventListener("scroll", closeMenu, true);
 
 // The menu of one mod (WHY§103), on the Mods tab and on the Updater list.
 async function sourceLink(mod, now) {
-  const text = "A source link for “" + mod + "”\n\nThe web address the mod comes from: its page at Nexus, its GitHub repository, or any other page. With a Nexus or GitHub address ModTrap can ask whether a newer file is out; any other address is kept for you to open."
+  const text = "A source link for “" + mod + "”\n\nThe web address the mod comes from: its page at Nexus, its GitHub repository, or any other page. With a Nexus or GitHub address ModTrap asks at once whether a newer file is out; any other address is kept for you to open."
+    + "\n\nAny page of the mod will do, as your browser shows it: the Files or Posts tab of its Nexus page, the Releases page of its repository. The page of one GitHub release also tells ModTrap that this release is the one installed."
     + "\n\nModTrap keeps the link in its own folder. The mod's own files are not touched.";
   const url = await modalBox(text, { input: now || "", yes: "Keep the link", no: "Cancel" });
   if (url === null) return;
   if (!url.trim() && !now) return;
   try {
-    await api("/api/updates/link", { mod, url: url.trim() });
-    toast(url.trim() ? "The source link is kept." : "The source link is forgotten.");
+    const got = await api("/api/updates/link", { mod, url: url.trim() });
+    const site = got.kind === "nexus" ? "Nexus" : "GitHub";
+    toast(!url.trim() ? "The source link is forgotten."
+      : "The source link is kept: " + (got.what || "a web address") + "." + (got.asking === "now" ? " Asking " + site + " about it now…" : got.asking === "after" ? " " + site + " is asked about it when the scan that is going has finished." : ""));
     state.upSig = "";
     await loadUpdates();
   } catch (e) { toast(e.message); }
@@ -592,7 +595,7 @@ async function modMenu(ev, mod) {
     r && r.get ? { text: r.state === "update" ? "Update it" + (r.newest ? " to " + r.newest : "") : "Look at its files for a newer one…", note: "The Updater carries the update through; where the site gives the file only to your browser, its page is opened for your press on its download button", run: () => getUpdate(mod) } : undefined,
     m && m.kind === "mod" ? { text: "Manual update…", note: "For a file you downloaded yourself, from any site: it goes to Install mods as a newer version of this mod", off: !canChange(), run: () => manualUpdate(mod) } : undefined,
     r ? { text: r.fav ? "Remove from favourites" : "Mark as favourite", run: () => setFavourite(mod, !r.fav) } : undefined,
-    r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: r.host === "nexus" && state.updates && !state.updates.key ? "Nexus is asked only with your key" : "", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
+    r && (r.host === "nexus" || r.host === "github") ? { text: "Ask about this mod now", note: "Whether a newer file is out", run: async () => { try { await api("/api/updates/scan", { mods: [mod] }); toast("Asking about “" + mod + "”…"); } catch (e) { toast(e.message); } state.upSig = ""; loadUpdates(); } } : undefined,
     { text: "Open its page", off: !page, note: page ? page : "No page is known for this mod: add a source link", run: () => openTab(page) },
     { text: "Copy its page's address", off: !page, run: () => navigator.clipboard.writeText(page).then(() => toast("The address is copied."), () => toast("The address could not be copied.")) },
     ...(onMods() && m && m.kind === "mod" ? [null,
@@ -1405,7 +1408,8 @@ function renderUpdates(listOnly) {
         el("td", { class: "modname" }, r.fav ? el("span", { class: "upfav", title: "A favourite of yours", text: "★ " }) : null, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
         el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null,
           r.given ? el("div", { class: "dim small", text: "by your link" }) : null),
-        el("td", { text: r.version || "" }),
+        el("td", { title: r.version_by === "name" ? "No record states this mod's version: this one is read from the mod's name" : "" }, r.version || "",
+          r.version_by === "name" && r.version ? el("div", { class: "dim small", text: "by its name" }) : null),
         el("td", { class: "small upnote" }, r.comments || "", r.notes ? el("span", { class: "tag", title: r.notes, text: "note" }) : null),
         el("td", { class: "upstate" }, el("span", { class: "tag " + UP_STATE[r.state][1], text: UP_STATE[r.state][0] }), r.newest ? el("div", { class: "small", text: r.newest + (r.when ? " · " + r.when : "") }) : null),
         el("td", { class: "c-get" }, getButton(r)),

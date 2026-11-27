@@ -99,6 +99,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   with Ctrl and Shift; a drag that follows the list as it scrolls).
   MT79 (a name is taken only by a mod that is there: no "(2)" for a mod installed again; the lists have arrows to
   their top and bottom and begin at the bottom).
+  MT80 (any page of a mod names its source, and a link just given is asked about at once; a version read from a
+  mod's name; pre-releases at GitHub; a fix for a plugin the game does not load is seen by the scripts).
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -2174,3 +2176,48 @@ after launch and every refresh the bottom of the list is shown be default."
   opened, and after "Rescan". That is where what was installed last and what the tools made stand. A list read
   again after a change (a tick, a move, an install) keeps the place it has, as MT71 settled: jumping to the bottom
   after a change made further up would take the changed row out of sight.
+
+## MT80
+
+**Any page of a mod names its source, and it is asked about at once; a fix for a plugin the game does not load is seen** · *2026-11-27 · The owner's report and request*
+
+**Owner's words** (the names of real mods, and the addresses that carry them, are replaced by words in square
+brackets, as everywhere in these documents). "when the user adds soruces, can you make sure that modtrap can see what
+it needs to see regradless if the user adds sub address of main mod page: [a mod's page at Nexus] / [the same page
+with `?tab=files`] (or any other subtab) / [a repository at GitHub] / [the same repository's `/releases`] (or any
+other subtab)
+
+I noticed that some github mods automatically registered like [one mod] or [another mod], how were those installed? I
+added some github and nexus source links to some mods I installed but the github ones don't seem to get recognized.
+
+It also see an issue with [a mod], but there is a fix for it in the modlist which is not seen or
+considered by modtrap. Can you improve the logic to see fixes for mods with issues?"
+
+**What the owner's session showed** (WHY§147, WHY§146). Every link was understood and kept; the two mods that
+looked "registered automatically" had their links from the owner as well, one a day earlier. What differed was
+only that ModTrap had been started once since that one link was given: ModTrap asked a site at its start and when
+told to, never when a link was given, so twenty-odd links given in one sitting all read "Not asked yet". Their
+Installed column was empty besides: an archive taken in by hand has no record of its version, though the mod's
+name ends with it. The plugin named on the Health tab is not among the six files the fix replaces.
+
+**Settled** (DESIGN§38; the owner may overrule any of it):
+
+- **Any page of the mod or of the repository names it**, as the browser shows it: a tab of a Nexus page, a
+  repository's Releases, its code, an issue, with or without `https://` or `www.`. The page of one GitHub release,
+  or a file of it, also says which release is installed. An address that names no mod's page and no repository is
+  kept as a plain address, and ModTrap says back what it made of the address.
+- **A link just given is asked about at once**, without a press: that one mod, at Nexus or GitHub. Given while a
+  scan is going, it follows that scan.
+- **A mod's version, where no record states one, is the one its name ends with** (MT67), or its archive's. It is
+  shown as read from the name. A mod ModTrap installs gets that version in its own record too, where MO2 shows it.
+- **GitHub is asked for a repository's newest releases, pre-releases among them.** A repository with only
+  pre-releases is no longer "without a release", and an installed pre-release is known for what it is. "Update
+  out" is said for a full release; a pre-release that is newer is named beside it.
+- **A script extender plugin for another version of the game is a fault only as far as something needs it.** A
+  mod above that replaces the plugin is the fix already (only the copy the game loads is judged; the same now
+  holds for an archive in the older game's format). New: where the mod's own scripts say what the plugin is for,
+  ModTrap reads which of them call it, as the game loads them. If a mod above replaced every script that did, or
+  the script that declared the plugin's functions, the plugin is named in a note and no longer as a fault. If
+  scripts still call it, the fault stays and names them, and names the mods above that replace other files of
+  the mod, so that it is plain why they are no fix for this.
+- **Not done:** judging a fix by its name. A mod called a fix for another is a fix for what it replaces.

@@ -168,6 +168,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 143 | 2026-11-24 | A greyed control must say why where it is pressed; a group is made of picked plugins, and a drop on its line is the one way to join at its edge | METHOD | #page #model |
 | 144 | 2026-11-24 | A bulk list is a queue and a run of small jobs, not one big analysis; a drag's aim must follow the list as well as the pointer | METHOD | #page #model #safety |
 | 145 | 2026-11-24 | A record of something done is not a claim on its name; where "refresh" ends and a change begins | FACT | #model #page |
+| 146 | 2026-11-27 | A plugin the game does not load is a fault as far as something calls it; the scripts say | METHOD | #model #safety |
+| 147 | 2026-11-27 | "Not asked yet" beside a link just given reads as a link not understood; a name's version; pre-releases | FACT | #updates #page |
 
 ## Entries
 
@@ -3986,3 +3988,67 @@ them; the addresses were read by a session that can), and the time the second pa
   paid when the list is first shown (its tab opened, the Updater list drawn).
 - Checked in a browser on an invented list of seventy mods: the three lists at their bottom at the start, the
   arrows, the place kept after a tick at the top, the bottom after Rescan, and two wrong numbers taken off.
+
+### 146. A plugin the game does not load is a fault as far as something calls it; the scripts say
+
+`2026-11-27` · METHOD · `#model #safety` · refs: MT80, MT76, MT65, DESIGN§38, DESIGN§25, DESIGN§33, WHY§141
+
+- FACT (the owner's session): the Health tab named a script extender plugin built for game version 1.5 in a mod,
+  in a game of 1.6. A mod directly above it, called a fix for it, replaces six of its files. The scan judges only
+  the copy of a plugin that the game loads, and still named this one: so the plugin is not among the six. The
+  finding was right as far as it went, and said nothing of what the fix does.
+- What a fix for such a plugin can be, told by files alone: (1) the plugin in the right version, at the same
+  path: seen already. (2) Scripts that no longer call the plugin. (3) The script that declared the plugin's
+  functions, replaced by one that does their work in Papyrus. (2) and (3) are in the scripts.
+- FACT (the format, from its public description): a compiled script holds its names in a table, and for each
+  function a mark for "native" (declared here, done elsewhere) and its instructions; a call by a script's name
+  carries that script's name and the function's. ModTrap's reader (`pex.py`) is its own code and follows a file
+  to its last byte or answers nothing. Checked against eleven compiled scripts of two open-source mods, read
+  outside the repository and not kept: all eleven read to the end, with the native functions of the ones that
+  have them (379 in one) and the calls by name of the others.
+- METHOD: a script is the plugin's face where it declares native functions and the plugin's bytes hold the
+  script's name and the name of one of those functions (a plugin registers each function under both). A script
+  calls the plugin where it calls such a function by that script's name. Asked twice: of the mod's own copies,
+  and of the copies the game loads. A copy that cannot be read counts as calling still.
+- The plugin is "no longer called" only where the mod's own scripts did call it and the loaded ones do not, or
+  the face itself is replaced by a script that declares none of the functions. Where the scripts say nothing of
+  the plugin (no face: it works without Papyrus, or its scripts are packed in an archive), the finding stays
+  as it was: nothing is called fixed on a guess (MT76 asks for warnings of real problems, not for silence).
+- Limit, said on the page: the scripts of other mods are not read. A third mod that calls the plugin is not
+  seen. Reading every script of a list of 600,000 files for each such plugin is not worth the wait.
+- Rejected: taking a mod named a fix, or one directly above, as the fix. A name says what its author meant, not
+  what the files do; here the fix replaces other files, and whether the plugin still matters is in the scripts.
+- Also: an archive in the older game's format is judged only where the game loads that copy, as the plugin was;
+  and the scan of every mod no longer stops listing a mod at 60,000 files or four seconds (the owner's scan was
+  "cut short" by one large mod on every run): it lists up to two million, within the scan's own limit of time.
+- Not verified: the owner's two mods themselves. Their files are not in the session, and their page could not
+  be read from here. After a new scan the Health tab says which of the three cases it is.
+
+### 147. "Not asked yet" beside a link just given reads as a link not understood; a name's version; pre-releases
+
+`2026-11-27` · FACT · `#updates #page` · refs: MT80, MT67, MT37, MT44, DESIGN§38, WHY§103, WHY§101, WHY§109
+
+- FACT (the owner's session log): 24 source links were given in a quarter of an hour, 21 of them to GitHub
+  repositories; each was logged as kept, with its kind told rightly. The last scan had run two minutes before
+  the first of them. No scan followed, so all of them read "Not asked yet". The one repository that had an
+  answer had been given a day earlier, with a start of ModTrap in between. Nothing was registered by itself.
+- FACT (the code): the addresses the owner asks about (a tab of a Nexus page, a repository's Releases) were
+  understood before: the reader took the beginning of an address and passed over the rest. Not understood were
+  an address without its beginning, `www.github.com`, GitHub's other hosts, Nexus's newer forms, a tag in the
+  address of a repository's packed code, and GitHub's own pages (taken for repositories of an account "orgs").
+- So the fault was in when ModTrap asks, not in what it reads. A link given by hand is a question put: the mod
+  is asked about then, alone (one question, whatever a scan would hold back), or after the scan that is going.
+- FACT: the staged records of archives taken in by hand hold no version, and the record ModTrap wrote for such
+  a mod stated none; the mod's name ends with it (MT67). The Updater had the version in front of it and said
+  "which release is installed is not recorded".
+- METHOD (a version from a name): the one a name ends with is ModTrap's own way of naming, and is taken as the
+  mod's version where no record states one: it can say "current" and "update". A number elsewhere in a name
+  (a name with dots for spaces, an archive's name) can only confirm: if it is the newest release's, the mod is
+  current; if it is not, nothing follows, since such a number may be the game's version or another mod's.
+- FACT (GitHub's service): "the latest release" answers with the newest full release and with "not found" for
+  a repository that has only pre-releases. The list of releases gives both, newest first, at the same cost of
+  one question. One of the owner's mods carries a pre-release's version in its name.
+- METHOD: what is kept of a repository is marked with its making; an answer kept by an older ModTrap (to the
+  other question) is asked for anew, without the older answer's mark of sameness, which was for another address.
+- Checked in a browser on an invented list with a stand-in for GitHub: three forms of address, the words said
+  back, the question at once, "by its name" in the Installed column, a pre-release named beside a full release.

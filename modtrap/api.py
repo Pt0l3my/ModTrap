@@ -984,7 +984,10 @@ class Api:
                 mod, url = body.get("mod"), body.get("url", "")
                 if not isinstance(mod, str) or not isinstance(url, str) or not any(x.name == mod for x in m.instance.mods if x.kind == "mod"):
                     raise Bad("that is not a mod of this modlist")
-                return self.updating.set_link(key, mod, url)
+                got = self.updating.set_link(key, mod, url)
+                if got["kept"] and got["kind"] in ("nexus", "github"):
+                    got["asking"] = self.updating.ask_soon(m, key, added, mod)       # asked at once, not at the next start (WHY§147)
+                return got
             if what == "metas":
                 files = body.get("files")
                 if not isinstance(files, list):

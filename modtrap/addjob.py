@@ -47,6 +47,19 @@ class Plan:
         return {"mods": [{k: v for k, v in x.items() if k != "root"} for x in self.mods], "plugins": self.plugins}
 
 
+def _with_version(src: dict, name: str) -> dict:
+    """What is known of a staged mod's source, with its version: the one a record states, else the one its name
+    ends with (MT67). MO2 shows it in its Version column, and the Updater compares it with the newest release
+    (WHY§147). A mod of which nothing says a version gets none."""
+    from . import adding
+    meta = dict(src.get("meta") or {})
+    if not meta.get("version"):
+        version = adding.version_in(name) or adding.from_archive_name(src.get("archive", ""))["version"]
+        if version:
+            meta["version"] = version
+    return meta
+
+
 def plan(m: model.Model, report: dict, staged: dict[str, dict] | None = None) -> Plan:
     """What "Add it" would do, from the analysis. `staged` maps an unpacked mod's name to {"root", "archive"}."""
     staged = staged or {}
@@ -70,7 +83,7 @@ def plan(m: model.Model, report: dict, staged: dict[str, dict] | None = None) ->
             if old and inst.mod(old) is None:
                 raise Refused("'%s', which '%s' is a newer version of, is no longer in the modlist" % (old, x["name"]))
             p.mods.append({"name": x["name"], "before": x.get("own_before", "") if old else before, "staged": True, "root": str(src["root"]),
-                           "archive": src.get("archive", ""), "enabled": False, "meta": src.get("meta") or {}, "updates": old,
+                           "archive": src.get("archive", ""), "enabled": False, "meta": _with_version(src, x["name"]), "updates": old,
                            "replaces": old if old and x.get("updates_enabled") else ""})
         else:
             p.mods.append({"name": x["name"], "before": before, "staged": False, "root": "", "archive": "",

@@ -61,6 +61,7 @@ class Updating:
         self._stop = threading.Event()
         self.store = updates.load()
         self.launched = False
+        self._after: set[str] = set()                     # mods to ask about when the scan that is going has finished (WHY§147)
         self.waiting: dict[str, dict] = {}         # a mod's name -> the download ModTrap waits for (MT42)
         self._sizes: dict[str, int] = {}           # a candidate file -> its size at the last look: taken once it stands
         self._looked = 0.0
@@ -211,20 +212,27 @@ class Updating:
         given = sources.given_load()
         mine = given["links"].setdefault(modlist_key, {})
         url = (url or "").strip()
+        what = ""
         if not url:
             mine.pop(sources.fold(mod), None)
             kind = ""
         else:
             try:
-                kind = sources.parse_link(url)["host"]
+                got = sources.parse_link(url)
             except ValueError as e:
                 raise Bad(str(e)) from None
+            kind, url = got["host"], got["url"]
+            # What ModTrap made of the address, in words, for the owner to see that it was understood.
+            what = ("the mod with number %d at Nexus (%s)%s" % (got["mod_id"], got["game"], ", file %d" % got["file_id"] if got["file_id"] else "") if kind == "nexus"
+                    else "the GitHub repository %s%s" % (got["repo"], ", release %s" % got["tag"] if got["tag"] else "") if kind == "github"
+                    else "a page ModTrap cannot ask about updates: it is kept for you to open")
             mine[sources.fold(mod)] = url
         sources.given_save(given)
         with self._lock:
             self._rows = None
-        log.info("a source link for “%s” is %s", mod, "kept (%s)" % {"nexus": "a mod's page at Nexus", "github": "a GitHub repository", "url": "a web address"}[kind] if url else "forgotten")
-        return {"kept": bool(url), "kind": kind}
+        log.info("a source link for “%s” is %s", mod, "kept (%s)" % {"nexus": "a mod's page at Nexus", "github": "a GitHub repository", "url": "a web address"}.get(kind, "a web address")
+                 if url else "forgotten")
+        return {"kept": bool(url), "kind": kind, "what": what}
 
     def set_favourite(self, modlist_key: str, mod: str, on: bool) -> dict:
         """The owner's own mark on a mod (MT46): a favourite, to find it again by a filter. Kept in ModTrap's folder
@@ -324,7 +332,7 @@ class Updating:
             counts[v["state"]] = counts.get(v["state"], 0) + 1
             origins[r["origin"]] = origins.get(r["origin"], 0) + 1
             hosts[r["host"] or "not known"] = hosts.get(r["host"] or "not known", 0) + 1
-            out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": r["version"],
+            out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": r["version"], "version_by": r.get("version_by", ""),
                              "archive": r["archive"], "origin": r["origin"], "by": r["by"], "given": r.get("given", ""), "state": v["state"], "text": v["text"],
                              "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r),
                              "get": updates.get_of(r, v) or (updates.page_of(r) if r["host"] in ("loverslab", "url") else ""), "fetches": "fetch" in updates.how_to_get(r, v, self.store, key_kept, self.premium)
@@ -730,9 +738,34 @@ class Updating:
                 log.error("the scan for updates failed: %s", logbook.why(e))
                 with self._lock:
                     self.work = {"state": "idle", "text": "", "started": 0.0, "error": "The scan failed (%s). The log says more." % logbook.why(e)}
+            with self._lock:
+                waiting, self._after = self._after, set()
+            if waiting and not self._stop.is_set():       # the mods whose links were given while this scan was going
+                try:
+                    self.start(*self._after_for, only=waiting)
+                except Exception as e:
+                    log.warn("the mods named during the scan could not be asked about: %s", logbook.why(e))
 
         threading.Thread(target=run, name="updates", daemon=True).start()
         return dict(self.work)
+
+    def ask_soon(self, model, modlist_key: str, added: set[str], mod: str) -> str:
+        """One mod asked about without the owner asking (WHY§147): its source was just named, and "not asked yet"
+        beside a link just given reads as a link that was not understood. "now" when the question is begun, "after"
+        when it follows the scan that is going."""
+        with self._lock:
+            if self.work["state"] == "going":
+                self._after.add(mod)
+                self._after_for = (model, modlist_key, added)
+                return "after"
+        try:
+            self.start(model, modlist_key, added, only={mod})
+            return "now"
+        except Bad:                                        # a scan began in between
+            with self._lock:
+                self._after.add(mod)
+                self._after_for = (model, modlist_key, added)
+            return "after"
 
     def stop(self) -> dict:
         self._stop.set()

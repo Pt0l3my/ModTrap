@@ -34,14 +34,43 @@ NOTE_MAX = 400                       # characters of a mod's comment or note tha
 WJ_ENTRY = "modlist"                 # the list itself, inside a Wabbajack file (TL01§27)
 WJ_CHUNK = 1024 * 1024
 WJ_VALUE_MAX = 64 * 1024 * 1024      # one entry of the list larger than this is passed over
-GITHUB = re.compile(r"^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/releases/(?:download|tag)/([^/?#]+))?", re.IGNORECASE)
+# A repository at GitHub, by any page of it (WHY§147): the repository itself, its releases, its code, its issues. The
+# page of one release, or a file of it, also names the release that is installed. An address of GitHub's own pages
+# (github.com/orgs/…, /settings/…) is not a repository.
+GITHUB = re.compile(r"^https?://(?:www\.)?github\.com/([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9_.-]+)(?=[/?#]|$)", re.IGNORECASE)
+GITHUB_TAG = re.compile(r"^/(?:releases/(?:download|tag|expanded_assets)/([^/?#]+)|archive/refs/tags/([^?#]+?)\.(?:zip|tar\.gz)(?:[?#]|$))", re.IGNORECASE)
+GITHUB_OWN = frozenset(("orgs", "settings", "topics", "search", "marketplace", "sponsors", "features", "about", "users", "apps", "collections", "explore",
+                        "notifications", "pulls", "issues", "login", "join", "enterprise", "pricing", "customer-stories", "security", "site", "trending",
+                        "new", "codespaces"))
+# The same repository by GitHub's other hosts: a file of its code, its packed code, the service programs ask.
+GITHUB_OTHER = re.compile(r"^https?://(?:raw\.githubusercontent\.com|codeload\.github\.com|api\.github\.com/repos)/([A-Za-z0-9][A-Za-z0-9-]*)/([A-Za-z0-9_.-]+)(?=[/?#]|$)", re.IGNORECASE)
+
+
+def github_repo(url: str) -> tuple[str, str] | None:
+    """The repository an address at GitHub is of, and the release it names ("" where it names none): ("owner/name",
+    tag). None where the address is not of a repository."""
+    from urllib.parse import unquote
+    hit = GITHUB.match(url)
+    tag = ""
+    if hit is not None:
+        if hit.group(1).lower() in GITHUB_OWN:
+            return None
+        named = GITHUB_TAG.match(url[hit.end():])
+        if named is not None:
+            tag = unquote(named.group(1) or named.group(2) or "")
+    else:
+        hit = GITHUB_OTHER.match(url)
+    if hit is None:
+        return None
+    repo = re.sub(r"\.git$", "", hit.group(2), flags=re.IGNORECASE)
+    return ("%s/%s" % (hit.group(1), repo), tag) if repo not in ("", ".", "..") else None
 LOVERSLAB = re.compile(r"^https?://(?:www\.)?loverslab\.com/", re.IGNORECASE)
 _data: dict | None = None
 
 
 def host_of(url: str) -> str:
     """The kind of source a web address is: "github", "loverslab", or "url" for any other."""
-    return "github" if GITHUB.match(url) else "loverslab" if LOVERSLAB.match(url) else "url"
+    return "github" if github_repo(url) else "loverslab" if LOVERSLAB.match(url) else "url"
 
 
 def data() -> dict:
@@ -175,7 +204,7 @@ def source_of_mark(mark: dict) -> str:
     """The one address of a mark that says most of the source: a GitHub address before any other (the release's
     file, else the page), then a LoversLab one, then the page the download was started on, then the file's own."""
     both = [mark.get("url", ""), mark.get("page", "")]
-    for test in (GITHUB.match, LOVERSLAB.match):
+    for test in (github_repo, LOVERSLAB.match):
         hit = next((u for u in both if u and test(u)), "")
         if hit:
             return hit
@@ -186,8 +215,25 @@ def source_of_mark(mark: dict) -> str:
 
 GIVEN = "given-sources.json"
 LINK_MAX = 500
-NEXUS_PAGE = re.compile(r"^https?://(?:www\.)?nexusmods\.com/([a-z0-9]+)/mods/(\d+)", re.IGNORECASE)
+# A mod's page at Nexus, by any tab of it and with whatever follows its number (WHY§147); also as the site's newer
+# addresses write it, and as a "mod manager download" link does.
+NEXUS_PAGE = re.compile(r"^https?://(?:www\.|next\.)?nexusmods\.com/(?:games/)?([a-z0-9]+)/mods/(\d+)(?![0-9])", re.IGNORECASE)
+NEXUS_NXM = re.compile(r"^nxm://([a-z0-9]+)/mods/(\d+)(?:/files/(\d+))?", re.IGNORECASE)
 NEXUS_FILE = re.compile(r"[?&]file_id=(\d+)", re.IGNORECASE)
+NAMED = re.compile(r"(?<![0-9])(?<![0-9]\.)v?(\d+(?:\.\d+){1,4}(?:[-.]?(?:rc|beta|alpha|pre|b|a)[-.]?\d*)?[a-z]?)(?![0-9A-Za-z])", re.IGNORECASE)
+
+
+def names_version(version: str, *names: str) -> bool:
+    """Whether one of the names (a mod's, its archive's) carries this version, as a whole: "1.2.0" is in
+    "Thing.1.2.0" and in "Thing-v1.2.0.zip", not in "Thing 11.2.0" or "Thing 1.2.01"."""
+    want = version.strip().lower().lstrip("v")
+    if not re.search(r"\d", want):
+        return False
+    for name in names:
+        name = re.sub(r"\.(zip|7z|rar)$", "", name or "", flags=re.IGNORECASE)
+        if any(v.lower() == want for v in NAMED.findall(name)):
+            return True
+    return False
 
 
 def given_load() -> dict:
@@ -214,16 +260,21 @@ def parse_link(url: str) -> dict:
     """A web address the owner gave as a mod's source, in ModTrap's words: {"host": "nexus", "game", "mod_id",
     "file_id"} for a mod's page at Nexus, {"host": "github", "repo", "tag", "url"} for a repository, {"host": "url",
     "url"} for anything else. Raises ValueError with the reason in words."""
-    url = url.strip()
+    url = url.strip().strip("<>\"'")
+    hit = NEXUS_NXM.match(url)
+    if hit:
+        url = "https://www.nexusmods.com/%s/mods/%s%s" % (hit.group(1).lower(), hit.group(2), "?tab=files&file_id=%s" % hit.group(3) if hit.group(3) else "")
+    elif re.match(r"^(www\.|next\.)?(nexusmods\.com|github\.com)/", url, re.IGNORECASE):
+        url = "https://" + url                         # copied without its beginning
     if not url.lower().startswith(("http://", "https://")) or len(url) > LINK_MAX or any(c.isspace() or ord(c) < 32 for c in url):
         raise ValueError("a source link is a web address: it starts with https:// and has no spaces")
     hit = NEXUS_PAGE.match(url)
     if hit:
         f = NEXUS_FILE.search(url)
         return {"host": "nexus", "game": hit.group(1).lower(), "mod_id": int(hit.group(2)), "file_id": int(f.group(1)) if f else 0, "url": url}
-    hit = GITHUB.match(url)
-    if hit:
-        return {"host": "github", "repo": "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2))), "tag": hit.group(3) or "", "url": url}
+    repo = github_repo(url)
+    if repo is not None:
+        return {"host": "github", "repo": repo[0], "tag": repo[1], "url": url}
     return {"host": host_of(url), "url": url}
 
 
@@ -525,7 +576,7 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
             dl, by_dl = g_archives[fold(meta["archive"])], "a download's meta file you gave"
         row = {"mod": m.name, "enabled": m.enabled, "host": "", "game": "", "mod_id": 0, "files": [], "archive": meta["archive"],
                "version": meta["version"], "mo2_newest": meta["mo2_newest"], "url": "", "repo": "", "tag": "", "by": [],
-               "given": links.get(fold(m.name), ""), "priority": m.priority, "comments": own.get("comments", ""), "notes": own.get("notes", "")}
+               "given": links.get(fold(m.name), ""), "version_by": "", "priority": m.priority, "comments": own.get("comments", ""), "notes": own.get("notes", "")}
         from_list: list[dict] = []
         if wj is not None:
             hashes = list(wj["mods"].get(fold(m.name), []))
@@ -582,12 +633,11 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
         if not row["host"]:
             url = meta["url"] or dl.get("url", "") or next((a.get("url", "") for a in from_list if a.get("url")), "")
             if url:
-                hit = GITHUB.match(url)
+                hit = github_repo(url)
                 row.update(host=host_of(url), url=url)
                 row["by"].append(by_meta if meta["url"] else by_dl if dl.get("url") else "the Wabbajack file")
                 if hit:
-                    row["repo"] = "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2)))
-                    row["tag"] = hit.group(3) or ""
+                    row["repo"], row["tag"] = hit
             elif from_list:
                 row["host"] = from_list[0]["host"] if from_list[0]["host"] not in ("nexus", "github", "url") else ""
                 row["url"] = from_list[0].get("url", "")
@@ -597,15 +647,21 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
             # downloaded (WHY§109). Only where the archive still lies in MO2's downloads folder.
             url = source_of_mark(web_mark(inst.downloads_dir / meta["archive"], mark_reader))
             if url:
-                hit = GITHUB.match(url)
+                hit = github_repo(url)
                 row.update(host=host_of(url), url=url)
                 row["by"].append("the mark your browser left on the downloaded archive")
                 if hit:
-                    row["repo"] = "%s/%s" % (hit.group(1), re.sub(r"\.git$", "", hit.group(2)))
-                    row["tag"] = hit.group(3) or ""
+                    row["repo"], row["tag"] = hit
         rows.append(row)
+    from . import adding
+    for row in rows:
+        if not row["version"]:
+            # No record states a version: the mod's own name may end with one (ModTrap names a mod by its title
+            # and its version, MT67), and so may the name of its archive.
+            row["version"] = adding.version_in(row["mod"]) or (adding.from_archive_name(row["archive"])["version"] if row["archive"] else "")
+            row["version_by"] = "name" if row["version"] else ""
     return rows
 
 
 __all__ = ["data", "download_meta", "download_meta_of", "gather", "given_load", "given_save", "memo_name", "memo_read", "memo_write",
-           "mod_meta", "mod_meta_of", "nexus_game", "parse_link", "source_of_mark", "web_mark", "own_record", "read_list_bytes", "read_wabbajack", "said", "wabbajack"]
+           "github_repo", "mod_meta", "mod_meta_of", "names_version", "nexus_game", "parse_link", "source_of_mark", "web_mark", "own_record", "read_list_bytes", "read_wabbajack", "said", "wabbajack"]

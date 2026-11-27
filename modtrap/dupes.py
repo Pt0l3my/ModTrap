@@ -28,6 +28,8 @@ from .instance import fold
 
 log = logbook.get("scan")
 DEEP_SECONDS = 240.0
+DEEP_FILES = 2_000_000                # files of one mod listed at most in the scan of every mod: a tool's output can hold hundreds of thousands
+DEEP_ONE = 60.0                       # seconds for the listing of one mod's folder
 COPY_MARK = re.compile(r"(\s*\(\d+\)|\s*-\s*copy(\s*\(\d+\))?|\s+copy)$", re.IGNORECASE)
 
 
@@ -93,6 +95,22 @@ def _find(folder: Path, *names: str) -> Path | None:
             return None
         at = Path(hit)
     return at
+
+
+def _file(folder: Path, rel: str) -> Path | None:
+    """A file of a mod by its path in another mod, whatever case its folders and its name are written in there."""
+    direct = folder / rel
+    if direct.is_file():
+        return direct
+    *dirs, name = rel.lower().split("/")
+    at = _find(folder, *dirs)
+    if at is None:
+        return None
+    try:
+        with os.scandir(at) as it:
+            return next((Path(e.path) for e in it if e.name.lower() == name and e.is_file(follow_symlinks=False)), None)
+    except OSError:
+        return None
 
 
 def _finding(key: str, level: str, title: str, text: str, items: list[str], mods: list[str]) -> dict:
@@ -199,7 +217,7 @@ def deep(m: model.Model, progress=None, seconds: float = DEEP_SECONDS) -> dict:
     out: list[dict] = []
     cut = False
     files = 0
-    nothing, mostly, old_archives, wrong = [], [], [], []
+    nothing, mostly, old_archives, wrong, unused = [], [], [], [], []
     game = evaluate.game_version(m.instance.game_dir)
     memo: dict = {}
     for i, x in enumerate(mods):
@@ -208,29 +226,46 @@ def deep(m: model.Model, progress=None, seconds: float = DEEP_SECONDS) -> dict:
             break
         if progress is not None and i % 25 == 0:
             progress(i, len(mods))
-        listed, c = steps.walk(x.folder)
+        listed, c = steps.walk(x.folder, DEEP_FILES, DEEP_ONE)
         cut = cut or c
         real = [f for f in listed if f.lower() != "meta.ini" and not evaluate.PAPERS.search(f.lower())]
         files += len(listed)
         over: dict[int, int] = {}
+        dlls: list[str] = []
         for f in real:
             lf = f.lower()
             mark = hash(lf)
             w = winner.setdefault(mark, i)
             if w != i:
                 over[w] = over.get(w, 0) + 1
-            if "/" not in f and lf.endswith(".bsa"):
+            elif "/" not in f and lf.endswith(".bsa"):
                 h = evaluate._head(x.folder / f, 8)
                 if h[:4] == b"BSA\0" and len(h) >= 8 and struct.unpack_from("<I", h, 4)[0] < 105:
                     old_archives.append((x.name, f))
-            elif game is not None and lf.startswith("skse/plugins/") and lf.endswith(".dll") and lf.count("/") == 2 and w == i:
-                try:
-                    data = (x.folder / f).read_bytes() if (x.folder / f).stat().st_size <= evaluate.COMPARE_ONE else b""
-                except OSError:
-                    data = b""
-                new, old = b"SKSEPlugin_Version\0" in data, b"SKSEPlugin_Query\0" in data
-                if (game >= (1, 6, 0) and old and not new) or (game < (1, 6, 0) and new and not old):
-                    wrong.append((x.name, f, "1.5" if old else "1.6"))
+            elif game is not None and lf.startswith("skse/plugins/") and lf.endswith(".dll") and lf.count("/") == 2:
+                dlls.append(f)
+        for f in dlls:                               # only a copy the game loads is judged
+            try:
+                data = (x.folder / f).read_bytes() if (x.folder / f).stat().st_size <= evaluate.COMPARE_ONE else b""
+            except OSError:
+                data = b""
+            built = evaluate.extender_wrong(game, data)
+            if not built:
+                continue
+            # What the scripts beside it say (WHY§146): the mod's own, and the copies the game loads of them.
+            scripts = []
+            for s in [s for s in real if s.lower().startswith("scripts/") and s.lower().endswith(".pex") and s.count("/") == 1][:evaluate.SCRIPTS]:
+                w = winner.get(hash(s.lower()), i)
+                loaded = _file(mods[w].folder, s) if w != i else x.folder / s
+                scripts.append((s.lower(), x.folder / s, loaded or x.folder / s, mods[w].name if w != i and loaded is not None else ""))
+            use = evaluate.plugin_use(data, scripts)
+            line = "“%s”: %s, built for game version %s" % (x.name, f, built)
+            if use is not None and not use["now"] and (use["own"] or use["taken_over"]):
+                unused.append((x.name, line + "; " + evaluate.use_told(use)))
+            else:
+                above = sorted(over.items(), key=lambda kv: -kv[1])[:3]
+                wrong.append((x.name, line + ("; " + evaluate.use_told(use) if use is not None and use["now"] else "")
+                              + ("; %s of this mod's files, this plugin not among them" % ", ".join("“%s” replaces %d" % (mods[w].name, n) for w, n in above) if above else "")))
         lost = sum(over.values())
         if real and lost == len(real) and not adding.is_output_mod(m, x, memo):
             top = sorted(over.items(), key=lambda kv: -kv[1])[:3]
@@ -260,8 +295,14 @@ def deep(m: model.Model, progress=None, seconds: float = DEEP_SECONDS) -> dict:
                             ["“%s”: %s" % t for t in old_archives], sorted({t[0] for t in old_archives}, key=fold)))
     if wrong:
         out.append(_finding("extender-version", "bad", "Script extender plugins for another version of the game",
-                            "This game is version %d.%d.%d. The script extender does not load a plugin built for another version, and what the mod does through it is missing."
-                            % game, ["“%s”: %s, built for game version %s" % t for t in wrong], sorted({t[0] for t in wrong}, key=fold)))
+                            "This game is version %d.%d.%d. The script extender does not load a plugin built for another version, and what the mod does through it is missing. "
+                            "A mod above that replaces the plugin itself, or the scripts that call it, is taken into account; one that replaces other files is not a fix for this."
+                            % game, [t[1] for t in wrong], sorted({t[0] for t in wrong}, key=fold)))
+    if unused:
+        out.append(_finding("extender-unused", "info", "Script extender plugins for another version of the game, which nothing calls now",
+                            "The script extender does not load these, but a mod above replaced the scripts that called them: as the game loads each mod's scripts, none "
+                            "calls its plugin any more. The scripts of other mods were not read.",
+                            [t[1] for t in unused], sorted({t[0] for t in unused}, key=fold)))
     return {"findings": out, "mods": len(mods), "files": files, "cut": cut, "seconds": round(time.monotonic() - started, 1)}
 
 

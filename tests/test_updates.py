@@ -251,11 +251,90 @@ class GivenByHand(Sources):
         with self.assertRaises(updating.Bad):
             u.take_list("another modlist", "x.wabbajack", 1, 1, 8, 0, io.BytesIO(b""))
 
+    def test_any_page_of_a_mod_or_a_repository_names_it(self):
+        """WHY§147: the owner copies whatever the browser shows, a tab of the page as soon as its front."""
+        for url in ("https://www.nexusmods.com/skyrimspecialedition/mods/555", "https://www.nexusmods.com/skyrimspecialedition/mods/555?tab=files",
+                    "https://www.nexusmods.com/skyrimspecialedition/mods/555?tab=posts", "https://www.nexusmods.com/skyrimspecialedition/mods/555/",
+                    "https://nexusmods.com/skyrimspecialedition/mods/555#description", "http://www.nexusmods.com/SkyrimSpecialEdition/mods/555?tab=images",
+                    "https://www.nexusmods.com/games/skyrimspecialedition/mods/555", "https://next.nexusmods.com/skyrimspecialedition/mods/555",
+                    "www.nexusmods.com/skyrimspecialedition/mods/555?tab=files", "  https://www.nexusmods.com/skyrimspecialedition/mods/555?tab=bugs  ",
+                    "nxm://skyrimspecialedition/mods/555", "<https://www.nexusmods.com/skyrimspecialedition/mods/555>"):
+            got = sources.parse_link(url)
+            self.assertEqual((got["host"], got["game"], got["mod_id"], got["file_id"]), ("nexus", "skyrimspecialedition", 555, 0), url)
+            self.assertTrue(got["url"].startswith(("https://", "http://")), url)
+        self.assertEqual(sources.parse_link("nxm://skyrimspecialedition/mods/555/files/77?key=x")["file_id"], 77)
+        self.assertEqual(sources.parse_link("https://www.nexusmods.com/skyrimspecialedition/mods/5556")["mod_id"], 5556)
+        for url in ("https://github.com/invented-owner/R.E.E.D", "https://github.com/invented-owner/R.E.E.D/", "https://github.com/invented-owner/R.E.E.D/releases",
+                    "https://github.com/invented-owner/R.E.E.D/releases/latest", "https://github.com/invented-owner/R.E.E.D/tree/main/docs", "https://github.com/invented-owner/R.E.E.D/issues/4",
+                    "https://github.com/invented-owner/R.E.E.D?tab=readme-ov-file", "https://github.com/invented-owner/R.E.E.D#readme", "https://github.com/invented-owner/R.E.E.D.git",
+                    "https://www.github.com/invented-owner/R.E.E.D/wiki", "github.com/invented-owner/R.E.E.D/releases", "https://github.com/invented-owner/R.E.E.D/blob/main/README.md",
+                    "https://raw.githubusercontent.com/invented-owner/R.E.E.D/main/README.md", "https://api.github.com/repos/invented-owner/R.E.E.D/releases",
+                    "https://codeload.github.com/invented-owner/R.E.E.D/zip/refs/heads/main", "https://github.com/invented-owner/R.E.E.D/archive/refs/heads/main.zip"):
+            got = sources.parse_link(url)
+            self.assertEqual((got["host"], got["repo"], got["tag"]), ("github", "invented-owner/R.E.E.D", ""), url)
+        # The page of one release, or a file of it, also says which release is installed.
+        for url, tag in (("https://github.com/invented-owner/reed/releases/tag/v1.2.0", "v1.2.0"), ("https://github.com/invented-owner/reed/releases/download/v1.2.0/Reed.zip", "v1.2.0"),
+                         ("https://github.com/invented-owner/reed/releases/tag/1.2.0-rc1?x=1", "1.2.0-rc1"), ("https://github.com/invented-owner/reed/archive/refs/tags/v1.2.0.zip", "v1.2.0"),
+                         ("https://github.com/invented-owner/reed/releases/expanded_assets/v1.2.0", "v1.2.0"), ("https://github.com/invented-owner/reed/releases/tag/reed%2Fv1", "reed/v1")):
+            self.assertEqual(sources.parse_link(url)["tag"], tag, url)
+        # GitHub's own pages and an account's page are no repository: kept as a plain address.
+        for url in ("https://github.com/invented-owner", "https://github.com/orgs/invented-owner/repositories", "https://github.com/settings/profile",
+                    "https://gist.github.com/invented-owner/0123456789abcdef", "https://github.community/t/x/1"):
+            self.assertEqual(sources.parse_link(url)["host"], "url", url)
+
+    def test_a_mod_without_a_recorded_version_has_the_one_its_name_ends_with(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        fx.make_instance(root, [("+", "Reed 1.3.0", {"a.txt": b"x"}), ("+", "Heather", {"a.txt": b"x", "meta.ini": meta(version="2.0", installationFile="Heather-v9.9.zip").encode()}),
+                                ("+", "Thistle", {"a.txt": b"x", "meta.ini": meta(installationFile="Thistle-v0.4.1.zip").encode()}), ("+", "Moss", {"a.txt": b"x"})], load_order=[])
+        rows = {r["mod"]: r for r in sources.gather(instance.load(root), given={"links": {"reed 1.3.0": "https://github.com/invented-owner/reed/releases"}})}
+        self.assertEqual([(n, rows[n]["version"], rows[n]["version_by"]) for n in ("Reed 1.3.0", "Heather", "Thistle", "Moss")],
+                         [("Reed 1.3.0", "1.3.0", "name"), ("Heather", "2.0", ""), ("Thistle", "0.4.1", "name"), ("Moss", "", "")])
+        self.assertEqual((rows["Reed 1.3.0"]["host"], rows["Reed 1.3.0"]["repo"]), ("github", "invented-owner/reed"))
+
+    def test_a_version_is_found_in_a_name_as_a_whole(self):
+        yes = (("v1.2.0", "Thing.1.2.0"), ("1.2.0", "Thing-v1.2.0.zip"), ("v0.7.0-rc1", "Things-0.7.0-rc1"), ("V4.9.2", "Thing-4.9.2-FOMOD 4.9.2"), ("7.5.2a", "Thing (7.5.2a)"))
+        no = (("1.2.0", "Thing 11.2.0"), ("1.2.0", "Thing 1.2.01"), ("1.2", "Thing 1.2.0"), ("v2", "Thing 2"), ("", "Thing"), ("latest", "Thing latest"), ("1.2.0", "Thing 0.1.2.0"))
+        for version, name in yes:
+            self.assertTrue(sources.names_version(version, "", name), (version, name))
+        for version, name in no:
+            self.assertFalse(sources.names_version(version, name), (version, name))
+
+    def test_a_link_just_given_is_asked_about_at_once(self):
+        """WHY§147: "not asked yet" beside a link just given reads as a link that was not understood."""
+        a = api.Api()
+        a.updating.net = net = FakeNet({"/repos/invented-owner/old-lantern/releases?": (200, {}, [{"tag_name": "v1.5", "published_at": "2026-11-20T10:00:00Z"}])})
+        a.open(str(self.root), wait=True)
+        for _ in range(500):
+            if a.updating.work["state"] != "going":
+                break
+            time.sleep(0.01)
+        net.asked.clear()
+        got = a.post("/api/updates/link", {"mod": "Old Lantern", "url": "github.com/invented-owner/old-lantern/releases"})[1]
+        self.assertEqual((got["kind"], got["what"], got["asking"]), ("github", "the GitHub repository invented-owner/old-lantern", "now"))
+        for _ in range(500):
+            if a.updating.work["state"] != "going" and net.asked:
+                break
+            time.sleep(0.01)
+        self.assertEqual([u for u, _h in net.asked], ["https://api.github.com/repos/invented-owner/old-lantern/releases?per_page=10"])
+        row = next(r for r in a.get("/api/updates", {})[1]["rows"] if r["mod"] == "Old Lantern")
+        self.assertEqual((row["given"], row["host"], row["id"], row["newest"]), ("https://github.com/invented-owner/old-lantern/releases", "github", "invented-owner/old-lantern", "v1.5"))
+        self.assertNotEqual(row["state"], "not asked")
+        # A plain address is kept and nobody is asked; a link given while a scan is going is asked about after it.
+        net.asked.clear()
+        self.assertNotIn("asking", a.post("/api/updates/link", {"mod": "Old Lantern", "url": "https://example.invalid/x"})[1])
+        a.updating.work = {"state": "going", "text": "", "started": 1.0, "error": ""}
+        self.assertEqual(a.post("/api/updates/link", {"mod": "Old Lantern", "url": "https://github.com/invented-owner/old-lantern"})[1]["asking"], "after")
+        self.assertEqual((a.updating._after, net.asked), ({"Old Lantern"}, []))
+        a.updating.work = {"state": "idle", "text": "", "started": 0.0, "error": ""}
+
     def test_through_the_page_a_link_is_for_a_mod_of_this_modlist_only(self):
         a = api.Api()
         a.updating.net = FakeNet({})
         a.open(str(self.root), wait=True)
-        self.assertEqual(a.post("/api/updates/link", {"mod": "Old Lantern", "url": "https://example.invalid/x"})[1], {"kept": True, "kind": "url"})
+        self.assertEqual(a.post("/api/updates/link", {"mod": "Old Lantern", "url": "https://example.invalid/x"})[1],
+                         {"kept": True, "kind": "url", "what": "a page ModTrap cannot ask about updates: it is kept for you to open"})
         row = next(r for r in a.get("/api/updates", {})[1]["rows"] if r["mod"] == "Old Lantern")
         self.assertEqual((row["given"], row["page"], row["host"]), ("https://example.invalid/x", "https://example.invalid/x", "url"))
         self.assertEqual(a.get("/api/updates", {})[1]["given"]["links"], 1)
@@ -400,9 +479,9 @@ class FetchingANewerFile(unittest.TestCase):
             "/mods/4321/files/113/download_link": (200, {}, [{"name": "CDN", "short_name": "CDN", "URI": self.cdn}]),
             "/mods/4321/files": (200, {}, files_answer([(111, "Quill-4321-1-2.7z", "1.2", 4, 100), (113, "Quill-4321-1-4.zip", "1.4", 1, now)],
                                                        [(111, 113, "Quill-4321-1-2.7z", "Quill-4321-1-4.zip")])),
-            "/repos/invented-owner/lantern/releases/latest": (200, {}, {"tag_name": "v2.1", "published_at": "2026-11-20T10:00:00Z", "assets": [
+            "/repos/invented-owner/lantern/releases?": (200, {}, [{"tag_name": "v2.1", "published_at": "2026-11-20T10:00:00Z", "assets": [
                 {"name": "Lantern.Release.2.1.zip", "browser_download_url": "https://github.com/invented-owner/lantern/releases/download/v2.1/Lantern.Release.2.1.zip", "size": 10},
-                {"name": "Source.txt", "browser_download_url": "https://github.com/invented-owner/lantern/releases/download/v2.1/Source.txt", "size": 1}]})})
+                {"name": "Source.txt", "browser_download_url": "https://github.com/invented-owner/lantern/releases/download/v2.1/Source.txt", "size": 1}]}])})
         self.net.files = {self.cdn: a_zip({"Quill.esp": (mods / "Quill" / "Quill.esp").read_bytes(), "textures/quill/new.dds": b"newer"}),
                           "https://github.com/invented-owner/lantern/releases/download/v2.1/Lantern.Release.2.1.zip": a_zip({"Lantern.esp": (mods / "Lantern" / "Lantern.esp").read_bytes()})}
         self.api = api.Api()
@@ -675,6 +754,43 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(updates.verdict(row, store)["state"], "current")
         self.assertEqual(updates.verdict(dict(row, tag="", version="2.0"), store)["state"], "current")
         self.assertEqual(updates.verdict(dict(row, tag="", version=""), store)["state"], "maybe")
+        # WHY§147: no release is recorded, and the version (the record's, or the one the mod's name ends with) says it.
+        kept = store["github"]["invented-owner/lantern"]
+        kept["tag"] = "v2.1.0"
+        plain = dict(row, tag="", version="", mod="Lantern", archive="")
+        v = updates.verdict(dict(plain, version="2.1", version_by="name"), store)
+        self.assertEqual((v["state"], v["text"]), ("current", "the installed version (read from the mod's name) is the newest release (v2.1.0)"))
+        v = updates.verdict(dict(plain, version="2.0.3", version_by="name"), store)
+        self.assertEqual((v["state"], v["newest"]), ("update", "v2.1.0"))
+        self.assertIn("the installed version is 2.0.3 (read from the mod's name)", v["text"])
+        v = updates.verdict(dict(plain, version="2.2"), store)
+        self.assertEqual(v["state"], "current")
+        self.assertIn("is newer than the newest release", v["text"])
+        self.assertEqual(updates.verdict(dict(plain, version="second"), store)["state"], "maybe")            # nothing to order by
+        self.assertEqual(updates.verdict(dict(plain, mod="Lantern.Pack.2.1.0"), store)["state"], "current")   # the name carries it, though not at its end
+        self.assertEqual(updates.verdict(dict(plain, archive="Lantern-v2.1.0.zip"), store)["state"], "current")
+        self.assertEqual(updates.verdict(dict(plain, mod="Lantern.Pack.2.0.0"), store)["state"], "maybe")     # a number inside a name is no ground for "update"
+        # A pre-release that came after the newest full release.
+        kept["pre"] = {"tag": "v2.2.0-rc1", "published": "2026-11-10T00:00:00Z"}
+        v = updates.verdict(dict(plain, version="2.1.0"), store)
+        self.assertEqual(v["state"], "current")
+        self.assertIn("a pre-release, v2.2.0-rc1 of 2026-11-10, is out too", v["text"])
+        self.assertEqual(updates.verdict(dict(plain, tag="v2.2.0-rc1"), store)["state"], "current")
+        self.assertEqual(updates.verdict(dict(plain, mod="Lantern-2.2.0-rc1"), store)["state"], "current")
+        self.assertEqual(updates.verdict(dict(plain, version="2.0"), store)["state"], "update")
+
+    def test_what_is_kept_of_a_repositorys_releases(self):
+        rel = lambda tag, pre=False, draft=False, when="2026-11-01T00:00:00Z": {"tag_name": tag, "prerelease": pre, "draft": draft, "published_at": when, "assets": [
+            {"name": "Lantern.zip", "browser_download_url": "https://github.com/invented-owner/lantern/releases/download/%s/Lantern.zip" % tag, "size": 5}, {"name": ""}, "junk"]}
+        got = updates.github_releases([rel("v2.1"), rel("v2.0")])
+        self.assertEqual((got["tag"], got["published"], got["assets"], "pre" in got, "only_pre" in got),
+                         ("v2.1", "2026-11-01T00:00:00Z", [["Lantern.zip", "https://github.com/invented-owner/lantern/releases/download/v2.1/Lantern.zip", 5]], False, False))
+        got = updates.github_releases([rel("v2.3-draft", draft=True), rel("v2.2-rc1", pre=True, when="2026-11-09T00:00:00Z"), rel("v2.1"), rel("v2.1-rc1", pre=True)])
+        self.assertEqual((got["tag"], got["pre"]), ("v2.1", {"tag": "v2.2-rc1", "published": "2026-11-09T00:00:00Z"}))
+        got = updates.github_releases([rel("v0.7.0-rc1", pre=True), rel("v0.6.0-rc2", pre=True)])
+        self.assertEqual((got["tag"], got["only_pre"], "pre" in got), ("v0.7.0-rc1", True, False))
+        self.assertEqual(updates.github_releases([]), {"gone": "it has no release"})
+        self.assertEqual(updates.github_releases([rel("v1", draft=True), "junk", {}]), {"gone": "it has no release"})
         v = updates.verdict(self.row(mo2_newest="1.3.0.0", version="1.2.0.0"), {"nexus": {}, "github": {}})
         self.assertEqual(v["state"], "not asked")
         self.assertIn("MO2's own last check saw version 1.3.0.0", v["text"])
@@ -700,13 +816,31 @@ class Scan(unittest.TestCase):
             "/mods/updated?period=1m": (200, self.limits, [{"mod_id": 4321, "latest_file_update": self.now - DAY, "latest_mod_activity": self.now}]),
             "/mods/4321/files": (200, self.limits, files_answer([(111, "a.7z", "1.2", 4, 100), (113, "b.7z", "1.4", 1, self.now - DAY)], [(111, 113, "a.7z", "b.7z")])),
             "/mods/5000/files": (200, self.limits, files_answer([(900, "r.7z", "1.0", 1, 100)])),
-            "/repos/invented-owner/lantern/releases/latest": (200, {"x-ratelimit-remaining": "55", "etag": 'W/"abc"'},
-                                                               {"tag_name": "v2.1", "published_at": "2026-11-20T10:00:00Z"})})
+            "/repos/invented-owner/lantern/releases?": (200, {"x-ratelimit-remaining": "55", "etag": 'W/"abc"'},
+                                                         [{"tag_name": "v2.1", "published_at": "2026-11-20T10:00:00Z"}])})
 
     def tearDown(self):
         os.environ.pop("MODTRAP_HOME", None)
         self.tmp.cleanup()
         logbook.set_console(True)
+
+    def test_what_was_kept_of_a_repository_before_is_asked_for_anew(self):
+        """WHY§147: an answer kept by an older ModTrap knew nothing of pre-releases, and called a repository with
+        only those one without a release."""
+        store = updates.load()
+        store["github"]["invented-owner/lantern"] = {"asked": self.now - 60, "gone": "no release, or no such repository", "etag": 'W/"old"'}
+        rows = [r for r in self.rows if r["host"] == "github"]
+        out = updates.scan(rows, "", self.net, store, now=self.now)
+        self.assertEqual(out["github"]["asked"], 1)
+        asked = [(u, h) for u, h in self.net.asked if "api.github.com" in u]
+        self.assertEqual([u for u, _h in asked], ["https://api.github.com/repos/invented-owner/lantern/releases?per_page=10"])
+        self.assertNotIn("If-None-Match", asked[0][1])                      # the older answer was to another question
+        self.assertEqual((store["github"]["invented-owner/lantern"]["tag"], store["github"]["invented-owner/lantern"]["v"]), ("v2.1", 2))
+        self.net.asked.clear()
+        self.assertEqual(updates.scan(rows, "", self.net, store, now=self.now + 60)["github"]["asked"], 0)      # asked a minute ago: kept
+        self.net.answers["/repos/invented-owner/lantern/releases?"] = (404, {}, None)
+        updates.scan(rows, "", self.net, store, now=self.now + 120, force=True)
+        self.assertEqual(updates.verdict(rows[0], store)["text"], "GitHub shows no release for this repository (no such repository, or it is private)")
 
     def test_a_scan_asks_what_needs_asking_and_keeps_the_answers(self):
         store = updates.load()
