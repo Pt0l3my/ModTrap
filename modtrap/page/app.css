@@ -434,7 +434,7 @@ body.dragging-mod, body.dragging-mod * { cursor: grabbing !important; user-selec
 .findings { margin: 0 0 10px; padding-left: 20px; }
 .findings li.bad { color: var(--bad); }
 .findings li.warn { color: var(--warn); }
-.modal.dropbox { max-width: 900px; max-height: calc(100vh - 60px); overflow: auto; }
+.modal.dropbox { max-width: 1060px; max-height: calc(100vh - 60px); overflow: auto; }
 .miniflow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0 10px; }
 .miniflow .stage { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); min-width: 0; min-height: 0; }
 .miniflow .stage.s-going { border-color: var(--warn); }
@@ -641,3 +641,36 @@ body.refreshing #mods-table tbody, body.refreshing #plugins-table tbody { opacit
 .listnav { display: inline-flex; gap: 2px; }
 .listnav .navbtn { padding: 3px 9px; font-size: 12px; line-height: 1.4; }
 .tools.slim { padding-top: 5px; padding-bottom: 5px; }
+
+/* A drop zone while a dragged file is over it (MT81). */
+body.dragging .upzone { border-color: var(--accent); }
+.glow, .upzone.over, .bulkdrop.over { border-color: var(--accent) !important; border-style: solid !important; background: rgba(185, 163, 255, .26) !important;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 26px 6px rgba(185, 163, 255, .55); transition: box-shadow .12s, background .12s; animation: zoneglow 1.1s ease-in-out infinite alternate; }
+@keyframes zoneglow { from { box-shadow: 0 0 0 2px var(--accent), 0 0 14px 2px rgba(185, 163, 255, .35); } to { box-shadow: 0 0 0 2px var(--accent), 0 0 30px 9px rgba(185, 163, 255, .7); } }
+@media (prefers-reduced-motion: reduce) { .glow, .upzone.over, .bulkdrop.over { animation: none; } }
+
+/* The one installer's box (MT81): as many stages as the run has; an installer's questions inside it. */
+.miniflow.n6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.miniflow.n7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.miniflow.n6 .stage-head b, .miniflow.n7 .stage-head b { font-size: 13px; }
+.dropask { max-height: max(220px, calc(100vh - 330px)); overflow: auto; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
+.dropask .card { margin-bottom: 0; border: 0; padding: 0; background: none; }
+.tag.goes { font-weight: 600; }
+
+/* The Installer tool in parts (MT81). */
+h2.pagepart { margin: 22px 2px 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 650; }
+h2.pagepart:first-child { margin-top: 4px; }
+.steppart { padding-bottom: 6px; }
+.steppart.done { border-color: #2f5a44; }
+.steppart-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.steppart-head h2 { margin: 0; flex: 0 0 auto; }
+.steppart-head .partnum { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; display: inline-grid; place-items: center; align-self: center; }
+.steppart.done .partnum { background: var(--good); color: #062a15; }
+.step.row { background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; margin: 0; padding: 8px 0 6px; grid-template-columns: 28px 1fr; }
+.step.row .num { width: 22px; height: 22px; font-size: 12px; }
+.step.row h3 { font-size: 14.5px; }
+.stepwhy summary { cursor: pointer; color: var(--dim); font-size: 12.5px; width: max-content; }
+.stepwhy p { margin: 4px 0 2px; }
+ol.howto { margin: 6px 0 10px; padding-left: 22px; }
+ol.howto li { margin: 2px 0; }
+table.lately td.acts { white-space: nowrap; text-align: right; }

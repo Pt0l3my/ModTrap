@@ -1350,3 +1350,46 @@ them, the mod's own copies and the copies the game loads:
 The same holds in a mod's own weighing (§25), which also says where a mod above replaces the plugin itself. An
 archive in the older game's format is named only where the game loads that copy. The scan of every mod lists a
 mod's files up to two million and for up to a minute, within its own limit of time.
+
+## 39. One installer; the Installer tool in parts; versions in order (MT81)
+
+**The run** (`installRun`, the page). Started by a drop on the mods' list (with the place under the pointer,
+MT57) or on the Installer tool (without one), for up to ten archives. Its stages, shown in one box:
+
+| stage | what happens | where it waits for the owner |
+| --- | --- | --- |
+| Taken in | the archive goes to ModTrap's work folder | a mod that is in the modlist already (§25); the name (MT67) |
+| Unpacked | ModTrap's own unpacking | |
+| Answers | only where the archive has an installer: its questions, in the box | "Use these answers" |
+| Read | the analysis of §16 for the place | stops where something the mod needs is missing |
+| Placed | only for a drop without a place, with "Always place a new mod by hand": the box steps aside, one click on the Mods tab | the click; Esc ends the run with nothing installed |
+| Installed, Checked | the add job (§16.8): MO2 closed, safe copies, the lists read back | |
+
+A drop without a place and without that setting goes last, before what the tools made; an update takes the older
+version's place. Off the run: with "Install a dropped mod by itself" switched off (on as ModTrap comes), with MO2
+open, or without the switch for changes, a drop on the tool is taken in and read, and "Install mod" does the rest
+as before. More than ten archives at once are handed to the bulk installer (§36).
+
+**An installer's options** (`fomod.needs`, `Api._installer_marks`). For each option: the plugins its conditions
+ask to be active, and the masters of the plugins it installs, less the game's own and the installer's own. Each
+is looked up in the load order: active, not active, in a disabled mod, or missing. All active: "✅ in your
+modlist". Otherwise the option names what is not. Up to 600 options are read for masters.
+
+**What is in hand, and what is done.** The tool's list holds what is still to be installed, and mods of MO2 the
+owner asked to look at. A mod installed leaves it. "Installed lately" lists the newest fifty installs from their
+records (`/api/installed`, which gives the newest two hundred and the count of all). ModTrap's unpacked copies of
+installed mods: the newest fifty are kept (`Api._prune_staged`), at an install and at the opening of a session.
+
+**The tool's page, top to bottom:** Install (the button, the place, the tool card where one runs); the installer's
+questions where one waits outside a run; The mod (room in the load order, a card for each mod); The steps, in four
+parts (what the mod needs first: `needs`; the install itself: `install`, `update`, `enable`, `activate`, `health`;
+what it changes at its place: `files`, `differs`, `records`; afterwards: `tools`), each part with its number, its
+state, and its steps as rows, a step's reason behind "Why"; Installed lately.
+
+**Drop zones.** While a dragged file is over one, it has the class `glow` (the page's bar, the welcome page's
+zone, the Updater's, the bulk installer's, the one for ModTrap's own update).
+
+**Versions in order** (`updates.rank`, `updates.order`, WHY§148). Numbers, then pre-release, release, or release
+with a letter. Used by the GitHub verdict (§38) in place of numbers alone, and by the Nexus verdict where the
+installed file could not be told: a version that is a current file's is current; on a page with one current file
+in all, a lower version is an update and a higher one is said so.

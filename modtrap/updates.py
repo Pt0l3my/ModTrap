@@ -229,6 +229,39 @@ def _parts(version: str) -> tuple | None:
     return t
 
 
+RANK = re.compile(r"^([a-z][a-z _-]*?[ _-]+)?v?(\d+(?:\.\d+)*)(?:[-._ ]?(alpha|beta|rc|pre|preview|a|b)[-._ ]?(\d+)|[-._ ]?(alpha|beta|rc|pre|preview)|([a-z]))?$")
+STAGES = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "pre": 2, "preview": 2, "rc": 3}
+
+
+def rank(version: str) -> tuple | None:
+    """A version as something to put in order (WHY§148): its numbers, then whether it is a pre-release (which
+    comes before the release of the same numbers) or carries a letter (which comes after). Understood: "1.2",
+    "v1.2.0", "1.2-rc1", "1.2b", and a tag that puts words before the numbers ("beta-release-0.4"). None for
+    anything else: nothing is put in order on a guess."""
+    hit = RANK.match(version.strip().lower())
+    if hit is None:
+        return None
+    nums = tuple(int(x) for x in hit.group(2).split("."))
+    while len(nums) > 1 and nums[-1] == 0:
+        nums = nums[:-1]
+    if hit.group(3):
+        return nums, 0, STAGES[hit.group(3)], int(hit.group(4))
+    if hit.group(5):
+        return nums, 0, STAGES[hit.group(5)], 0
+    if hit.group(6):
+        return nums, 2, ord(hit.group(6)), 0
+    return nums, 1, 0, 0
+
+
+def order(a: str, b: str) -> int | None:
+    """1 where version `a` is the newer, -1 where `b` is, 0 where they are the same; None where they cannot be put
+    in order: one of them is not understood, or one counts by years and the other does not."""
+    x, y = rank(a), rank(b)
+    if x is None or y is None or (x[0][0] >= 1900) != (y[0][0] >= 1900):
+        return None
+    return 0 if x == y else 1 if x > y else -1
+
+
 def same_version(a: str, b: str) -> bool:
     pa, pb = _parts(a), _parts(b)
     return pa == pb if pa is not None and pb is not None else a.strip().lower().lstrip("v") == b.strip().lower().lstrip("v")
@@ -300,14 +333,33 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
         how = "by the archive's name"
     mains = sorted((f for f in files.values() if f["state"] == 1), key=lambda f: -f["time"])
     if not installed:
+        by_name = " (read from the mod's name)" if row.get("version_by") == "name" else ""
+        kind = "main"
         if not mains:
-            return {"state": "maybe", "text": "the installed file could not be told among the mod's files, and the mod has no main file now",
+            # A page that keeps its files under "optional" or "miscellaneous" alone (WHY§148): those are its files.
+            mains = sorted((f for f in files.values() if f["state"] in active), key=lambda f: -f["time"])
+            kind = "current"
+        if not mains:
+            return {"state": "maybe", "text": "the installed file could not be told among the mod's files, and the mod has no current file now",
                     "newest": "", "file": "", "when": "", "asked": asked}
-        if row.get("version") and any(same_version(row["version"], f["version"]) for f in mains):
-            return {"state": "current", "text": "the installed version is that of a main file (the file itself could not be told)",
+        if row.get("version") and any(same_version(row["version"], f["version"]) or order(row["version"], f["version"]) == 0 for f in mains):
+            return {"state": "current", "text": "the installed version%s is that of a %s file (the file itself could not be told)" % (by_name, kind),
                     "newest": mains[0]["version"], "file": mains[0]["label"], "when": _day(mains[0]["time"]), "asked": asked}
-        return {"state": "maybe", "text": "the installed file could not be told among the mod's files; its main file is version %s, of %s, and "
-                                          "the installed version reads %s" % (mains[0]["version"] or "(none given)", _day(mains[0]["time"]), row.get("version") or "(none given)"),
+        if row.get("version") and len(mains) == 1 and sum(1 for f in files.values() if f["state"] in active) == 1:
+            # The page has one current file in all, and both versions can be put in order: the installed mod is
+            # an older or a newer state of that one file. With more files than one it may be another of them.
+            only, how = mains[0], order(row["version"], mains[0]["version"])
+            if how == -1:
+                return {"state": "update", "text": "the mod's one %s file is version %s, of %s; the installed version is %s%s (the file itself could not be told)" % (
+                    kind, only["version"], _day(only["time"]), row["version"], by_name),
+                        "newest": only["version"], "file": only["label"], "when": _day(only["time"]), "asked": asked, "file_id": only["id"],
+                        "file_name": only["name"] if ARCHIVE.search(only["name"]) else "", "time": only["time"], "size": only["size"], "code": only["code"]}
+            if how == 1:
+                return {"state": "current", "text": "the installed version, %s%s, is newer than the mod's one %s file (version %s, of %s)" % (
+                    row["version"], by_name, kind, only["version"], _day(only["time"])),
+                        "newest": only["version"], "file": only["label"], "when": _day(only["time"]), "asked": asked}
+        return {"state": "maybe", "text": "the installed file could not be told among the mod's files; its newest %s file is version %s, of %s, and "
+                                          "the installed version reads %s" % (kind, mains[0]["version"] or "(none given)", _day(mains[0]["time"]), row.get("version") or "(none given)"),
                 "newest": mains[0]["version"], "file": mains[0]["label"], "when": _day(mains[0]["time"]), "asked": asked}
     best = None
     unsure = None
@@ -400,10 +452,12 @@ def github_verdict(row: dict, kept: dict | None) -> dict:
             return dict(out, state="current", text="the installed version%s is the newest release (%s)%s%s" % (by_name, tag, only, early))
         if pre.get("tag") and same_version(version, pre["tag"]):
             return dict(out, state="current", text="the installed version%s is the newest pre-release (%s); the newest full release is %s, of %s" % (by_name, pre["tag"], tag, when))
-        a, b = _parts(version), _parts(tag)
-        if a is not None and b is not None:
-            if a > b:
-                return dict(out, state="current", text="the installed version, %s%s, is newer than the newest release (%s, of %s)%s" % (version, by_name, tag, when, early))
+        how = order(version, tag)
+        if how == 0:
+            return dict(out, state="current", text="the installed version%s is the newest release (%s)%s%s" % (by_name, tag, only, early))
+        if how == 1:
+            return dict(out, state="current", text="the installed version, %s%s, is newer than the newest release (%s, of %s)%s" % (version, by_name, tag, when, early))
+        if how == -1:
             return dict(out, state="update", text="the newest release is %s, of %s%s; the installed version is %s%s%s" % (tag, when, only, version, by_name, early))
     for name, what in ((tag, "release"), (pre.get("tag", ""), "pre-release")):
         if name and sources.names_version(name, row.get("mod", ""), row.get("archive", "")):
@@ -923,4 +977,4 @@ def page_of(row: dict) -> str:
     return row.get("url", "") if row["host"] in ("url", "loverslab") else ""
 
 
-__all__ = ["Net", "Refused", "fetch", "home_of", "picture_address", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "page_of", "same_version", "save", "scan", "verdict"]
+__all__ = ["Net", "Refused", "fetch", "home_of", "picture_address", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "order", "page_of", "rank", "same_version", "save", "scan", "verdict"]

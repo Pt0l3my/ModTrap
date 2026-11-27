@@ -92,6 +92,8 @@ OTHER_MO2 = ("Another Mod Organizer is open, for another modlist. MO2 hands ever
              "open, so ModTrap's would go to the wrong modlist. Close that MO2: ModTrap then goes on.")
 
 # The owner's settings (DESIGN§19): name -> default. Kept in ModTrap's own folder, for every session.
+INSTALLED_SHOWN = 200                # installs listed on the Installed tab, the newest (MT81)
+STAGED_KEPT = 50                     # ModTrap's unpacked copies of installed mods that are kept, the newest (MT81)
 SETTINGS = {
     "auto_go": False,          # after the dry run, go ahead without asking when the plan leaves nothing to the owner
     "close_mo2": False,        # close this modlist's MO2 without asking when a step needs it closed
@@ -111,7 +113,7 @@ SETTINGS = {
     "downloads_move": True,    # a mod's download in the browser's folder is moved into ModTrap's own downloads folder, not copied (MT50)
     "stay_on_tab": True,       # when a site's page is opened in a new tab, the browser is taken back to ModTrap's tab (MT52)
     "manual_placement": False, # a new mod is always placed by hand: "Install mod" asks for its place on the Mods tab (MT53)
-    "install_on_drop": False,  # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55)
+    "install_on_drop": True,   # a dropped mod is installed as soon as it is unpacked and read, with no further press (MT54; off: MT55; on again: MT81)
     "ask_name": True,          # a mod's name is asked at every install and update, with ModTrap's own as what is offered (MT67)
     "quit_with_page": True,    # ModTrap closes when its page is closed, with nothing in hand (MT64)
     "start_from_page": True,   # a link of ModTrap's own kind starts ModTrap.exe, so that a page brought back can start it (MT64)
@@ -872,7 +874,9 @@ class Api:
                                  "updates": (j.get("updates") or {}).get(name, ""), "with": [x for x in j["mods"] if x != name],
                                  "there": mod is not None, "enabled": bool(mod is not None and mod.enabled),
                                  "priority": mod.priority if mod is not None else None, "plugins": list(mod.plugins) if mod is not None else []})
-        return {"rows": rows, "changes": self.changes is not None}
+        # The newest two hundred (MT81): a list of every install ever made grows without end, and each row is looked
+        # up among the Updater's rows on the page. The installs themselves stay, each with its Revert, in the History.
+        return {"rows": rows[:INSTALLED_SHOWN], "total": len(rows), "changes": self.changes is not None}
 
     def updater_do(self, what: str, body: dict) -> dict:
         """The Updater's presses (MT50), and the naming of ModTrap's downloads folder."""
@@ -1704,6 +1708,7 @@ class Api:
             if rec.get("state") in ("copying", "unpacking"):
                 rec["state"], rec["note"] = "failed", "ModTrap was closed while this was being unpacked. Drop it again."
             self._staged[d.name] = rec
+        self._prune_staged()
 
     def _source_for(self, old: str, new: str) -> dict:
         """What a newer version inherits of the older mod's source (WHY§109): MO2's name of the game and the mod's
@@ -1954,8 +1959,48 @@ class Api:
             v = fomod.view(self._installer_of(rec), picks, self._plugin_state)
         except fomod.Unreadable as e:
             raise Bad(str(e)) from None
+        self._installer_marks(rec, v["steps"])
         return {"id": rec["id"], "name": v["name"] or rec["name"], "steps": v["steps"], "problems": v["problems"],
                 "files": len(v["files"]), "state": rec["state"]}
+
+    def _installer_marks(self, rec: dict, steps: list[dict]) -> None:
+        """Marks each option of an installer with what it goes with in this modlist (MT81): the plugins its own
+        conditions name and the masters of the plugins it installs, each as it stands in the load order. An option
+        whose every such plugin is active is "there"; the game's own plugins say nothing and are left out."""
+        memo = self.__dict__.setdefault("_installer_needs", {})
+        got = memo.get(rec["id"])
+        if got is None:
+            def masters_of(path: Path) -> list[str]:
+                try:
+                    return list(plugin.read(path).masters)
+                except (OSError, plugin.Unreadable):
+                    return []
+            try:
+                got = fomod.needs(self._installer_of(rec), Path(rec["raw"]), masters_of) if rec.get("installer") == "fomod" else {}
+            except (fomod.Unreadable, OSError):
+                got = {}
+            if len(memo) > 40:
+                memo.clear()
+            memo[rec["id"]] = got
+        m = self.model
+        for st in steps:
+            for g in st["groups"]:
+                for o in g["options"]:
+                    have, lack = [], []
+                    for name in got.get("%s.%d" % (g["key"], o["n"]), []):
+                        r = m.row(name) if m is not None else None
+                        if r is not None and r.source == instance.GAME:
+                            continue
+                        state = self._plugin_state(name).lower()
+                        if state == "missing" and m is not None:
+                            # Not in the load order, but a mod of the modlist that is disabled has it: said as that.
+                            f = instance.fold(name)
+                            held = next((x.name for x in m.instance.mods if x.kind == "mod" and any(instance.fold(p) == f for p in x.plugins)), "")
+                            if held:
+                                state = "disabled"
+                        (have if state == "active" else lack).append({"name": name, "state": state})
+                    if have or lack:
+                        o["goes_with"] = {"there": not lack, "have": [x["name"] for x in have], "lack": lack}
 
     def add_choose(self, body: dict) -> dict:
         """Builds the mod's folder from the answers, in the session's folder; it is then analysed like any other."""
@@ -2085,6 +2130,36 @@ class Api:
         self._save_staged(rec)
         threading.Thread(target=self._unpack, args=(rec, src), name="unpack", daemon=True).start()
         return self._staged_public(rec)
+
+    def _prune_staged(self) -> int:
+        """ModTrap's unpacked copies of what is installed (MT81): the newest fifty are kept, for an Uninstall to put
+        the mod back on the Installer tool's list; the older ones are removed from ModTrap's work folder. The mods
+        themselves are in MO2 and are not touched; their Uninstall works without the copy. Archives that could not
+        be taken in are kept by the same count."""
+        gone = 0
+        for kind in ("installed", "failed"):
+            done = [r for r in self._staged.values() if r["state"] == kind]
+            if len(done) <= STAGED_KEPT:
+                continue
+
+            def when(r: dict) -> float:
+                try:
+                    return (Path(r["dir"]) / "staged.json").stat().st_mtime
+                except OSError:
+                    return 0.0
+            try:
+                base = self._incoming()
+            except (Bad, sessions.Refused):
+                return gone
+            for r in sorted(done, key=when)[:len(done) - STAGED_KEPT]:
+                d = Path(r["dir"])
+                if d.parent == base and re.fullmatch(r"[0-9a-f]{10}", d.name):
+                    shutil.rmtree(d, ignore_errors=True)
+                self._staged.pop(r["id"], None)
+                gone += 1
+        if gone:
+            log.info("add: ModTrap's own unpacked copies of %d older install(s) were removed from its work folder; the newest %d are kept", gone, STAGED_KEPT)
+        return gone
 
     def add_forget(self, body: dict) -> dict:
         """Takes an archive off the list and removes ModTrap's own copy of it. Nothing of the modlist is touched."""

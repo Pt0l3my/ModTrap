@@ -170,6 +170,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 145 | 2026-11-24 | A record of something done is not a claim on its name; where "refresh" ends and a change begins | FACT | #model #page |
 | 146 | 2026-11-27 | A plugin the game does not load is a fault as far as something calls it; the scripts say | METHOD | #model #safety |
 | 147 | 2026-11-27 | "Not asked yet" beside a link just given reads as a link not understood; a name's version; pre-releases | FACT | #updates #page |
+| 148 | 2026-11-27 | Versions are put in order only where both are understood; a page with one file says more than was taken from it | METHOD | #updates |
+| 149 | 2026-11-27 | Two installers were one installer with two front ends; what "stops" were; a list that only grew | FACT | #page #add #safety |
 
 ## Entries
 
@@ -4052,3 +4054,62 @@ them; the addresses were read by a session that can), and the time the second pa
   other question) is asked for anew, without the older answer's mark of sameness, which was for another address.
 - Checked in a browser on an invented list with a stand-in for GitHub: three forms of address, the words said
   back, the question at once, "by its name" in the Installed column, a pre-release named beside a full release.
+
+### 148. Versions are put in order only where both are understood; a page with one file says more than was taken from it
+
+`2026-11-27` · METHOD · `#updates` · refs: MT81, MT80, MT67, DESIGN§39, DESIGN§38, WHY§147, WHY§101
+
+- FACT (the owner's screen, the day after WHY§147): of 23 repositories asked about, most read "Up to date" or
+  "Update out" by the version in the mod's name. Left "Unclear" or without a version: a name with dots for spaces
+  that ends in its version; a name that ends in a pre-release's version, where the repository's newest release is
+  the full release of the same numbers; a newest release whose tag puts words before its numbers; and a mod at
+  Nexus whose page has no main file.
+- METHOD (order): a version is its numbers, then one of three: a pre-release (alpha, beta, pre, rc, each with its
+  count), the release, a release with a letter after it. So 0.7.0-rc1 is older than 0.7.0, and 7.5.2a newer than
+  7.5.2. A tag may carry words before its numbers; one that carries anything else (two versions, a build's mark)
+  is not understood. Two versions are compared only where both are understood and both, or neither, count by
+  years. Anything else stays "unclear": a false "update" on a list of thousands is worse than an honest "unclear".
+- METHOD (a name's end): `adding.version_in` takes a version after a space, a hyphen or an underscore, as ModTrap
+  itself writes one. Read besides, for the Updater only and only where no record states a version: one after a
+  dot, and one with a pre-release's mark, at the very end of the name. ModTrap's naming of mods is not changed.
+- FACT (the code): where the installed file could not be told among a Nexus page's files, the version was
+  compared with main files only, and a page with none was "unclear" whatever its other files said.
+- METHOD (Nexus): a page with no main file is judged by its current files (optional, update, miscellaneous).
+  And where a page has one current file in all, the installed mod is a state of that one file: a lower version
+  is an update, a higher one is said so. With more files than one it may be another of them, and stays unclear
+  unless a version matches. An earlier test said "unclear" for the one-file case; the reason given there (it may
+  be another file) does not hold where there is no other.
+- Not verified on the owner's PC: what the Nexus page of the one mod in question holds.
+
+### 149. Two installers were one installer with two front ends; what "stops" were; a list that only grew
+
+`2026-11-27` · FACT · `#page #add #safety` · refs: MT81, MT55, MT54, MT57, MT78, MT53, DESIGN§39, DESIGN§16, WHY§120, WHY§144
+
+- FACT (the code): the mods' list and the Installer tool installed through the same server calls. The list's
+  drop ran them in one go, in a box with stages. The tool's drop took the archive in and waited for "Install
+  mod" (MT55, the owner's own choice four days earlier); with the owner's setting for placing by hand it then
+  went to the Mods tab for a click, and asked once more before installing. Three presses against none.
+- FACT: the list's run ended, with a pointer to the tool, where the archive had an installer.
+- So the run was made the one installer: it takes a place or none, and where it has none it gets the usual one
+  or asks for one click. The installer's questions are a stage of the run, shown in its box; the card is the one
+  the tool had. The second question after a place chosen by hand is gone for a run: what the mod overwrites
+  there is in the box afterwards, with "Uninstall" beside it, as it always was for the list's drop.
+- FACT (the limit): every mod installed was put on the tool's list of what is in hand, and stayed until
+  cleared. That list is analysed whole at every reading of the modlist (the owner's log: nine mods read again
+  after each change, four to five seconds each time), and twenty was its most. Nothing took a mod off it.
+- So an installed mod leaves that list. What the owner asked to see, the latest installs, is a list of its own,
+  read from the installs' records; a mod's full report is one press away. Kept once: a page that still holds
+  such mods from an older ModTrap takes off the ones an install put there.
+- FACT (disk): each install left ModTrap's unpacked copy of the mod in the session's folder, so that an
+  Uninstall could put the mod back on the list; the owner's session held 87. Fifty are kept, by when they were
+  installed. An Uninstall of an older one takes the mod out as before and does not put it back on the list.
+- METHOD (an installer's options): "is this mod installed" has two answers that files can prove. The installer
+  may ask itself (a condition on a plugin being active). And the option's own plugins name their masters. Both
+  are looked up in the load order. A match of an option's name with a mod's name was not used: names promise
+  nothing. An option that goes with nothing beyond the game and the installer itself gets no mark.
+- METHOD (the page in parts): the steps had one order, the order the analysis makes them in, which is not the
+  order things happen (copying came before "what the mod needs"). Four parts, by what a step is: a condition,
+  the install, a telling, an afterwards. Only the first can hold the install up, and only it is the owner's.
+- Checked in a browser on an invented list: a plain archive from the tool with no press after the name; one
+  with an installer, from the tool and from the list, with the marks; one placed by hand with one click; the
+  tool's parts; each zone's glow. Not checked on the owner's PC, nor with a real installer of many steps.

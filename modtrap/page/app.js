@@ -313,7 +313,7 @@ const SETTING_TEXT = [
   ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updater list). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
-  ["install_on_drop", "Install a dropped mod by itself", "Off: a mod's archive dropped on the Installer tool is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it. On: it is installed as soon as it is read, with no press; with “Always place a new mod by hand”, ModTrap takes you to the Mods tab to choose its place instead. It waits where the mod's installer asks which parts to install, and stops, saying why, where something the mod needs is missing."],
+  ["install_on_drop", "Install a dropped mod by itself", "On: a mod's archive dropped on the Installer tool is installed in one run, as one dropped on the mods' list is: unpacked, read, installed and checked, shown stage by stage in a box. It stops only for what is yours to say: the mod's name, its installer's questions, its place where “Always place a new mod by hand” is on, and something the mod needs that is not there. Off: the archive is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it."],
   ["ask_name", "Ask for a mod's name at every install and update", "A mod is named by its title and its version, as in “Example Mod 1.2”: the title from the file's name (for an update, the name of the mod it replaces, without that mod's version), the version from what the mod's site says of the file, else from the file's name, else from a file inside it. On: before a mod is installed or updated, a box shows that name for you to change or keep; Enter keeps it. Off: the name is given without asking; the pen beside a mod on the Installer tool still changes it."],
   ["quit_with_page", "Close ModTrap when its page is closed", "ModTrap has no window, so its page is all there is of it. On: when the last tab with ModTrap's page is closed (or its browser is), ModTrap saves its session and closes, a few seconds later; a page only loaded anew is back before that. It never closes in the middle of a job, a tool's run or a scan: it waits for that to end. A browser that is ended without a word is noticed after four minutes. Off: ModTrap runs until “Quit”."],
   ["start_from_page", "Let ModTrap's page start ModTrap", "When ModTrap has closed and your browser brings its tab back, a small page ModTrap left in the browser shows instead and starts ModTrap again; then you are back where you were. For that, ModTrap enters one kind of link (modtrap:) for your Windows account, which starts this ModTrap.exe. Your browser asks before it opens such a link; you can let it remember the answer for this page. The link carries nothing: whatever it says, ModTrap is started the one same way, as a double-click does. Off: the entry is taken out again, and the page only tells you to start ModTrap.exe yourself."],
@@ -1679,7 +1679,7 @@ function currentUi() {
     pSearch: $("plugins-search").value, pProblems: $("p-problems").checked, pDeps: $("p-deps").checked,
     collapsed: [...(state.collapsed || [])], pcollapsed: [...(state.pcollapsed || [])], plugin: state.plugin || "", stepsDone: state.stepsDone || {},
     ticksJob: state.ticksJob === undefined ? null : state.ticksJob,
-    adding: [...(state.adding || [])], staged: [...(state.staged || [])],
+    adding: [...(state.adding || [])], staged: [...(state.staged || [])], toolUi: state.toolUi === 2 ? 2 : 1,
     bulk: ((state.bulk || {}).items || []).filter((x) => x.id && !x.reject).map((x) => x.id),
   };
 }
@@ -1718,6 +1718,8 @@ function applyUi(ui) {
     state.adding = (Array.isArray(ui.adding) ? ui.adding : []).filter((n) => { const m = findMod(n); return m && m.kind === "mod"; });
     state.staged = (Array.isArray(ui.staged) ? ui.staged : []).filter((x) => typeof x === "string").slice(0, 20);
     state.stagedInfo = {};
+    state.toolUi = ui.toolUi === 2 ? 2 : 1;
+    state.lately = null;
     // The bulk list (MT78): what was taken in before is still in ModTrap's work folder; its lines come back as they stand.
     // A reading anew of the same session leaves the list as it is, with its notes and a bulk install that is going.
     if (!state.bulk || state.bulkSession !== state.sessionApplied) {
@@ -3253,32 +3255,58 @@ function fileOver(ev) {
   return at;
 }
 
-const DROP_STAGES = [["take", "Taken in"], ["unpack", "Unpacked"], ["read", "Read"], ["install", "Installed"], ["check", "Checked"]];
+// One installer for both places (MT81). A file dropped on the Modlist page's list brings its place with it; a file
+// dropped on the Installer tool has none, and gets the usual one, or is placed by hand where the owner's setting asks
+// for that. Everything else is the same run, shown in the same box: taken in, unpacked, its installer's questions
+// answered in the box, read against the modlist, installed, checked.
+const DROP_STAGES = [["take", "Taken in"], ["unpack", "Unpacked"], ["answers", "Answers"], ["read", "Read"], ["place", "Placed"], ["install", "Installed"], ["check", "Checked"]];
+const RUN_FILES = 10;                           // archives installed in one run; more than that is the bulk installer's work
 function dropAtPlace(ev, at) {
-  if (mo2Blocks()) return;                       // nothing is taken in for an install that could not be made
-  const files = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []).filter((f) => ARCHIVE_NAME.test(f.name)).slice(0, 10);
+  const files = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []).filter((f) => ARCHIVE_NAME.test(f.name));
   if (!files.length) { toast("Dropped on the list, a mod's archive (.zip, .7z or .rar) is installed at that place. This is none: nothing was done."); return; }
-  const run = state.dropRun = { files, label: files.map((f) => f.name).join(", "), before: at.before, words: at.words, ids: [], names: [],
-    stage: { take: "going", unpack: "waiting", read: "waiting", install: "waiting", check: "waiting" }, note: {}, state: "going", d: null, done: null, job: "", why: "" };
+  installRun(files, at);
+}
+function installRun(files, at) {
+  if (mo2Blocks()) return false;                 // nothing is taken in for an install that could not be made
+  if (state.dropRun) { if (state.dropRun.state === "going") { toast("An install is going: this one follows when it has ended."); return false; } dropClose(); }
+  files = files.slice(0, RUN_FILES);
+  const byHand = !at && !!(state.settings || {}).manual_placement;
+  const stage = { take: "going", unpack: "waiting", read: "waiting" };
+  if (byHand) stage.place = "waiting";
+  stage.install = "waiting"; stage.check = "waiting";
+  const run = state.dropRun = { files, label: files.map((f) => f.name).join(", "), before: at ? at.before : null, words: at ? at.words : "", byHand, ids: [], names: [], asking: [],
+    stage, note: {}, state: "going", d: null, done: null, job: "", why: "" };
   run.back = el("div", { class: "modal-back" }, el("div", { class: "modal wide dropbox", role: "dialog", "aria-modal": "true" }));
   document.body.append(run.back);
   renderDropBox();
-  dropRun(run).catch((e) => dropStop(run, "failed", e.message)).finally(() => renderDropBox());
+  dropRun(run).catch((e) => dropStop(run, "failed", e.message)).finally(() => { if (state.dropRun === run) renderDropBox(); });
+  return true;
 }
 function dropStop(run, how, why) {
   if (run.state !== "going") return;
   run.state = how;
   run.why = why || "";
-  for (const k of Object.keys(run.stage)) if (run.stage[k] === "going") run.stage[k] = how === "yours" ? "yours" : how === "stopped" ? "skipped" : "failed";
+  run.asking = [];
+  if (!run.back.isConnected) document.body.append(run.back);          // it was set aside while a place was chosen
+  for (const k of Object.keys(run.stage)) if (run.stage[k] === "going" || run.stage[k] === "yours") run.stage[k] = how === "yours" ? "yours" : how === "stopped" ? "skipped" : "failed";
+}
+// The place, chosen on the Mods tab (the owner's setting "Always place a new mod by hand"): the box steps aside, a
+// click between two mods is the place, and the run goes on from there. Esc or Cancel ends the run with nothing installed.
+function runPlace(run) {
+  return new Promise((resolve) => {
+    run.back.remove();
+    run.placed = (got) => { run.placed = null; if (!run.back.isConnected) document.body.append(run.back); resolve(got); };
+    startPlacement({ run, label: run.names.join(", ") });
+  });
 }
 async function dropRun(run) {
   const step = (k, st, note) => { run.stage[k] = st; if (note !== undefined) run.note[k] = note; renderDropBox(); };
-  const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before });
+  const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before || "" });
   // 1. Taken in: the archive goes to ModTrap's work folder (or is used from MO2's downloads folder, where it lies there).
   const got = await api("/api/add/resolve", { items: run.files.map((f) => ({ name: f.name })) });
   for (let i = 0; i < run.files.length; i++) {
     const it = got.items[i], file = run.files[i];
-    if ((state.staged || []).length + (state.adding || []).length >= 20) return dropStop(run, "failed", "Twenty mods at a time is the most the Installer tool holds. Take some off its list first.");
+    if ((state.staged || []).length >= 20) return dropStop(run, "failed", "Twenty archives wait on the Installer tool already. Install them or clear them first.");
     step("take", "going", run.files.length > 1 ? file.name : "");
     let rec = it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file);
     if (!(rec.already || []).length && it.mods.length)            // MO2 has a mod installed from this very file
@@ -3303,41 +3331,80 @@ async function dropRun(run) {
     run.names.push(rec.name);
     state.staged = (state.staged || []).concat(rec.id);
     state.stagedInfo = Object.assign({}, state.stagedInfo, { [rec.id]: rec });
-    state.addPlace = { ids: run.ids.slice(), before: run.before, words: run.words };        // the Installer tool knows the place too
+    if (run.before !== null) state.addPlace = { ids: run.ids.slice(), before: run.before, words: run.words };        // the Installer tool knows the place too
     renderAddPicked();
     saveUi();
   }
   step("take", "done", "in ModTrap's work folder");
-  // 2. Unpacked, 3. Read: what it needs, what it overwrites at this place, the tools that have to do with it.
+  // 2. Unpacked; the installer's questions, where it has any; 3. Read: what it needs, what it overwrites, the tools.
   step("unpack", "going");
-  let d;
-  for (let i = 0; ; i++) {
-    if (run.state !== "going") return;
-    if (i > 3600) return dropStop(run, "failed", "It took too long to get ready. The mod is on the Installer tool's list, with its place.");
-    d = await api("/api/add", body());
-    const recs = (d.staged || []).filter((r) => run.ids.includes(r.id));
-    if ((d.gone || []).some((id) => run.ids.includes(id)) || recs.length < run.ids.length) return dropStop(run, "failed", "The archive could not be unpacked.");
-    const bad = recs.find((r) => r.state === "failed");
-    if (bad) return dropStop(run, "failed", bad.note || "The archive could not be read.");
-    if (recs.some((r) => r.state === "copying" || r.state === "unpacking")) { await sleep(400); continue; }
-    if (recs.some((r) => r.state !== "ready")) {
-      step("unpack", "done");
-      step("read", "going");
-      return dropStop(run, "yours", "This mod asks which parts to install. Answer its questions on the Installer tool: “Install mod” there then puts it at the place you chose.");
+  const read = async () => {
+    for (let i = 0; ; i++) {
+      if (run.state !== "going") return null;
+      if (i > 7200) { dropStop(run, "failed", "It took too long to get ready. The mod is on the Installer tool's list."); return null; }
+      const d = await api("/api/add", body());
+      const recs = (d.staged || []).filter((r) => run.ids.includes(r.id));
+      if ((d.gone || []).some((id) => run.ids.includes(id)) || recs.length < run.ids.length) { dropStop(run, "failed", "The archive could not be unpacked."); return null; }
+      const bad = recs.find((r) => r.state === "failed");
+      if (bad) { dropStop(run, "failed", bad.note || "The archive could not be read."); return null; }
+      if (recs.some((r) => r.state === "copying" || r.state === "unpacking")) { await sleep(400); continue; }
+      const asks = recs.filter((r) => r.state === "installer");
+      if (asks.length) {
+        // An installer asks which parts to install (MT81): its questions are answered here, in the box, and the run goes on.
+        const cannot = asks.find((r) => !r.installer);
+        if (cannot) { dropStop(run, "yours", (cannot.note || "ModTrap cannot read this mod's installer.") + " It is on the Installer tool's list."); return null; }
+        const ids = asks.map((r) => r.id);
+        if (run.stage.answers !== "yours" || ids.join() !== run.asking.join()) {
+          state.stagedInfo = Object.assign({}, state.stagedInfo, Object.fromEntries(recs.map((r) => [r.id, r])));
+          if (run.stage.unpack !== "done") { run.stage.unpack = "done"; }
+          run.asking = ids;
+          const order = {};
+          for (const [k] of DROP_STAGES) if (k === "answers" || k in run.stage) order[k] = k === "answers" ? "yours" : run.stage[k];
+          run.stage = order;
+          run.note.answers = "it asks which parts to install";
+          renderDropBox();
+        }
+        await sleep(500);
+        continue;
+      }
+      if (run.stage.answers === "yours") { run.asking = []; step("answers", "done", "built from your answers"); }
+      run.names = recs.map((r) => r.name);
+      if (run.stage.unpack !== "done") step("unpack", "done", plural(recs.reduce((a, r) => a + (r.files || 0), 0), "file"));
+      if (run.stage.read !== "going") step("read", "going");
+      if (!d.looking && !d.unpacking) return d;
+      await sleep(400);
     }
-    run.names = recs.map((r) => r.name);
-    step("unpack", "done", plural(recs.reduce((a, r) => a + (r.files || 0), 0), "file"));
-    step("read", "going");
-    if (!d.looking && !d.unpacking) break;
-    await sleep(400);
-  }
+  };
+  let d = await read();
+  if (!d) return;
   if (d.failed) return dropStop(run, "failed", d.failed);
+  const lacks = (x) => { const needs = (x.steps || []).find((y) => y.key === "needs"); return needs && needs.state !== "done" ? needs.items.map((y) => y.text).slice(0, 3).join(" ") : ""; };
   run.d = d;
-  const needs = (d.steps || []).find((x) => x.key === "needs");
-  if (needs && needs.state !== "done") return dropStop(run, "yours", "Something the mod needs is not there yet: " + needs.items.map((x) => x.text).slice(0, 3).join(" ") + " It is on the Installer tool's list, with its place.");
+  if (lacks(d)) return dropStop(run, "yours", "Something the mod needs is not there yet: " + lacks(d) + " It is on the Installer tool's list" + (run.before !== null ? ", with its place." : "."));
   if (probeReason()) return dropStop(run, "failed", "Not yet: " + probeReason() + ".");
   step("read", "done", "what it needs is there");
-  // 4. Installed at the place; 5. Checked: the add job reads the lists back itself, and puts everything back if they are not as planned.
+  // The place, where the drop did not bring one.
+  if (run.before === null) {
+    if (d.update || run.updates) { run.before = ""; if (run.stage.place) step("place", "done", "the older version's place"); if (!run.words) run.words = "in the place of the older version"; }
+    else if (run.byHand) {
+      step("place", "yours", "click a place on the Mods tab");
+      const where = await runPlace(run);
+      if (run.state !== "going") return;
+      if (!where) return dropStop(run, "stopped", "No place was chosen: nothing was installed. The mod is on the Installer tool's list.");
+      run.before = where.before;
+      run.words = where.words;
+      state.addPlace = { ids: run.ids.slice(), before: run.before, words: run.words };
+      step("place", "done", where.words);
+      step("read", "going", "at this place");
+      d = await read();
+      if (!d) return;
+      if (d.failed) return dropStop(run, "failed", d.failed);
+      run.d = d;
+      if (lacks(d)) return dropStop(run, "yours", "Something the mod needs is not there yet: " + lacks(d) + " It is on the Installer tool's list, with its place.");
+      step("read", "done", "what it needs is there");
+    } else { run.before = ""; run.words = "last in MO2's list, before what the modlist's tools made"; renderDropBox(); }
+  }
+  // Installed at the place; checked: the add job reads the lists back itself, and puts everything back if they are not as planned.
   step("install", "going");
   let r;
   for (let i = 0; ; i++) {
@@ -3351,13 +3418,15 @@ async function dropRun(run) {
   run.done = r.done;
   run.job = r.job;
   state.addPlace = null;
-  for (const n of run.names) if (!(state.adding || []).includes(n)) state.adding.push(n);
+  state.staged = (state.staged || []).filter((id) => !run.ids.includes(id));       // installed: off the list of what is in hand
+  renderAddPicked();
   saveUi();
   const first = (r.done.mods || [])[0];
   step("install", "done", first ? "priority " + first.priority : "");
   step("check", "done", "the lists read back as planned");
   run.state = "done";
   state.addText = "";
+  state.lately = null;
   state.gen = (state.gen || 0) + 1;
   tick();
   dropEvaluate(run, first ? first.name : run.names[0]);
@@ -3386,15 +3455,20 @@ function renderDropBox() {
   if (!run) return;
   const box = run.back.firstChild;
   const WORD = { going: "going on", yours: "waits for you", done: "done", failed: "stopped", stopped: "stopped by you" };
-  const kids = [el("div", { class: "uprun-head" }, el("b", { text: "Installing “" + (run.names.length ? run.names.join(", ") : run.label) + "” " + run.words }),
+  const asked = box.querySelector(".dropask");
+  const askedAt = asked ? asked.scrollTop : 0;
+  const kids = [el("div", { class: "uprun-head" }, el("b", { text: "Installing “" + (run.names.length ? run.names.join(", ") : run.label) + "”" + (run.words ? " " + run.words : "") }),
     el("span", { class: "tag " + ({ done: "good", failed: "bad", going: "warn" }[run.state] || ""), text: WORD[run.state] }))];
-  kids.push(el("div", { class: "miniflow" }, ...DROP_STAGES.map(([k, title], i) => {
+  const shown = DROP_STAGES.filter(([k]) => k in run.stage);
+  kids.push(el("div", { class: "miniflow n" + shown.length }, ...shown.map(([k, title], i) => {
     const st = run.stage[k];
     return el("div", { class: "stage s-" + st }, el("div", { class: "stage-head" }, el("span", { class: "n", text: String(i + 1) }), el("b", { text: title }),
       el("span", { class: "ico t-" + st, "aria-hidden": "true", text: TASK_ICON[st] || "○" })),
       el("p", { class: "stage-note", text: run.note[k] || (st === "going" ? "…" : st === "waiting" ? "to come" : "") }));
   })));
   if (run.why) kids.push(el("p", { class: run.state === "failed" ? "would-needs" : "", text: run.why }));
+  if (run.state === "going" && run.asking.length)
+    kids.push(el("div", { class: "dropask" }, ...run.asking.map((id) => installerCard((state.stagedInfo || {})[id] || { id, name: run.label, state: "installer" }))));
   if (run.ask) {
     const rec = run.ask.rec, a = rec.already[0];
     const said = a.same ? "the very file it was installed from" : a.newer > 0 ? "newer" : a.newer < 0 ? "older" : rec.version && a.version ? "the same version" : "";
@@ -3443,7 +3517,7 @@ function renderDropBox() {
   const toTool = () => { dropClose(); showTab("add"); state.addText = ""; pollAdd(true); };
   if (run.ask) { /* the question's own buttons answer it */ }
   else if (run.state === "going") {
-    if (run.stage.install === "waiting") act("Stop", () => { dropStop(run, "stopped", "Stopped. Nothing of the modlist was changed. The mod is on the Installer tool's list, with its place."); renderDropBox(); }, "", "Nothing of the modlist is changed before the install itself");
+    if (run.stage.install === "waiting") act("Stop", () => { dropStop(run, "stopped", "Stopped. Nothing of the modlist was changed. The mod is on the Installer tool's list."); renderDropBox(); }, "", "Nothing of the modlist is changed before the install itself");
   } else {
     if (run.state === "done" && run.job) {
       act("Uninstall", async () => { if (await uninstallJob(run.job, run.names.map((n) => "“" + n + "”").join(", "))) dropClose(); }, "", "Puts MO2's lists back as they were and takes ModTrap's copy of the mod out again");
@@ -3456,6 +3530,8 @@ function renderDropBox() {
   box.replaceChildren(...kids.filter(Boolean));
   const details = box.querySelector(".dropdetails");
   if (details && run.scrolled) details.scrollTop = run.scrolled;
+  const asking = box.querySelector(".dropask");
+  if (asking && askedAt) asking.scrollTop = askedAt;
   const stop = box.querySelector(".actions button.primary") || box.querySelector(".actions button");
   if (stop && run.state !== "going" && !box.contains(document.activeElement)) stop.focus();
 }
@@ -5810,7 +5886,20 @@ function sendArchive(file, updates) {
 
 async function dropMods(drops) {
   showTab("add");
+  // More archives than one run takes are the bulk installer's work (MT78): they go there, with nothing lost.
+  const many = drops.filter((x) => x.file && ARCHIVE_NAME.test(x.name));
+  if (many.length > RUN_FILES) {
+    showTab("bulk");
+    bulkAdd(many.map((x) => x.file));
+    toast(plural(many.length, "archive") + " at once: they are on the Bulk install list.");
+    drops = drops.filter((x) => !many.includes(x));
+    if (!drops.length) return;
+  }
   drops = drops.slice(0, 50);
+  // An archive is installed in one run, as on the Modlist page (MT81): ModTrap is started to change things, MO2 is
+  // closed, and the setting "Install a dropped mod by itself" is on. Else it is taken in and read, for "Install mod".
+  const runs = !!state.changes && !!(state.settings || {}).install_on_drop && !mo2Open() && !(state.dropRun && state.dropRun.state === "going");
+  const mine = [];
   try {
     const d = await api("/api/add/resolve", { items: drops.map((x) => ({ name: x.name })) });
     const notes = [];
@@ -5818,6 +5907,7 @@ async function dropMods(drops) {
     for (let i = 0; i < d.items.length; i++) {
       const it = d.items[i];
       const file = drops[i] && drops[i].file;
+      if (runs && file && ARCHIVE_NAME.test(it.name)) { mine.push(file); continue; }       // the run itself says where the modlist has the mod already
       if (it.mods.length) {
         for (const m of it.mods) if (addCandidate(m)) added++;
         if (!it.sure) notes.push({ name: it.name, text: "Taken to be the mod “" + it.mods[0] + "”, because " + it.how + ". Take it off the list if that is not the one." });
@@ -5829,7 +5919,7 @@ async function dropMods(drops) {
           "MO2 has no mod of this name. Drop the mod's archive (.zip, .7z or .rar) instead of a folder." });
         continue;
       }
-      if ((state.staged || []).length + (state.adding || []).length >= 20) { notes.push({ name: it.name, bad: true, text: "Twenty mods at a time is the most ModTrap analyses." }); continue; }
+      if ((state.staged || []).length + (state.adding || []).length >= 20) { notes.push({ name: it.name, bad: true, text: "Twenty mods wait on this page already. Install them or clear them first." }); continue; }
       try {
         const rec = await askName(it.downloaded ? await api("/api/add/take", { name: it.name, size: file.size }).catch(() => sendArchive(file)) : await sendArchive(file));
         state.staged = (state.staged || []).concat(rec.id);
@@ -5843,6 +5933,7 @@ async function dropMods(drops) {
     }
     state.addNotes = notes;
     state.addText = "";
+    if (mine.length) { installRun(mine, null); pollAdd(true); return; }
     if (added) toast(state.autoInstall && (state.settings || {}).install_on_drop && state.changes
       ? ((state.settings || {}).manual_placement ? "Taken in. ModTrap unpacks it, then takes you to the Mods tab to choose its place." : "Taken in. ModTrap unpacks it and installs it by itself.")
       : plural(added, "mod") + " put on the list."); else if (!notes.length) toast("Already on the list.");
@@ -5926,6 +6017,7 @@ async function loadInstaller(id) {
   state.addText = "";
   pollAdd(true);
   bulkRefresh();
+  if (state.dropRun) renderDropBox();
 }
 
 function installerCard(info) {
@@ -5943,8 +6035,15 @@ function installerCard(info) {
         else set(g.options.filter((x) => (x.n === o.n ? box.checked : x.chosen)).map((x) => x.n));
       });
       const [word, cls] = OPTION_WORDS[o.type] || ["", ""];
+      // What the option goes with (MT81): the plugins its own conditions name, and the masters of the plugins it installs.
+      const gw = o.goes_with;
+      const lacking = gw && !gw.there ? gw.lack.map((x) => x.name + (x.state === "inactive" ? " (in the modlist, not active)" : x.state === "disabled" ? " (in a disabled mod)" : " (not in the modlist)")) : [];
+      const there = gw && !gw.there && gw.lack.every((x) => x.state !== "missing");            // in the modlist, only not switched on
+      const mark = !gw ? null : gw.there ? el("span", { class: "tag good goes", title: "Active in your load order: " + gw.have.join(", "), text: "✅ in your modlist" })
+        : el("span", { class: "tag goes" + (there ? " warn" : ""), title: (gw.have.length ? "Active in your load order: " + gw.have.join(", ") + ". " : "") + "Not active in your load order: " + lacking.join(", "),
+          text: (there ? "in your modlist, not active: " : "not in your modlist: ") + (there ? gw.lack : gw.lack.filter((x) => x.state === "missing")).slice(0, 2).map((x) => x.name).join(", ") + (gw.lack.length > 2 ? " and more" : "") });
       return el("label", { class: "iopt" + (o.locked && !o.chosen ? " off" : "") }, box, el("span", {}, el("strong", { text: o.name }),
-        word ? el("span", { class: "tag " + cls, text: word }) : null, o.description ? el("span", { class: "dim idesc", text: o.description }) : null));
+        word ? el("span", { class: "tag " + cls, text: word }) : null, mark, o.description ? el("span", { class: "dim idesc", text: o.description }) : null));
     });
     if (g.none_allowed) {
       const none = el("input", { type: "radio", name: name, checked: !g.options.some((o) => o.chosen) });
@@ -5957,14 +6056,15 @@ function installerCard(info) {
   const go = el("button", { type: "button", class: "primary", text: info.state === "ready" ? "Build it again with these answers" : "Use these answers", disabled: v.problems.length > 0 });
   go.addEventListener("click", async () => {
     go.disabled = true;
-    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; if (state.bulk) state.bulk.open[info.id] = false; toast("Built “" + info.name + "” from your answers."); }
+    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; if (state.bulk) state.bulk.open[info.id] = false; if (!state.dropRun) toast("Built “" + info.name + "” from your answers."); }
     catch (e) { cur.error = e.message; }
     state.addText = "";
     pollAdd(true);
     pollBulk(true);
+    if (state.dropRun) renderDropBox();
   });
   return el("div", { class: "card installer" }, el("h2", {}, v.name || info.name, el("span", { class: "tag warn", text: "asks which parts to install" })),
-    el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder and analyses it." }),
+    el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. ✅ marks an option whose plugins are active in your load order: the ones the installer itself asks about, and the masters of the plugins the option installs. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder first." }),
     ...steps, ...v.problems.map((t) => el("p", { class: "would-needs", text: t })),
     v.steps.length ? null : el("p", { class: "dim", text: "It asks nothing: everything it installs is fixed." }),
     el("div", { class: "actions" }, go, el("span", { class: "dim", text: plural(v.files, "file entry", "file entries") + " would be installed" })));
@@ -5985,7 +6085,7 @@ async function askAddPlan() {
 // It waits while an installer's questions are open, and gives up, saying why, where something the mod needs is missing.
 function autoInstallStep(d) {
   const a = state.autoInstall;
-  if (!a || state.addBusy || state.placing) return;
+  if (!a || state.addBusy || state.placing || (state.dropRun && state.dropRun.state === "going")) return;
   const stop = (why) => { state.autoInstall = null; if (why) toast("Not installed by itself: " + why + ". “Install mod”, at the top, installs it once that is settled."); };
   if (!(state.settings || {}).install_on_drop || !state.changes) return stop("");
   if (Date.now() - a.since > 30 * 60 * 1000) return stop("it took too long to get ready");
@@ -6016,11 +6116,13 @@ async function installNow(before) {
   pollAdd(true);
   try {
     await api("/api/add/run", body);
-    const names = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id) && r.state === "ready").map((r) => r.name);
-    toast("Installed. ModTrap is reading the modlist again.");
+    const done = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id) && r.state === "ready");
+    toast("Installed" + (done.length === 1 ? ": “" + done[0].name + "”" : "") + ". ModTrap is reading the modlist again; it is under “Installed lately” below.");
     state.addPlace = null;
-    for (const n of names) if (!(state.adding || []).includes(n)) state.adding.push(n);
+    state.staged = (state.staged || []).filter((id) => !done.some((r) => r.id === id));       // installed: no longer in hand (MT81)
+    state.lately = null;
     state.addPlanError = "";
+    renderAddPicked();
     saveUi();
   } catch (e) { state.addPlanError = e.message; }
   state.addBusy = false;
@@ -6074,12 +6176,6 @@ function addActionCard(d) {
     forget.addEventListener("click", () => { state.addPlace = null; state.addText = ""; pollAdd(true); });
     kids.push(el("p", {}, el("span", { class: "tag good", text: "place chosen" }), " You dropped it on the Modlist page " + chosen.words + ": “Install mod” puts it there.  ", forget));
   }
-  for (const j of (d.added || []).filter((x) => x.state === "added").slice(0, 12)) {
-    const undo = el("button", { type: "button", text: "Uninstall" });
-    undo.addEventListener("click", () => uninstallJob(j.job, j.mods.map((n) => "“" + n + "”").join(", ")));
-    kids.push(el("p", {}, el("span", { class: "tag good", text: "installed by ModTrap" }),
-      " " + j.when.replace("T", " ") + ": " + j.mods.join(", ") + (j.plugins.length ? "  (" + j.plugins.join(", ") + ")" : "") + "  ", state.changes ? undo : null));
-  }
   return el("div", { class: "card" }, ...kids.filter(Boolean));
 }
 
@@ -6088,8 +6184,9 @@ function addActionCard(d) {
 // is the place. ModTrap then says what the mod overwrites there and what overwrites it, and installs it there on OK.
 function startPlacement(opts) {
   const many = opts && opts.bulk === true ? opts : null;                    // the bulk list (MT78); else the Installer tool's mods
+  const run = opts && opts.run ? opts.run : null;                           // an install that is going (MT81): the click is the place, and it goes on
   const names = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id)).map((r) => r.name).concat(state.adding || []);
-  state.placing = many ? { bulk: true, label: many.label, back: "bulk" } : { body: addBody(), label: names.join(", ") || "the mod", back: "add" };
+  state.placing = many ? { bulk: true, label: many.label, back: "bulk" } : run ? { run, label: opts.label || "the mod", back: "add" } : { body: addBody(), label: names.join(", ") || "the mod", back: "add" };
   $("mods-order").value = "mo2";
   $("mods-search").value = "";
   for (const id of ["f-enabled", "f-plugins", "f-deps"]) $(id).checked = false;
@@ -6103,12 +6200,15 @@ function startPlacement(opts) {
   const banner = $("place-banner");
   banner.replaceChildren(el("b", { text: many ? "Placing " + many.label + ". " : "Placing “" + state.placing.label + "”. " }),
     el("span", { text: many ? "Move the pointer over the list: the line shows where the first mod would go, and the others follow it in the order of the bulk list. Click to choose that place; ModTrap asks before installing. Esc cancels.  "
+      : run ? "Move the pointer over the list: the line shows where the mod would go. Click to choose that place: ModTrap installs it there at once, and tells you what it overwrites. Esc cancels, and nothing is installed.  "
       : "Move the pointer over the list: the line shows where the mod would go. Click to choose that place; ModTrap then tells you what it overwrites there, and asks before installing. Esc cancels.  " }), last, " ", cancel);
   banner.hidden = false;
   document.body.classList.add("placing");
 }
 function endPlacement() {
+  const was = state.placing;
   state.placing = null;
+  if (was && was.run && was.run.placed) was.run.placed(null);               // left without a click: the run ends, nothing installed
   $("place-banner").hidden = true;
   document.body.classList.remove("placing");
   placeLine(null);
@@ -6153,6 +6253,7 @@ async function placementChosen(before, words) {
   const p = state.placing;
   if (!p || p.asking) return;
   if (p.bulk) { bulkPlaceChosen(before, words); return; }
+  if (p.run) { const go = p.run.placed; p.run.placed = null; endPlacement(); if (go) { go({ before, words }); } return; }
   p.asking = true;
   const body = Object.assign({}, p.body, { before });
   let d;
@@ -6213,6 +6314,7 @@ async function loadInstalled() {
   const up = new Map(((state.updates || {}).rows || []).map((r) => [r.mod, r]));
   $("installed-head").replaceChildren(el("div", { class: "card" }, el("h3", { text: "Installed mods" }),
     el("p", { class: "dim", text: "The mods ModTrap installed into this modlist that still stand, by priority (click a column's title to sort by it): new mods, and newer versions put in by the Updater. “Uninstall” puts MO2's lists back as they were before that install and takes ModTrap's copy of the mod out again; for a newer version, the older one is enabled as before." })));
+  if ((d.total || 0) > d.rows.length) $("installed-head").firstChild.append(el("p", { class: "dim", text: "Shown are the newest " + d.rows.length + " of " + d.total + " installs. The older ones are in the History, each with its Revert." }));
   if (!d.rows.length) { $("installed-list").replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "ModTrap has installed nothing into this modlist yet. Drop a mod's archive on the Installer tool, or update a mod on the Updater list." }))); return; }
   const isort = state.instSort || { key: "priority", desc: false };
   const rank = { update: 0, maybe: 1, replaced: 2, current: 3, "not asked": 4, none: 5, gone: 6 };
@@ -6289,7 +6391,9 @@ function recordsBlock(d) {
   return el("div", {}, ...kids.filter(Boolean));
 }
 
-function addStepCard(st, d) {
+// One step, as a row of its part of the page (MT81): its title, whose it is and how it stands; why it is there is
+// behind "Why", open only where the step is the owner's and still to do.
+function addStepCard(st, d, n) {
   const done = state.stepsDone || {};
   const ticked = st.manual && !!done[addKey(st.key)];
   const isDone = ticked || st.state === "done" || st.state === "not needed";
@@ -6297,10 +6401,10 @@ function addStepCard(st, d) {
   // What ModTrap does itself is never shown as something "to do": it is ModTrap's, done when the mod is installed.
   const auto = !isDone && st.who === "ModTrap" && !!state.changes && !st.manual;
   const [word, cls] = ticked ? ["ticked off by you", "good"] : auto ? [state.addBusy ? "ModTrap is doing this…" : "ModTrap does this", state.addBusy ? "warn" : ""] : STEP_STATE[st.state] || [st.state, ""];
+  const yours = !isDone && !auto && !waiting;
   const body = el("div", {},
     el("h3", {}, st.title, whoTag(st.who),
       el("span", { class: "tag " + cls, text: word })),
-    el("p", { class: "dim", text: st.why }),
     st.note ? el("p", { text: st.note }) : null,
     st.items.length ? el("ul", {}, ...st.items.map((it) => el("li", {}, it.text,
       it.tag ? el("span", { class: "tag " + (it.cls || ""), text: it.tag }) : null,
@@ -6309,7 +6413,8 @@ function addStepCard(st, d) {
         const b = el("button", { type: "button", class: "linkish", text: "  add it too" });
         b.addEventListener("click", () => addCandidate(it.add));
         return b;
-      })() : null))) : null);
+      })() : null))) : null,
+    el("details", { class: "stepwhy", open: yours }, el("summary", { text: "Why" }), el("p", { class: "dim", text: st.why })));
   if (st.key === "records") body.append(recordsBlock(d));
   if (st.manual) {
     const box = el("input", { type: "checkbox", checked: ticked });
@@ -6321,7 +6426,82 @@ function addStepCard(st, d) {
     });
     body.append(el("label", { class: "tickoff" }, box, "I have done this"));
   }
-  return [isDone, el("div", { class: "step " + (isDone ? "done" : waiting ? "waiting" : "todo") }, el("div", { class: "num", text: isDone ? "✓" : st.n }), body)];
+  return [isDone, yours, el("div", { class: "step row " + (isDone ? "done" : waiting ? "waiting" : "todo") }, el("div", { class: "num", text: isDone ? "✓" : n }), body)];
+}
+// The steps in the parts they belong to, in the order things happen: what must be there first, the install itself
+// (ModTrap's, in one go), what the mod changes at its place, and the tools afterwards.
+const STEP_PARTS = [
+  ["What the mod needs first", ["needs"], "Nothing is installed while something here is missing."],
+  ["The install itself", ["install", "update", "enable", "activate", "health"], "ModTrap does these in this order, in one go, and reads the lists back."],
+  ["What it changes at its place", ["files", "differs", "records"], "For you to know. Nothing here has to be done for the install."],
+  ["Afterwards: the modlist's tools", ["tools"], "A tool's output is as the modlist was when the tool last ran."],
+];
+function stepParts(d) {
+  const placed = new Set(STEP_PARTS.flatMap((x) => x[1]));
+  const parts = STEP_PARTS.map(([title, keys, about]) => [title, d.steps.filter((st) => keys.includes(st.key)).sort((a, b) => keys.indexOf(a.key) - keys.indexOf(b.key)), about]);
+  const rest = d.steps.filter((st) => !placed.has(st.key));
+  if (rest.length) parts.push(["Also", rest, ""]);
+  let open = 0, n = 0;
+  const cards = [];
+  for (const [title, steps, about] of parts) {
+    if (!steps.length) continue;
+    n++;
+    let left = 0, mine = 0;
+    const rows = steps.map((st, i) => { const [isDone, yours, row] = addStepCard(st, d, i + 1); if (!isDone) { left++; open++; } if (yours) mine++; return row; });
+    const [word, cls] = !left ? ["done", "good"] : mine ? [plural(mine, "thing") + " for you", "warn"] : state.changes ? ["ModTrap does this", ""] : [plural(left, "step") + " to go", ""];
+    cards.push(el("section", { class: "card steppart" + (left ? "" : " done") },
+      el("div", { class: "steppart-head" }, el("span", { class: "partnum", text: String(n) }), el("h2", { text: title }), el("span", { class: "tag " + cls, text: word }),
+        about ? el("span", { class: "dim small", text: about }) : null),
+      ...rows));
+  }
+  return [open, cards];
+}
+
+// What ModTrap installed lately (MT81): the newest fifty, newest first. A mod installed leaves the list of what is in
+// hand and stands here; "Look at it" brings its full report back. The older ones are on the Installed tab.
+const LATELY = 50;
+async function loadLately() {
+  try {
+    const d = await api("/api/installed");
+    state.lately = d;
+    state.latelyFor = state.loaded;
+    if (state.toolUi !== 2) {
+      // Once: an older ModTrap kept every mod it installed on the list of what is in hand, where twenty was the most.
+      const done = new Set(d.rows.map((x) => fold(x.mod)));
+      state.adding = (state.adding || []).filter((name) => !done.has(fold(name)));
+      state.toolUi = 2;
+      renderAddPicked();
+      saveUi();
+    }
+  } catch (e) { state.lately = state.lately || { rows: [], total: 0, changes: false }; state.latelyFor = state.loaded; }
+}
+function latelyCard() {
+  const d = state.lately;
+  if (!d || !d.rows.length) return null;
+  const rows = d.rows.slice(0, LATELY);
+  const hand = new Set((state.adding || []).map(fold));
+  const table = el("table", { class: "grid lately" },
+    el("thead", {}, el("tr", {}, ...["Installed", "Mod", "Priority", ""].map((h) => el("th", { text: h })))),
+    el("tbody", {}, ...rows.map((x) => {
+      const look = el("button", { type: "button", text: "Look at it", disabled: !x.there || hand.has(fold(x.mod)), title: !x.there ? "It is no longer in the modlist" : "Its full report on this page: what it overwrites, the tools that have to do with it, every step" });
+      look.addEventListener("click", () => { addCandidate(x.mod); window.scrollTo(0, 0); });
+      const un = el("button", { type: "button", text: "Uninstall", disabled: !d.changes, title: x.with.length ? "Installed together with " + x.with.join(", ") + ": they are uninstalled together" : "Puts the modlist back as it was before this install" });
+      un.addEventListener("click", async () => { if (await uninstallJob(x.job, "“" + x.mod + "”" + (x.with.length ? " and " + x.with.map((n) => "“" + n + "”").join(", ") : ""))) { state.lately = null; pollAdd(true); } });
+      return el("tr", {},
+        el("td", { class: "small", text: x.when.replace("T", " ") }),
+        el("td", { class: "modname" }, x.there ? modLink(x.mod) : el("span", { text: x.mod }),
+          x.there ? (x.enabled ? null : el("span", { class: "tag", text: "disabled" })) : el("span", { class: "tag warn", text: "no longer in the modlist" }),
+          x.updates ? el("div", { class: "dim small", text: "a newer version of “" + x.updates + "”" }) : null,
+          x.plugins.length ? el("div", { class: "dim small mono", text: x.plugins.slice(0, 4).join(", ") + (x.plugins.length > 4 ? " …" : "") }) : null),
+        el("td", { class: "num", text: x.priority === null ? "" : String(x.priority) }),
+        el("td", { class: "acts" }, look, " ", un));
+    })));
+  const more = (d.total || d.rows.length) - rows.length;
+  const all = el("button", { type: "button", class: "linkish", text: "the Installed tab" });
+  all.addEventListener("click", () => showTab("installed"));
+  return el("div", { class: "card" }, el("div", { class: "card-head" }, el("h2", { text: "Installed lately" })),
+    el("p", { class: "dim" }, "The mods ModTrap installed last, newest first" + (more > 0 ? "; " + plural(more, "older one") + " and every column are on " : ". All of them, with their sources and updates, are on "), all, "."),
+    table);
 }
 
 function renderAdd(d) {
@@ -6332,23 +6512,26 @@ function renderAdd(d) {
     el("ul", {}, ...notes.map((n) => el("li", {}, el("span", { class: "mono", text: n.name }), ": " + n.text)))) : null;
   if (!(state.adding || []).length && !(state.staged || []).length && !(state.uploads || []).length) {
     $("add-summary").textContent = "";
-    box.replaceChildren(...[noteCard, el("div", { class: "card" }, el("h2", { text: "Add a mod to this modlist, safely" }),
-      el("p", { text: "Drop the mod's archive (.zip, .7z or .rar) anywhere on this page. ModTrap unpacks it in its own work folder, not in your modlist, reads it against the whole modlist and tells you:" }),
-      el("ul", {},
-        el("li", { text: "what it needs: masters that are missing, switched off or in a disabled mod, and whether the load order has room;" }),
-        el("li", { text: "where it should go, among the mods and in the load order, and why: after everything made by hand, before what the modlist's tools made;" }),
-        el("li", { text: "which files of which mods it would replace there, and which it would lose, with the kinds that go wrong quietly pointed out;" }),
-        el("li", { text: "which of the modlist's tools must run again, and every step in order." })),
-      el("p", { class: "dim", text: "A mod MO2 has already installed can be found by name in the box above instead. A mod whose installer asks which parts you want is installed in MO2 first, for now." }),
-      el("p", { class: "dim", text: "Nothing in MO2 changes yet. Putting the mod into MO2 and in its place for you, with a safe folder and Revert, is the part that is still switched off." }))].filter(Boolean));
+    $("add-go").hidden = true;
+    const runs = !!state.changes && !!(state.settings || {}).install_on_drop;
+    box.replaceChildren(...[noteCard, el("div", { class: "card" }, el("h2", { text: "Install a mod into this modlist" }),
+      el("p", { text: "Drop the mod's archive (.zip, .7z or .rar) anywhere on this page" + (runs ? ". ModTrap then goes through the whole install by itself and shows each stage in a box:" : ". ModTrap takes it in and reads it; “Install mod” then does the rest:") }),
+      el("ol", { class: "howto" },
+        el("li", { text: "it unpacks the archive in its own work folder, not in your modlist;" }),
+        el("li", { text: "where the mod has an installer, it asks the installer's questions, marking the options whose mods are in your load order;" }),
+        el("li", { text: "it reads the mod against the whole modlist: what it needs, what it overwrites, which tools have to do with it;" }),
+        el("li", { text: (state.settings || {}).manual_placement ? "you click its place on the Mods tab (your setting “Always place a new mod by hand”);" : "it puts the mod last, before what the modlist's tools made;" }),
+        el("li", { text: "it copies the mod in, enables it, activates its plugins in their place, and reads the lists back." })),
+      el("p", { class: "dim", text: "It stops only for what is yours to say: the mod's name, an installer's questions, a place chosen by hand, and something the mod needs that is not there. Every install can be taken out again with “Uninstall”. More than ten archives at once go to Bulk install. A mod MO2 has installed already can be found by name in the box above, for a look at it." }))
+      , latelyCard()].filter(Boolean));
     return;
   }
-  const asking = (d.staged || []).filter((r) => r.installer && (r.state === "installer" || ((state.installers || {})[r.id] || {}).open));
+  const asking = (d.staged || []).filter((r) => r.installer && (r.state === "installer" || ((state.installers || {})[r.id] || {}).open) && !(state.dropRun && state.dropRun.asking.includes(r.id)));
   const askCards = asking.map(installerCard);
   if (!d.looking && !(d.mods || []).length && !d.failed) {
     $("add-summary").textContent = d.unpacking || (state.uploads || []).length ? "Unpacking…" : asking.length ? "Waiting for your answers" : "";
     box.replaceChildren(...[noteCard, ...askCards, d.unpacking || (state.uploads || []).length ? el("div", { class: "card" }, el("h2", {}, el("span", { class: "spinner", "aria-hidden": "true" }), " Taking the archive in…"),
-      el("p", { class: "dim", text: "It is copied into ModTrap's own work folder and unpacked there. A large mod takes a while; nothing in your modlist is being changed." })) : null].filter(Boolean));
+      el("p", { class: "dim", text: "It is copied into ModTrap's own work folder and unpacked there. A large mod takes a while; nothing in your modlist is being changed." })) : null, latelyCard()].filter(Boolean));
     return;
   }
   if (d.looking) {
@@ -6358,8 +6541,7 @@ function renderAdd(d) {
     return;
   }
   if (d.failed) { $("add-summary").textContent = ""; box.replaceChildren(el("div", { class: "card" }, el("p", { class: "would-needs", text: d.failed }))); return; }
-  let open = 0;
-  const cards = d.steps.map((st) => { const [isDone, card] = addStepCard(st, d); if (!isDone) open++; return card; });
+  const [open, cards] = stepParts(d);
   const mine = d.steps.filter((st) => st.who !== "ModTrap" && !["done", "not needed"].includes(st.state)).length;       // what is the owner's
   const ready = ["install", "enable", "activate", "update"].some((k) => d.steps.some((x) => x.key === k && x.state !== "done"));
   $("add-summary").textContent = state.addBusy ? "Installing…" : state.autoInstall ? "Installing by itself…" : mine ? plural(mine, "thing") + " for you to settle first"
@@ -6372,15 +6554,22 @@ function renderAdd(d) {
   const room = el("p", { class: s.full.after > s.full.limit || s.light.after > s.light.limit ? "would-needs" : "dim",
     text: "Room in the load order: full plugins " + s.full.now + (s.full.after !== s.full.now ? " → " + s.full.after : "") + " of " + s.full.limit +
       ", light plugins " + s.light.now + (s.light.after !== s.light.now ? " → " + s.light.after : "") + " of " + s.light.limit + "." });
+  const head = (text) => el("h2", { class: "pagepart", text });
+  const tool = toolCard(), lately = latelyCard();
   box.replaceChildren(...[noteCard,
+    ready ? head("Install") : null,
+    ready ? addActionCard(d) : null,
+    ...askCards,
+    head((d.mods || []).length > 1 ? "The mods" : "The mod"),
     el("div", { class: "card" }, el("p", { text: d.update ? "An update: a newer version of a mod you have. It takes the older one's place and nothing else of the modlist is judged anew; a new mod gets the full list of steps."
       : "What ModTrap can tell from the files; what is inside the plugins' records is read through xEdit in its own step. ModTrap checks every step against the modlist's files each time the modlist is read." }), room,
       d.cut ? el("p", { class: "would-needs", text: "The search for shared files was cut short: there may be more than is listed." }) : null,
       d.unknown && d.unknown.length ? el("p", { class: "would-needs", text: "No longer in MO2: " + d.unknown.join(", ") }) : null),
-    toolCard(), addActionCard(d),
-    ...askCards,
     ...d.mods.map((x) => addModCard(x, d.place, (d.staged || []).find((r) => r.installer && r.state === "ready" && r.name === x.name))),
-    el("h2", { text: ready && state.changes ? "What ModTrap does when it installs the mod, in order" : "What was done, in order" }), ...cards].filter(Boolean));
+    head(ready && state.changes ? "The steps, in the order things happen" : "The steps, as they stand"), ...cards,
+    tool ? head("A tool that is running") : null, tool,
+    ready ? null : (state.addPlanError ? el("p", { class: "would-needs", text: state.addPlanError }) : null),
+    lately].filter(Boolean));
 }
 
 async function autoAddStep(d) {
@@ -6407,8 +6596,10 @@ async function autoAddStep(d) {
     await api("/api/add/run", addBody());
     state.autoAdd = null;
     state.addPlan = null;
-    toast("“" + rec.name + "” is added as the newer version of “" + a.mod + "”" + (x.updates_enabled ? ", and “" + a.mod + "” is disabled" : "") + ". Revert, on the Install mods tab, undoes it.");
-    if (!(state.adding || []).includes(rec.name)) state.adding.push(rec.name);
+    toast("“" + rec.name + "” is added as the newer version of “" + a.mod + "”" + (x.updates_enabled ? ", and “" + a.mod + "” is disabled" : "") + ". “Uninstall”, on the Installer tool, undoes it.");
+    state.staged = (state.staged || []).filter((id) => id !== rec.id);
+    state.lately = null;
+    renderAddPicked();
     saveUi();
     state.addText = ""; state.upSig = "";
     state.gen = (state.gen || 0) + 1;
@@ -6424,6 +6615,7 @@ async function pollAdd(force) {
   const key = mods.join("|") + "#" + staged.join("|") + "#" + state.loaded;
   if (!force && key === state.addKeySeen && !state.addLooking && !state.recGoing && !state.autoAdd) return;
   try {
+    if (!state.lately || state.latelyFor !== state.loaded) await loadLately();
     const d = mods.length || staged.length ? await api("/api/add", { mods: mods, staged: staged }) : { looking: false, mods: [], steps: [] };
     state.addKeySeen = key;
     state.addLooking = d.looking || d.unpacking;
@@ -6436,13 +6628,13 @@ async function pollAdd(force) {
     if (d.gone && d.gone.length) { state.staged = state.staged.filter((id) => !d.gone.includes(id)); saveUi(); }
     for (const r of d.staged || []) {
       if (r.state !== "installed") continue;
-      state.staged = state.staged.filter((id) => id !== r.id);
-      if (findMod(r.name) && !(state.adding || []).includes(r.name)) state.adding.push(r.name);
+      state.staged = state.staged.filter((id) => id !== r.id);                  // installed: it is under "Installed lately" (MT81)
+      state.lately = null;
       saveUi();
     }
     if (infoText !== JSON.stringify(state.stagedInfo || {}) || (d.gone && d.gone.length)) { state.stagedInfo = info; renderAddPicked(); }
     const text = JSON.stringify(d) + JSON.stringify(state.addNotes || []) + (state.uploads || []).length + JSON.stringify(state.installers || {})
-      + JSON.stringify(state.addPlan || 0) + (state.addPlanError || "") + state.changes + probeReason() + JSON.stringify(chosenPlace() || 0);
+      + JSON.stringify(state.addPlan || 0) + (state.addPlanError || "") + state.changes + probeReason() + JSON.stringify(chosenPlace() || 0) + JSON.stringify(state.lately || 0);
     if (text !== state.addText) { state.addText = text; renderAdd(d); }
   } catch (e) { /* the next round tries again */ }
 }
@@ -6796,8 +6988,19 @@ function dropped(ev) {
   problem("That could not be used. Drop the modlist's folder, or paste its path into the box.");
 }
 
+// A drop zone glows while a dragged file is over it (MT81): where it would land is seen before letting go.
+const ZONES = ".drop, .bigdrop, .upzone, .selfdrop:not(.off), .bulkdrop";
+let glowing = null;
+function zoneGlow(target) {
+  const zone = target && target.closest ? target.closest(ZONES) : null;
+  if (zone === glowing) return;
+  if (glowing) glowing.classList.remove("glow");
+  glowing = zone;
+  if (zone) zone.classList.add("glow");
+}
 let dragDepth = 0;
 const dragOn = (yes) => {
+  if (!yes) zoneGlow(null);
   document.body.classList.toggle("dragging", yes);
   $("drop-words").textContent = state.status === "ready" ? (state.tab === "bulk" ? "Drop the mods here: archives, or folders of them" : "Drop a mod's archive here to add it, or another modlist's folder to open that") : "Drop your modlist folder here";
 };
@@ -6805,6 +7008,7 @@ document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++;
 document.addEventListener("dragover", (e) => {
   e.preventDefault();
   if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  zoneGlow(e.target);
   fileOver(e);                                             // over the Modlist page's rows: the line of the place
 });
 document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) { dragOn(false); fileOver(null); } });

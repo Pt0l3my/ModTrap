@@ -101,6 +101,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   their top and bottom and begin at the bottom).
   MT80 (any page of a mod names its source, and a link just given is asked about at once; a version read from a
   mod's name; pre-releases at GitHub; a fix for a plugin the game does not load is seen by the scripts).
+  MT81 (one installer for the list and the Installer tool, an installer's questions inside it; no count to run
+  into; the tool's page in parts; drop zones that glow; versions put in order). It amends MT55.
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -1356,6 +1358,8 @@ it have to run separately? if so, can you make it start minimized?"
   starts minimised, in the taskbar. What it writes is on the page already (History, then Log). The launcher has no
   window of its own, and says so in a box should ModTrap end at once.
 
+**2026-11-27.** Amended by MT81, at the owner's word: a mod dropped on the Installer tool is installed at the drop again, in the same run as a drop on the mods' list, and the setting is on as ModTrap comes. Read and show, then one press, is what the setting switched off still does.
+
 ## MT56
 
 **The Modlist page as MO2's own list; the demaster's ticks on a tab of their own** · *2026-11-23 · The owner's request*
@@ -2221,3 +2225,61 @@ name ends with it. The plugin named on the Health tab is not among the six files
   scripts still call it, the fault stays and names them, and names the mods above that replace other files of
   the mod, so that it is plain why they are no fix for this.
 - **Not done:** judging a fix by its name. A mod called a fix for another is a fix for what it replaces.
+
+## MT81
+
+**One installer for both places, with the installer's questions inside it; the Installer tool in parts; drop zones that glow** · *2026-11-27 · The owner's request*
+
+**Owner's words.** "when I drag a file into update UI's drop zone, there is no feedback until I actually drop the file
+inside the drop zone area. Can you add glow effect when a file is dragged inside the drop zone area (also apple the
+same to other drop zones).
+
+some mods are still reported as unclear, not seeing version, not knowing a newer one is out, etc.
+
+For installer tool, can you remove the limit and just make the tool show the latest 50, then replace new installs with
+oldest entries, and keep the logs 200 entries long (would that make logs too bog or not?) so the user doesn't hit
+limits anymore installing mods.
+
+I noticed that the installer in modlist page seem more powerful, as it just goes through the process and does its
+job, the one on installer tool page requires the user to click more than once because it stops during the process. I
+would like the modlist installer be able to process fomod installers as well, and I would like the installer tool to
+be as powerful and be able to go through the process without stopped (except for fomod setup of course, would it be
+also possible for installer tool and modlist installer to be able to see installed mods flagged in FOMOD steps? for
+example when the FOMOD asks if a mod is installed and active in modlist, those could be given a green tick emoji to
+indicate they are installed).
+
+Can you also make the installer tool UI to be more organised and divided for the user to be more user friendly? The
+install steps seem to be one big paragraph of rows. It's hard to see their order (it seems some steps are done before
+others usually, so is there even any order or hierarchy, does it need one? maybe then it could be redesigned at
+dependencies for successful installation)."
+
+**Settled** (DESIGN§39, WHY§148, WHY§149; the owner may overrule any of it). This amends MT55: a mod dropped on the
+Installer tool is installed at the drop again, and the setting for it is on as ModTrap comes.
+
+- **One installer.** A file dropped on the Installer tool goes through the same run, in the same box, as a file
+  dropped on the mods' list: taken in, unpacked, read, installed, checked. The one difference is the place: the
+  list's drop brings it; the tool's drop gets the usual one (last, before what the tools made), or, with the
+  owner's setting "Always place a new mod by hand", one click on the Mods tab, after which the run goes on with no
+  further question. The run stops only for what is the owner's to say: the mod's name (a setting), an installer's
+  questions, a place by hand, a mod that is in the modlist already, and something the mod needs that is not there.
+- **An installer's questions are answered in the run's box**, from either place, and the run goes on with the answers.
+- **An option of an installer says whether what it goes with is in the load order**: ✅ where every plugin it
+  goes with is active. Those are the plugins the installer's own conditions ask about, and the masters of the
+  plugins the option installs, read from the unpacked archive; the game's own plugins and the installer's own say
+  nothing. Where one is missing, in a disabled mod, or not active, the option names it.
+- **No count to run into.** A mod that is installed leaves the Installer tool's list of what is in hand, where
+  twenty was the most; it stands under "Installed lately", the newest fifty, with "Look at it" (its full report)
+  and "Uninstall". The Installed tab lists the newest two hundred. More than ten archives dropped at once go to
+  Bulk install. ModTrap's unpacked copy of an installed mod is kept for the newest fifty installs and removed for
+  the older ones; the mod in MO2 is not touched, and its Uninstall works without the copy.
+- **The Installer tool in parts**, in the order things happen: the install's button; the mod; the steps in four
+  parts (what the mod needs first; the install itself, which is ModTrap's and done in one go; what it changes at
+  its place; the tools afterwards); what was installed lately. A step's reason is behind "Why".
+- **A drop zone glows while a dragged file is over it**: the Updater's, the bulk installer's, the page's own bar,
+  the one for ModTrap's own update.
+- **Versions** (the Updater): a version at the end of a name after a dot or with a pre-release's mark is read; a
+  pre-release comes before the release of the same numbers; a tag with words before its numbers is understood; a
+  Nexus page without a main file is judged by its current files, and a page with one current file in all by that
+  file's version.
+- **Not done:** removing an install's own record. Each holds the copies of MO2's lists that its Revert needs
+  (about half a megabyte on the owner's list); two hundred of them are no burden, and none is deleted.

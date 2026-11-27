@@ -66,7 +66,7 @@ class PageTests(unittest.TestCase):
         drop = re.search(r'document\.addEventListener\("drop", \(e\) => \{(.+?)\n\}\);', self.js, re.S).group(1)
         self.assertLess(drop.index("const at = fileOver(e)"), drop.rindex("dragOn(false)"))
         self.assertIn("if (at) dropAtPlace(e, at);", drop)
-        self.assertIn('const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before });', self.js)
+        self.assertIn('const body = () => ({ mods: [], staged: run.ids.slice(), before: run.before || "" });', self.js)
         self.assertIn('api("/api/add/run", body())', self.js)
         self.assertIn("if (chosenPlace()) installNow(chosenPlace().before);", self.js)
         self.assertIn("scrollTops.set(t, t.scrollTop);", self.js)
@@ -405,7 +405,7 @@ class PageTests(unittest.TestCase):
         for word in ("Install mod$", "Uninstall", "Revert$", "Enable$", "Disable$"):
             self.assertIn(word, re.search(r"const MO2_GATED = /\^\((.*?)\)/;", self.js).group(1))
         self.assertNotIn("off: !state.changes", self.js)
-        self.assertIn("if (mo2Blocks()) return;                       // nothing is taken in", self.js)
+        self.assertIn("if (mo2Blocks()) return false;                 // nothing is taken in", self.js)
         self.assertIn('id="mo2-note"', self.html)
         # The same modlist read anew: nothing is hidden, a bar says so.
         self.assertIn('const refreshing = s.status === "reading" && !!state.everReady && state.everReady === s.folder;', self.js)
@@ -414,6 +414,37 @@ class PageTests(unittest.TestCase):
         # MT71: each separator's name heads the plugins' list once.
         self.assertIn("group = byName.get(gname);", self.js)
         self.assertNotIn('" #" + n', self.js)
+
+    def test_one_installer_for_both_places_and_the_tool_in_parts(self):
+        """MT81."""
+        # A drop on the Installer tool is the same run as a drop on the list, without a place of its own.
+        self.assertIn("if (mine.length) { installRun(mine, null); pollAdd(true); return; }", self.js)
+        self.assertIn("function dropAtPlace(ev, at) {", self.js)
+        self.assertIn("  installRun(files, at);", self.js)
+        self.assertIn('const byHand = !at && !!(state.settings || {}).manual_placement;', self.js)
+        # An installer's questions are answered in the run's box, and the run goes on; so is a place chosen by hand.
+        self.assertIn('kids.push(el("div", { class: "dropask" }, ...run.asking.map(', self.js)
+        self.assertIn("const where = await runPlace(run);", self.js)
+        self.assertIn("if (p.run) { const go = p.run.placed; p.run.placed = null; endPlacement(); if (go) { go({ before, words }); } return; }", self.js)
+        self.assertIn("if (was && was.run && was.run.placed) was.run.placed(null);", self.js)
+        # More archives than one run takes go to the bulk installer; what is installed leaves the list of what is in hand.
+        self.assertIn("if (many.length > RUN_FILES) {", self.js)
+        self.assertNotIn("state.adding.push(n)", self.js)
+        self.assertNotIn("state.adding.push(rec.name)", self.js)
+        self.assertNotIn("Twenty mods at a time is the most the Installer tool holds", self.js)
+        self.assertIn("const LATELY = 50;", self.js)
+        self.assertIn('el("h2", { text: "Installed lately" })', self.js)
+        # The steps stand in the parts they belong to, in the order things happen.
+        parts = re.search(r"const STEP_PARTS = \[(.*?)\n\];", self.js, re.S).group(1)
+        self.assertEqual(re.findall(r'^  \["([^"]+)"', parts, re.M), ["What the mod needs first", "The install itself", "What it changes at its place", "Afterwards: the modlist's tools"])
+        for key in ("needs", "install", "update", "enable", "activate", "health", "files", "differs", "records", "tools"):
+            self.assertIn('"%s"' % key, parts)
+        # An installer's option says whether what it goes with is in the load order.
+        self.assertIn('text: "✅ in your modlist" })', self.js)
+        # A drop zone glows while a file is over it, each of them.
+        self.assertIn('const ZONES = ".drop, .bigdrop, .upzone, .selfdrop:not(.off), .bulkdrop";', self.js)
+        self.assertIn("  zoneGlow(e.target);", self.js)
+        self.assertRegex(self.css, r"\.glow, \.upzone\.over, \.bulkdrop\.over \{[^}]*box-shadow")
 
     def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):
         """MT72: a spinner that stands still reads as stuck. Only what is for show stands still."""

@@ -223,6 +223,16 @@ NEXUS_FILE = re.compile(r"[?&]file_id=(\d+)", re.IGNORECASE)
 NAMED = re.compile(r"(?<![0-9])(?<![0-9]\.)v?(\d+(?:\.\d+){1,4}(?:[-.]?(?:rc|beta|alpha|pre|b|a)[-.]?\d*)?[a-z]?)(?![0-9A-Za-z])", re.IGNORECASE)
 
 
+def name_end_version(name: str) -> str:
+    """The version a name ends with, where it is written in a way `adding.version_in` does not take: after a dot
+    ("Thing.Pack.1.2.0"), or with a pre-release's mark ("Thing-0.7.0-rc1"). "" where the name ends otherwise."""
+    name = name.strip().rstrip(")")
+    last = None
+    for last in NAMED.finditer(name):
+        pass
+    return last.group(1) if last is not None and last.end() == len(name) and last.start() > 0 else ""
+
+
 def names_version(version: str, *names: str) -> bool:
     """Whether one of the names (a mod's, its archive's) carries this version, as a whole: "1.2.0" is in
     "Thing.1.2.0" and in "Thing-v1.2.0.zip", not in "Thing 11.2.0" or "Thing 1.2.01"."""
@@ -658,10 +668,11 @@ def gather(inst: Instance, wj: dict | None = None, added_by_modtrap: set[str] | 
         if not row["version"]:
             # No record states a version: the mod's own name may end with one (ModTrap names a mod by its title
             # and its version, MT67), and so may the name of its archive.
-            row["version"] = adding.version_in(row["mod"]) or (adding.from_archive_name(row["archive"])["version"] if row["archive"] else "")
+            row["version"] = adding.version_in(row["mod"]) or name_end_version(row["mod"]) or \
+                (adding.from_archive_name(row["archive"])["version"] if row["archive"] else "")
             row["version_by"] = "name" if row["version"] else ""
     return rows
 
 
 __all__ = ["data", "download_meta", "download_meta_of", "gather", "given_load", "given_save", "memo_name", "memo_read", "memo_write",
-           "github_repo", "mod_meta", "mod_meta_of", "names_version", "nexus_game", "parse_link", "source_of_mark", "web_mark", "own_record", "read_list_bytes", "read_wabbajack", "said", "wabbajack"]
+           "github_repo", "mod_meta", "mod_meta_of", "name_end_version", "names_version", "nexus_game", "parse_link", "source_of_mark", "web_mark", "own_record", "read_list_bytes", "read_wabbajack", "said", "wabbajack"]

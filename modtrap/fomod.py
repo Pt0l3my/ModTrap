@@ -325,6 +325,68 @@ def view(inst: Installer, picks: dict[str, list[int]], plugin_state: Callable[[s
     return {"name": inst.name, "steps": steps_out, "problems": problems, "files": files}
 
 
+# --- what an option is for (MT81) ---------------------------------------------------------------------------------------
+
+PLUGIN_NAME = re.compile(r"\.(esp|esm|esl)$", re.IGNORECASE)
+MASTERS_OPTIONS = 600                # options whose plugins are read for their masters, at most
+
+
+def wants(option: Option) -> list[str]:
+    """The plugins the installer itself says an option goes with: the ones its conditions ask to be active."""
+    out: list[str] = []
+
+    def walk(c: Condition) -> None:
+        if c.kind == "file" and c.b == "Active" and c.a and c.a not in out:
+            out.append(c.a)
+        for part in c.parts:
+            walk(part)
+    for cond, _typ in option.patterns:
+        walk(cond)
+    return out
+
+
+def plugins_of(entries: list[FileEntry], root: Path) -> list[Path]:
+    """The plugins these file entries would install, as they lie in the unpacked archive: a file entry that is a
+    plugin, and the plugins directly inside a folder entry."""
+    out: list[Path] = []
+    for f in entries:
+        at = _find_ci(root, tuple(x for x in f.source.replace("\\", "/").split("/") if x not in ("", ".")))
+        if at is None:
+            continue
+        if f.folder:
+            out += [Path(e.path) for e in _names(at) if PLUGIN_NAME.search(e.name) and e.is_file(follow_symlinks=False)]
+        elif PLUGIN_NAME.search(at.name) and at.is_file():
+            out.append(at)
+    return out
+
+
+def needs(inst: Installer, root: Path, masters_of: Callable[[Path], list[str]]) -> dict:
+    """For each option, by "step.group.option", the plugins it goes with that the installer does not bring itself:
+    the ones its conditions name, and the masters of the plugins it installs (read from the unpacked archive).
+    The game's own plugins are the caller's to leave out."""
+    own = {p.name.lower() for p in plugins_of(list(inst.required) + [f for _c, fs in inst.conditional for f in fs], root)}
+    per: dict[str, tuple[list[str], list[Path]]] = {}
+    n = 0
+    for si, step in enumerate(inst.steps):
+        for gi, group in enumerate(step.groups):
+            for oi, o in enumerate(group.options):
+                n += 1
+                mine = plugins_of(o.files, root) if n <= MASTERS_OPTIONS else []
+                own |= {p.name.lower() for p in mine}
+                per["%d.%d.%d" % (si, gi, oi)] = (wants(o), mine)
+    out: dict[str, list[str]] = {}
+    memo: dict[Path, list[str]] = {}
+    for key, (asked, mine) in per.items():
+        names = list(asked)
+        for path in mine:
+            if path not in memo:
+                memo[path] = masters_of(path)
+            names += memo[path]
+        seen: set[str] = set()
+        out[key] = [x for x in names if x.lower() not in own and not (x.lower() in seen or seen.add(x.lower()))]
+    return out
+
+
 # --- building the mod's folder -----------------------------------------------------------------------------------------
 
 def _find_ci(base: Path, parts: tuple[str, ...]) -> Path | None:

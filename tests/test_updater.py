@@ -89,7 +89,9 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual(r["page"], "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
         self.assertTrue((downloads.folder() / r["file"]).is_file())
         # Installed mods: the newer version, with the install it came by.
-        inst_rows = self.api.get("/api/installed", {})[1]["rows"]
+        listed = self.api.get("/api/installed", {})[1]
+        self.assertEqual(listed["total"], len(listed["rows"]))                       # MT81: the newest two hundred are listed, and their count said
+        inst_rows = listed["rows"]
         self.assertEqual([(x["mod"], x["updates"], x["job"], x["enabled"], x["archive"]) for x in inst_rows],
                          [("Quill 1.4", "Quill", run["job"], True, "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip")])
         # The Updates list: the older version as such, the newer one up to date.

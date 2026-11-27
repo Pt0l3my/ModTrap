@@ -157,6 +157,55 @@ class Intake(unittest.TestCase):
         self.assertEqual((Path(self.api._staged[rec["id"]]["root"]) / "textures" / "shared" / "a.dds").read_bytes(), b"purple")
         self.assertEqual(snapshot(self.root), self.before)
 
+    def test_an_option_says_whether_what_it_goes_with_is_in_the_load_order(self) -> None:
+        """MT81: a patch for a mod of the modlist is marked as such, by the installer's own condition and by the
+        masters of the plugin the option installs."""
+        xml = """<config><moduleName>Patches</moduleName>
+<requiredInstallFiles><file source="Core\\Base.esp" destination="Base.esp"/></requiredInstallFiles>
+<installSteps order="Explicit"><installStep name="Patches"><optionalFileGroups><group name="For your mods" type="SelectAny"><plugins order="Explicit">
+<plugin name="For Quill"><description/><files><file source="P\\ForQuill.esp" destination="ForQuill.esp"/></files><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+<plugin name="For Absent"><description/><files><folder source="Absent" destination=""/></files><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+<plugin name="By condition"><description/><files><folder source="Tex" destination=""/></files><typeDescriptor><dependencyType><defaultType name="Optional"/>
+<patterns><pattern><dependencies operator="And"><fileDependency file="Quill.esp" state="Active"/><fileDependency file="Nowhere.esp" state="Active"/></dependencies>
+<type name="Recommended"/></pattern></patterns></dependencyType></typeDescriptor></plugin>
+<plugin name="Plain"><description/><files><folder source="Tex" destination=""/></files><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+<plugin name="For the base"><description/><files><file source="P\\ForBase.esp" destination="ForBase.esp"/></files><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+</plugins></group></optionalFileGroups></installStep></installSteps></config>"""
+        files = {"fomod/ModuleConfig.xml": xml.encode(), "Core/Base.esp": plugin.build((SKY,)), "P/ForQuill.esp": plugin.build((SKY, "Quill.esp", "Base.esp")),
+                 "Absent/ForAbsent.esp": plugin.build((SKY, "Absent.esm")), "Tex/textures/a.dds": b"x", "P/ForBase.esp": plugin.build((SKY, "Base.esp"))}
+        rec = self.drop("Patches.zip", zipped(files))
+        self.settled([], [rec["id"]])
+        v = self.api.post("/api/add/installer", {"id": rec["id"], "picks": {}})[1]
+        marks = {o["name"]: o.get("goes_with") for o in v["steps"][0]["groups"][0]["options"]}
+        self.assertEqual(marks["For Quill"], {"there": True, "have": ["Quill.esp"], "lack": []})          # the game's own and the installer's own say nothing
+        self.assertEqual(marks["For Absent"], {"there": False, "have": [], "lack": [{"name": "Absent.esm", "state": "missing"}]})
+        self.assertEqual(marks["By condition"], {"there": False, "have": ["Quill.esp"], "lack": [{"name": "Nowhere.esp", "state": "missing"}]})
+        self.assertEqual((marks["Plain"], marks["For the base"]), (None, None))
+        self.assertEqual(snapshot(self.root), self.before)
+
+    def test_the_unpacked_copies_of_older_installs_are_removed_and_the_newest_kept(self) -> None:
+        """MT81: an install leaves ModTrap's unpacked copy behind, for an Uninstall to put the mod back on the list;
+        fifty of those are kept."""
+        base = self.api._incoming()
+        made = []
+        for i in range(api.STAGED_KEPT + 3):
+            d = base / ("%010x" % (0xabc000 + i))
+            d.mkdir(parents=True)
+            (d / "files").mkdir()
+            rec = {"id": d.name, "dir": str(d), "archive": "Mod %d.zip" % i, "name": "Mod %d" % i, "state": "installed", "root": str(d / "files")}
+            self.api._staged[d.name] = rec
+            self.api._save_staged(rec)
+            os.utime(d / "staged.json", (1_700_000_000 + i, 1_700_000_000 + i))
+            made.append(d)
+        waiting = self.drop("Thistle2.zip", zipped({"Thistle2.esp": plugin.build((SKY,))}))
+        self.settled([], [waiting["id"]])
+        self.assertEqual(self.api._prune_staged(), 3)
+        self.assertEqual([d.exists() for d in made[:4]], [False, False, False, True])            # the oldest three went, by when they were installed
+        self.assertEqual(sum(1 for r in self.api._staged.values() if r["state"] == "installed"), api.STAGED_KEPT)
+        self.assertIn(waiting["id"], self.api._staged)                                           # what still waits is never removed
+        self.assertEqual(self.api._prune_staged(), 0)
+        self.assertEqual(snapshot(self.root), self.before)
+
     def test_folders_to_choose_from_are_asked_too(self) -> None:
         rec = self.drop("Parts.zip", zipped({"00 Core/Parts.esp": plugin.build(()), "01 Extra/meshes/a.nif": b"x"}))
         self.settled([], [rec["id"]])

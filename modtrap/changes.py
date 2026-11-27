@@ -226,6 +226,7 @@ class Changes:
                 if rec["name"] in names and rec["state"] == "ready":
                     rec["state"] = "installed"
                     api._save_staged(rec)
+            api._prune_staged()                    # the unpacked copies of the newest installs are kept, the older removed (MT81)
             for x in done["mods"]:
                 log.info("  %s: enabled at priority %s", x["name"], x["priority"])
             for x in done["plugins"]:

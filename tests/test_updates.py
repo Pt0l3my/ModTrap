@@ -410,7 +410,7 @@ class TheListAsTheModlist(Sources):
         v = updates.nexus_verdict(row, {"asked": 1, "files": [list(f) for f in files], "chain": [[111, 113, "a.7z", "b.7z"]]})
         self.assertEqual(v["file_id"], 113)
         self.assertEqual(updates.get_of(row, v), "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files&file_id=113")
-        unsure = updates.nexus_verdict(dict(row, files=[], archive="renamed.7z"), {"asked": 1, "files": [list(files[1])], "chain": []})
+        unsure = updates.nexus_verdict(dict(row, files=[], archive="renamed.7z"), {"asked": 1, "files": [list(files[1]), [120, "extra.7z", "0.3", 3, 50]], "chain": []})
         self.assertEqual((unsure["state"], updates.get_of(row, unsure)), ("maybe", "https://www.nexusmods.com/skyrimspecialedition/mods/4321?tab=files"))
         self.assertEqual(updates.get_of(row, {"state": "current"}), "")
         gh = dict(row, host="github", repo="invented-owner/lantern", tag="v2.0")
@@ -734,10 +734,26 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(updates.nexus_verdict(self.row(files=[120, 112]), self.kept(files, chain))["state"], "update")
 
     def test_what_cannot_be_told_is_said_as_such_and_never_as_current(self):
-        files = [(113, "Quill-4321-1-4.7z", "1.4", 1, 300)]
+        files = [(113, "Quill-4321-1-4.7z", "1.4", 1, 300), (120, "Quill Optional.7z", "0.3", 3, 50)]
         v = updates.nexus_verdict(self.row(files=[], archive="renamed by hand.7z"), self.kept(files))
-        self.assertEqual(v["state"], "maybe")
+        self.assertEqual(v["state"], "maybe")                                 # it may be the other file of the page
         self.assertIn("could not be told", v["text"])
+        # WHY§148: a page with one current file in all, and versions that can be put in order, says it after all.
+        one = self.kept(files[:1])
+        v = updates.nexus_verdict(self.row(files=[], archive="renamed by hand.7z"), one)
+        self.assertEqual((v["state"], v["file_id"], v["newest"]), ("update", 113, "1.4"))
+        self.assertIn("the mod's one main file is version 1.4", v["text"])
+        v = updates.nexus_verdict(self.row(files=[], archive="renamed by hand.7z", version="1.5", version_by="name"), one)
+        self.assertEqual(v["state"], "current")
+        self.assertIn("1.5 (read from the mod's name), is newer than the mod's one main file", v["text"])
+        self.assertEqual(updates.nexus_verdict(self.row(files=[], archive="renamed by hand.7z", version="second"), one)["state"], "maybe")
+        # A page that keeps its files under "optional" alone: those are its files.
+        loose = self.kept([(130, "Quill Patch.7z", "2.0.1", 3, 300)])
+        v = updates.nexus_verdict(self.row(files=[], archive="x.7z", version="2.0.1", version_by="name"), loose)
+        self.assertEqual((v["state"], v["text"]), ("current", "the installed version (read from the mod's name) is that of a current file (the file itself could not be told)"))
+        self.assertEqual(updates.nexus_verdict(self.row(files=[], archive="x.7z", version="2.0"), loose)["state"], "update")
+        self.assertEqual(updates.nexus_verdict(self.row(files=[], archive="x.7z", version=""), loose)["state"], "maybe")
+        self.assertIn("no current file now", updates.nexus_verdict(self.row(files=[], archive="x.7z"), self.kept([(111, "old.7z", "1.0", 4, 1)]))["text"])
         v = updates.nexus_verdict(self.row(files=[], archive="renamed by hand.7z", version="1.4.0"), self.kept(files))
         self.assertEqual(v["state"], "current")                               # the version is that of the main file
         # The installed file is marked old, nothing says what replaced it, and a later main file is there.
@@ -778,6 +794,24 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(updates.verdict(dict(plain, tag="v2.2.0-rc1"), store)["state"], "current")
         self.assertEqual(updates.verdict(dict(plain, mod="Lantern-2.2.0-rc1"), store)["state"], "current")
         self.assertEqual(updates.verdict(dict(plain, version="2.0"), store)["state"], "update")
+
+    def test_versions_are_put_in_order_only_where_they_are_understood(self):
+        """WHY§148."""
+        o = updates.order
+        self.assertEqual((o("1.10", "1.9"), o("v2.0", "2.0.0"), o("1.2", "1.2.1")), (1, 0, -1))
+        self.assertEqual((o("0.7.0-rc1", "0.7.0"), o("0.7.0-rc2", "0.7.0-rc1"), o("0.7.0-beta", "0.7.0-rc1"), o("0.7.0rc1", "v0.7.0-rc.1")), (-1, 1, -1, 0))
+        self.assertEqual((o("7.5.2a", "7.5.2"), o("7.5.2a", "7.5.3"), o("7.5.2b", "7.5.2a")), (1, -1, 1))
+        self.assertEqual((o("0.0.3", "beta-release-0.4"), o("0.4", "beta-release-0.4"), o("1.0", "release 1.0")), (-1, 0, 0))
+        self.assertEqual([o(a, b) for a, b in (("second", "1"), ("1.2", "nightly"), ("1.2", "2026.11.01"), ("1.2", "1.2+build5"), ("", "1"), ("1.2", "v1.2 and v1.3"))], [None] * 6)
+        self.assertEqual(o("2026.11.01", "2026.10.30"), 1)
+        row = {"mod": "Reed 0.0.3", "archive": "", "host": "github", "repo": "invented-owner/reed", "tag": "", "version": "0.0.3", "version_by": "name"}
+        store = {"nexus": {}, "github": {"invented-owner/reed": {"asked": 1, "tag": "beta-release-0.4", "published": "2026-11-26T00:00:00Z"}}}
+        self.assertEqual(updates.verdict(row, store)["state"], "update")
+        store["github"]["invented-owner/reed"]["tag"] = "0.7.0"
+        v = updates.verdict(dict(row, mod="Reed-0.7.0-rc1", version="0.7.0-rc1"), store)
+        self.assertEqual(v["state"], "update")                         # the full release came after the pre-release that is installed
+        self.assertEqual([sources.name_end_version(n) for n in ("Reed.Pack.1.5.0", "Reed-0.7.0-rc1", "Reed (7.5.2a)", "Reed 1.5.0 for Lantern", "1.5.0", "Reed")],
+                         ["1.5.0", "0.7.0-rc1", "7.5.2a", "", "", ""])
 
     def test_what_is_kept_of_a_repositorys_releases(self):
         rel = lambda tag, pre=False, draft=False, when="2026-11-01T00:00:00Z": {"tag_name": tag, "prerelease": pre, "draft": draft, "published_at": when, "assets": [
