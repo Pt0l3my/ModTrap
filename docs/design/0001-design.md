@@ -1439,3 +1439,23 @@ the Updater, which knows the file it fetched.
 archive's record reads "installed" is closed by `_elsewhere`: the stages up to the install are marked done, the
 install's job is found among the session's adds by the new mod's name and becomes the run's, the new and the
 older version are told as the modlist now has them.
+
+## 43. What the older version was installed with (MT84)
+
+**The note** (`Api._choices_keep`, at the add that installs a mod built from an installer's answers): in
+`given-sources.json`, under "choices", by modlist and by the mod's name: the archive, the time, and the answers as
+`fomod.chosen` gives them: for every group that showed, its step's name, its own, and the chosen options' names.
+`Changes._given_renamed` carries it to a mod's new name.
+
+**For a staged archive that updates a mod** (`Api._installer_before`), in this order:
+
+1. the note under the older mod's name;
+2. the unpacked copy of the older mod's own install, where ModTrap still has it: its answers by number, read
+   through its installer into names;
+3. the older mod's files (`fomod.in_older`): the options whose own files are all in its folder, with the rule for
+   options that share places (WHY§153).
+
+By 1 and 2 ("record"), `fomod.prior_picks` turns the names into picks for the new installer, which
+`Api._installer_rec` puts under whatever the owner answers, for the view and for the build. By 3 ("files") no
+pick is made. Either way the options are marked in the view (`before`: "record" or "files"), and the page
+highlights them, with a line above the questions saying which of the two it is and what is chosen to begin with.

@@ -387,6 +387,118 @@ def needs(inst: Installer, root: Path, masters_of: Callable[[Path], list[str]]) 
     return out
 
 
+# --- what an older version was installed with (MT84) ---------------------------------------------------------------
+
+LANDS_FILES = 60_000                 # files of an installer's options that are followed to where they would land, at most
+
+
+def chosen(steps: list[dict]) -> list[dict]:
+    """The answers of a view, by name: [{"step", "group", "options": the chosen options' names}] for every group
+    that showed. Names, not numbers: a newer version's installer may list its options in another order."""
+    return [{"step": st["name"], "group": g["name"], "options": [o["name"] for o in g["options"] if o["chosen"]]}
+            for st in steps for g in st["groups"]]
+
+
+def prior_picks(inst: Installer, before: list[dict]) -> dict[str, list[int]]:
+    """Answers given to an older version's installer, as picks for this one: for each group of this installer that
+    the older answers have too (by its step's and its own name, or by its own name where only one group has it),
+    the options of the same names. A group the older installer did not have is left to this one's own suggestion."""
+    low = lambda t: " ".join(str(t or "").lower().split())
+    out: dict[str, list[int]] = {}
+    for si, step in enumerate(inst.steps):
+        for gi, group in enumerate(step.groups):
+            same = [b for b in before if low(b.get("group")) == low(group.name) and low(b.get("step")) == low(step.name)]
+            if not same:
+                same = [b for b in before if low(b.get("group")) == low(group.name)]
+            if len(same) != 1:
+                continue
+            names = {low(n) for n in same[0].get("options") or []}
+            out["%d.%d" % (si, gi)] = [i for i, o in enumerate(group.options) if low(o.name) in names]
+    return out
+
+
+def lands(entries: list[FileEntry], root: Path, budget: list[int]) -> dict[str, Path] | None:
+    """Where these file entries would put which file of the unpacked archive: {the place in the mod, lower case:
+    the file}. None where it cannot be followed (an entry outside the archive, or more files than are counted)."""
+    out: dict[str, Path] = {}
+    for f in entries:
+        src_parts = safe_parts(f.source)
+        raw_dest = f.destination.replace("\\", "/")
+        if src_parts is None:
+            return None
+        src = _find_ci(root, src_parts)
+        if src is None or src.is_symlink() or (f.folder and not src.is_dir()) or (not f.folder and not src.is_file()):
+            continue
+        if f.folder:
+            dparts = safe_parts(raw_dest) if raw_dest.strip("/") else ()
+            if dparts is None:
+                return None
+            for base, _dirs, names in os.walk(src):
+                for n in names:
+                    full = Path(base) / n
+                    budget[0] -= 1
+                    if budget[0] < 0:
+                        return None
+                    if not full.is_symlink():
+                        out["/".join((*dparts, *full.relative_to(src).parts)).lower()] = full
+        else:
+            if raw_dest == "" or raw_dest.endswith("/"):
+                raw_dest += src.name
+            dparts = safe_parts(raw_dest)
+            if dparts is None:
+                return None
+            budget[0] -= 1
+            out["/".join(dparts).lower()] = src
+    return out
+
+
+def _same_bytes(a: Path, b: Path) -> bool:
+    try:
+        if a.stat().st_size != b.stat().st_size:
+            return False
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            while True:
+                x, y = fa.read(1 << 20), fb.read(1 << 20)
+                if x != y:
+                    return False
+                if not x:
+                    return True
+    except OSError:
+        return False
+
+
+def in_older(inst: Installer, root: Path, older: dict[str, Path]) -> set[str]:
+    """The options of this installer whose files are in an older version's folder, by "step.group.option": what that
+    version was, as far as its files tell, installed with. `older`: the older mod's files, {place in lower case:
+    file}. An option counts where every file it alone would install is there. Where several options of one group
+    count and they would put files in the same places, the one whose files are the same, byte for byte, is taken;
+    where that does not tell them apart, none is. Options that install nothing of their own say nothing."""
+    budget = [LANDS_FILES]
+    always = lands(list(inst.required), root, budget)
+    if always is None:
+        return set()
+    out: set[str] = set()
+    for si, step in enumerate(inst.steps):
+        for gi, group in enumerate(step.groups):
+            mine: dict[int, dict[str, Path]] = {}
+            for oi, o in enumerate(group.options):
+                got = lands(o.files, root, budget)
+                if got is None:
+                    return out
+                own = {d: p for d, p in got.items() if d not in always}
+                if own and all(d in older for d in own):
+                    mine[oi] = own
+            for oi, own in mine.items():
+                rivals = [k for k, other in mine.items() if k != oi and set(other) & set(own)]
+                if not rivals:
+                    out.add("%d.%d.%d" % (si, gi, oi))
+                    continue
+                exact = lambda k: all(_same_bytes(p, older[d]) for d, p in mine[k].items())
+                if exact(oi) and not any(exact(k) for k in rivals):
+                    out.add("%d.%d.%d" % (si, gi, oi))
+    return out
+
+
 # --- building the mod's folder -----------------------------------------------------------------------------------------
 
 def _find_ci(base: Path, parts: tuple[str, ...]) -> Path | None:
@@ -447,4 +559,4 @@ def build(files: list[FileEntry], root: Path, dest: Path) -> dict:
     return {"copied": copied, "missing": missing}
 
 
-__all__ = ["Installer", "Unreadable", "find", "read", "from_folders", "view", "build"]
+__all__ = ["Installer", "Unreadable", "build", "chosen", "find", "from_folders", "in_older", "lands", "needs", "prior_picks", "read", "view", "wants"]

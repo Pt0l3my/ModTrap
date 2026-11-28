@@ -234,6 +234,71 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual((new.folder / "textures" / "quill" / "c.dds").read_bytes(), b"white")
         self.assertTrue(run["job"])
 
+    def options(self, pub: dict) -> tuple[dict, list]:
+        v = self.api.post("/api/add/installer", {"id": pub["id"], "picks": {}})[1]
+        return v, [(o["name"], o["chosen"], o.get("before")) for o in v["steps"][0]["groups"][0]["options"]]
+
+    def test_a_newer_versions_installer_shows_and_begins_with_what_the_older_one_was_installed_with(self):
+        """MT84: the answers are noted at the install, by name, and the next version's installer has them."""
+        pub, run = self.asking()
+        v, opts = self.options(pub)
+        self.assertEqual((v["before"], opts), (None, [("Purple", True, None), ("White", False, None)]))        # "Quill" itself came without an installer's answers... and its files tell nothing: it has none of these
+        self.api.post("/api/add/choose", {"id": pub["id"], "picks": {"0.0": [1]}})
+        run = self.ended(run["id"])
+        self.assertEqual(run["state"], "done", run["summary"])
+        self.settle()
+        new = run["new"]
+        from modtrap import sources
+        kept = sources.given_load()["choices"]
+        self.assertEqual([v2[instance.fold(new)]["groups"] for v2 in kept.values()], [[{"step": "Colour", "group": "Pick a colour", "options": ["White"]}]])
+        # The next version, with its options the other way round: the same answer, found by its name.
+        esp = (self.root / "mods" / "Quill" / "Quill.esp").read_bytes()
+        turned = self.INSTALLER.replace('<plugin name="Purple">', '<plugin name="@">').replace('<plugin name="White">', '<plugin name="Purple">').replace('<plugin name="@">', '<plugin name="White">') \
+            .replace('source="Purple"', 'source="@"').replace('source="White"', 'source="Purple"').replace('source="@"', 'source="White"')
+        path = fx.write(Path(self.tmp.name) / "given" / "Quill-3.0.zip", a_zip({"fomod/ModuleConfig.xml": turned.encode(), "Core/Quill.esp": esp,
+                                                                              "Purple/textures/quill/c.dds": b"purple 3", "White/textures/quill/c.dds": b"white 3"}))
+        pub3 = self.api.stage_where_it_lies(path, "Quill-3.0.zip", new, "3.0", {"version": "3.0"})
+        self.api.post("/api/updater/start", {"mod": new, "staged": pub3["id"]})
+        for _ in range(600):
+            if any(r["asks"] and r["staged"] == pub3["id"] for r in self.api.get("/api/updater", {})[1]["runs"]):
+                break
+            time.sleep(0.02)
+        v, opts = self.options(pub3)
+        self.assertEqual(v["before"], {"mod": new, "by": "record", "options": 1})
+        self.assertEqual(opts, [("White", True, "record"), ("Purple", False, None)])                  # chosen to begin with, though the installer suggests the other
+        # The owner's own answer stands over it; and with none given, the older answers build the mod.
+        v = self.api.post("/api/add/installer", {"id": pub3["id"], "picks": {"0.0": [1]}})[1]
+        self.assertEqual([(o["name"], o["chosen"], o.get("before")) for o in v["steps"][0]["groups"][0]["options"]], [("White", False, "record"), ("Purple", True, None)])
+        self.api.post("/api/add/choose", {"id": pub3["id"], "picks": {}})
+        run3 = self.ended(next(r["id"] for r in self.api.get("/api/updater", {})[1]["runs"] if r["staged"] == pub3["id"]))
+        self.assertEqual(run3["state"], "done", run3["summary"])
+        self.settle()
+        self.assertEqual((instance.load(self.root).mod(run3["new"]).folder / "textures" / "quill" / "c.dds").read_bytes(), b"white 3")
+        # A rename carries the note to the new name.
+        self.api.post("/api/list/rename", {"name": run3["new"], "to": "Quill the Third"})
+        self.settle()
+        self.assertIn(instance.fold("Quill the Third"), next(iter(sources.given_load()["choices"].values())))
+
+    def test_without_a_note_the_older_versions_files_tell_what_it_was_installed_with(self):
+        """MT84: a mod that came with the modlist, or was installed in MO2: the options whose files are in it."""
+        fx.write(self.root / "mods" / "Quill" / "textures" / "quill" / "c.dds", b"white")
+        self.api.open(str(self.root), wait=True)
+        self.settle()
+        pub, run = self.asking()
+        v, opts = self.options(pub)
+        self.assertEqual(v["before"], {"mod": "Quill", "by": "files", "options": 1})
+        self.assertEqual(opts, [("Purple", True, None), ("White", False, "files")])                 # shown, not chosen: the files tell, nobody noted it
+        self.api.post("/api/updater/stop", {"run": run["id"]})
+        self.ended(run["id"])
+        # Two options that would put the same file there, and neither is the same as what is there: nothing is said.
+        fx.write(self.root / "mods" / "Quill" / "textures" / "quill" / "c.dds", b"another colour")
+        self.api.open(str(self.root), wait=True)
+        self.settle()
+        pub, run = self.asking("Quill-2.1.zip")
+        v, opts = self.options(pub)
+        self.assertEqual((v["before"], opts), (None, [("Purple", True, None), ("White", False, None)]))
+        self.api.post("/api/updater/stop", {"run": run["id"]})
+
     def test_stopped_while_it_waits_for_answers_nothing_is_changed(self):
         pub, run = self.asking()
         before = (self.root / "profiles" / instance.load(self.root).profile / "modlist.txt").read_bytes()

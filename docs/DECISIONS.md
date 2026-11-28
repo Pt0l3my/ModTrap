@@ -107,6 +107,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   update's own Uninstall).
   MT83 (an installer's questions are answered on the Updater tool, inside the update's run; an update finished on
   Install mods is taken in by its run).
+  MT84 (a newer version's installer shows, and begins with, what the older version was installed with: by the
+  answers noted at its install, or, without a note, by its files, shown only).
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -2334,3 +2336,28 @@ installer tool pages?"
   the archive has been installed there: it reads "done", says that the install was made on Install mods, and its
   "Uninstall" takes that install out like any other update.
 - While a run waits for answers nothing else of ModTrap waits with it: other installs and updates go on.
+
+## MT84
+
+**A newer version's installer shows what the older one was installed with** · *2026-11-28 · The owner's request*
+
+**Owner's words.** "would it be also possible to show previous version's FOMOD selections with highlight? (both
+updater and installer page)"
+
+**Settled** (DESIGN§43, WHY§153; the owner may overrule any of it):
+
+- **The answers are noted at the install.** When ModTrap installs a mod through its installer, it notes the
+  answers by name (step, group, the options chosen) in its own folder, under the mod's name. Nothing is written
+  into the mod. A rename carries the note along.
+- **A newer version's installer shows them**, wherever its questions are asked (the Updater tool, the Installer
+  tool, the installer's box): each option the older version was installed with is highlighted and marked "chosen
+  before". They are also what is chosen to begin with, in place of the installer's own suggestion; every group the
+  owner answers is the owner's. Options are matched by their names, so an installer that lists them in another
+  order, or has new ones, is no trouble; a group the older installer did not have keeps its own suggestion.
+- **Without a note, the files tell.** For a mod that came with the modlist, was installed in MO2, or was
+  installed before ModTrap noted answers and whose unpacked copy is gone: an option is marked "in the older
+  version" where every file it alone would install is in the older version's folder. Where two options of a group
+  would put files in the same places, the one whose files are the same byte for byte is taken, and none where
+  that does not tell them apart. This is shown and not chosen: it is read from files, not from what was answered.
+- A mod ModTrap installed through an installer before this version is covered while its unpacked copy is kept
+  (the newest fifty installs, MT81): the answers are read from that copy.

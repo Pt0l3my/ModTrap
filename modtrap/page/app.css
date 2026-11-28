@@ -678,3 +678,8 @@ table.lately td.acts { white-space: nowrap; text-align: right; }
 /* An installer's questions inside an update's run (MT83). */
 .uprun-ask { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
 .uprun-ask .card { margin: 0; border: 0; padding: 0; background: none; }
+
+/* What the older version was installed with, in a newer version's installer (MT84). */
+.iopt.before { background: rgba(185, 163, 255, .13); box-shadow: inset 3px 0 0 var(--accent); border-radius: 4px; padding-left: 8px; margin-left: -8px; }
+.tag.was { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.wasnote { margin: 4px 0 8px; }

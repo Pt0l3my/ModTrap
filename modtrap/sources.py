@@ -249,17 +249,18 @@ def names_version(version: str, *names: str) -> bool:
 def given_load() -> dict:
     """What the owner told ModTrap of sources, kept in ModTrap's own folder and never in a mod's: {"links": {modlist:
     {mod, folded: address}}, "archives": {archive's name, folded: what its meta file said}, "mods": {modlist: {mod,
-    folded: what its meta file said}}}."""
+    folded: what its meta file said}}}. And what ModTrap itself notes there for a mod by its name: "favourites",
+    and "choices": {modlist: {mod, folded: the answers its installer was given, by name}} (MT84)."""
     try:
         with open(paths.home() / GIVEN, "rb") as f:
             got = json.loads(f.read().decode("utf-8"))
         if got.get("format") == "modtrap-given/1":
-            for k in ("links", "archives", "mods", "favourites"):
+            for k in ("links", "archives", "mods", "favourites", "choices"):
                 got.setdefault(k, {})
             return got
     except (OSError, ValueError):
         pass
-    return {"format": "modtrap-given/1", "links": {}, "archives": {}, "mods": {}, "favourites": {}}
+    return {"format": "modtrap-given/1", "links": {}, "archives": {}, "mods": {}, "favourites": {}, "choices": {}}
 
 
 def given_save(given: dict) -> None:

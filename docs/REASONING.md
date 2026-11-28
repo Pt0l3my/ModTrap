@@ -175,6 +175,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 150 | 2026-11-28 | "Remove" after an update is the uninstall that exists, run on the modlist as the update left it | METHOD | #add #updates #safety |
 | 151 | 2026-11-28 | The version in a download's name is not always the file's; the code at its end is the file | FACT | #updates #add |
 | 152 | 2026-11-28 | A run that hands its work over must look again; better that it does not hand it over | FACT | #updates #add #page |
+| 153 | 2026-11-28 | What an older version was installed with: a note where there is one, the files where there is none | METHOD | #add #updates #page |
 
 ## Entries
 
@@ -4190,3 +4191,31 @@ them; the addresses were read by a session that can), and the time the second pa
   The wait ends by the answers, by "Stop", by the archive being taken off the list, or after twelve hours.
 - Checked in a browser on an invented list: the questions under the run's stages, an option changed, "Use these
   answers", and the run through to "done" with the older version disabled. Not checked on the owner's PC.
+
+### 153. What an older version was installed with: a note where there is one, the files where there is none
+
+`2026-11-28` · METHOD · `#add #updates #page` · refs: MT84, MT83, MT81, MT67, DESIGN§43, DESIGN§42, WHY§152
+
+- FACT (the code): the answers given to an installer were kept only with ModTrap's unpacked copy of the archive,
+  as numbers ("group 0 of step 0: option 1"), and that copy is removed after fifty newer installs (MT81).
+  Nothing connected them to the mod, and a newer version's installer never saw them.
+- METHOD (the note): at the install, the answers are written down by name (the step's, the group's, the chosen
+  options') under the mod's name, in the file where ModTrap keeps what it knows of a mod by its name (the
+  owner's source links, the favourites). By name because a newer installer may order or number its options
+  otherwise; under the mod's name because that is what an update names as the version it replaces.
+- METHOD (matching): a group of the new installer has older answers where one older group has its step's name and
+  its own, or, failing that, where exactly one older group has its own name. Options are the same by name. A
+  group without older answers is left to the installer's suggestion; an older option that is gone is passed over.
+- METHOD (to begin with): the older answers are the starting choice, since "the same as before" is what an
+  update mostly wants, and each is one press to change. They are applied where the answers are read, for the
+  view and for the build alike, so that what is shown is what is built.
+- METHOD (the files): where there is no note, an option's own files (those the installer would not put there
+  anyway) are looked for in the older version's folder. All there: the option was, as far as files tell,
+  installed. Options that put different files in the same places cannot both have been: the one whose files
+  are the same, byte for byte, as the older version's is taken. If the newer version changed those files, none
+  is the same, and nothing is said. An option that installs nothing of its own (it only sets a flag) says
+  nothing either way. Such marks are shown and never chosen: a guess, however good, is not the owner's answer.
+- Rejected: writing the answers into the mod's own record in MO2's folder. ModTrap writes that file only for a
+  mod it adds, and MO2 rewrites it; ModTrap's own folder is where its notes on a mod live.
+- Checked in a browser on an invented list: an option marked by the files, highlighted, the installer's own
+  suggestion left chosen. The note's path is covered by tests through two updates and a rename.

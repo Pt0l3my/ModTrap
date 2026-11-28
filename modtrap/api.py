@@ -1987,7 +1987,75 @@ class Api:
         if not isinstance(picks, dict) or len(picks) > 2000 or not all(
                 isinstance(k, str) and len(k) < 20 and isinstance(v, list) and len(v) < 2000 for k, v in picks.items()):
             raise Bad("the answers did not arrive")
+        # A newer version begins with the answers the older one was installed with, where ModTrap has them (MT84);
+        # every group the owner answers now is the owner's.
+        before = self._installer_before(rec)
+        if before.get("picks"):
+            picks = {**before["picks"], **picks}
         return rec, picks
+
+    def _choices_keep(self, rec: dict) -> None:
+        """Notes the answers a mod's installer was given, by name, in ModTrap's own folder (MT84): the next version's
+        installer shows them, and begins with them. Nothing is written into the mod."""
+        if rec.get("installer") != "fomod":
+            return
+        try:
+            from . import sources
+            v = fomod.view(self._installer_of(rec), rec.get("picks") or {}, self._plugin_state)
+            key = self._updates_for()[0]
+            given = sources.given_load()
+            given["choices"].setdefault(key, {})[instance.fold(rec["name"])] = {
+                "mod": rec["name"], "archive": rec.get("archive", ""), "when": time.strftime("%Y-%m-%dT%H:%M:%S"), "groups": fomod.chosen(v["steps"])}
+            sources.given_save(given)
+        except (fomod.Unreadable, OSError, ValueError) as e:
+            log.warn("the answers given to the installer of “%s” could not be noted: %s", rec.get("name", ""), logbook.why(e))
+
+    def _installer_before(self, rec: dict) -> dict:
+        """What the older version of a mod being updated was installed with (MT84): {"mod": the older version,
+        "by": "record" (the answers ModTrap noted at its install) or "files" (the options whose files are in its
+        folder), "picks": those answers as picks for this installer (by record only), "options": the options
+        marked, as "step.group.option"}. {} for a mod that is no update, or where nothing tells."""
+        old = rec.get("updates") or ""
+        if not old or rec.get("installer") != "fomod":
+            return {}
+        memo = self.__dict__.setdefault("_installer_befores", {})
+        key = (rec["id"], old)
+        if key in memo:
+            return memo[key]
+        out: dict = {}
+        try:
+            inst = self._installer_of(rec)
+            from . import sources
+            noted = sources.given_load()["choices"].get(self._updates_for()[0], {}).get(instance.fold(old))
+            groups = noted.get("groups") if isinstance(noted, dict) else None
+            if groups is None:
+                # Installed by ModTrap before it noted answers: its unpacked copy still has them, by number.
+                was = next((r for r in self._staged.values() if instance.fold(r.get("name", "")) == instance.fold(old) and r.get("installer") == "fomod"
+                            and r.get("state") == "installed" and r.get("raw") and Path(r["raw"]).is_dir()), None)
+                if was is not None:
+                    groups = fomod.chosen(fomod.view(self._installer_of(was), was.get("picks") or {}, self._plugin_state)["steps"])
+            if groups is not None:
+                picks = fomod.prior_picks(inst, groups)
+                out = {"mod": old, "by": "record", "picks": picks, "options": sorted("%s.%d" % (k, i) for k, v in picks.items() for i in v)}
+            else:
+                m = self.model
+                mod = m.instance.mod(old) if m is not None else None
+                if mod is not None and mod.folder is not None:
+                    listed, cut = steps.walk(mod.folder)
+                    if not cut:
+                        older = {f.lower(): mod.folder / f for f in listed}
+                        found = fomod.in_older(inst, Path(rec["raw"]), older)
+                        if found:
+                            out = {"mod": old, "by": "files", "picks": {}, "options": sorted(found)}
+        except (fomod.Unreadable, OSError, ValueError, KeyError, TypeError) as e:
+            log.warn("what “%s” was installed with could not be told: %s", old, logbook.why(e))
+        if len(memo) > 40:
+            memo.clear()
+        memo[key] = out
+        if out:
+            log.info("add: the installer of “%s” shows what “%s” was installed with (%s): %d option(s)", rec["name"], old,
+                     "the answers noted at its install" if out["by"] == "record" else "the options whose files are in its folder", len(out["options"]))
+        return out
 
     def add_installer(self, body: dict) -> dict:
         """The installer's questions as they stand for the answers so far (DESIGN§16.1)."""
@@ -1997,8 +2065,16 @@ class Api:
         except fomod.Unreadable as e:
             raise Bad(str(e)) from None
         self._installer_marks(rec, v["steps"])
+        before = self._installer_before(rec)
+        marked = set(before.get("options") or [])
+        for st in v["steps"]:
+            for g in st["groups"]:
+                for o in g["options"]:
+                    if "%s.%d" % (g["key"], o["n"]) in marked:
+                        o["before"] = before["by"]
         return {"id": rec["id"], "name": v["name"] or rec["name"], "steps": v["steps"], "problems": v["problems"],
-                "files": len(v["files"]), "state": rec["state"]}
+                "files": len(v["files"]), "state": rec["state"],
+                "before": {"mod": before["mod"], "by": before["by"], "options": len(marked)} if before else None}
 
     def _installer_marks(self, rec: dict, steps: list[dict]) -> None:
         """Marks each option of an installer with what it goes with in this modlist (MT81): the plugins its own

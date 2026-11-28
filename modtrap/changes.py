@@ -226,6 +226,7 @@ class Changes:
                 if rec["name"] in names and rec["state"] == "ready":
                     rec["state"] = "installed"
                     api._save_staged(rec)
+                    api._choices_keep(rec)             # the answers its installer was given, for its next version (MT84)
             api._prune_staged()                    # the unpacked copies of the newest installs are kept, the older removed (MT81)
             for x in done["mods"]:
                 log.info("  %s: enabled at priority %s", x["name"], x["priority"])
@@ -488,7 +489,7 @@ class Changes:
             given = sources.given_load()
             a, b = sources.fold(old), sources.fold(new)
             changed = False
-            for part in ("links", "mods"):
+            for part in ("links", "mods", "choices"):
                 d = given.get(part, {}).get(key)
                 if isinstance(d, dict) and a in d:
                     d[b] = d.pop(a)

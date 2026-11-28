@@ -6058,8 +6058,11 @@ function installerCard(info) {
       const mark = !gw ? null : gw.there ? el("span", { class: "tag good goes", title: "Active in your load order: " + gw.have.join(", "), text: "✅ in your modlist" })
         : el("span", { class: "tag goes" + (there ? " warn" : ""), title: (gw.have.length ? "Active in your load order: " + gw.have.join(", ") + ". " : "") + "Not active in your load order: " + lacking.join(", "),
           text: (there ? "in your modlist, not active: " : "not in your modlist: ") + (there ? gw.lack : gw.lack.filter((x) => x.state === "missing")).slice(0, 2).map((x) => x.name).join(", ") + (gw.lack.length > 2 ? " and more" : "") });
-      return el("label", { class: "iopt" + (o.locked && !o.chosen ? " off" : "") }, box, el("span", {}, el("strong", { text: o.name }),
-        word ? el("span", { class: "tag " + cls, text: word }) : null, mark, o.description ? el("span", { class: "dim idesc", text: o.description }) : null));
+      // What the older version was installed with (MT84): by the answers noted at its install, or by its files.
+      const was = !o.before || !v.before ? null : el("span", { class: "tag was", text: o.before === "record" ? "chosen before" : "in the older version",
+        title: o.before === "record" ? "“" + v.before.mod + "” was installed with this option" : "Every file this option installs is in “" + v.before.mod + "”: it was, as far as its files tell, installed with it" });
+      return el("label", { class: "iopt" + (o.locked && !o.chosen ? " off" : "") + (o.before ? " before" : "") }, box, el("span", {}, el("strong", { text: o.name }),
+        word ? el("span", { class: "tag " + cls, text: word }) : null, mark, was, o.description ? el("span", { class: "dim idesc", text: o.description }) : null));
     });
     if (g.none_allowed) {
       const none = el("input", { type: "radio", name: name, checked: !g.options.some((o) => o.chosen) });
@@ -6083,6 +6086,9 @@ function installerCard(info) {
   });
   return el("div", { class: "card installer" }, el("h2", {}, v.name || info.name, el("span", { class: "tag warn", text: "asks which parts to install" })),
     el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. ✅ marks an option whose plugins are active in your load order: the ones the installer itself asks about, and the masters of the plugins the option installs. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder first." }),
+    v.before ? el("p", { class: "wasnote" }, el("span", { class: "tag was", text: v.before.by === "record" ? "chosen before" : "in the older version" }),
+      v.before.by === "record" ? " Highlighted: what “" + v.before.mod + "”, the version you have, was installed with. Those options are chosen to begin with; change what you like."
+        : " Highlighted: the options whose files are in “" + v.before.mod + "”, the version you have. ModTrap has no note of the answers given then, so this is told by the files, and what is chosen to begin with is the installer's own suggestion.") : null,
     ...steps, ...v.problems.map((t) => el("p", { class: "would-needs", text: t })),
     v.steps.length ? null : el("p", { class: "dim", text: "It asks nothing: everything it installs is fixed." }),
     el("div", { class: "actions" }, go, el("span", { class: "dim", text: plural(v.files, "file entry", "file entries") + " would be installed" })));

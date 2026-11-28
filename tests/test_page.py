@@ -460,6 +460,14 @@ class PageTests(unittest.TestCase):
         self.assertIn('if (r.state === "yours" && r.handed && r.staged) act("Go to Install mods"', self.js)
         self.assertIn("Where the newer version has an installer, its questions are asked here", self.html)
 
+    def test_what_the_older_version_was_installed_with_is_highlighted_in_the_installers_card(self):
+        """MT84."""
+        self.assertIn('(o.before ? " before" : "")', self.js)
+        self.assertIn('text: o.before === "record" ? "chosen before" : "in the older version"', self.js)
+        self.assertIn("Those options are chosen to begin with; change what you like.", self.js)
+        self.assertIn("this is told by the files, and what is chosen to begin with is the installer's own suggestion", self.js)
+        self.assertRegex(self.css, r"\.iopt\.before \{[^}]*box-shadow")
+
     def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):
         """MT72: a spinner that stands still reads as stuck. Only what is for show stands still."""
         still = " ".join(re.findall(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\}\s*\}", self.css, re.S))
