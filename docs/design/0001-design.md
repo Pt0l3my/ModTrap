@@ -1422,3 +1422,20 @@ kept of the page (`updates.file_by_code`), or, where nothing kept knows the code
 (`updates.ask_files`), waited for up to six seconds. The file's version from the page is the mod's version (MT67),
 and the file's number is written into the mod's own record with the mod's number. Not for an update started by
 the Updater, which knows the file it fetched.
+
+## 42. An installer inside an update's run (MT83)
+
+`Updater._go`, after the archive is unpacked:
+
+- its record is in the state "installer" and ModTrap can read the installer: the stage "Unpack it" and the run
+  are set to "waits for you" (the run's `asks` is true, `handed` false), and the thread waits until the record
+  leaves that state. The page draws the installer's card (§16.1, §39) under the run's stages while `asks` is
+  true; its "Use these answers" is `/api/add/choose`, as everywhere. Then the run goes on: check, install, verify;
+- the record reads "installed" when the wait ends (the answers were given and the archive installed on Install
+  mods): `Updater._elsewhere` closes the run as done;
+- an installer ModTrap cannot read: handed to Install mods, as before.
+
+`Updater.state`, which the page asks for, first looks at every run that is handed over (`_reconcile`): one whose
+archive's record reads "installed" is closed by `_elsewhere`: the stages up to the install are marked done, the
+install's job is found among the session's adds by the new mod's name and becomes the run's, the new and the
+older version are told as the modlist now has them.

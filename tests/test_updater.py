@@ -193,6 +193,72 @@ class TheUpdater(unittest.TestCase):
         rec = self.api._new_staged("Quill AE V1.4 4321 1.5 2026-11-21T00-00Z Zx9InventedQ.zip", "upload")
         self.assertEqual((rec["name"].startswith("Quill AE V1.4 1.5"), rec["version"]), (True, "1.5"))
 
+    INSTALLER = """<config><moduleName>Quill</moduleName>
+<requiredInstallFiles><file source="Core\\Quill.esp" destination="Quill.esp"/></requiredInstallFiles>
+<installSteps order="Explicit"><installStep name="Colour"><optionalFileGroups><group name="Pick a colour" type="SelectExactlyOne"><plugins order="Explicit">
+<plugin name="Purple"><description/><files><folder source="Purple" destination=""/></files><typeDescriptor><type name="Recommended"/></typeDescriptor></plugin>
+<plugin name="White"><description/><files><folder source="White" destination=""/></files><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+</plugins></group></optionalFileGroups></installStep></installSteps></config>"""
+
+    def asking(self, name: str = "Quill-2.0.zip") -> tuple[dict, dict]:
+        """An update whose archive has an installer, started and waiting for its answers."""
+        esp = (self.root / "mods" / "Quill" / "Quill.esp").read_bytes()
+        path = fx.write(Path(self.tmp.name) / "given" / name, a_zip({"fomod/ModuleConfig.xml": self.INSTALLER.encode(), "Core/Quill.esp": esp,
+                                                                    "Purple/textures/quill/c.dds": b"purple", "White/textures/quill/c.dds": b"white"}))
+        pub = self.api.stage_where_it_lies(path, name, "Quill", "2.0", {"version": "2.0"})
+        got = self.api.post("/api/updater/start", {"mod": "Quill", "staged": pub["id"]})[1]
+        for _ in range(600):
+            run = next(r for r in self.api.get("/api/updater", {})[1]["runs"] if r["id"] == got["run"])
+            if run["asks"] or run["state"] not in ("going", "yours"):
+                break
+            time.sleep(0.02)
+        return pub, run
+
+    def test_an_installers_questions_are_answered_on_the_updater_tool_and_the_update_goes_on(self):
+        """MT83: the run waits for the answers; it is not handed to Install mods and left there."""
+        pub, run = self.asking()
+        self.assertEqual((run["state"], run["asks"], run["handed"], run["staged"]), ("yours", True, False, pub["id"]))
+        self.assertEqual(self.stages(run)[2:4], [("unpack", "yours"), ("check", "waiting")])
+        self.assertTrue(self.api.get("/api/updater", {})[1]["going"])                          # the page keeps asking how it stands
+        self.assertFalse(self.api._busy())                                                     # and nothing else of ModTrap waits with it
+        v = self.api.post("/api/add/installer", {"id": pub["id"], "picks": {}})[1]
+        self.assertEqual([o["name"] for o in v["steps"][0]["groups"][0]["options"]], ["Purple", "White"])
+        self.api.post("/api/add/choose", {"id": pub["id"], "picks": {"0.0": [1]}})
+        run = self.ended(run["id"])
+        self.assertEqual((run["state"], run["asks"], [s for s in self.stages(run) if s[1] != "done"]), ("done", False, [("find", "skipped"), ("download", "skipped")]), run["summary"])
+        self.assertIn("its installer's questions are answered: the mod is built from the answers (2 file(s))", [t["text"] for t in run["stages"][2]["tasks"]])
+        self.settle()
+        inst = instance.load(self.root)
+        new = inst.mod(run["new"])
+        self.assertEqual((inst.mod("Quill").enabled, new.enabled), (False, True))
+        self.assertEqual((new.folder / "textures" / "quill" / "c.dds").read_bytes(), b"white")
+        self.assertTrue(run["job"])
+
+    def test_stopped_while_it_waits_for_answers_nothing_is_changed(self):
+        pub, run = self.asking()
+        before = (self.root / "profiles" / instance.load(self.root).profile / "modlist.txt").read_bytes()
+        self.api.post("/api/updater/stop", {"run": run["id"]})
+        run = self.ended(run["id"])
+        self.assertEqual((run["state"], run["asks"]), ("stopped", False))
+        self.assertEqual((self.root / "profiles" / instance.load(self.root).profile / "modlist.txt").read_bytes(), before)
+
+    def test_an_update_finished_on_install_mods_is_taken_in_by_its_run(self):
+        """MT83, the owner's report: the questions answered and "Update mod" pressed on Install mods; the run
+        stood at "waits for you" for good."""
+        pub, run = self.asking()
+        rec = self.api._staged[pub["id"]]
+        self.api.post("/api/add/choose", {"id": pub["id"], "picks": {"0.0": [0]}})
+        run = self.ended(run["id"])
+        self.assertEqual(run["state"], "done")
+        # The same, for a run that was handed over: it is looked at again whenever the page asks.
+        self.api.updater.runs[run["id"]].update(state="yours", handed=True, job="", summary="Waits for you.")
+        self.api.updater._stage(self.api.updater.runs[run["id"]], "install")["state"] = "waiting"
+        self.assertEqual(rec["state"], "installed")
+        again = next(r for r in self.api.get("/api/updater", {})[1]["runs"] if r["id"] == run["id"])
+        self.assertEqual((again["state"], again["handed"], again["job"], [s for s in self.stages(again) if s[1] not in ("done", "skipped")]), ("done", False, run["job"], []))
+        self.assertIn("was installed from Install mods", again["summary"])
+        self.assertIn("installed from Install mods: “%s” is in the modlist" % rec["name"], [t["text"] for st in again["stages"] for t in st["tasks"]])
+
     def test_a_file_downloaded_before_is_used_and_no_page_is_opened(self):
         # In the browser's folder from an earlier day, under whatever name: known by its size, to the byte.
         fx.write(self.browser / "something saved last week", self.data)

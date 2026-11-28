@@ -883,9 +883,13 @@ function renderUpdater() {
     dot.hidden = !(going || yours);
     dot.className = "live-dot" + (yours && !going ? " yours" : "");
   }
-  const text = JSON.stringify(d.runs);
+  // An installer's questions are answered here (MT83): the card of each run that waits for them is part of what is drawn.
+  const asking = d.runs.filter((r) => r.asks && r.state === "yours" && r.staged);
+  const text = JSON.stringify(d.runs) + JSON.stringify(asking.map((r) => (state.installers || {})[r.staged] || 0));
   if (text === state.updaterText) return;
   state.updaterText = text;
+  const pane = $("updater-runs").closest(".scroll") || document.scrollingElement;
+  const paneAt = pane ? pane.scrollTop : 0;
   $("updater-summary").textContent = yours ? "Waits for you: “" + yours.mod + "”" : going ? "Now: “" + going.mod + "”" : failed && d.runs[0] === failed ? "Stopped: “" + failed.mod + "”" : "Updater tool";
   $("updater-clear").disabled = !d.runs.some((r) => !["going", "yours"].includes(r.state) || r.handed);
   if (!d.runs.length) { $("updater-runs").replaceChildren(el("div", { class: "card" }, el("p", { class: "dim", text: "No update has been started. On the Updater list, press the arrow beside a mod that has a newer version." }))); return; }
@@ -902,7 +906,7 @@ function renderUpdater() {
         pollUpdater(true);
       }), "primary");
     if (["going", "yours"].includes(r.state) && !r.handed) act("Stop", "Stop this update; nothing of the modlist is changed before the add itself", async () => { try { await api("/api/updater/stop", { run: r.id }); } catch (e) { toast(e.message); } pollUpdater(true); });
-    if (r.handed && r.staged) act("Go to Install mods", "The archive waits there, with the steps of an update", () => { if (!(state.staged || []).includes(r.staged)) state.staged = (state.staged || []).concat(r.staged); saveUi(); showTab("add"); pollAdd(true); }, "primary");
+    if (r.state === "yours" && r.handed && r.staged) act("Go to Install mods", "The archive waits there, with the steps of an update", () => { if (!(state.staged || []).includes(r.staged)) state.staged = (state.staged || []).concat(r.staged); saveUi(); showTab("add"); pollAdd(true); }, "primary");
     if (r.state === "done" && r.job) act("Uninstall", "Puts the modlist back as it was before this update: the older version enabled again, the newer one taken out", async () => {
       if (!await confirmBox("Take “" + r.new + "” out again and enable “" + r.mod + "”, the older version, as before? The downloaded file stays where it is.")) return;
       try { await api("/api/updater/revert", { run: r.id }); toast("Put back as it was."); } catch (e) { toast(e.message); }
@@ -924,8 +928,10 @@ function renderUpdater() {
             el("span", { class: "ico", "aria-hidden": "true", text: TASK_ICON[t.state] || "○" }),
             el("span", { text: t.text + (t.state === "going" ? " …" : "") }),
             t.note ? el("span", { class: "note", text: t.note }) : null))));
-      })));
+      })),
+      asking.includes(r) ? el("div", { class: "uprun-ask" }, installerCard((state.stagedInfo || {})[r.staged] || { id: r.staged, name: r.new || r.mod, state: "installer" })) : null);
   }));
+  if (pane && paneAt) pane.scrollTop = paneAt;
 }
 
 // The Nexus key, asked for where it is needed (MT52): with the key of a Premium account ModTrap fetches a file
@@ -6027,6 +6033,7 @@ async function loadInstaller(id) {
   pollAdd(true);
   bulkRefresh();
   if (state.dropRun) renderDropBox();
+  renderUpdater();
 }
 
 function installerCard(info) {
@@ -6065,12 +6072,14 @@ function installerCard(info) {
   const go = el("button", { type: "button", class: "primary", text: info.state === "ready" ? "Build it again with these answers" : "Use these answers", disabled: v.problems.length > 0 });
   go.addEventListener("click", async () => {
     go.disabled = true;
-    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; if (state.bulk) state.bulk.open[info.id] = false; if (!state.dropRun) toast("Built “" + info.name + "” from your answers."); }
+    const here = ((state.updater || {}).runs || []).some((r) => r.asks && r.staged === info.id);          // answered on the Updater tool: the update goes on by itself
+    try { await api("/api/add/choose", { id: info.id, picks: cur.picks }); cur.open = false; if (state.bulk) state.bulk.open[info.id] = false; if (!state.dropRun) toast(here ? "The update goes on with your answers." : "Built “" + info.name + "” from your answers."); }
     catch (e) { cur.error = e.message; }
     state.addText = "";
     pollAdd(true);
     pollBulk(true);
     if (state.dropRun) renderDropBox();
+    pollUpdater(true);
   });
   return el("div", { class: "card installer" }, el("h2", {}, v.name || info.name, el("span", { class: "tag warn", text: "asks which parts to install" })),
     el("p", { class: "dim", text: "These are the mod's own installer questions. What is recommended is already chosen; options that do not suit your load order are marked. ✅ marks an option whose plugins are active in your load order: the ones the installer itself asks about, and the masters of the plugins the option installs. Nothing is installed into MO2 by answering: ModTrap builds the mod in its own folder first." }),

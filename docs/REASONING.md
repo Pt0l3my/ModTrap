@@ -174,6 +174,7 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 149 | 2026-11-27 | Two installers were one installer with two front ends; what "stops" were; a list that only grew | FACT | #page #add #safety |
 | 150 | 2026-11-28 | "Remove" after an update is the uninstall that exists, run on the modlist as the update left it | METHOD | #add #updates #safety |
 | 151 | 2026-11-28 | The version in a download's name is not always the file's; the code at its end is the file | FACT | #updates #add |
+| 152 | 2026-11-28 | A run that hands its work over must look again; better that it does not hand it over | FACT | #updates #add #page |
 
 ## Entries
 
@@ -4167,3 +4168,25 @@ them; the addresses were read by a session that can), and the time the second pa
   answer the name's version stands, as before.
 - Not changed: a mod already named. The owner's is named rightly by the owner's own hand; its record still
   states 1.1, which the Updater no longer goes by.
+
+### 152. A run that hands its work over must look again; better that it does not hand it over
+
+`2026-11-28` · FACT · `#updates #add #page` · refs: MT83, MT81, MT49, MT82, DESIGN§42, DESIGN§39, WHY§149
+
+- FACT (the owner's session log): an update fetched from GitHub, unpacked, and at once "waits for the owner: its
+  installer asks which parts to install: answer its questions on Install mods; the update goes on from there".
+  Fifteen minutes later the answers and "Update mod" on Install mods: the add ran, the older version was removed
+  (MT82, working on its first real run), the modlist read back clean. The Updater tool showed "waits for you".
+- FACT (the code): at an installer the run's own thread ended, in the state "waits for you, handed over".
+  Nothing looked at that run again. "The update goes on from there" was true of the update and never of the run.
+- So two things. The run no longer ends at an installer it can read: it waits for the record of the unpacked
+  archive to leave the state "installer", which the answers do, and goes on. The questions are the same card as
+  on Install mods and in the installer's box (MT81), drawn inside the run, so there is one page to be on.
+- And a run that is still handed over (the two cases left: a missing master, an installer ModTrap cannot read)
+  is looked at each time the page asks how the runs stand: where its archive's record reads "installed", the
+  run is closed as done, with the install found among the session's adds, so that its Uninstall works.
+- METHOD (waiting): the run waits in the state "waits for you", not "going on": ModTrap's check for "something
+  else is going" counts only runs that are going, so a question left unanswered for an hour holds nothing up.
+  The wait ends by the answers, by "Stop", by the archive being taken off the list, or after twelve hours.
+- Checked in a browser on an invented list: the questions under the run's stages, an option changed, "Use these
+  answers", and the run through to "done" with the older version disabled. Not checked on the owner's PC.

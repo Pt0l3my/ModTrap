@@ -29,6 +29,7 @@ log = logbook.get("updater")
 STAGES = (("find", "Find the newer file"), ("download", "Download it"), ("unpack", "Unpack it"),
           ("check", "Check what it needs"), ("install", "Put it in the older version's place"), ("verify", "Check the result"))
 UNPACK_SECONDS = 1800          # the most an unpacking may take
+ANSWER_SECONDS = 12 * 3600     # the most a run waits for an installer's questions to be answered (MT83)
 SETTLE_SECONDS = 900           # the most ModTrap waits for its own reading and scanning, and for MO2 to be closed
 KEEP_RUNS = 40                 # how many runs the Updater tool keeps in view
 
@@ -59,6 +60,7 @@ class Updater:
         return {k: v for k, v in run.items() if not k.startswith("_")}
 
     def state(self) -> dict:
+        self._reconcile()
         with self._lock:
             runs = sorted(self.runs.values(), key=lambda r: -r["started"])
         return {"runs": [self._public(r) for r in runs], "going": any(r["state"] in ("going", "yours") and not r["handed"] for r in runs),
@@ -130,7 +132,7 @@ class Updater:
         if row is None:
             raise Bad("that is not a mod of this modlist")
         run = {"id": _secrets.token_hex(4), "mod": mod, "started": time.time(), "ended": 0.0, "state": "going", "summary": "", "open": "", "why_page": "",
-               "version": "", "new": "", "job": "", "staged": "", "handed": False, "download": "",
+               "version": "", "new": "", "job": "", "staged": "", "handed": False, "asks": False, "download": "",
                "stages": [{"key": k, "title": t, "state": "waiting", "note": "", "tasks": []} for k, t in STAGES],
                "waits_page": False, "needs_open": False, "_stop": False, "_arrived": threading.Event(), "_file": None}
         net = api.updating.net
@@ -350,11 +352,38 @@ class Updater:
             if rec["state"] == "failed":
                 raise Bad(rec.get("note") or "the archive could not be unpacked")
             self._task(run, "unpack", "unpacked “%s”: %d file(s)" % (rec["archive"], rec.get("files") or 0), slot="unpack")
-            if rec["state"] == "installer" or rec.get("installer"):
-                self._set(run, "unpack", "done")
-                raise _Yours("its installer asks which parts to install: answer its questions on Install mods; the update goes on from there")
+            if rec["state"] == "installer":
+                if not rec.get("installer"):
+                    self._set(run, "unpack", "done")
+                    raise _Yours("its installer is one ModTrap cannot read: the archive waits on Install mods, which says what can be done")
+                # An installer asks which parts to install (MT83): its questions are answered here, on the Updater
+                # tool, and the update goes on with the answers. The run waits; nothing else of ModTrap does.
+                self._task(run, "unpack", "its installer asks which parts to install: answer its questions below", "yours", slot="answers")
+                self._set(run, "unpack", "yours", "Its installer asks which parts to install. Answer its questions below: the update goes on by itself.")
+                run["asks"], run["state"], run["summary"] = True, "yours", "Waits for you: its installer asks which parts to install. Answer its questions below."
+                end = time.time() + ANSWER_SECONDS
+                try:
+                    while rec["state"] == "installer":
+                        self._check(run)
+                        if api._staged.get(rec["id"]) is not rec:
+                            raise Bad("the archive was taken off ModTrap's list before its installer was answered")
+                        if time.time() > end:
+                            raise Bad("its installer's questions were not answered in %d hours" % (ANSWER_SECONDS // 3600))
+                        time.sleep(0.3)
+                finally:
+                    run["asks"] = False
+                run["state"], run["summary"] = "going", ""
+                self._stage(run, "unpack")["note"] = ""
+                for t in self._stage(run, "unpack")["tasks"]:
+                    if t.get("slot") == "answers":
+                        t.update(text="its installer's questions are answered: the mod is built from the answers (%d file(s))" % (rec.get("files") or 0), state="done")
+            if rec["state"] == "failed":
+                raise Bad(rec.get("note") or "the mod could not be built from the installer's answers")
             self._set(run, "unpack", "done")
             run["new"] = rec["name"]
+            if rec["state"] == "installed":             # answered and installed on Install mods meanwhile: nothing is left to do but look
+                self._elsewhere(run, rec)
+                return
             # --- check ---
             at = "check"
             self._set(run, "check", "going")
@@ -503,6 +532,48 @@ class Updater:
         self._task(run, "download", "the download is whole: “%s”, %s, %s" % (rec.get("file") or as_name, _mb(rec.get("size") or 0),
                                                                               "used from MO2's downloads folder" if in_mo2 else "now in ModTrap's downloads folder"), slot="coming")
         self._set(run, "download", "done", "")
+
+    def _elsewhere(self, run: dict, rec: dict) -> None:
+        """An update that was finished on Install mods (MT83): the run takes that in, and ends as done. The install
+        is found among the session's adds, so that "Uninstall" here takes it out again like any other update."""
+        api = self.api
+        job = None
+        if api.changes is not None:
+            job = next((j for j in api.changes.jobs() if j["state"] == "added" and rec["name"] in j["mods"]), None)
+        for key in ("unpack", "check", "install"):
+            st = self._stage(run, key)
+            if st["state"] != "done":
+                st["state"], st["note"] = "done", ""
+                for t in st["tasks"]:
+                    if t["state"] in ("yours", "going"):
+                        t["state"] = "done"
+        self._task(run, "install", "installed from Install mods: “%s” is in the modlist" % rec["name"])
+        run["new"], run["job"] = rec["name"], job["job"] if job else ""
+        m = api.model
+        new = m.instance.mod(rec["name"]) if m is not None else None
+        old = m.instance.mod(run["mod"]) if m is not None else None
+        self._task(run, "verify", "“%s” is %s%s" % (rec["name"], "enabled" if new is not None and new.enabled else "in the modlist, not enabled" if new is not None else "not in the modlist as it was last read",
+                                                   "; “%s”, the older version, is %s" % (run["mod"], "still enabled" if old is not None and old.enabled else "disabled" if old is not None else "taken out of the modlist")),
+                   "done" if new is not None and new.enabled else "yours")
+        self._stage(run, "verify")["state"] = "done" if new is not None and new.enabled else "yours"
+        if run["download"]:
+            downloads.note(run["download"], installed_as=rec["name"])
+        run["state"], run["handed"], run["ended"] = "done", False, time.time()
+        run["summary"] = "“%s” is updated%s: “%s” was installed from Install mods." % (run["mod"], " to %s" % run["version"] if run["version"] else "", rec["name"])
+        log.info("update of “%s” done: “%s” was installed from Install mods (%s)", run["mod"], rec["name"], run["job"] or "its install was not found among this session's")
+
+    def _reconcile(self) -> None:
+        """Runs handed to Install mods (something the newer version needs, an installer ModTrap cannot read) are
+        looked at again each time the page asks: one whose archive has been installed there is done (MT83)."""
+        for run in list(self.runs.values()):
+            if run["state"] != "yours" or not run["handed"] or not run["staged"]:
+                continue
+            rec = self.api._staged.get(run["staged"])
+            if rec is not None and rec["state"] == "installed":
+                try:
+                    self._elsewhere(run, rec)
+                except Exception as e:
+                    log.warn("an update finished on Install mods could not be taken in: %s", logbook.why(e))
 
     def _analysed(self, run: dict, body: dict) -> dict:
         end = time.time() + SETTLE_SECONDS

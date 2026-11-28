@@ -105,6 +105,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   into; the tool's page in parts; drop zones that glow; versions put in order). It amends MT55.
   MT82 (a setting: after an update the older version is uninstalled too, moved aside whole, and comes back with the
   update's own Uninstall).
+  MT83 (an installer's questions are answered on the Updater tool, inside the update's run; an update finished on
+  Install mods is taken in by its run).
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -2309,3 +2311,26 @@ older one, then remove the older one."
 - **Left where it is, and said so:** an older version that another profile of this MO2 has enabled (an uninstall
   takes a mod out of every profile), one that is still enabled, and one whose removal fails. The update itself
   stands in each case, with the older version disabled, as without the setting.
+
+## MT83
+
+**An installer's questions are answered on the Updater tool, and an update finished elsewhere is taken in** · *2026-11-28 · The owner's report and request*
+
+**Owner's words.** "I updated this mod, and it told me to go to install tool page due to FOMOD step, I selected an
+option for FOMOD step, and clicked update mod on installer tool page, which then seemingly done the update, but the
+Updater tool got stuck on the step with FOMOD step. Fix this bug.
+
+can you also add a fomod step processing to udpater tool page? so users don't need to bounce between updater and
+installer tool pages?"
+
+**Settled** (DESIGN§42, WHY§152; the owner may overrule any of it):
+
+- **The questions are asked where the update is.** Where the newer version has an installer ModTrap can read,
+  the run on the Updater tool waits at "Unpack it" and shows the installer's questions under its stages, with
+  the same marks as everywhere (MT81). "Use these answers" builds the mod, and the run goes on by itself: checked,
+  put in the older version's place, the result checked. "Stop" ends it while it waits, with nothing changed.
+- **An update finished on Install mods is taken in by its run.** A run that was handed to Install mods (something
+  the newer version needs is missing; an installer ModTrap cannot read) no longer stands at "waits for you" once
+  the archive has been installed there: it reads "done", says that the install was made on Install mods, and its
+  "Uninstall" takes that install out like any other update.
+- While a run waits for answers nothing else of ModTrap waits with it: other installs and updates go on.

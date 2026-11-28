@@ -453,6 +453,13 @@ class PageTests(unittest.TestCase):
             self.assertIn(said, text)
         self.assertIn("if (run.removed) kids.push(el(\"p\", {}, removedWords(run.removed)));", self.js)
 
+    def test_an_installers_questions_are_drawn_inside_the_update_that_waits_for_them(self):
+        """MT83."""
+        self.assertIn('const asking = d.runs.filter((r) => r.asks && r.state === "yours" && r.staged);', self.js)
+        self.assertIn('asking.includes(r) ? el("div", { class: "uprun-ask" }, installerCard(', self.js)
+        self.assertIn('if (r.state === "yours" && r.handed && r.staged) act("Go to Install mods"', self.js)
+        self.assertIn("Where the newer version has an installer, its questions are asked here", self.html)
+
     def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):
         """MT72: a spinner that stands still reads as stuck. Only what is for show stands still."""
         still = " ".join(re.findall(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\}\s*\}", self.css, re.S))

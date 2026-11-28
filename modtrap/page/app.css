@@ -674,3 +674,7 @@ h2.pagepart:first-child { margin-top: 4px; }
 ol.howto { margin: 6px 0 10px; padding-left: 22px; }
 ol.howto li { margin: 2px 0; }
 table.lately td.acts { white-space: nowrap; text-align: right; }
+
+/* An installer's questions inside an update's run (MT83). */
+.uprun-ask { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+.uprun-ask .card { margin: 0; border: 0; padding: 0; background: none; }
