@@ -332,7 +332,8 @@ class Updating:
             counts[v["state"]] = counts.get(v["state"], 0) + 1
             origins[r["origin"]] = origins.get(r["origin"], 0) + 1
             hosts[r["host"] or "not known"] = hosts.get(r["host"] or "not known", 0) + 1
-            out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": r["version"], "version_by": r.get("version_by", ""),
+            out_rows.append({"mod": r["mod"], "enabled": r["enabled"], "host": r["host"], "id": r["mod_id"] or r["repo"], "version": v.get("installed_version") or r["version"],
+                             "version_by": "page" if v.get("installed_version") and v["installed_version"] != r["version"] else r.get("version_by", ""),
                              "archive": r["archive"], "origin": r["origin"], "by": r["by"], "given": r.get("given", ""), "state": v["state"], "text": v["text"],
                              "newest": v["newest"], "file": v["file"], "when": v["when"], "asked": v["asked"], "page": updates.page_of(r),
                              "get": updates.get_of(r, v) or (updates.page_of(r) if r["host"] in ("loverslab", "url") else ""), "fetches": "fetch" in updates.how_to_get(r, v, self.store, key_kept, self.premium)

@@ -733,6 +733,28 @@ class Verdicts(unittest.TestCase):
         # Two files installed: an update of either is an update.
         self.assertEqual(updates.nexus_verdict(self.row(files=[120, 112]), self.kept(files, chain))["state"], "update")
 
+    def test_a_download_from_nexus_is_known_by_the_code_its_name_ends_with(self):
+        """WHY§151: a page with two main files of one version, and a download whose name states another version."""
+        files = [(201, "aa/bb/0123", "1.0", 1, 1000, 7, "Lantern SE V1.0", 10, "Se1InventedA"), (202, "cc/dd/4567", "1.0", 1, 1000, 8, "Lantern AE V1.0", 10, "Ae1InventedB")]
+        row = self.row(files=[], archive="Lantern AE V1.0 4321 1.1 2026-07-17T19-05Z Ae1InventedB.zip", version="1.1")
+        v = updates.nexus_verdict(row, self.kept(files))
+        self.assertEqual((v["state"], v["installed_version"]), ("current", "1.0"))
+        self.assertEqual(v["text"], "no newer file replaced the installed one (by the file's own code in the archive's name)")
+        self.assertEqual(updates.nexus_verdict(dict(row, archive=row["archive"].replace(".zip", " (1).zip")), self.kept(files))["state"], "current")   # saved a second time by the browser
+        # A newer file of the same line of versions is its update; one of the other line is not.
+        newer = files + [(203, "ee/ff/89ab", "1.2", 1, 2000, 8, "Lantern AE V1.2", 10, "Ae2InventedC")]
+        v = updates.nexus_verdict(row, self.kept(newer))
+        self.assertEqual((v["state"], v["file_id"], v["newest"], v["installed_version"]), ("update", 203, "1.2", "1.0"))
+        other = files + [(204, "gg/hh/cdef", "1.2", 1, 2000, 7, "Lantern SE V1.2", 10, "Se2InventedD")]
+        self.assertEqual(updates.nexus_verdict(row, self.kept(other))["state"], "current")
+        # A code no file of the page has says nothing: as before.
+        v = updates.nexus_verdict(dict(row, archive="Lantern AE V1.0 4321 1.1 2026-07-17T19-05Z NotOfThisPage.zip"), self.kept(files))
+        self.assertEqual((v["state"], "installed_version" in v), ("maybe", False))
+        self.assertEqual(updates.file_by_code({"nexus": {"skyrimspecialedition/4321": self.kept(files)}}, "skyrimspecialedition", 4321, row["archive"]),
+                         {"id": 202, "version": "1.0", "label": "Lantern AE V1.0"})
+        self.assertIsNone(updates.file_by_code({"nexus": {}}, "skyrimspecialedition", 4321, row["archive"]))
+        self.assertIsNone(updates.file_by_code({"nexus": {"skyrimspecialedition/4321": self.kept(files)}}, "skyrimspecialedition", 4321, "Lantern-4321-1-1-1700000000.zip"))
+
     def test_what_cannot_be_told_is_said_as_such_and_never_as_current(self):
         files = [(113, "Quill-4321-1-4.7z", "1.4", 1, 300), (120, "Quill Optional.7z", "0.3", 3, 50)]
         v = updates.nexus_verdict(self.row(files=[], archive="renamed by hand.7z"), self.kept(files))

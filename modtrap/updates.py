@@ -302,6 +302,26 @@ def _iso_time(text: str) -> int:
         return 0
 
 
+NAME_CODE = re.compile(r" \d{1,8} \S+ \d{4}-\d\d-\d\dT\d\d-\d\dZ ([0-9A-Za-z]{6,16})(?: ?\(\d+\))?\.(?:zip|7z|rar)$", re.IGNORECASE)
+
+
+def _name_code(archive: str) -> str:
+    """The file's own short code, where an archive's name ends as a download from Nexus does (TL01§31)."""
+    hit = NAME_CODE.search(archive or "")
+    return hit.group(1) if hit else ""
+
+
+def file_by_code(store: dict, game: str, mod_id: int, archive: str) -> dict | None:
+    """The file of a mod at Nexus that an archive is, by the code its name ends with, from what is kept:
+    {"id", "version", "label"}. None where the name has no such code or nothing kept knows it."""
+    code = _name_code(archive)
+    kept = (store.get("nexus") or {}).get("%s/%d" % (game, mod_id)) if code and game and mod_id else None
+    for f in (kept or {}).get("files", []):
+        if len(f) > 8 and f[8] == code:
+            return {"id": f[0], "version": f[2], "label": f[6] if len(f) > 6 and f[6] else f[1]}
+    return None
+
+
 def nexus_verdict(row: dict, kept: dict | None) -> dict:
     """What Nexus's files for the mod say of the files installed (MO01§13). {"state": "update", "current", "maybe",
     "gone" or "not asked", "text", "newest", "file", "when", "asked"}."""
@@ -327,11 +347,19 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
     installed = [i for i in row.get("files", []) if i in files or i in chain or any(c[1] == i for c in chain.values())]
     how = "by the file's number"
     if not installed and row.get("archive"):
+        # A download from Nexus ends its name with the file's own short code (TL01§31): that is this file and no
+        # other, whatever else the name says. The version in such a name is not always the file's (WHY§151).
+        code = _name_code(row["archive"])
+        installed = [f["id"] for f in files.values() if code and f["code"] == code]
+        how = "by the file's own code in the archive's name"
+    if not installed and row.get("archive"):
         low = row["archive"].lower()
         installed = [f["id"] for f in files.values() if f["name"].lower() == low] or \
                     [c[0] for c in chain.values() if c[2].lower() == low] or [c[1] for c in chain.values() if c[3].lower() == low]
         how = "by the archive's name"
     mains = sorted((f for f in files.values() if f["state"] == 1), key=lambda f: -f["time"])
+    # The version of the installed file as its page states it, where the file is known: the row shows that one.
+    stated = files[installed[0]]["version"] if len(installed) == 1 and installed[0] in files else ""
     if not installed:
         by_name = " (read from the mod's name)" if row.get("version_by") == "name" else ""
         kind = "main"
@@ -395,12 +423,14 @@ def nexus_verdict(row: dict, kept: dict | None) -> dict:
         return {"state": "update", "text": "a newer file replaced the installed one (%s): %s, version %s, of %s" % (
             how, best["label"], best["version"] or "(none given)", _day(best["time"])),
                 "newest": best["version"], "file": best["label"], "when": _day(best["time"]), "asked": asked, "file_id": best["id"],
-                "file_name": best["name"] if ARCHIVE.search(best["name"]) else "", "time": best["time"], "size": best["size"], "code": best["code"]}
+                "file_name": best["name"] if ARCHIVE.search(best["name"]) else "", "time": best["time"], "size": best["size"], "code": best["code"],
+                "installed_version": stated}
     if unsure is not None:
         return {"state": "maybe", "text": "the installed file is marked old or is no longer listed, with no word of what replaced it; a later "
                                           "main file is there: %s, version %s, of %s" % (unsure["label"], unsure["version"] or "(none given)", _day(unsure["time"])),
-                "newest": unsure["version"], "file": unsure["label"], "when": _day(unsure["time"]), "asked": asked}
-    return {"state": "current", "text": "no newer file replaced the installed one (%s)" % how, "newest": "", "file": "", "when": "", "asked": asked}
+                "newest": unsure["version"], "file": unsure["label"], "when": _day(unsure["time"]), "asked": asked, "installed_version": stated}
+    return {"state": "current", "text": "no newer file replaced the installed one (%s)" % how, "newest": "", "file": "", "when": "", "asked": asked,
+            "installed_version": stated}
 
 
 def github_releases(body: list) -> dict:
@@ -977,4 +1007,4 @@ def page_of(row: dict) -> str:
     return row.get("url", "") if row["host"] in ("url", "loverslab") else ""
 
 
-__all__ = ["Net", "Refused", "fetch", "home_of", "picture_address", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "order", "page_of", "rank", "same_version", "save", "scan", "verdict"]
+__all__ = ["Net", "Refused", "fetch", "file_by_code", "home_of", "picture_address", "get_of", "github_asset", "github_verdict", "how_to_get", "nexus_account", "nexus_link", "load", "nexus_verdict", "order", "page_of", "rank", "same_version", "save", "scan", "verdict"]

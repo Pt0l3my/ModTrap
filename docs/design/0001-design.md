@@ -1393,3 +1393,32 @@ zone, the Updater's, the bulk installer's, the one for ModTrap's own update).
 with a letter. Used by the GitHub verdict (§38) in place of numbers alone, and by the Nexus verdict where the
 installed file could not be told: a version that is a current file's is current; on a page with one current file
 in all, a lower version is an update and a higher one is said so.
+
+## 40. The older version removed after an update (MT82)
+
+The owner's setting `update_removes_old`, off as ModTrap comes. With it on, `Changes.run` does one thing more
+after an add that holds an update (§16.8, MT49) has ended and read its lists back:
+
+1. the modlist is read anew, and the request waits for that reading;
+2. each older version is looked at on it: gone already, still enabled, or enabled in another profile of this MO2:
+   left, with the reason; else
+3. the uninstall of §27 takes those that remain out, as one job of its own (safe copies, the lists read back, the
+   History's lines), and the update's job folder gets `removed.json`: that job's name and the mods;
+4. the answer to the page and to the Updater's run says what went and what stayed, and why.
+
+`Changes.revert` of such an add first undoes the uninstall its note names, where that still stands, reads the
+modlist anew, and then reverts the add. An older version the owner put back already is left alone.
+
+## 41. A download from Nexus, known by the code its name ends with (WHY§151)
+
+**The Updater** (`updates.nexus_verdict`). The installed file is looked for in this order: the file's number in
+MO2's records; the code at the end of the archive's name (`[0-9A-Za-z]{6,16}` after the mod's number, a version
+and a time, TL01§31) among the codes kept for the page's files; the archive's whole name. A file known by its
+code is judged as one known by its number. The verdict then carries the version the page states for that file,
+and the Updater list shows it, with a note where the mod's own record reads otherwise.
+
+**At install** (`Api._file_said`, `_new_staged`). An archive whose name ends so is matched to its file by what is
+kept of the page (`updates.file_by_code`), or, where nothing kept knows the code, by asking the page once
+(`updates.ask_files`), waited for up to six seconds. The file's version from the page is the mod's version (MT67),
+and the file's number is written into the mod's own record with the mod's number. Not for an update started by
+the Updater, which knows the file it fetched.

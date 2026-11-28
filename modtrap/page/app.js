@@ -313,6 +313,7 @@ const SETTING_TEXT = [
   ["updates_at_launch", "Look for updates when ModTrap starts", "Asks Nexus and GitHub whether the modlist's mods have newer files, once at each start (Updater list). It asks only those two, reads the answers and changes nothing. No key is needed. Off: only when you press “Scan for updates”."],
   ["site_window", "Open a site's page for a download in a small window, not a tab", "Where ModTrap cannot fetch a file itself, it opens the mod's page for you to press its download button. Off: the page opens as a new tab. On: it opens in a small window beside ModTrap. Either way the browser puts it in front: a page has no way to open a tab behind itself. To open it behind ModTrap's tab, press the update button with Ctrl held, or with the middle mouse button: that is the browser's own doing, and such a tab ModTrap cannot close."],
   ["site_window_closes", "Close the site's page when the download is here", "On: when the file is whole and taken, or the waiting ends, ModTrap closes the tab or window it opened for the download, and your browser returns to ModTrap. For that the site's page stays tied to ModTrap's tab, and a page that is tied can send the tab that opened it to another address; so this is done only for Nexus, GitHub and LoversLab, and while such a page is open your browser asks before ModTrap's tab goes anywhere. Off: the page is cut loose from ModTrap before it loads, and you close it yourself."],
+  ["update_removes_old", "Also remove the old version after an update", "Off: after an update the older version stays in the modlist, disabled, right before the newer one. On: once the newer version is installed, enabled and checked, the older one is disabled and then uninstalled, as “Uninstall” in a mod's menu does: its line leaves MO2's list and its folder is moved, whole, into ModTrap's own folder beside MO2's mods folder. Nothing is deleted; “Uninstall” on the update puts the older version back as it was. It holds for every update: from the Updater, by “Manual update…”, and for a file dropped on a mod that is in the modlist already. An older version that another profile has enabled is left where it is, and ModTrap says so."],
   ["install_on_drop", "Install a dropped mod by itself", "On: a mod's archive dropped on the Installer tool is installed in one run, as one dropped on the mods' list is: unpacked, read, installed and checked, shown stage by stage in a box. It stops only for what is yours to say: the mod's name, its installer's questions, its place where “Always place a new mod by hand” is on, and something the mod needs that is not there. Off: the archive is unpacked and read, ModTrap shows what it overwrites and the tools that have to do with it, and one press on “Install mod” installs it."],
   ["ask_name", "Ask for a mod's name at every install and update", "A mod is named by its title and its version, as in “Example Mod 1.2”: the title from the file's name (for an update, the name of the mod it replaces, without that mod's version), the version from what the mod's site says of the file, else from the file's name, else from a file inside it. On: before a mod is installed or updated, a box shows that name for you to change or keep; Enter keeps it. Off: the name is given without asking; the pen beside a mod on the Installer tool still changes it."],
   ["quit_with_page", "Close ModTrap when its page is closed", "ModTrap has no window, so its page is all there is of it. On: when the last tab with ModTrap's page is closed (or its browser is), ModTrap saves its session and closes, a few seconds later; a page only loaded anew is back before that. It never closes in the middle of a job, a tool's run or a scan: it waits for that to end. A browser that is ended without a word is noticed after four minutes. Off: ModTrap runs until “Quit”."],
@@ -1408,7 +1409,7 @@ function renderUpdates(listOnly) {
         el("td", { class: "modname" }, r.fav ? el("span", { class: "upfav", title: "A favourite of yours", text: "★ " }) : null, modLink(r.mod), r.enabled ? null : el("span", { class: "tag", text: "disabled" }), r.origin ? el("div", { class: "dim small", text: UP_ORIGIN[r.origin] }) : null),
         el("td", {}, (UP_HOST[r.host] || r.host) + (r.id ? " " + r.id : ""), r.page ? el("div", { class: "small" }, link(r)) : null,
           r.given ? el("div", { class: "dim small", text: "by your link" }) : null),
-        el("td", { title: r.version_by === "name" ? "No record states this mod's version: this one is read from the mod's name" : "" }, r.version || "",
+        el("td", { title: r.version_by === "name" ? "No record states this mod's version: this one is read from the mod's name" : r.version_by === "page" ? "The version its page at Nexus states for the file that is installed. The mod's own record in MO2 reads otherwise" : "" }, r.version || "",
           r.version_by === "name" && r.version ? el("div", { class: "dim small", text: "by its name" }) : null),
         el("td", { class: "small upnote" }, r.comments || "", r.notes ? el("span", { class: "tag", title: r.notes, text: "note" }) : null),
         el("td", { class: "upstate" }, el("span", { class: "tag " + UP_STATE[r.state][1], text: UP_STATE[r.state][0] }), r.newest ? el("div", { class: "small", text: r.newest + (r.when ? " · " + r.when : "") }) : null),
@@ -3417,6 +3418,7 @@ async function dropRun(run) {
   }
   run.done = r.done;
   run.job = r.job;
+  run.removed = r.removed || null;
   state.addPlace = null;
   state.staged = (state.staged || []).filter((id) => !run.ids.includes(id));       // installed: off the list of what is in hand
   renderAddPicked();
@@ -3430,6 +3432,12 @@ async function dropRun(run) {
   state.gen = (state.gen || 0) + 1;
   tick();
   dropEvaluate(run, first ? first.name : run.names[0]);
+}
+// What became of the older version after an update, where the owner's setting has it removed too (MT82).
+function removedWords(r) {
+  const gone = (r.mods || []).map((n) => "“" + n + "”").join(", ");
+  const kept = (r.kept || []).map((k) => "“" + k.mod + "” stays in the modlist, disabled (" + k.why + ")").join("; ");
+  return (gone ? "The older version, " + gone + ", was taken out of the modlist too (your setting). ModTrap keeps its folder; “Uninstall” puts it back." : "") + (gone && kept ? " " : "") + (kept ? "The older version " + kept + "." : "");
 }
 // The installed mod, weighed at its place (MT65), once the list has been read anew with it in.
 async function dropEvaluate(run, name) {
@@ -3490,6 +3498,7 @@ function renderDropBox() {
     const where = (run.done.mods || []).map((x) => "“" + x.name + "” is enabled at priority " + x.priority).join("; ");
     const plugs = (run.done.plugins || []).map((x) => x.name + " at place " + x.position).join(", ");
     kids.push(el("p", {}, el("b", { text: "Installed. " }), where + "." + (plugs ? " Active in the load order: " + plugs + "." : " It brings no plugin.")));
+    if (run.removed) kids.push(el("p", {}, removedWords(run.removed)));
   }
   if (run.d) {
     const tools = (run.d.steps || []).find((x) => x.key === "tools");
@@ -6115,9 +6124,9 @@ async function installNow(before) {
   state.addText = "";
   pollAdd(true);
   try {
-    await api("/api/add/run", body);
+    const ran = await api("/api/add/run", body);
     const done = Object.values(state.stagedInfo || {}).filter((r) => (state.staged || []).includes(r.id) && r.state === "ready");
-    toast("Installed" + (done.length === 1 ? ": “" + done[0].name + "”" : "") + ". ModTrap is reading the modlist again; it is under “Installed lately” below.");
+    toast("Installed" + (done.length === 1 ? ": “" + done[0].name + "”" : "") + ". ModTrap is reading the modlist again; it is under “Installed lately” below." + (ran.removed ? " " + removedWords(ran.removed) : ""));
     state.addPlace = null;
     state.staged = (state.staged || []).filter((id) => !done.some((r) => r.id === id));       // installed: no longer in hand (MT81)
     state.lately = null;
@@ -6593,10 +6602,10 @@ async function autoAddStep(d) {
   try {
     const p = await api("/api/add/plan", addBody());
     if (p.nothing) { stop("there is nothing to add"); return; }
-    await api("/api/add/run", addBody());
+    const ran = await api("/api/add/run", addBody());
     state.autoAdd = null;
     state.addPlan = null;
-    toast("“" + rec.name + "” is added as the newer version of “" + a.mod + "”" + (x.updates_enabled ? ", and “" + a.mod + "” is disabled" : "") + ". “Uninstall”, on the Installer tool, undoes it.");
+    toast("“" + rec.name + "” is added as the newer version of “" + a.mod + "”" + (ran.removed && (ran.removed.mods || []).length ? ". " + removedWords(ran.removed) : (x.updates_enabled ? ", and “" + a.mod + "” is disabled" : "") + ". “Uninstall”, on the Installer tool, undoes it."));
     state.staged = (state.staged || []).filter((id) => id !== rec.id);
     state.lately = null;
     renderAddPicked();

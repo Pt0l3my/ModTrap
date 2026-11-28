@@ -19,7 +19,7 @@ import json
 
 import shutil
 
-from . import addjob, demaster, dryrun, history, listjob, loadcheck, logbook, paths, plugin, plugingroups, probejob, profile, safe, sources
+from . import addjob, demaster, dryrun, history, instance, listjob, loadcheck, logbook, paths, plugin, plugingroups, probejob, profile, safe, sources
 from . import process
 from .instance import fold
 from .instance import fold as instance_fold
@@ -231,8 +231,97 @@ class Changes:
                 log.info("  %s: enabled at priority %s", x["name"], x["priority"])
             for x in done["plugins"]:
                 log.info("  %s: active at position %s", x["name"], x["position"])
-        api.open(api.folder, api.profile or None, session=api.session)          # read the modlist as it now is
-        return {"job": work.name, "done": done}
+            olds = [x["updates"] for x in p.mods if x.get("updates")] if api.settings().get("update_removes_old") else []
+        # The modlist is read as it now is. Where an older version is to be removed too (MT82), that reading is
+        # waited for: the removal is planned on the modlist with the newer version in it.
+        api.open(api.folder, api.profile or None, session=api.session, wait=bool(olds))
+        out = {"job": work.name, "done": done}
+        if olds:
+            out["removed"] = self._remove_old(work, olds)
+        return out
+
+    REMOVED_NOTE = "removed.json"
+
+    def _remove_old(self, add_work: Path, names: list[str]) -> dict:
+        """After an update, the older version is taken out too (MT82, the owner's setting): through the uninstall
+        of MT66, so that its folder is moved aside whole and nothing is deleted. Only an older version that is
+        disabled now, and that no other profile has enabled, goes. The update's own job notes which uninstall this
+        was, so that taking the update out again puts the older version back first. A removal that cannot be made
+        is told and leaves the update as it stands: the older version is then disabled, as without the setting."""
+        api = self.api
+        out = {"mods": [], "kept": [], "job": ""}
+        try:
+            with self._lock:
+                m, job = self._list_job()
+                inst = m.instance
+                going = []
+                for n in names:
+                    y = inst.mod(n)
+                    if y is None or y.kind != "mod":
+                        continue                                  # it is gone already
+                    if y.enabled:
+                        out["kept"].append({"mod": n, "why": "it is still enabled"})
+                        continue
+                    others = []
+                    for other in inst.profiles:
+                        if other == inst.profile:
+                            continue
+                        try:
+                            rows = instance.parse_modlist(instance._decode(instance._read_bytes(inst.profiles_dir / other / "modlist.txt")))
+                        except (OSError, instance.Unusable):
+                            continue
+                        if any(sign == "+" and instance.fold(name) == instance.fold(n) for sign, name in rows):
+                            others.append(other)
+                    if others:
+                        out["kept"].append({"mod": n, "why": "the profile %s has it enabled" % ", ".join("“%s”" % o for o in others[:3])})
+                        continue
+                    going.append(n)
+                if going:
+                    rows = {r["mod"]: r for r in api._rows(m)}
+                    original = {n for n in going if (rows.get(n) or {}).get("origin") == "list"}
+                    log.info("removing the older version%s after the update: %s", "s" if len(going) > 1 else "", ", ".join(going))
+                    job.uninstall(going, original)
+                    out["mods"], out["job"] = going, job.dir.name
+                    paths.write_atomic(add_work / self.REMOVED_NOTE, (json.dumps({"job": job.dir.name, "mods": going}) + "\n").encode("utf-8"))
+        except (Bad, listjob.Refused, OSError) as e:
+            why = str(e) if isinstance(e, (Bad, listjob.Refused)) else logbook.why(e)
+            log.warn("the older version was not removed after the update: %s. It is disabled, and stays in the modlist.", why)
+            out["kept"] += [{"mod": n, "why": why} for n in names if n not in out["mods"] and not any(k["mod"] == n for k in out["kept"])]
+        for k in out["kept"]:
+            log.info("  “%s”, the older version, stays in the modlist, disabled: %s", k["mod"], k["why"])
+        if out["mods"]:
+            api.open(api.folder, api.profile or None, session=api.session)
+        return out
+
+    def _old_back(self, add_name: str) -> list[str]:
+        """Before an update is taken out again: the older version that was removed after it (MT82) is put back, by
+        the undo of that uninstall. Returns the mods put back. Called without the lock."""
+        api = self.api
+        try:
+            with open(self._jobs_dir() / add_name / self.REMOVED_NOTE, "rb") as f:
+                note = json.loads(f.read(1024 * 1024).decode("utf-8"))
+            name = note["job"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return []
+        if not isinstance(name, str) or not re.fullmatch(r"list-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
+            return []
+        work = self._jobs_dir() / name
+        was = listjob.ListJob.summary(work)
+        if was is None or was["undone"]:
+            return []                                   # the owner put it back already
+        with self._lock:
+            m = api._need()
+            if api._busy():
+                raise Bad("something else is going; wait for it to end")
+            if api.status != "ready":
+                raise Bad("the modlist is being read; try again in a moment")
+            try:
+                listjob.ListJob(m.instance, m, work, api.store.dir(api.session.id), self.closed).undo()
+            except listjob.Refused as e:
+                raise Bad("the older version, removed after the update, could not be put back: %s. The update stays as it is." % e) from None
+            log.info("the older version removed after the update is back: %s", ", ".join(was["mods"]))
+        api.open(api.folder, api.profile or None, session=api.session, wait=True)
+        return list(was["mods"])
 
     def separator(self, body: dict) -> dict:
         """Adds a separator to MO2's mod list right below a mod or separator (MT55): an empty folder named
@@ -626,6 +715,7 @@ class Changes:
         name = body.get("job")
         if not isinstance(name, str) or not re.fullmatch(r"add-[0-9]{8}-[0-9]{6}(-[0-9]+)?", name):
             raise Bad("that is not one of this session's adds")
+        back = self._old_back(name)             # an older version removed after this update comes back first (MT82)
         with self._lock:
             m = api._need()
             if api._busy():
@@ -647,7 +737,7 @@ class Changes:
                     restored.append({"id": rec["id"], "name": rec["name"]})
             log.info("the add %s was put back%s", name, (" (left in place: %s)" % ", ".join(got["left"])) if got["left"] else "")
         api.open(api.folder, api.profile or None, session=api.session)
-        return {"job": name, "left": got["left"], "how": got.get("how", "whole"), "restored": restored}
+        return {"job": name, "left": got["left"], "how": got.get("how", "whole"), "restored": restored, "back": back}
 
     # --- the demaster (DESIGN§6.3 to §6.5, WHY§39, WHY§46) -----------------------------------------------------------
 

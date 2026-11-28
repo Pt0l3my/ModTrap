@@ -172,6 +172,8 @@ switch of model starts with it in view. Decisions stay in [DECISIONS.md](DECISIO
 | 147 | 2026-11-27 | "Not asked yet" beside a link just given reads as a link not understood; a name's version; pre-releases | FACT | #updates #page |
 | 148 | 2026-11-27 | Versions are put in order only where both are understood; a page with one file says more than was taken from it | METHOD | #updates |
 | 149 | 2026-11-27 | Two installers were one installer with two front ends; what "stops" were; a list that only grew | FACT | #page #add #safety |
+| 150 | 2026-11-28 | "Remove" after an update is the uninstall that exists, run on the modlist as the update left it | METHOD | #add #updates #safety |
+| 151 | 2026-11-28 | The version in a download's name is not always the file's; the code at its end is the file | FACT | #updates #add |
 
 ## Entries
 
@@ -4113,3 +4115,55 @@ them; the addresses were read by a session that can), and the time the second pa
 - Checked in a browser on an invented list: a plain archive from the tool with no press after the name; one
   with an installer, from the tool and from the list, with the marks; one placed by hand with one click; the
   tool's parts; each zone's glow. Not checked on the owner's PC, nor with a real installer of many steps.
+
+### 150. "Remove" after an update is the uninstall that exists, run on the modlist as the update left it
+
+`2026-11-28` · METHOD · `#add #updates #safety` · refs: MT82, MT66, MT49, MT14, MT15, DESIGN§40, DESIGN§27, WHY§149
+
+- FACT (the owner's session log of 2026-11-26): an update through the Updater, and nineteen seconds later the
+  older version uninstalled by hand. The setting asked for is that second step, taken by ModTrap.
+- METHOD: ModTrap deletes no mod (its standing rule). The uninstall of MT66 moves a mod's folder aside whole and
+  takes its lines out of the lists, with the lists copied to its safe folder first, the result read back, and an
+  undo. "Remove" is that job, not a new way of taking a mod out.
+- FACT (the code): the uninstall decides which plugins leave the load order by asking which enabled mod still
+  gives each one. Asked of the modlist as it was before the update, the answer is wrong: the newer version is
+  not in it, and the plugins the two versions share would leave the load order with the older one. So the
+  modlist is read anew after the update, and the removal is planned on that reading. The request waits for it.
+- METHOD (the way back): the update's job keeps a note of which uninstall followed it. Taking the update out
+  undoes that uninstall first, reads the modlist again, and then reverts the update; in the other order the
+  update's Revert would enable a mod that is not there.
+- METHOD (other profiles): an uninstall takes a mod's line out of every profile. Another profile that has the
+  older version enabled would lose the mod, and would have the newer one only as MO2 adds an unknown folder:
+  disabled. That is a change to a profile the owner is not looking at, so such an older version is left, and
+  ModTrap says why. A profile that has it disabled loses nothing it uses.
+- A removal that fails (MO2 opened in between, a file in use) leaves the update whole and the older version
+  disabled. Nothing of the update is put back for it: the update was verified before the removal began.
+
+### 151. The version in a download's name is not always the file's; the code at its end is the file
+
+`2026-11-28` · FACT · `#updates #add` · refs: MT67, MT81, DESIGN§41, DESIGN§39, TL01§31, WHY§110, WHY§148
+
+- The owner's report (a real mod's name replaced by words in square brackets): "for [a mod], modtrap sees v1.1
+  and states unclear. The mod itself on nexus has two v1.0 version, one for SE and one for AE. can you check
+  where the logic fails and fix?"
+- FACT (the owner's session log, the page the owner showed): the archive was downloaded in the browser under
+  Nexus's newer kind of name, "[file's name] [mod's number] 1.1 [day and time]Z [code].zip". The page states
+  version 1.0 for that file, and has two main files, both 1.0, uploaded in the same minute. So the version in
+  such a name is not always the version the page states. Why it differs here is not known: nothing ModTrap can
+  read says how the site makes that part of the name.
+- FACT (the code): ModTrap took the name's version as the file's: the mod was named "[file's name] 1.1" (the
+  owner renamed it), and its record stated 1.1. The Updater knew the installed file only by a file's number or
+  by the archive's whole name; a mod installed from a browser's download has neither, so it fell back to
+  comparing versions, 1.1 against 1.0, and said "unclear".
+- FACT: the last part of such a name is the file's own short code, which the public service gives for every
+  file and ModTrap keeps (WHY§110). It was used to know a download that had just arrived, and nowhere else.
+- So: the installed file is known by that code, before anything else that the name says. Known, it is judged as
+  a file known by its number is: by what replaced it, or by the newer files of its own line of versions. The
+  row shows the version the page states for it. Two main files of one version are then no trouble: each is its
+  own line.
+- At install, the same: where the name ends with a code, what is kept of the page says which file it is; where
+  nothing is kept, the page is asked once and waited for six seconds. The file's version from the page names
+  the mod, and the file's number goes into the mod's record, as MO2 writes it for its own downloads. Without an
+  answer the name's version stands, as before.
+- Not changed: a mod already named. The owner's is named rightly by the owner's own hand; its record still
+  states 1.1, which the Updater no longer goes by.

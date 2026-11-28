@@ -6,7 +6,7 @@ import time
 import unittest
 from pathlib import Path
 
-from modtrap import api, changes, downloads, instance, logbook, updating
+from modtrap import api, changes, downloads, history, instance, listjob, logbook, model, updating
 from tests import _fixtures as fx
 from tests.test_updates import FakeNet, a_zip, files_answer, meta, public_service
 
@@ -112,6 +112,86 @@ class TheUpdater(unittest.TestCase):
         self.assertEqual(len(self.api.get("/api/downloads", {})[1]["rows"]), 1)                     # kept once
         self.assertTrue(instance.load(self.root).mod("Quill 1.4").enabled)
         del asked
+
+    def settle(self):
+        for _ in range(600):
+            if not self.api.unsettled() and self.api.status == "ready":
+                return
+            time.sleep(0.02)
+
+    def test_with_the_owners_setting_the_older_version_is_removed_after_the_update_and_comes_back(self):
+        """MT82: installed, enabled, checked; then the older one is uninstalled, by the uninstall of MT66."""
+        self.api.post("/api/settings", {"name": "update_removes_old", "value": True})
+        fx.write(self.browser / "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip", self.data)
+        before = {p.relative_to(self.root / "mods" / "Quill").as_posix(): p.read_bytes() for p in (self.root / "mods" / "Quill").rglob("*") if p.is_file()}
+        order = [n for n, _a in instance.load(self.root).load_order]
+        got = self.api.post("/api/updater/start", {"mod": "Quill"})[1]
+        run = self.ended(got["run"])
+        self.assertEqual(run["state"], "done", run["summary"])
+        self.assertEqual(run["summary"], "“Quill” is updated to 1.4: “Quill 1.4” is enabled in its place, and the older version is taken out of the modlist "
+                                         "(kept by ModTrap; “Uninstall” puts it back).")
+        self.assertIn("“Quill”, the older version: taken out of the modlist too (your setting). Its folder is kept by ModTrap, and “Uninstall” puts it back",
+                      [t["text"] for st in run["stages"] for t in st["tasks"]])
+        self.settle()
+        inst = instance.load(self.root)
+        self.assertIsNone(inst.mod("Quill"))
+        self.assertTrue(inst.mod("Quill 1.4").enabled)
+        self.assertFalse((self.root / "mods" / "Quill").exists())
+        kept = list((self.root / listjob.REMOVED).glob("*/Quill"))
+        self.assertEqual(len(kept), 1)                                                              # moved aside whole: nothing is deleted
+        self.assertEqual({p.relative_to(kept[0]).as_posix(): p.read_bytes() for p in kept[0].rglob("*") if p.is_file()}, before)
+        self.assertEqual(([n for n, _a in inst.load_order], model.build(inst).issues), (order, []))  # the plugin is the newer version's now, at its place
+        kinds = [(e["kind"], e.get("mod")) for e in history.History(self.api.store.dir(self.api.session.id)).all()]
+        self.assertIn(("mod uninstalled", "Quill"), kinds)
+        # Taking the update out again puts the older version back first, then takes the newer one out: all as it was.
+        self.api.post("/api/updater/revert", {"run": got["run"]})
+        self.settle()
+        inst = instance.load(self.root)
+        self.assertTrue(inst.mod("Quill").enabled)
+        self.assertIsNone(inst.mod("Quill 1.4"))
+        self.assertEqual({p.relative_to(self.root / "mods" / "Quill").as_posix(): p.read_bytes() for p in (self.root / "mods" / "Quill").rglob("*") if p.is_file()}, before)
+        self.assertEqual(([n for n, _a in inst.load_order], model.build(inst).issues), (order, []))
+        self.assertEqual(list((self.root / listjob.REMOVED).glob("*/Quill")), [])
+
+    def test_an_older_version_another_profile_has_enabled_is_left_where_it_is(self):
+        self.api.post("/api/settings", {"name": "update_removes_old", "value": True})
+        here = self.root / "profiles" / instance.load(self.root).profile
+        other = self.root / "profiles" / "Another"
+        other.mkdir()
+        for name in ("modlist.txt", "plugins.txt", "loadorder.txt"):
+            (other / name).write_bytes((here / name).read_bytes())
+        self.api.open(str(self.root), wait=True)
+        self.settle()
+        fx.write(self.browser / "Quill 4321 1.4 2026-11-21T00-00Z Zx9InventedQ.zip", self.data)
+        run = self.ended(self.api.post("/api/updater/start", {"mod": "Quill"})[1]["run"])
+        self.assertEqual(run["state"], "done", run["summary"])
+        self.assertIn("the older version is disabled, not deleted", run["summary"])
+        self.assertIn("“Quill”, the older version, stays in the modlist, disabled: the profile “Another” has it enabled", [t["text"] for st in run["stages"] for t in st["tasks"]])
+        self.settle()
+        inst = instance.load(self.root)
+        self.assertEqual((inst.mod("Quill").enabled, inst.mod("Quill 1.4").enabled), (False, True))
+        self.assertTrue((self.root / "mods" / "Quill" / "Quill.esp").is_file())
+
+    def test_an_archive_from_nexus_is_named_by_the_version_its_page_states(self):
+        """WHY§151: the version in a download's name is not always the file's; the code at its end names the file."""
+        rec = self.api._new_staged("Quill AE V1.4 4321 1.5 2026-11-21T00-00Z Zx9InventedQ.zip", "upload")
+        self.assertEqual((rec["name"], rec["version"], rec["meta"].get("file_id"), rec["meta"].get("version")), ("Quill AE V1.4", "1.4", 113, "1.4"))
+        # Nothing kept knows the page: it is asked, once, and the answer is kept.
+        self.api.updating.store["nexus"].clear()
+        asked = len(self.net.questions)
+        rec = self.api._new_staged("Quill AE V1.4 4321 1.5 2026-11-21T00-00Z Zx9InventedQ.zip", "upload")
+        self.assertEqual((rec["version"], rec["meta"].get("file_id")), ("1.4", 113))
+        once = len(self.net.questions)
+        self.assertGreater(once, asked)
+        self.api._new_staged("Quill AE V1.4 4321 1.5 2026-11-21T00-00Z Zx9InventedQ.zip", "upload")
+        self.assertEqual(len(self.net.questions), once)                              # kept: not asked a second time
+        # A code the page does not have, or a page that does not answer: the name's own version stands.
+        rec = self.api._new_staged("Quill AE V1.4 4321 1.5 2026-11-21T00-00Z NotOfThisPage.zip", "upload")
+        self.assertEqual((rec["version"], rec["meta"].get("file_id")), ("1.5", None))
+        self.api.updating.store["nexus"].clear()
+        self.net.public = lambda query: (0, {"why": "no answer"}, None)
+        rec = self.api._new_staged("Quill AE V1.4 4321 1.5 2026-11-21T00-00Z Zx9InventedQ.zip", "upload")
+        self.assertEqual((rec["name"].startswith("Quill AE V1.4 1.5"), rec["version"]), (True, "1.5"))
 
     def test_a_file_downloaded_before_is_used_and_no_page_is_opened(self):
         # In the browser's folder from an earlier day, under whatever name: known by its size, to the byte.

@@ -108,6 +108,7 @@ SETTINGS = {
     "mo2_leave_alone": True,   # a compiler a tool's log shows crashing inside MO2 is added to MO2's list of programs it leaves alone (MT32)
     "updates_at_launch": True, # when ModTrap starts, ask Nexus and GitHub whether mods have newer files (MT37); nothing without a key or a GitHub mod
     "updates_go": False,       # a newer file that is here is added without asking, when its plan leaves nothing to the owner (MT43)
+    "update_removes_old": False,   # after an update, the older version is uninstalled too: moved aside whole, put back by a Revert (MT82)
     "site_window": False,      # a site's page for a download opens in a small window of its own, not a tab (MT46, MT47)
     "site_window_closes": True,    # that tab or window stays tied to ModTrap's tab, so that ModTrap can close it (MT48, WHY§111)
     "downloads_move": True,    # a mod's download in the browser's folder is moved into ModTrap's own downloads folder, not copied (MT50)
@@ -1752,7 +1753,33 @@ class Api:
                     game = sources._ini(mod.folder / "meta.ini").get("general", {}).get("gamename", "")
                     if game:
                         break
-        return {k: v for k, v in {"game": game, "mod_id": said["mod_id"], "version": said.get("version", "")}.items() if v} if game else {}
+        return {k: v for k, v in {"game": game, "mod_id": said["mod_id"], "version": said.get("version", ""), "file_id": said.get("file_id", 0)}.items() if v} if game else {}
+
+    def _file_said(self, archive: str, said: dict) -> dict | None:
+        """Which file of a mod's page at Nexus an archive is, by the file's own code at the end of its name
+        (TL01§31, WHY§151): {"id", "version", "label"}, from what is kept of the page, or from the page itself,
+        asked once and waited for a few seconds. None where the name carries no code or the page does not answer."""
+        if not said.get("mod_id") or not said.get("code"):
+            return None
+        from . import sources
+        game = sources.nexus_game(self._source_said(said).get("game", ""))
+        if not game:
+            return None
+        store = self.updating.store
+        got = updates_mod.file_by_code(store, game, said["mod_id"], archive)
+        if got is None:
+            def ask() -> None:
+                try:
+                    why = updates_mod.ask_files({"host": "nexus", "game": game, "mod_id": said["mod_id"]}, self.updating.net, store)
+                    if why:
+                        log.info("which file of its page “%s” is could not be asked: %s", archive, why)
+                except Exception as e:
+                    log.warn("asking Nexus which file “%s” is failed: %s", archive, logbook.why(e))
+            t = threading.Thread(target=ask, name="which-file", daemon=True)
+            t.start()
+            t.join(6.0)
+            got = updates_mod.file_by_code(store, game, said["mod_id"], archive)
+        return got
 
     def _new_staged(self, archive: str, source: str, updates: str = "", version: str = "") -> dict:
         """`updates`: the mod of the modlist this archive is a newer version of (MT40); the new mod is then named
@@ -1770,6 +1797,16 @@ class Api:
         # it is known (the Updater, a download's own record), else what the file's name says; a file inside the
         # archive can still say it once it is unpacked. The title: the file's name without what the site added, or,
         # for a newer version, the name of the mod it replaces without that mod's version.
+        # Where the name ends with a file's own code, as a download from Nexus does, the page says which file it is,
+        # and that file's version is the one taken: the version written into such a name is not always the file's
+        # (WHY§151). The page is asked once where nothing kept knows the file; without an answer the name stands.
+        found = None if version or updates else self._file_said(archive, said)
+        if found is not None and adding.clean_version(found["version"]):
+            if adding.clean_version(found["version"]) != adding.clean_version(said.get("version", "")):
+                log.info("“%s” is version %s by its page at Nexus (file %d); its name says %s", archive, found["version"], found["id"], said.get("version") or "nothing")
+            said = dict(said, version=found["version"])
+        if found is not None:
+            said = dict(said, file_id=found["id"])
         version = adding.clean_version(version) or adding.clean_version(said.get("version", ""))
         title = said["stem"] or "New mod"
         if updates:

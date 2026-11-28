@@ -391,6 +391,13 @@ class Updater:
             for p in done["done"]["plugins"]:
                 self._task(run, "install", "%s: active at position %s" % (p["name"], p["position"]))
             run["job"] = done["job"]
+            # The owner's setting (MT82): the older version is uninstalled too, by the uninstall of MT66.
+            removed = done.get("removed") or {}
+            for n in removed.get("mods", []):
+                self._task(run, "install", "“%s”, the older version: taken out of the modlist too (your setting). Its folder is kept by ModTrap, and “Uninstall” puts it back" % n)
+            for k in removed.get("kept", []):
+                self._task(run, "install", "“%s”, the older version, stays in the modlist, disabled: %s" % (k["mod"], k["why"]))
+            run["removed"] = bool(removed.get("mods"))
             self._set(run, "install", "done")
             if run["download"]:
                 downloads.note(run["download"], installed_as=rec["name"])
@@ -414,7 +421,9 @@ class Updater:
             self._task(run, "verify", "no master is missing or inactive")
             self._set(run, "verify", "done")
             run["state"] = "done"
-            run["summary"] = "“%s” is updated%s: “%s” is enabled right after it, and the older version is disabled, not deleted." % (
+            run["summary"] = ("“%s” is updated%s: “%s” is enabled in its place, and the older version is taken out of the modlist (kept by ModTrap; “Uninstall” puts it back)."
+                              if run.get("removed") else
+                              "“%s” is updated%s: “%s” is enabled right after it, and the older version is disabled, not deleted.") % (
                 mod, " to %s" % run["version"] if run["version"] else "", rec["name"])
             log.info("update of “%s” done: “%s” is in place (%s)", mod, rec["name"], run["job"])
         except _Stopped:

@@ -103,6 +103,8 @@ and ids are never renumbered. Everything is cited by code: `WHY§n` is the [reas
   mod's name; pre-releases at GitHub; a fix for a plugin the game does not load is seen by the scripts).
   MT81 (one installer for the list and the Installer tool, an installer's questions inside it; no count to run
   into; the tool's page in parts; drop zones that glow; versions put in order). It amends MT55.
+  MT82 (a setting: after an update the older version is uninstalled too, moved aside whole, and comes back with the
+  update's own Uninstall).
 - **Open.** Nothing. Followed meanwhile, for the owner to confirm: MT12 (no session link in commits), MT13 (the
   reference system).
 
@@ -2283,3 +2285,27 @@ Installer tool is installed at the drop again, and the setting for it is on as M
   file's version.
 - **Not done:** removing an install's own record. Each holds the copies of MO2's lists that its Revert needs
   (about half a megabyte on the owner's list); two hundred of them are no burden, and none is deleted.
+
+## MT82
+
+**A setting: the older version is removed after an update** · *2026-11-28 · The owner's request*
+
+**Owner's words.** "for the update sequence, can you add a setting for an updater tool: Also remove old version after
+update. Which will mean once the newer version is installed, activate the newer version in modlist, disable the
+older one, then remove the older one."
+
+**Settled** (DESIGN§40, WHY§150; the owner may overrule any of it):
+
+- **The setting** "Also remove the old version after an update", off as ModTrap comes. On: an update goes as
+  before (the newer version copied in, put right after the older one, enabled; the older one disabled; the lists
+  read back and checked), and then the older version is uninstalled.
+- **"Removed" is the uninstall of MT66**, as "Uninstall" in a mod's menu does it: the mod's line leaves MO2's
+  list, and its folder is moved, whole, into ModTrap's own folder beside MO2's mods folder. Nothing is deleted.
+  The plugins keep their places: they are the newer version's now.
+- **It comes back with the update's own "Uninstall"**: the older version is put back first, then the newer one
+  is taken out and the older one enabled as it was. Its uninstall is also in the History by itself.
+- **It holds for every update**: from the Updater, by "Manual update…", for a file dropped on a mod that is in
+  the modlist already, and for "Update mod" on the Installer tool.
+- **Left where it is, and said so:** an older version that another profile of this MO2 has enabled (an uninstall
+  takes a mod out of every profile), one that is still enabled, and one whose removal fails. The update itself
+  stands in each case, with the older version disabled, as without the setting.

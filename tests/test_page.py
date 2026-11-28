@@ -446,6 +446,13 @@ class PageTests(unittest.TestCase):
         self.assertIn("  zoneGlow(e.target);", self.js)
         self.assertRegex(self.css, r"\.glow, \.upzone\.over, \.bulkdrop\.over \{[^}]*box-shadow")
 
+    def test_the_setting_for_removing_the_older_version_says_what_removed_means(self):
+        """MT82."""
+        text = re.search(r'\["update_removes_old", "Also remove the old version after an update", "([^\n]*)"\],', self.js).group(1)
+        for said in ("its folder is moved, whole, into ModTrap's own folder", "Nothing is deleted", "puts the older version back", "another profile has enabled is left"):
+            self.assertIn(said, text)
+        self.assertIn("if (run.removed) kids.push(el(\"p\", {}, removedWords(run.removed)));", self.js)
+
     def test_what_says_modtrap_is_at_work_keeps_moving_where_the_pc_asks_for_less_motion(self):
         """MT72: a spinner that stands still reads as stuck. Only what is for show stands still."""
         still = " ".join(re.findall(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\}\s*\}", self.css, re.S))
